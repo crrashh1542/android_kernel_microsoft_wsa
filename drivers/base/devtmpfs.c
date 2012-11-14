@@ -356,6 +356,7 @@ static int handle_remove(const char *nodename, struct device *dev)
 int __init devtmpfs_mount(void)
 {
 	int err;
+	int mflags = MS_SILENT;
 
 	if (!mount_dev)
 		return 0;
@@ -363,7 +364,10 @@ int __init devtmpfs_mount(void)
 	if (!thread)
 		return 0;
 
-	err = init_mount("devtmpfs", "dev", "devtmpfs", MS_SILENT, NULL);
+#ifdef CONFIG_DEVTMPFS_SAFE
+	mflags |= MS_NOEXEC | MS_NOSUID;
+#endif
+	err = init_mount("devtmpfs", "dev", "devtmpfs", mflags, NULL);
 	if (err)
 		printk(KERN_INFO "devtmpfs: error mounting %i\n", err);
 	else
