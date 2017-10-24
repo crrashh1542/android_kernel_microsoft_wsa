@@ -3993,7 +3993,6 @@ static int exp_ll_privacy_feature_changed(bool enabled, struct hci_dev *hdev,
 	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
-
 }
 
 static int exp_feature_changed(struct hci_dev *hdev, const u8 *uuid,
