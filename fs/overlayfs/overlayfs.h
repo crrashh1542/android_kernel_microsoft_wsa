@@ -187,7 +187,8 @@ static inline ssize_t ovl_do_getxattr(struct ovl_fs *ofs, struct dentry *dentry,
 				      size_t size)
 {
 	const char *name = ovl_xattr(ofs, ox);
-	int err = vfs_getxattr(&init_user_ns, dentry, name, value, size);
+	struct inode *ip = d_inode(dentry);
+	int err = __vfs_getxattr(&init_user_ns, dentry, ip, name, value, size, XATTR_NOSECURITY);
 	int len = (value && err > 0) ? err : 0;
 
 	pr_debug("getxattr(%pd2, \"%s\", \"%*pE\", %zu, 0) = %i\n",
