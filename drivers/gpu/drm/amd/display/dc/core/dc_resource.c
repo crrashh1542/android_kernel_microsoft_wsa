@@ -2818,6 +2818,17 @@ static void set_hfvs_info_packet(
 	*info_packet = stream->hfvsif_infopacket;
 }
 
+
+static void set_vtem_info_packet(
+		struct dc_info_packet *info_packet,
+		struct dc_stream_state *stream)
+{
+	if (!stream->vtem_infopacket.valid)
+		return;
+
+	*info_packet = stream->vtem_infopacket;
+}
+
 void dc_resource_state_destruct(struct dc_state *context)
 {
 	int i, j;
@@ -2898,7 +2909,7 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 	info->hdrsmd.valid = false;
 	info->vsc.valid = false;
 	info->hfvsif.valid = false;
-
+	info->vtem.valid = false;
 	signal = pipe_ctx->stream->signal;
 
 	/* HDMi and DP have different info packets*/
@@ -2907,6 +2918,7 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 
 		set_vendor_info_packet(&info->vendor, pipe_ctx->stream);
 		set_hfvs_info_packet(&info->hfvsif, pipe_ctx->stream);
+		set_vtem_info_packet(&info->vtem, pipe_ctx->stream);
 
 		set_spd_info_packet(&info->spd, pipe_ctx->stream);
 
