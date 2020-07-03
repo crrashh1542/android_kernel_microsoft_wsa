@@ -531,7 +531,7 @@ void kbase_arbiter_pm_vm_event(struct kbase_device *kbdev,
 		switch (arb_vm_state->vm_state) {
 		case KBASE_VM_STATE_STARTING:
 			KBASE_TLSTREAM_TL_EVENT_ARB_STARTED(kbdev, kbdev);
-			/* FALL THROUGH */
+			fallthrough;
 		case KBASE_VM_STATE_IDLE:
 			kbase_arbiter_pm_vm_set_state(kbdev,
 			KBASE_VM_STATE_ACTIVE);

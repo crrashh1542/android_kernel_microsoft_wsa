@@ -2436,7 +2436,7 @@ struct kbasep_debug_command {
 	kbasep_debug_command_func *func;
 };
 
-void kbasep_ktrace_dump_wrapper(struct kbase_device *kbdev)
+static void kbasep_ktrace_dump_wrapper(struct kbase_device *kbdev)
 {
 	KBASE_KTRACE_DUMP(kbdev);
 }
@@ -3516,10 +3516,7 @@ int power_control_init(struct kbase_device *kbdev)
 	int err = 0;
 	unsigned int i;
 #if defined(CONFIG_REGULATOR)
-	static const char *regulator_names[] = {
-		"mali", "shadercores"
-	};
-	BUILD_BUG_ON(ARRAY_SIZE(regulator_names) < BASE_MAX_NR_CLOCKS_REGULATORS);
+	const char *regulator_names[BASE_MAX_NR_CLOCKS_REGULATORS];
 #endif /* CONFIG_REGULATOR */
 
 	if (!kbdev)
@@ -3528,6 +3525,37 @@ int power_control_init(struct kbase_device *kbdev)
 	pdev = to_platform_device(kbdev->dev);
 
 #if defined(CONFIG_REGULATOR)
+
+	kbdev->nr_regulators = of_property_count_strings(kbdev->dev->of_node,
+			"supply-names");
+
+	if (kbdev->nr_regulators == -EINVAL) {
+		/* The 'supply-names' is optional; if not there assume default */
+#if (KERNEL_VERSION(4, 0, 0) <= LINUX_VERSION_CODE) || \
+					defined(LSK_OPPV2_BACKPORT)
+		regulator_names[0] = "mali";
+		regulator_names[1] = "shadercores";
+#else
+		regulator_names[0] = "mali";
+#endif
+	} else if (kbdev->nr_regulators > BASE_MAX_NR_CLOCKS_REGULATORS) {
+		dev_err(&pdev->dev, "Too many regulators: %d > %d\n",
+			kbdev->nr_regulators, BASE_MAX_NR_CLOCKS_REGULATORS);
+		return -EINVAL;
+	} else if (kbdev->nr_regulators < 0) {
+		err = kbdev->nr_regulators;
+	} else {
+		err = of_property_read_string_array(kbdev->dev->of_node,
+						    "supply-names",
+						    regulator_names,
+						    kbdev->nr_regulators);
+	}
+
+	if (err < 0) {
+		dev_err(&pdev->dev, "Error reading supply-names: %d\n", err);
+		return err;
+	}
+
 	/* Since the error code EPROBE_DEFER causes the entire probing
 	 * procedure to be restarted from scratch at a later time,
 	 * all regulators will be released before returning.
@@ -3536,9 +3564,9 @@ int power_control_init(struct kbase_device *kbdev)
 	 * operating with a partial initialization of regulators.
 	 */
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
-		kbdev->regulators[i] = regulator_get_optional(kbdev->dev,
+		kbdev->regulators[i] = regulator_get(kbdev->dev,
 			regulator_names[i]);
-		if (IS_ERR_OR_NULL(kbdev->regulators[i])) {
+		if (IS_ERR(kbdev->regulators[i])) {
 			err = PTR_ERR(kbdev->regulators[i]);
 			kbdev->regulators[i] = NULL;
 			break;
@@ -3571,22 +3599,6 @@ int power_control_init(struct kbase_device *kbdev)
 			kbdev->clocks[i] = NULL;
 			break;
 		}
-
-		err = clk_prepare_enable(kbdev->clocks[i]);
-		if (err) {
-			dev_err(kbdev->dev,
-				"Failed to prepare and enable clock (%d)\n",
-				err);
-			clk_put(kbdev->clocks[i]);
-			break;
-		}
-	}
-	if (err == -EPROBE_DEFER) {
-		while ((i > 0) && (i < BASE_MAX_NR_CLOCKS_REGULATORS)) {
-			clk_disable_unprepare(kbdev->clocks[--i]);
-			clk_put(kbdev->clocks[i]);
-		}
-		goto clocks_probe_defer;
 	}
 
 	kbdev->nr_clocks = i;
@@ -3618,12 +3630,6 @@ int power_control_init(struct kbase_device *kbdev)
 #endif /* KERNEL_VERSION(4, 4, 0) > LINUX_VERSION_CODE */
 	return 0;
 
-clocks_probe_defer:
-#if defined(CONFIG_REGULATOR)
-	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++)
-		regulator_put(kbdev->regulators[i]);
-#endif
-	return err;
 #endif /* KERNEL_VERSION(3, 18, 0) > LINUX_VERSION_CODE */
 }
 
@@ -3651,8 +3657,6 @@ void power_control_term(struct kbase_device *kbdev)
 
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
 		if (kbdev->clocks[i]) {
-			if (__clk_is_enabled(kbdev->clocks[i]))
-				clk_disable_unprepare(kbdev->clocks[i]);
 			clk_put(kbdev->clocks[i]);
 			kbdev->clocks[i] = NULL;
 		} else
@@ -4099,6 +4103,11 @@ int kbase_backend_devfreq_init(struct kbase_device *kbdev)
 	return 0;
 }
 
+static const struct kbase_mali_platform_functions default_data = {
+	.pm_callbacks = POWER_MANAGEMENT_CALLBACKS,
+	.platform_funcs = PLATFORM_FUNCS,
+};
+
 static int kbase_platform_device_probe(struct platform_device *pdev)
 {
 	struct kbase_device *kbdev;
@@ -4115,11 +4124,17 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 	kbdev->dev = &pdev->dev;
 	dev_set_drvdata(kbdev->dev, kbdev);
 
+	kbdev->funcs = (struct kbase_mali_platform_functions *)
+				of_device_get_match_data(kbdev->dev);
+	if (!kbdev->funcs)
+		kbdev->funcs = (struct kbase_mali_platform_functions *)
+					&default_data;
+
 	err = kbase_device_init(kbdev);
 
 	if (err) {
 		if (err == -EPROBE_DEFER)
-			dev_dbg(kbdev->dev, "Device initialization Deferred\n");
+			dev_dbg(kbdev->dev, "Device initialization deferred\n");
 		else
 			dev_err(kbdev->dev, "Device initialization failed\n");
 
@@ -4316,16 +4331,6 @@ static const struct dev_pm_ops kbase_pm_ops = {
 	.runtime_idle = kbase_device_runtime_idle,
 #endif /* KBASE_PM_RUNTIME */
 };
-
-#ifdef CONFIG_OF
-static const struct of_device_id kbase_dt_ids[] = {
-	{ .compatible = "arm,malit6xx" },
-	{ .compatible = "arm,mali-midgard" },
-	{ .compatible = "arm,mali-bifrost" },
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, kbase_dt_ids);
-#endif
 
 static struct platform_driver kbase_platform_driver = {
 	.probe = kbase_platform_device_probe,

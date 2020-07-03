@@ -172,8 +172,6 @@ struct kbase_pm_callback_conf {
 	 *
 	 * For linux this callback will be called by the kernel runtime_suspend callback.
 	 * Note: for linux the kernel must have CONFIG_PM_RUNTIME enabled to use this feature.
-	 *
-	 * @return 0 on success, else OS error code.
 	 */
 	void (*power_runtime_off_callback)(struct kbase_device *kbdev);
 
@@ -181,6 +179,8 @@ struct kbase_pm_callback_conf {
 	 *
 	 * For linux this callback will be called by the kernel runtime_resume callback.
 	 * Note: for linux the kernel must have CONFIG_PM_RUNTIME enabled to use this feature.
+	 *
+	 * @return 0 on success, else OS error code.
 	 */
 	int (*power_runtime_on_callback)(struct kbase_device *kbdev);
 
@@ -221,6 +221,11 @@ struct kbase_pm_callback_conf {
 	 * be raised. On error, return the corresponding OS error code.
 	 */
 	int (*soft_reset_callback)(struct kbase_device *kbdev);
+};
+
+struct kbase_mali_platform_functions {
+        struct kbase_pm_callback_conf *pm_callbacks;
+        struct kbase_platform_funcs_conf *platform_funcs;
 };
 
 #ifdef CONFIG_OF

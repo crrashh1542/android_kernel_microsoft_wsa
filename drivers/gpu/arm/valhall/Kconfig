@@ -26,8 +26,8 @@ menuconfig MALI_VALHALL
 	depends on THERMAL || THERMAL=n
 	select GPU_TRACEPOINTS if ANDROID
 	select DMA_SHARED_BUFFER
-	depends on !MALI_MIDGARD
-	depends on !MALI_BIFROST
+	depends on !MALI_MIDGARD && MALI_MIDGARD!=m
+	depends on !MALI_BIFROST && MALI_BIFROST!=m
 	default n
 	help
 	  Enable this option to build support for a ARM Mali Valhall GPU.
@@ -46,9 +46,10 @@ config MALI_VALHALL_GATOR_SUPPORT
 config MALI_VALHALL_DVFS
 	bool "Enable legacy DVFS"
 	depends on MALI_VALHALL && !MALI_VALHALL_DEVFREQ
+	depends on BROKEN
 	default n
 	help
-	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
+	  Choose this option to enable legacy DVFS in the Mali Valhall DDK.
 
 config MALI_VALHALL_ENABLE_TRACE
 	bool "Enable kbase tracing"
@@ -61,7 +62,10 @@ config MALI_VALHALL_ENABLE_TRACE
 
 config MALI_VALHALL_DEVFREQ
 	bool "devfreq support for Mali"
-	depends on MALI_VALHALL && PM_DEVFREQ
+	depends on MALI_VALHALL
+	depends on DEVFREQ_GOV_SIMPLE_ONDEMAND
+	depends on DEVFREQ_THERMAL
+	depends on PM_DEVFREQ
 	default y
 	help
 	  Support devfreq for Mali.
@@ -126,6 +130,7 @@ config MALI_VALHALL_CORESTACK
 config MALI_VALHALL_DEBUG
 	bool "Debug build"
 	depends on MALI_VALHALL && MALI_VALHALL_EXPERT
+	depends on !COMPILE_TEST
 	default n
 	help
 	  Select this option for increased checking and reporting of errors.
@@ -308,3 +313,4 @@ config MALI_VALHALL_PRFCNT_SET_SECONDARY_VIA_DEBUG_FS
 	  If unsure, say N.
 
 source "drivers/gpu/arm/valhall/platform/Kconfig"
+source "drivers/gpu/arm/valhall/tests/Kconfig"
