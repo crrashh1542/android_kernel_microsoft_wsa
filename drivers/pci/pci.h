@@ -743,5 +743,6 @@ extern const struct attribute_group aspm_ctrl_attr_group;
 #endif
 
 extern const struct attribute_group pci_dev_reset_method_attr_group;
+bool pci_drv_allowed_for_untrusted_devs(struct device_driver *drvr);
 
 #endif /* DRIVERS_PCI_H */
