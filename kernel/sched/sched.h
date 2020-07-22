@@ -2048,6 +2048,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_SYNC     0x10 /* Waker goes to sleep after wakeup */
 #define WF_MIGRATED 0x20 /* Internal use, task got migrated */
 #define WF_ON_CPU   0x40 /* Wakee is on_cpu */
+#define WF_CURRENT_CPU		0x80		/* Prefer to move wakee to the current CPU */
 
 #ifdef CONFIG_SMP
 static_assert(WF_EXEC == SD_BALANCE_EXEC);
