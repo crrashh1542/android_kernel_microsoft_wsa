@@ -13,6 +13,7 @@
 
 struct intel_pxp;
 struct drm_i915_gem_object;
+struct drm_file;
 
 #ifdef CONFIG_DRM_I915_PXP
 struct intel_gt *pxp_to_gt(const struct intel_pxp *pxp);
@@ -36,6 +37,8 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 void intel_pxp_invalidate(struct intel_pxp *pxp);
 
 int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmfile);
+
+void intel_pxp_close(struct intel_pxp *pxp, struct drm_file *drmfile);
 #else
 static inline void intel_pxp_init(struct intel_pxp *pxp)
 {
@@ -70,6 +73,10 @@ static inline int intel_pxp_key_check(struct intel_pxp *pxp,
 static inline int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmfile)
 {
 	return -ENODEV;
+}
+
+static inline void intel_pxp_close(struct intel_pxp *pxp, struct drm_file *drmfile)
+{
 }
 #endif
 
