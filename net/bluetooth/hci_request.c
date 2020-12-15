@@ -835,6 +835,53 @@ void __hci_req_disable_advertising(struct hci_request *req)
 	}
 }
 
+static bool has_pending_adv(struct hci_dev *hdev)
+{
+	struct adv_info *adv_instance;
+
+	list_for_each_entry(adv_instance, &hdev->adv_instances, list) {
+		if (adv_instance->pending)
+			return true;
+	}
+
+	return false;
+}
+
+static void __hci_req_enable_paused_adv(struct hci_request *req)
+{
+	struct hci_dev *hdev = req->hdev;
+	struct adv_info *adv;
+	u8 enable = 0x01;
+
+	/* Determine if any of our advertising instances are in the middle of
+	 * registration. This is important, because we do not want to enable
+	 * advertising if an enable will be provided at the end of registration.
+	 * Such a double call may result in an HCI error on some platforms.
+	 */
+
+	if (ext_adv_capable(hdev)) {
+		/* Call for each tracked instance to be re-enabled */
+		list_for_each_entry(adv, &hdev->adv_instances, list) {
+			if (!adv->pending)
+				__hci_req_enable_ext_advertising(req,
+								 adv->instance);
+		}
+	} else if (!has_pending_adv(hdev)) {
+		hci_req_add(req, HCI_OP_LE_SET_ADV_ENABLE,
+			    sizeof(enable), &enable);
+	}
+}
+
+int hci_req_enable_paused_adv(struct hci_dev *hdev)
+{
+	struct hci_request req;
+
+	hci_req_init(&req, hdev);
+	__hci_req_enable_paused_adv(&req);
+
+	return hci_req_run(&req, NULL);
+}
+
 static bool adv_use_rpa(struct hci_dev *hdev, uint32_t flags)
 {
 	/* If privacy is not enabled don't use RPA */
@@ -1304,25 +1351,39 @@ void __hci_req_clear_ext_adv_sets(struct hci_request *req)
 static void set_random_addr(struct hci_request *req, bdaddr_t *rpa)
 {
 	struct hci_dev *hdev = req->hdev;
+	bool adv_enabled = hci_dev_test_flag(hdev, HCI_LE_ADV);
 
-	/* If we're advertising or initiating an LE connection we can't
-	 * go ahead and change the random address at this time. This is
-	 * because the eventual initiator address used for the
-	 * subsequently created connection will be undefined (some
-	 * controllers use the new address and others the one we had
-	 * when the operation started).
+	/* If we're initiating an LE connection or actively scanning, we can't
+	 * go ahead and change the random address at this time. This is because
+	 * the eventual initiator address used for the subsequently created
+	 * connection will be undefined (some controllers use the new address
+	 * and others the one we had when the operation started).
 	 *
-	 * In this kind of scenario skip the update and let the random
-	 * address be updated at the next cycle.
+	 * In this kind of scenario skip the update and let the random address
+	 * be updated at the next cycle.
 	 */
-	if (hci_dev_test_flag(hdev, HCI_LE_ADV) ||
-	    hci_lookup_le_connect(hdev)) {
+
+	if (hci_lookup_le_connect(hdev) ||
+	    (hci_dev_test_flag(hdev, HCI_LE_SCAN) &&
+			hdev->le_scan_type == LE_SCAN_ACTIVE)) {
 		bt_dev_dbg(hdev, "Deferring random address update");
 		hci_dev_set_flag(hdev, HCI_RPA_EXPIRED);
 		return;
 	}
 
+	/* Because any random address update will fail while advertising is in
+	 * progress, we pause any active instances to update the random address.
+	 */
+	if (adv_enabled) {
+		__hci_req_disable_advertising(req);
+		hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	}
+
 	hci_req_add(req, HCI_OP_LE_SET_RANDOM_ADDR, 6, rpa);
+
+	/* Re-enable previously-active advertisements */
+	if (adv_enabled)
+		__hci_req_enable_paused_adv(req);
 }
 
 int __hci_req_setup_ext_adv_instance(struct hci_request *req, u8 instance)
