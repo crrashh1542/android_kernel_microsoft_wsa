@@ -24,7 +24,7 @@
 #include <linux/types.h>
 #include <linux/iopoll.h>
 
-#include "thermal_hwmon.h"
+#include "../thermal_hwmon.h"
 
 /* AUXADC Registers */
 #define AUXADC_CON1_SET_V	0x008
