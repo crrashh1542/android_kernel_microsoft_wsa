@@ -207,6 +207,9 @@ static u32 guc_ctl_feature_flags(struct intel_guc *guc)
 {
 	u32 flags = 0;
 
+	/* Enable PAVP GuC autoteardown flow  */
+	flags |= GUC_CTL_ENABLE_GUC_PAVP_CTL;
+
 	if (!intel_guc_submission_is_used(guc))
 		flags |= GUC_CTL_DISABLE_SCHEDULER;
 
