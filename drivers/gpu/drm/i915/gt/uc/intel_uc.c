@@ -494,6 +494,10 @@ static int __uc_init_hw(struct intel_uc *uc)
 
 	if (intel_uc_uses_guc_submission(uc))
 		intel_guc_submission_enable(guc);
+	else
+		intel_uncore_rmw(uc_to_gt(uc)->uncore,
+				 GUC_GPM_WGBOXPERF_INTR_ENABLE,
+				 0, GUC_GPM_ARAT);
 
 	if (intel_uc_uses_guc_slpc(uc)) {
 		ret = intel_guc_slpc_enable(&guc->slpc);
