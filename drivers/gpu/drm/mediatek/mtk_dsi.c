@@ -177,6 +177,7 @@ struct mtk_dsi_driver_data {
 	const u32 reg_cmdq_off;
 	bool has_shadow_ctl;
 	bool has_size_ctl;
+	const u32 data_phy_cycles_const;
 };
 
 struct mtk_dsi {
@@ -451,7 +452,7 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 	u32 horizontal_frontporch_byte;
 	u32 horizontal_front_back_byte;
 	u32 data_phy_cycles_byte;
-	u32 dsi_tmp_buf_bpp, data_phy_cycles;
+	u32 dsi_tmp_buf_bpp, data_phy_cycles, data_phy_cycles_const;
 	u32 delta;
 	struct mtk_phy_timing *timing = &dsi->phy_timing;
 
@@ -479,8 +480,12 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 		horizontal_backporch_byte = (vm->hback_porch + vm->hsync_len) *
 					    dsi_tmp_buf_bpp - 10;
 
+	data_phy_cycles_const = dsi->driver_data->data_phy_cycles_const ?
+				dsi->driver_data->data_phy_cycles_const : 3;
+
 	data_phy_cycles = timing->lpx + timing->da_hs_prepare +
-			  timing->da_hs_zero + timing->da_hs_exit + 3;
+			  timing->da_hs_zero + timing->da_hs_exit +
+			  data_phy_cycles_const;
 
 	delta = dsi->mode_flags & MIPI_DSI_MODE_VIDEO_BURST ? 18 : 12;
 	delta += dsi->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET ? 2 : 0;
@@ -1189,6 +1194,7 @@ static int mtk_dsi_remove(struct platform_device *pdev)
 
 static const struct mtk_dsi_driver_data mt8173_dsi_driver_data = {
 	.reg_cmdq_off = 0x200,
+	.data_phy_cycles_const = 4,
 };
 
 static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
