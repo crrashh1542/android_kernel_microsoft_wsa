@@ -57,7 +57,6 @@ static int vidioc_try_decoder_cmd(struct file *file, void *priv,
 		return v4l2_m2m_ioctl_try_decoder_cmd(file, priv, cmd);
 }
 
-
 static int vidioc_decoder_cmd(struct file *file, void *priv,
 				struct v4l2_decoder_cmd *cmd)
 {
