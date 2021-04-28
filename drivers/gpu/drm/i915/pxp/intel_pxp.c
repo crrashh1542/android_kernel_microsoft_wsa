@@ -2,8 +2,10 @@
 /*
  * Copyright(c) 2020 Intel Corporation.
  */
+#include <linux/kernel.h>
 #include <linux/workqueue.h>
 #include "intel_pxp.h"
+#include "intel_pxp_cmd.h"
 #include "intel_pxp_irq.h"
 #include "intel_pxp_session.h"
 #include "intel_pxp_tee.h"
@@ -51,7 +53,7 @@ bool intel_pxp_is_enabled(const struct intel_pxp *pxp)
 
 bool intel_pxp_is_active(const struct intel_pxp *pxp)
 {
-	return pxp->arb_is_valid;
+	return pxp->arb_session.is_valid;
 }
 
 /* KCR register definitions */
@@ -114,8 +116,6 @@ void intel_pxp_init(struct intel_pxp *pxp)
 	if (!HAS_PXP(gt->i915))
 		return;
 
-	mutex_init(&pxp->tee_mutex);
-
 	/*
 	 * we'll use the completion to check if there is a termination pending,
 	 * so we start it as completed and we reinit it when a termination
@@ -127,19 +127,25 @@ void intel_pxp_init(struct intel_pxp *pxp)
 	mutex_init(&pxp->arb_mutex);
 	INIT_WORK(&pxp->session_work, intel_pxp_session_work);
 
+	mutex_init(&pxp->tee_mutex);
+	mutex_init(&pxp->session_mutex);
+
 	ret = create_vcs_context(pxp);
 	if (ret)
 		return;
 
+	intel_pxp_init_arb_session(pxp);
+
 	ret = intel_pxp_tee_component_init(pxp);
 	if (ret)
-		goto out_context;
+		goto out_session;
 
 	drm_info(&gt->i915->drm, "Protected Xe Path (PXP) protected content support initialized\n");
 
 	return;
 
-out_context:
+out_session:
+	intel_pxp_fini_arb_session(pxp);
 	destroy_vcs_context(pxp);
 }
 
@@ -148,16 +154,18 @@ void intel_pxp_fini(struct intel_pxp *pxp)
 	if (!intel_pxp_is_enabled(pxp))
 		return;
 
-	pxp->arb_is_valid = false;
+	pxp->arb_session.is_valid = false;
 
 	intel_pxp_tee_component_fini(pxp);
+
+	intel_pxp_fini_arb_session(pxp);
 
 	destroy_vcs_context(pxp);
 }
 
 void intel_pxp_mark_termination_in_progress(struct intel_pxp *pxp)
 {
-	pxp->arb_is_valid = false;
+	pxp->arb_session.is_valid = false;
 	reinit_completion(&pxp->termination);
 }
 
@@ -189,7 +197,7 @@ int intel_pxp_start(struct intel_pxp *pxp)
 
 	mutex_lock(&pxp->arb_mutex);
 
-	if (pxp->arb_is_valid)
+	if (pxp->arb_session.is_valid)
 		goto unlock;
 
 	pxp_queue_termination(pxp);
@@ -203,7 +211,7 @@ int intel_pxp_start(struct intel_pxp *pxp)
 	/* make sure the compiler doesn't optimize the double access */
 	barrier();
 
-	if (!pxp->arb_is_valid)
+	if (!pxp->arb_session.is_valid)
 		ret = -EIO;
 
 unlock:
@@ -301,4 +309,94 @@ void intel_pxp_invalidate(struct intel_pxp *pxp)
 		i915_gem_context_put(ctx);
 	}
 	spin_unlock_irq(&i915->gem.contexts.lock);
+}
+
+static int pxp_set_session_status(struct intel_pxp *pxp,
+				  struct downstream_drm_i915_pxp_ops *pxp_ops,
+				  struct drm_file *drmfile)
+{
+	struct downstream_drm_i915_pxp_set_session_status_params params;
+	struct downstream_drm_i915_pxp_set_session_status_params __user *uparams =
+		u64_to_user_ptr(pxp_ops->params);
+	int ret = 0;
+
+	if (copy_from_user(&params, uparams, sizeof(params)) != 0)
+		return -EFAULT;
+
+	switch (params.req_session_state) {
+	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_ID_INIT:
+		ret = intel_pxp_sm_ioctl_reserve_session(pxp, drmfile,
+							 params.session_mode,
+							 &params.pxp_tag);
+		break;
+	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_IN_PLAY:
+		ret = intel_pxp_sm_ioctl_mark_session_in_play(pxp, drmfile,
+							      params.pxp_tag);
+		break;
+	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_TERMINATE:
+		ret = intel_pxp_sm_ioctl_terminate_session(pxp, drmfile,
+							   params.pxp_tag);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	if (ret >= 0) {
+		pxp_ops->status = ret;
+
+		if (copy_to_user(uparams, &params, sizeof(params)))
+			ret = -EFAULT;
+		else
+			ret = 0;
+	}
+
+	return ret;
+}
+
+int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmfile)
+{
+	int ret = 0;
+	struct downstream_drm_i915_pxp_ops *pxp_ops = data;
+	struct drm_i915_private *i915 = to_i915(dev);
+	struct intel_pxp *pxp = &i915->gt0.pxp;
+	intel_wakeref_t wakeref;
+
+	if (!intel_pxp_is_enabled(pxp))
+		return -ENODEV;
+
+	wakeref = intel_runtime_pm_get_if_in_use(&i915->runtime_pm);
+	if (!wakeref) {
+		drm_dbg(&i915->drm, "pxp ioctl blocked due to state in suspend\n");
+		pxp_ops->status = DOWNSTREAM_DRM_I915_PXP_OP_STATUS_SESSION_NOT_AVAILABLE;
+		return 0;
+	}
+
+	if (!intel_pxp_is_active(pxp)) {
+		ret = intel_pxp_start(pxp);
+		if (ret)
+			goto out_pm;
+	}
+
+	mutex_lock(&pxp->session_mutex);
+
+	if (pxp->hw_state_invalidated) {
+		drm_dbg(&i915->drm, "pxp ioctl retry required due to state attacked\n");
+		pxp_ops->status = DOWNSTREAM_DRM_I915_PXP_OP_STATUS_RETRY_REQUIRED;
+		goto out_unlock;
+	}
+
+	switch (pxp_ops->action) {
+	case DOWNSTREAM_DRM_I915_PXP_ACTION_SET_SESSION_STATUS:
+		ret = pxp_set_session_status(pxp, pxp_ops, drmfile);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+out_unlock:
+	mutex_unlock(&pxp->session_mutex);
+out_pm:
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
+
+	return ret;
 }

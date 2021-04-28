@@ -9,6 +9,24 @@
 #include <linux/types.h>
 
 struct work_struct;
+struct intel_pxp;
+struct drm_file;
+
+#define ARB_SESSION I915_PROTECTED_CONTENT_DEFAULT_SESSION /* shorter define */
+
+void intel_pxp_init_arb_session(struct intel_pxp *pxp);
+void intel_pxp_fini_arb_session(struct intel_pxp *pxp);
+
+int intel_pxp_sm_ioctl_reserve_session(struct intel_pxp *pxp, struct drm_file *drmfile,
+				       int protection_mode, u32 *pxp_tag);
+int intel_pxp_sm_ioctl_mark_session_in_play(struct intel_pxp *pxp,
+					    struct drm_file *drmfile,
+					    u32 session_id);
+int intel_pxp_sm_ioctl_terminate_session(struct intel_pxp *pxp,
+					 struct drm_file *drmfile,
+					 int session_id);
+
+bool intel_pxp_session_is_in_play(struct intel_pxp *pxp, u32 id);
 
 void intel_pxp_session_work(struct work_struct *work);
 
