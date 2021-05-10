@@ -69,6 +69,7 @@ struct sco_pinfo {
 	__u32		flags;
 	__u16		setting;
 	__u8		cmsg_mask;
+	__u32		wbs_pkt_len;
 	struct bt_codec codec;
 	struct sco_conn	*conn;
 };
@@ -277,6 +278,8 @@ static int sco_connect(struct hci_dev *hdev, struct sock *sk)
 		sk->sk_state = BT_CONNECT;
 		sco_sock_set_timer(sk, sk->sk_sndtimeo);
 	}
+
+	sco_pi(sk)->wbs_pkt_len = hdev->wbs_pkt_len;
 
 	return err;
 }
@@ -1098,7 +1101,7 @@ static int sco_sock_getsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		if (put_user(sco_pi(sk)->conn->mtu, (u32 __user *)optval))
+		if (put_user(sco_pi(sk)->wbs_pkt_len, (u32 __user *)optval))
 			err = -EFAULT;
 		break;
 
