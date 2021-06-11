@@ -13032,4 +13032,7 @@ enum skl_power_gate {
 #define SLICE_COMMON_ECO_CHICKEN1		_MMIO(0x731C)
 #define   MSC_MSAA_REODER_BUF_BYPASS_DISABLE	REG_BIT(14)
 
+/* PXP regs */
+#define GEN12_KCR_SIP _MMIO(0x32260) /* KCR hwdrm session in play 0-31 */
+
 #endif /* _I915_REG_H_ */

@@ -2285,6 +2285,11 @@ static const struct reg_whitelist {
 	.min_graphics_ver = 4,
 	.max_graphics_ver = 12,
 	.size = 8
+}, {
+	.offset_ldw = GEN12_KCR_SIP,
+	.min_graphics_ver = 12,
+	.max_graphics_ver = 12,
+	.size = 4
 } };
 
 int i915_reg_read_ioctl(struct drm_device *dev,

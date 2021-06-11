@@ -13,8 +13,6 @@
 #include "intel_pxp_tee.h"
 #include "intel_pxp_types.h"
 
-#define GEN12_KCR_SIP _MMIO(0x32260) /* KCR hwdrm session in play 0-31 */
-
 #define KCR_STATUS_1   _MMIO(0x320f4)
 #define KCR_STATUS_1_ATTACK_MASK 0x80000000
 
