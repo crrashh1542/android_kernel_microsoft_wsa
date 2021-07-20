@@ -2121,7 +2121,7 @@ static int amdgpu_mm_vram_table_show(struct seq_file *m, void *unused)
 							    TTM_PL_VRAM);
 	struct drm_printer p = drm_seq_file_printer(m);
 
-	man->func->debug(man, &p);
+	ttm_resource_manager_debug(man, &p);
 	return 0;
 }
 
@@ -2139,7 +2139,7 @@ static int amdgpu_mm_tt_table_show(struct seq_file *m, void *unused)
 							    TTM_PL_TT);
 	struct drm_printer p = drm_seq_file_printer(m);
 
-	man->func->debug(man, &p);
+	ttm_resource_manager_debug(man, &p);
 	return 0;
 }
 
@@ -2150,7 +2150,7 @@ static int amdgpu_mm_gds_table_show(struct seq_file *m, void *unused)
 							    AMDGPU_PL_GDS);
 	struct drm_printer p = drm_seq_file_printer(m);
 
-	man->func->debug(man, &p);
+	ttm_resource_manager_debug(man, &p);
 	return 0;
 }
 
@@ -2161,7 +2161,7 @@ static int amdgpu_mm_gws_table_show(struct seq_file *m, void *unused)
 							    AMDGPU_PL_GWS);
 	struct drm_printer p = drm_seq_file_printer(m);
 
-	man->func->debug(man, &p);
+	ttm_resource_manager_debug(man, &p);
 	return 0;
 }
 
@@ -2172,7 +2172,7 @@ static int amdgpu_mm_oa_table_show(struct seq_file *m, void *unused)
 							    AMDGPU_PL_OA);
 	struct drm_printer p = drm_seq_file_printer(m);
 
-	man->func->debug(man, &p);
+	ttm_resource_manager_debug(man, &p);
 	return 0;
 }
 
