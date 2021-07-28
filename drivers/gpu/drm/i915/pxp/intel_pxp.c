@@ -165,6 +165,7 @@ void intel_pxp_fini(struct intel_pxp *pxp)
 
 void intel_pxp_mark_termination_in_progress(struct intel_pxp *pxp)
 {
+	pxp->hw_state_invalidated = true;
 	pxp->arb_session.is_valid = false;
 	pxp->arb_session.tag = 0;
 	reinit_completion(&pxp->termination);
@@ -423,6 +424,11 @@ int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmf
 		pxp_ops->status = DOWNSTREAM_DRM_I915_PXP_OP_STATUS_SESSION_NOT_AVAILABLE;
 		return 0;
 	}
+	if (pxp->hw_state_invalidated) {
+		drm_dbg(&i915->drm, "pxp ioctl retry required due to state attacked\n");
+		pxp_ops->status = DOWNSTREAM_DRM_I915_PXP_OP_STATUS_RETRY_REQUIRED;
+		goto out_unlock;
+	}
 
 	if (!intel_pxp_is_active(pxp)) {
 		ret = intel_pxp_start(pxp);
@@ -431,12 +437,6 @@ int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct drm_file *drmf
 	}
 
 	mutex_lock(&pxp->session_mutex);
-
-	if (pxp->hw_state_invalidated) {
-		drm_dbg(&i915->drm, "pxp ioctl retry required due to state attacked\n");
-		pxp_ops->status = DOWNSTREAM_DRM_I915_PXP_OP_STATUS_RETRY_REQUIRED;
-		goto out_unlock;
-	}
 
 	switch (pxp_ops->action) {
 	case DOWNSTREAM_DRM_I915_PXP_ACTION_SET_SESSION_STATUS:

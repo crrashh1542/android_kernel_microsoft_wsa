@@ -421,8 +421,6 @@ static void pxp_terminate(struct intel_pxp *pxp)
 {
 	int ret;
 
-	pxp->hw_state_invalidated = true;
-
 	ret = pxp_terminate_all_sessions_and_global(pxp);
 
 	/*
@@ -437,8 +435,10 @@ static void pxp_terminate(struct intel_pxp *pxp)
 static void pxp_terminate_complete(struct intel_pxp *pxp)
 {
 	/* Re-create the arb session after teardown handle complete */
-	if (fetch_and_zero(&pxp->hw_state_invalidated))
+	if (pxp->hw_state_invalidated) {
 		pxp_create_arb_session(pxp);
+		pxp->hw_state_invalidated = false;
+	}
 
 	complete_all(&pxp->termination);
 }
