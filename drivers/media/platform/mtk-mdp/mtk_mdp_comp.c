@@ -51,17 +51,60 @@ static const struct of_device_id mtk_mdp_comp_driver_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk_mdp_comp_driver_dt_match);
 
-void mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
+int mtk_mdp_comp_power_on(struct mtk_mdp_comp *comp)
+
 {
-	int i, err, status;
+	int err, status;
 
 	err = pm_runtime_get_sync(comp->dev);
 	if (err < 0) {
-		dev_err(comp->dev,
-			"failed to runtime get, err %d.\n",
-			err);
-		return;
+		dev_err(comp->dev, "failed to runtime get, err %d.\n", err);
+		return err;
 	}
+
+	err = mtk_mdp_comp_clock_on(comp);
+	if (err) {
+		dev_err(comp->dev, "failed to turn on clock. err=%d", err);
+		status = err;
+		goto err_mtk_mdp_comp_clock_on;
+	}
+
+	return 0;
+
+err_mtk_mdp_comp_clock_on:
+	err = pm_runtime_put_sync(comp->dev);
+	if (err)
+		dev_err(comp->dev, "failed to runtime put in cleanup. err=%d", err);
+
+	return err;
+}
+
+int mtk_mdp_comp_power_off(struct mtk_mdp_comp *comp)
+{
+	int status, err;
+
+	mtk_mdp_comp_clock_off(comp);
+
+	err = pm_runtime_put_sync(comp->dev);
+	if (err < 0) {
+		dev_err(comp->dev, "failed to runtime put, err %d.\n", err);
+		status = err;
+		goto err_pm_runtime_put_sync;
+	}
+
+	return 0;
+
+err_pm_runtime_put_sync:
+	err = mtk_mdp_comp_clock_on(comp);
+	if (err)
+		dev_err(comp->dev, "failed to turn on clock in cleanup. err=%d", err);
+
+	return status;
+}
+
+int mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
+{
+	int i, err, status;
 
 	for (i = 0; i < ARRAY_SIZE(comp->clk); i++) {
 		if (IS_ERR(comp->clk[i]))
@@ -74,7 +117,7 @@ void mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
 		}
 	}
 
-	return;
+	return 0;
 
 err_clk_prepare_enable:
 	for (--i; i >= 0; i--) {
@@ -85,7 +128,7 @@ err_clk_prepare_enable:
 
 	pm_runtime_put_sync(comp->dev);
 
-	return;
+	return err;
 }
 
 void mtk_mdp_comp_clock_off(struct mtk_mdp_comp *comp)
@@ -97,8 +140,6 @@ void mtk_mdp_comp_clock_off(struct mtk_mdp_comp *comp)
 			continue;
 		clk_disable_unprepare(comp->clk[i]);
 	}
-
-	pm_runtime_put_sync(comp->dev);
 }
 
 static int mtk_mdp_comp_bind(struct device *dev, struct device *master, void *data)
