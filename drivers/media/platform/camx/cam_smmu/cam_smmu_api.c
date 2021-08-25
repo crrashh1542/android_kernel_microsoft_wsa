@@ -1318,7 +1318,7 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 		return rc;
 	}
 
-	attach = dma_buf_attach(buf, cb->dev);
+	attach = dma_buf_attach(buf, cb->dev->parent);
 	if (IS_ERR_OR_NULL(attach)) {
 		rc = PTR_ERR(attach);
 		CAM_ERR(CAM_SMMU, "Error: dma buf attach failed");
@@ -2213,6 +2213,7 @@ static int cam_alloc_smmu_context_banks(struct device *dev)
 
 	cam_smmu_reset_iommu_table(CAM_SMMU_TABLE_INIT);
 	iommu_cb_set.cb_init_count = 0;
+	dma_set_mask(dev, DMA_BIT_MASK(64));
 
 	CAM_DBG(CAM_SMMU, "no of context banks :%d", iommu_cb_set.cb_num);
 	return 0;
