@@ -3236,7 +3236,7 @@ static void intel_ddi_update_pipe_dp(struct intel_atomic_state *state,
 	intel_dp_set_infoframes(encoder, true, crtc_state, conn_state);
 	intel_edp_drrs_update(intel_dp, crtc_state);
 
-	intel_panel_update_backlight(state, encoder, crtc_state, conn_state);
+	intel_backlight_update(state, encoder, crtc_state, conn_state);
 	drm_connector_update_privacy_screen(conn_state);
 }
 
