@@ -3017,7 +3017,7 @@ static void intel_enable_ddi_dp(struct intel_atomic_state *state,
 	if (!dig_port->lspcon.active || dig_port->dp.has_hdmi_sink)
 		intel_dp_set_infoframes(encoder, true, crtc_state, conn_state);
 
-	intel_edp_drrs_enable(intel_dp, crtc_state);
+	intel_drrs_enable(intel_dp, crtc_state);
 
 	if (crtc_state->has_audio)
 		intel_audio_codec_enable(encoder, crtc_state, conn_state);
@@ -3205,7 +3205,7 @@ static void intel_pre_disable_ddi(struct intel_atomic_state *state,
 		return;
 
 	intel_dp = enc_to_intel_dp(encoder);
-	intel_edp_drrs_disable(intel_dp, old_crtc_state);
+	intel_drrs_disable(intel_dp, old_crtc_state);
 	intel_psr_disable(intel_dp, old_crtc_state);
 }
 
@@ -3235,7 +3235,7 @@ static void intel_ddi_update_pipe_dp(struct intel_atomic_state *state,
 
 	intel_psr_update(intel_dp, crtc_state, conn_state);
 	intel_dp_set_infoframes(encoder, true, crtc_state, conn_state);
-	intel_edp_drrs_update(intel_dp, crtc_state);
+	intel_drrs_update(intel_dp, crtc_state);
 
 	intel_backlight_update(state, encoder, crtc_state, conn_state);
 	drm_connector_update_privacy_screen(conn_state);
