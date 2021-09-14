@@ -275,6 +275,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fix_l1ss = false,
 		.max_tx_ring = DP_TCL_NUM_RING_MAX_QCA6390,
 		.hal_params = &ath11k_hw_hal_params_qca6390,
+		.check_dynamic_smps = true,
 	},
 };
 

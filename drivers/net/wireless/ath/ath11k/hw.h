@@ -176,6 +176,7 @@ struct ath11k_hw_params {
 	bool fix_l1ss;
 	u8 max_tx_ring;
 	const struct ath11k_hw_hal_params *hal_params;
+	bool check_dynamic_smps;
 };
 
 struct ath11k_hw_ops {
