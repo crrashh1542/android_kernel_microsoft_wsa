@@ -51,6 +51,8 @@ config SND_SOC_AMD_RENOIR_MACH
 	select SND_SOC_DMIC
 	select SND_SOC_RT5682_I2C
 	select SND_SOC_RT1019
+	select SND_SOC_RT5682S
+	select SND_SOC_MAX98357A
 	depends on SND_SOC_AMD_RENOIR && I2C
 	help
 	 This option enables machine driver for DMIC

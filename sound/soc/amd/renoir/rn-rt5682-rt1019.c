@@ -21,6 +21,7 @@
 #include <linux/dmi.h>
 
 #include "rn_acp3x.h"
+#include "../../codecs/rt5682s.h"
 #include "../../codecs/rt5682.h"
 #include "../../codecs/rt1019.h"
 
@@ -48,6 +49,77 @@ static const struct dmi_system_id rn_quirk_table[] = {
 	},
 	{},
 };
+
+static int acp3x_rn_5682s_init(struct snd_soc_pcm_runtime *rtd)
+{
+	int ret;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+	struct snd_soc_component *component = codec_dai->component;
+
+	dev_info(rtd->dev, "codec dai name = %s\n", codec_dai->name);
+
+	/* set rt5682 dai fmt */
+	ret =  snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S
+			| SND_SOC_DAIFMT_NB_NF
+			| SND_SOC_DAIFMT_CBM_CFM);
+	if (ret < 0) {
+		dev_err(rtd->card->dev,
+			"Failed to set rt5682s dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	/* set codec PLL */
+	ret = snd_soc_dai_set_pll(codec_dai, RT5682S_PLL2,RT5682S_PLL_S_MCLK,
+				  PCO_PLAT_CLK, RT5682_PLL_FREQ);
+	if (ret < 0) {
+		dev_err(rtd->dev, "can't set rt5682s PLL: %d\n", ret);
+		return ret;
+	}
+
+	/* Set codec sysclk */
+	ret = snd_soc_dai_set_sysclk(codec_dai, RT5682S_SCLK_S_PLL2,
+				     RT5682_PLL_FREQ, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(rtd->dev,
+			"Failed to set rt5682s SYSCLK: %d\n", ret);
+		return ret;
+	}
+
+	/* Set tdm/i2s1 master bclk ratio */
+	ret = snd_soc_dai_set_bclk_ratio(codec_dai, 64);
+	if (ret < 0) {
+		dev_err(rtd->dev,
+			"Failed to set rt5682s tdm bclk ratio: %d\n", ret);
+		return ret;
+	}
+
+	rt5682_dai_wclk = clk_get(component->dev, "rt5682-dai-wclk");
+	rt5682_dai_bclk = clk_get(component->dev, "rt5682-dai-bclk");
+
+	ret = snd_soc_card_jack_new(card, "Headset Jack",
+				    SND_JACK_HEADSET | SND_JACK_LINEOUT |
+				    SND_JACK_BTN_0 | SND_JACK_BTN_1 |
+				    SND_JACK_BTN_2 | SND_JACK_BTN_3,
+				    &pco_jack, NULL, 0);
+	if (ret) {
+		dev_err(card->dev, "HP jack creation failed %d\n", ret);
+		return ret;
+	}
+
+	snd_jack_set_key(pco_jack.jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
+	snd_jack_set_key(pco_jack.jack, SND_JACK_BTN_1, KEY_VOICECOMMAND);
+	snd_jack_set_key(pco_jack.jack, SND_JACK_BTN_2, KEY_VOLUMEUP);
+	snd_jack_set_key(pco_jack.jack, SND_JACK_BTN_3, KEY_VOLUMEDOWN);
+
+	ret = snd_soc_component_set_jack(component, &pco_jack, NULL);
+	if (ret) {
+		dev_err(rtd->dev, "Headset Jack call-back failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
 
 static int acp3x_rn_5682_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -216,6 +288,23 @@ static int acp3x_rn_5682_startup(struct snd_pcm_substream *substream)
 	return rn_rt5682_clk_enable(substream);
 }
 
+static int acp3x_rn_max_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_card *card = rtd->card;
+	struct acp3x_platform_info *machine = snd_soc_card_get_drvdata(card);
+
+	machine->play_i2s_instance = I2S_SP_INSTANCE;
+
+	runtime->hw.channels_max = DUAL_CHANNEL;
+	snd_pcm_hw_constraint_list(runtime, 0, SNDRV_PCM_HW_PARAM_CHANNELS,
+				   &constraints_channels);
+	snd_pcm_hw_constraint_list(runtime, 0, SNDRV_PCM_HW_PARAM_RATE,
+				   &constraints_rates);
+	return rn_rt5682_clk_enable(substream);
+}
+
 static int acp3x_rn_rt1019_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -264,6 +353,12 @@ static const struct snd_soc_ops acp3x_rn_rt1019_play_ops = {
 	.hw_params = acp3x_rn_1019_hw_params,
 };
 
+static const struct snd_soc_ops acp3x_rn_max_play_ops = {
+	.startup = acp3x_rn_max_startup,
+	.shutdown = rn_rt5682_shutdown,
+	.hw_params = acp3x_rn_1019_hw_params,
+};
+
 static const struct snd_soc_ops acp3x_rn_dmic_ops = {
 	.startup = acp3x_rn_dmic_startup,
 };
@@ -283,10 +378,13 @@ SND_SOC_DAILINK_DEF(acp3x_i2s,
 
 SND_SOC_DAILINK_DEF(i2s_platform,
 		    DAILINK_COMP_ARRAY(COMP_PLATFORM("acp_rn_i2s_dma.0")));
-
+SND_SOC_DAILINK_DEF(rt5682s,
+		    DAILINK_COMP_ARRAY(COMP_CODEC("i2c-RTL5682:00", "rt5682s-aif1")));
 SND_SOC_DAILINK_DEF(rt5682,
 		    DAILINK_COMP_ARRAY(COMP_CODEC("i2c-10EC5682:00", "rt5682-aif1")));
 
+SND_SOC_DAILINK_DEF(max,
+	DAILINK_COMP_ARRAY(COMP_CODEC("MX98360A:00", "HiFi")));
 SND_SOC_DAILINK_DEF(rt1019,
 	DAILINK_COMP_ARRAY(COMP_CODEC("i2c-10EC1019:00", "rt1019-aif"),
 			COMP_CODEC("i2c-10EC1019:01", "rt1019-aif")));
@@ -324,6 +422,12 @@ static const struct snd_soc_dapm_widget acp3x_rn_1019_widgets[] = {
 	SND_SOC_DAPM_SPK("Right Spk", NULL),
 };
 
+static const struct snd_soc_dapm_widget acp3x_rn_5682_max_widgets[] = {
+	SND_SOC_DAPM_HP("Headphone Jack", NULL),
+	SND_SOC_DAPM_MIC("Headset Mic", NULL),
+	SND_SOC_DAPM_SPK("Spk", NULL),
+};
+
 static const struct snd_soc_dapm_route acp3x_rn_1019_route[] = {
 	{"Headphone Jack", NULL, "HPOL"},
 	{"Headphone Jack", NULL, "HPOR"},
@@ -333,11 +437,24 @@ static const struct snd_soc_dapm_route acp3x_rn_1019_route[] = {
 	{"Right Spk", NULL, "Right SPO"},
 };
 
+static const struct snd_soc_dapm_route acp3x_rn_5682_audio_route[] = {
+	{"Headphone Jack", NULL, "HPOL"},
+	{"Headphone Jack", NULL, "HPOR"},
+	{"IN1P", NULL, "Headset Mic"},
+	{"Spk", NULL, "Speaker"},
+};
+
 static const struct snd_kcontrol_new acp3x_rn_mc_1019_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Headphone Jack"),
 	SOC_DAPM_PIN_SWITCH("Headset Mic"),
 	SOC_DAPM_PIN_SWITCH("Left Spk"),
 	SOC_DAPM_PIN_SWITCH("Right Spk"),
+};
+
+static const struct snd_kcontrol_new acp3x_rn_5682_mc_controls[] = {
+	SOC_DAPM_PIN_SWITCH("Headphone Jack"),
+	SOC_DAPM_PIN_SWITCH("Spk"),
+	SOC_DAPM_PIN_SWITCH("Headset Mic"),
 };
 
 static struct snd_soc_card acp3x_rn_5682_1019 = {
@@ -349,6 +466,28 @@ static struct snd_soc_card acp3x_rn_5682_1019 = {
 	.num_dapm_routes = ARRAY_SIZE(acp3x_rn_1019_route),
 	.controls = acp3x_rn_mc_1019_controls,
 	.num_controls = ARRAY_SIZE(acp3x_rn_mc_1019_controls),
+};
+
+static struct snd_soc_card acp3x_rn_5682_m98360 = {
+	.name = "acp3xalc5682m98360",
+	.owner = THIS_MODULE,
+	.dapm_widgets = acp3x_rn_5682_max_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(acp3x_rn_5682_max_widgets),
+	.dapm_routes = acp3x_rn_5682_audio_route,
+	.num_dapm_routes = ARRAY_SIZE(acp3x_rn_5682_audio_route),
+	.controls = acp3x_rn_5682_mc_controls,
+	.num_controls = ARRAY_SIZE(acp3x_rn_5682_mc_controls),
+};
+
+static struct snd_soc_card acp3x_rn_5682s_m98360 = {
+	.name = "acp3xalc5682sm98360",
+	.owner = THIS_MODULE,
+	.dapm_widgets = acp3x_rn_5682_max_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(acp3x_rn_5682_max_widgets),
+	.dapm_routes = acp3x_rn_5682_audio_route,
+	.num_dapm_routes = ARRAY_SIZE(acp3x_rn_5682_audio_route),
+	.controls = acp3x_rn_5682_mc_controls,
+	.num_controls = ARRAY_SIZE(acp3x_rn_5682_mc_controls),
 };
 
 static struct snd_soc_card acp3x_rn_dmic_5682_1019 = {
@@ -425,41 +564,118 @@ static int acp_card_dai_links_create(struct snd_soc_card *card)
 	links = devm_kzalloc(dev, sizeof(struct snd_soc_dai_link) *
 			     num_links, GFP_KERNEL);
 
-	/* Initialize Headset codec dai link if defined */
-	links[0].name = "acp3x-5682-play";
-	links[0].stream_name = "Playback";
-	links[0].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBM_CFM;
-	links[0].codecs = rt5682;
-	links[0].num_codecs = ARRAY_SIZE(rt5682);
-	links[0].cpus = acp3x_i2s;
-	links[0].num_cpus = ARRAY_SIZE(acp3x_i2s);
-	links[0].platforms = i2s_platform;
-	links[0].num_platforms = ARRAY_SIZE(i2s_platform);
-	links[0].ops = &acp3x_rn_5682_ops;
-	links[0].init = acp3x_rn_5682_init;
-	links[0].dpcm_playback = 1;
-	links[0].dpcm_capture = 1;
+	if(!(strcmp(card->name,"acp3xalc56821019")))
+	{
+		/* Initialize Headset codec dai link if defined */
+		links[0].name = "acp3x-5682-play";
+		links[0].stream_name = "Playback";
+		links[0].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+				   SND_SOC_DAIFMT_CBM_CFM;
 
-	/* Initialize Amp codec dai link if defined */
-	links[1].name = "acp3x-rt1019-play";
-	links[1].stream_name = "HiFi Playback";
-	links[1].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBS_CFS;
-	if (dmi_check_system(rn_quirk_table)) {
-		links[1].codecs = rt1019;
-		links[1].num_codecs = ARRAY_SIZE(rt1019);
-	} else {
-		links[1].codecs = rt1019_1;
-		links[1].num_codecs = ARRAY_SIZE(rt1019_1);
+		links[0].codecs = rt5682;
+		links[0].num_codecs = ARRAY_SIZE(rt5682);
+		links[0].cpus = acp3x_i2s;
+		links[0].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[0].platforms = i2s_platform;
+		links[0].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[0].ops = &acp3x_rn_5682_ops;
+		links[0].init = acp3x_rn_5682_init;
+		links[0].dpcm_playback = 1;
+		links[0].dpcm_capture = 1;
+
+		/* Initialize Amp codec dai link if defined */
+		links[1].name = "acp3x-rt1019-play";
+		links[1].stream_name = "HiFi Playback";
+		links[1].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+				   SND_SOC_DAIFMT_CBS_CFS;
+		if (dmi_check_system(rn_quirk_table)) {
+			links[1].codecs = rt1019;
+			links[1].num_codecs = ARRAY_SIZE(rt1019);
+		} else {
+			links[1].codecs = rt1019_1;
+			links[1].num_codecs = ARRAY_SIZE(rt1019_1);
+		}
+		links[1].cpus = acp3x_i2s;
+		links[1].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[1].platforms = i2s_platform;
+		links[1].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[1].ops = &acp3x_rn_rt1019_play_ops;
+		links[1].dpcm_playback = 1;
+
+
+		if (dmi_check_system(rn_quirk_table)) {
+			card->codec_conf = rt1019_conf;
+			card->num_configs = ARRAY_SIZE(rt1019_conf);
+		} else {
+			card->codec_conf = rt1019_conf_1;
+			card->num_configs = ARRAY_SIZE(rt1019_conf_1);
+		}
 	}
-	links[1].cpus = acp3x_i2s;
-	links[1].num_cpus = ARRAY_SIZE(acp3x_i2s);
-	links[1].platforms = i2s_platform;
-	links[1].num_platforms = ARRAY_SIZE(i2s_platform);
-	links[1].ops = &acp3x_rn_rt1019_play_ops;
-	links[1].dpcm_playback = 1;
+	else if(!(strcmp(card->name , "acp3xalc5682m98360")))
+	{
+		/* Initialize Headset codec dai link if defined */
+		links[0].name = "acp3x-5682-play";
+		links[0].stream_name = "Playback";
+		links[0].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+				   SND_SOC_DAIFMT_CBM_CFM;
 
+		links[0].codecs = rt5682;
+		links[0].num_codecs = ARRAY_SIZE(rt5682);
+		links[0].cpus = acp3x_i2s;
+		links[0].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[0].platforms = i2s_platform;
+		links[0].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[0].ops = &acp3x_rn_5682_ops;
+		links[0].init = acp3x_rn_5682_init;
+		links[0].dpcm_playback = 1;
+		links[0].dpcm_capture = 1;
+
+		links[1].name = "acp3x-max98360-play";
+		links[1].stream_name = "HiFi Playback";
+		links[1].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+				| SND_SOC_DAIFMT_CBS_CFS;
+		links[1].dpcm_playback = 1;
+		links[1].ops = &acp3x_rn_max_play_ops;
+		links[1].cpus = acp3x_i2s;
+		links[1].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[1].platforms = i2s_platform;
+		links[1].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[1].codecs = max;
+		links[1].num_codecs = ARRAY_SIZE(max);
+	}
+	else if(!(strcmp(card->name,"acp3xalc5682sm98360")))
+	{
+		/* Initialize Headset codec dai link if defined */
+		links[0].name = "acp3x-5682s-play";
+		links[0].stream_name = "Playback";
+		links[0].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+				   SND_SOC_DAIFMT_CBM_CFM;
+
+		links[0].codecs = rt5682s;
+		links[0].num_codecs = ARRAY_SIZE(rt5682s);
+		links[0].cpus = acp3x_i2s;
+		links[0].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[0].platforms = i2s_platform;
+		links[0].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[0].ops = &acp3x_rn_5682_ops;
+		links[0].init = acp3x_rn_5682s_init;
+		links[0].dpcm_playback = 1;
+		links[0].dpcm_capture = 1;
+
+
+		links[1].name = "acp3x-max98360-play";
+		links[1].stream_name = "HiFi Playback";
+		links[1].dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+				| SND_SOC_DAIFMT_CBS_CFS;
+		links[1].dpcm_playback = 1;
+		links[1].ops = &acp3x_rn_max_play_ops;
+		links[1].cpus = acp3x_i2s;
+		links[1].num_cpus = ARRAY_SIZE(acp3x_i2s);
+		links[1].platforms = i2s_platform;
+		links[1].num_platforms = ARRAY_SIZE(i2s_platform);
+		links[1].codecs = max;
+		links[1].num_codecs = ARRAY_SIZE(max);
+	}
 	/* Initialize Dmic codec dai link if defined */
 	links[2].name = "acp3x-dmic-capture";
 	links[2].stream_name = "DMIC capture";
@@ -471,14 +687,6 @@ static int acp_card_dai_links_create(struct snd_soc_card *card)
 	links[2].num_platforms = ARRAY_SIZE(pdm_platform);
 	links[2].capture_only = 1;
 	links[2].ops = &acp3x_rn_dmic_ops;
-
-	if (dmi_check_system(rn_quirk_table)) {
-		card->codec_conf = rt1019_conf;
-		card->num_configs = ARRAY_SIZE(rt1019_conf);
-	} else {
-		card->codec_conf = rt1019_conf_1;
-		card->num_configs = ARRAY_SIZE(rt1019_conf_1);
-	}
 
 	card->dai_link = links;
 	card->num_links = num_links;
@@ -528,6 +736,8 @@ static const struct acpi_device_id acp3x_rn_audio_acpi_match[] = {
 	{ "AMDI1019", (unsigned long)&acp3x_rn_5682_1019},
 	{ "10021019", (unsigned long)&acp3x_rn_dmic_5682_1019},
 	{ "10025682", (unsigned long)&acp3x_rn_5682},
+	{ "10029836", (unsigned long)&acp3x_rn_5682s_m98360},
+	{ "AMDI9836", (unsigned long)&acp3x_rn_5682_m98360},
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, acp3x_rn_audio_acpi_match);
