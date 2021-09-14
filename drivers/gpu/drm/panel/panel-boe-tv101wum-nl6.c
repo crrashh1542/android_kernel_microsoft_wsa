@@ -45,6 +45,7 @@ struct boe_panel {
 	const struct panel_desc *desc;
 
 	enum drm_panel_orientation orientation;
+	struct regulator *pp3300;
 	struct regulator *pp1800;
 	struct regulator *avee;
 	struct regulator *avdd;
@@ -503,6 +504,7 @@ static int boe_panel_unprepare_power(struct drm_panel *panel)
 		gpiod_set_value(boe->enable_gpio, 0);
 		usleep_range(5000, 7000);
 		regulator_disable(boe->pp1800);
+		regulator_disable(boe->pp3300);
 	} else {
 		msleep(150);
 		gpiod_set_value(boe->enable_gpio, 0);
@@ -511,6 +513,7 @@ static int boe_panel_unprepare_power(struct drm_panel *panel)
 		regulator_disable(boe->avdd);
 		usleep_range(5000, 7000);
 		regulator_disable(boe->pp1800);
+		regulator_disable(boe->pp3300);
 	}
 
 	boe->prepared_power = false;
@@ -550,6 +553,10 @@ static int boe_panel_prepare_power(struct drm_panel *panel)
 
 	gpiod_set_value(boe->enable_gpio, 0);
 	usleep_range(1000, 1500);
+
+	ret = regulator_enable(boe->pp3300);
+	if (ret < 0)
+		return ret;
 
 	ret = regulator_enable(boe->pp1800);
 	if (ret < 0)
@@ -794,6 +801,10 @@ static int boe_panel_add(struct boe_panel *boe)
 	boe->avee = devm_regulator_get(dev, "avee");
 	if (IS_ERR(boe->avee))
 		return PTR_ERR(boe->avee);
+
+	boe->pp3300 = devm_regulator_get(dev, "pp3300");
+	if (IS_ERR(boe->pp3300))
+		return PTR_ERR(boe->pp3300);
 
 	boe->pp1800 = devm_regulator_get(dev, "pp1800");
 	if (IS_ERR(boe->pp1800))
