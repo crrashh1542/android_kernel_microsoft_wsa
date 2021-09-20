@@ -31,6 +31,7 @@
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/sched/clock.h>
 
 struct drm_i915_private;
 struct timer_list;
