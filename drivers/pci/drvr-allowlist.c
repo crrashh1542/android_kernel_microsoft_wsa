@@ -202,9 +202,9 @@ bool pci_allowed_to_attach(struct pci_driver *drv, struct pci_dev *dev)
 		goto allowed;
 	}
 
-	/* Allow trusted devices */
+	/* Allow internal devices */
 	if (!dev_is_removable(&dev->dev)) {
-		reason = "trusted device";
+		reason = "internal device";
 		goto allowed;
 	}
 
