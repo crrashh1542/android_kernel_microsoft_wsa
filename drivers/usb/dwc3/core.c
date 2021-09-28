@@ -1788,7 +1788,8 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 	case DWC3_GCTL_PRTCAP_HOST:
 		dwc3_set_phy_speed_flags(dwc);
 		if (!PMSG_IS_AUTO(msg)) {
-			if (usb_wakeup_enabled_descendants(hcd->self.root_hub))
+			if (device_may_wakeup(&dwc->xhci->dev) &&
+			    usb_wakeup_enabled_descendants(hcd->self.root_hub))
 				dwc->need_phy_for_wakeup = true;
 			else
 				dwc->need_phy_for_wakeup = false;
