@@ -63,7 +63,7 @@ static int ieee80211_set_mon_options(struct ieee80211_sub_if_data *sdata,
 #if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 				     u32 flags,
 #endif
-				     struct vif_params *params)
+struct vif_params *params)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_sub_if_data *monitor_sdata;
@@ -126,7 +126,7 @@ static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
 #if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 						u32 *flags,
 #endif
-						struct vif_params *params)
+struct vif_params *params)
 {
 #if CFG80211_VERSION <= KERNEL_VERSION(4,0,0)
 	unsigned char name_assign_type = NET_NAME_UNKNOWN;
@@ -168,7 +168,7 @@ static int ieee80211_change_iface(struct wiphy *wiphy,
 #if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 				  u32 *flags,
 #endif
-				  struct vif_params *params)
+struct vif_params *params)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
@@ -2647,7 +2647,7 @@ ieee80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev
 			  ,
 			  u64 reqid
 #endif
-			  )
+)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 
@@ -4436,19 +4436,19 @@ const struct cfg80211_ops mac80211_config_ops = {
 		.mgmt_frame_register = ieee80211_mgmt_frame_register,
 #endif
 
-		.set_antenna = ieee80211_set_antenna,
-		.get_antenna = ieee80211_get_antenna,
-		.set_rekey_data = ieee80211_set_rekey_data,
-		.tdls_oper = ieee80211_tdls_oper,
-		.tdls_mgmt = ieee80211_tdls_mgmt,
+	.set_antenna = ieee80211_set_antenna,
+	.get_antenna = ieee80211_get_antenna,
+	.set_rekey_data = ieee80211_set_rekey_data,
+	.tdls_oper = ieee80211_tdls_oper,
+	.tdls_mgmt = ieee80211_tdls_mgmt,
 #if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
-		.tdls_channel_switch = ieee80211_tdls_channel_switch,
+	.tdls_channel_switch = ieee80211_tdls_channel_switch,
 #endif
 #if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
-		.tdls_cancel_channel_switch = ieee80211_tdls_cancel_channel_switch,
+	.tdls_cancel_channel_switch = ieee80211_tdls_cancel_channel_switch,
 #endif
-		.probe_client = ieee80211_probe_client,
-		.set_noack_map = ieee80211_set_noack_map,
+	.probe_client = ieee80211_probe_client,
+	.set_noack_map = ieee80211_set_noack_map,
 #ifdef CONFIG_PM
 	.set_wakeup = ieee80211_set_wakeup,
 #endif

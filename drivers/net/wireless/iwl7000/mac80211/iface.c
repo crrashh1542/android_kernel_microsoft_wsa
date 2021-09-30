@@ -1961,7 +1961,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 #if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 		     u32 flags,
 #endif
-		     struct vif_params *params)
+struct vif_params *params)
 {
 	struct net_device *ndev = NULL;
 	struct ieee80211_sub_if_data *sdata = NULL;
