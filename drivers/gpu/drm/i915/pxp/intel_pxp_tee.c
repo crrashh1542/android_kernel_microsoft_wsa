@@ -41,14 +41,32 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		goto unlock;
 	}
 
+	if (pxp->last_tee_msg_interrupted) {
+		/* read and drop data from the previous iteration */
+		ret = pxp_component->ops->recv(pxp_component->tee_dev,
+						msg_out, msg_out_max_size, 1);
+		if (ret == -EINTR)
+			goto unlock;
+
+		pxp->last_tee_msg_interrupted = false;
+	}
+
 	ret = pxp_component->ops->send(pxp_component->tee_dev, msg_in, msg_in_size, 1);
 	if (ret) {
+		/* flag on next msg to drop interrupted msg */
+		if (ret == -EINTR)
+			pxp->last_tee_msg_interrupted = true;
+
 		drm_err(&i915->drm, "Failed to send PXP TEE message\n");
 		goto unlock;
 	}
 
 	ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out, msg_out_max_size, 1);
 	if (ret < 0) {
+		/* flag on next msg to drop interrupted msg */
+		if (ret == -EINTR)
+			pxp->last_tee_msg_interrupted = true;
+
 		drm_err(&i915->drm, "Failed to receive PXP TEE message\n");
 		goto unlock;
 	}

@@ -99,6 +99,13 @@ struct intel_pxp {
 #define PXP_TERMINATION_REQUEST  BIT(0)
 #define PXP_TERMINATION_COMPLETE BIT(1)
 #define PXP_INVAL_REQUIRED       BIT(2)
+
+	/**
+	 * @last_tee_msg_interrupted: tracks if the last tee msg transaction was
+	 * interrupted by a pending signal. Since the msg still ends up being sent,
+	 * we need to drop the response to clear this state.
+	 **/
+	bool last_tee_msg_interrupted;
 };
 
 #endif /* __INTEL_PXP_TYPES_H__ */
