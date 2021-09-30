@@ -7566,7 +7566,7 @@ encoder_retry:
 		goto encoder_retry;
 	}
 	if (ret < 0) {
-		drm_dbg_kms(&i915->drm, "CRTC fixup failed\n");
+		drm_dbg_kms(&i915->drm, "CRTC config failure: %d\n", ret);
 		return ret;
 	}
 
