@@ -210,9 +210,9 @@ irqreturn_t cam_jpeg_enc_irq(int irq_num, void *data)
 				CAM_ERR(CAM_JPEG, "unexpected done, no cb");
 			}
 		} else {
+			core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
 			CAM_ERR(CAM_JPEG, "unexpected done irq");
 		}
-		core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
 		spin_unlock(&jpeg_enc_dev->hw_lock);
 	}
 	if (CAM_JPEG_HW_IRQ_IS_RESET_ACK(irq_status, hw_info)) {
@@ -404,8 +404,13 @@ int cam_jpeg_enc_stop_hw(void *data,
 		CAM_JPEG_ENC_RESET_TIMEOUT);
 	if (!rem_jiffies) {
 		CAM_ERR(CAM_JPEG, "error Reset Timeout");
+		spin_lock(&jpeg_enc_dev->hw_lock);
 		core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
+		spin_unlock(&jpeg_enc_dev->hw_lock);
 	}
+	spin_lock(&jpeg_enc_dev->hw_lock);
+	core_info->core_state = CAM_JPEG_ENC_CORE_READY;
+	spin_unlock(&jpeg_enc_dev->hw_lock);
 
 	mutex_unlock(&core_info->core_mutex);
 	return 0;
@@ -466,6 +471,51 @@ static int cam_jpeg_enc_hw_dump(struct cam_hw_info *jpeg_enc_dev,
 	CAM_DBG(CAM_JPEG, "offset %lld", dump_args->offset);
 
 	return 0;
+}
+
+int cam_jpeg_enc_write(void *hw_priv, void *write_args, uint32_t args_count)
+{
+	struct cam_hw_info *jpeg_enc_dev = hw_priv;
+	struct cam_jpeg_enc_device_core_info *core_info;
+	struct cam_hw_soc_info *soc_info;
+	void __iomem *mem_base;
+	struct cam_jpeg_rw_pair *wr_data = write_args;
+	int rc;
+
+	if (!jpeg_enc_dev) {
+		CAM_ERR(CAM_JPEG, "Invalid args");
+		return -EINVAL;
+	}
+
+	soc_info = &jpeg_enc_dev->soc_info;
+	core_info = jpeg_enc_dev->core_info;
+	mem_base = soc_info->reg_map[0].mem_base;
+
+	mutex_lock(&core_info->core_mutex);
+
+	spin_lock(&jpeg_enc_dev->hw_lock);
+	if (jpeg_enc_dev->hw_state == CAM_HW_STATE_POWER_DOWN ||
+	    core_info->core_state != CAM_JPEG_ENC_CORE_READY) {
+		CAM_ERR(CAM_JPEG, "JPEG HW is in wrong state");
+		rc = -EINVAL;
+		goto err_spin_unlock;
+	}
+	spin_unlock(&jpeg_enc_dev->hw_lock);
+
+	while (args_count--) {
+		cam_io_w_mb(wr_data->val, mem_base + wr_data->off);
+		wr_data++;
+	}
+
+	mutex_unlock(&core_info->core_mutex);
+
+	return 0;
+
+err_spin_unlock:
+	spin_unlock(&jpeg_enc_dev->hw_lock);
+	mutex_unlock(&core_info->core_mutex);
+
+	return rc;
 }
 
 int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,

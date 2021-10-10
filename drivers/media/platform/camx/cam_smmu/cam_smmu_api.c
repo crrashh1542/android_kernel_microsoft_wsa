@@ -1401,6 +1401,73 @@ err_buf_detach:
 	return rc;
 }
 
+static struct cam_context_bank_info *cam_smmu_get_cbank(int handle)
+{
+	int idx;
+
+	idx = GET_SMMU_TABLE_IDX(handle);
+	if (idx < 0 || idx >= iommu_cb_set.cb_num) {
+		CAM_ERR(CAM_SMMU, "Error: Index invalid. idx = %d hdl = %x",
+			idx, handle);
+		return NULL;
+	}
+
+	return &iommu_cb_set.cb_info[idx];
+}
+
+int cam_smmu_map_ext_buff(struct sg_table *table, int handle,
+			  dma_addr_t *paddr_ptr, size_t *len_ptr,
+			  enum cam_smmu_region_id region_id)
+{
+	struct cam_context_bank_info *cb;
+	struct gen_pool *pool;
+	int rc;
+
+	cb = cam_smmu_get_cbank(handle);
+	if (!cb)
+		return -EINVAL;
+
+	pool = cam_smmu_get_pool_for_region(cb, region_id);
+	if (!pool) {
+		CAM_ERR(CAM_SMMU, "Error: Wrong region requested");
+		return -EINVAL;
+	}
+
+	rc = cam_smmu_map_to_pool(cb->domain, pool, table, paddr_ptr, len_ptr);
+	if (rc < 0) {
+		CAM_ERR(CAM_SMMU,
+			"Buffer map failed, region_id=%u, size=%zu, handle=%d",
+			region_id, *len_ptr, handle);
+		return rc;
+	}
+
+	CAM_DBG(CAM_SMMU, "dev=%pK, paddr=%pK, len=%u", cb->dev,
+		(void *)*paddr_ptr, (unsigned int)*len_ptr);
+
+	return 0;
+}
+
+int cam_smmu_unmap_ext_buff(int handle,  dma_addr_t iova, size_t length,
+			    enum cam_smmu_region_id region_id)
+{
+	struct cam_context_bank_info *cb;
+	struct gen_pool *pool;
+
+	cb = cam_smmu_get_cbank(handle);
+	if (!cb)
+		return -EINVAL;
+
+	pool = cam_smmu_get_pool_for_region(cb, region_id);
+	if (!pool) {
+		CAM_ERR(CAM_SMMU, "Error: Wrong region requested");
+		return -EINVAL;
+	}
+
+	cam_smmu_unmap_from_pool(cb->domain, pool, iova, length);
+
+	return 0;
+}
+
 static int cam_smmu_map_buffer_and_add_to_list(int idx, int dma_fd,
 	 enum dma_data_direction dma_dir, dma_addr_t *paddr_ptr,
 	 size_t *len_ptr, enum cam_smmu_region_id region_id)

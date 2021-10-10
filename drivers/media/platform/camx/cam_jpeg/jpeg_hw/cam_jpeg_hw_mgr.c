@@ -1645,6 +1645,11 @@ static int cam_jpeg_mgr_cmd(void *hw_mgr_priv, void *cmd_args)
 	return rc;
 }
 
+int cam_jpeg_get_iommu_hd(void)
+{
+	return g_jpeg_hw_mgr.iommu_hdl;
+}
+
 int cam_jpeg_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl,
 	int *iommu_hdl)
 {
