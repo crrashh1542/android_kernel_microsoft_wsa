@@ -1368,7 +1368,7 @@ out_clk:
 	return ret;
 }
 
-static int sc16is7xx_remove(struct device *dev)
+static void sc16is7xx_remove(struct device *dev)
 {
 	struct sc16is7xx_port *s = dev_get_drvdata(dev);
 	int i;
@@ -1388,8 +1388,6 @@ static int sc16is7xx_remove(struct device *dev)
 	kthread_stop(s->kworker_task);
 
 	clk_disable_unprepare(s->clk);
-
-	return 0;
 }
 
 static const struct of_device_id __maybe_unused sc16is7xx_dt_ids[] = {
@@ -1447,7 +1445,9 @@ static int sc16is7xx_spi_probe(struct spi_device *spi)
 
 static int sc16is7xx_spi_remove(struct spi_device *spi)
 {
-	return sc16is7xx_remove(&spi->dev);
+	sc16is7xx_remove(&spi->dev);
+
+	return 0;
 }
 
 static const struct spi_device_id sc16is7xx_spi_id_table[] = {
@@ -1500,7 +1500,9 @@ static int sc16is7xx_i2c_probe(struct i2c_client *i2c,
 
 static int sc16is7xx_i2c_remove(struct i2c_client *client)
 {
-	return sc16is7xx_remove(&client->dev);
+	sc16is7xx_remove(&client->dev);
+
+	return 0;
 }
 
 static const struct i2c_device_id sc16is7xx_i2c_id_table[] = {
