@@ -1975,6 +1975,7 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 		goto err_emad_init;
 
 	if (!reload) {
+		devlink_set_features(devlink, DEVLINK_F_RELOAD);
 		err = devlink_register(devlink);
 		if (err)
 			goto err_devlink_register;

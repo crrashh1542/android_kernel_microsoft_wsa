@@ -3952,7 +3952,7 @@ static int devlink_reload(struct devlink *devlink, struct net *dest_net,
 	struct net *curr_net;
 	int err;
 
-	if (!devlink->reload_enabled)
+	if (!devlink->reload_enabled || !(devlink->features & DEVLINK_F_RELOAD))
 		return -EOPNOTSUPP;
 
 	memcpy(remote_reload_stats, devlink->stats.remote_reload_stats,
@@ -8898,6 +8898,23 @@ static bool devlink_reload_actions_valid(const struct devlink_ops *ops)
 }
 
 /**
+ *	devlink_set_features - Set devlink supported features
+ *
+ *	@devlink: devlink
+ *	@features: devlink support features
+ *
+ *	This interface allows us to set reload ops separatelly from
+ *	the devlink_alloc.
+ */
+void devlink_set_features(struct devlink *devlink, u64 features)
+{
+	WARN_ON(features & DEVLINK_F_RELOAD &&
+		!devlink_reload_supported(devlink->ops));
+	devlink->features = features;
+}
+EXPORT_SYMBOL_GPL(devlink_set_features);
+
+/**
  *	devlink_alloc_ns - Allocate new devlink instance resources
  *	in specific namespace
  *
@@ -8982,7 +8999,7 @@ void devlink_unregister(struct devlink *devlink)
 	wait_for_completion(&devlink->comp);
 
 	mutex_lock(&devlink_mutex);
-	WARN_ON(devlink_reload_supported(devlink->ops) &&
+	WARN_ON(devlink->features & DEVLINK_F_RELOAD &&
 		devlink->reload_enabled);
 	devlink_notify(devlink, DEVLINK_CMD_DEL);
 	xa_clear_mark(&devlinks, devlink->index, DEVLINK_REGISTERED);

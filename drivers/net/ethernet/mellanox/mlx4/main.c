@@ -4015,6 +4015,7 @@ static int mlx4_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	mutex_init(&dev->persist->interface_state_mutex);
 	mutex_init(&dev->persist->pci_status_mutex);
 
+	devlink_set_features(devlink, DEVLINK_F_RELOAD);
 	ret = devlink_register(devlink);
 	if (ret)
 		goto err_persist_free;

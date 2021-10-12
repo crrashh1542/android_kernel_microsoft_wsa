@@ -1470,6 +1470,7 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 	if (err)
 		goto err_devlink_free;
 
+	devlink_set_features(devlink, DEVLINK_F_RELOAD);
 	err = devlink_register(devlink);
 	if (err)
 		goto err_resources_unregister;
