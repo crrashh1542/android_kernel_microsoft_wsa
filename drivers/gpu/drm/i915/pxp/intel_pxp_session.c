@@ -444,6 +444,13 @@ static void pxp_terminate_complete(struct intel_pxp *pxp)
 {
 	/* Re-create the arb session after teardown handle complete */
 	if (pxp->hw_state_invalidated) {
+		/*
+		 * WA: Insert delay to allow GuC/CSE to resume allowing session
+		 * inits after an explicit terminate before attempting to
+		 * reinitialize the arb session
+		 */
+		msleep(50);
+
 		pxp_create_arb_session(pxp);
 		pxp->hw_state_invalidated = false;
 	}
