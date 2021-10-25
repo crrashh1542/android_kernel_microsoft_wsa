@@ -2214,6 +2214,7 @@ static int cam_alloc_smmu_context_banks(struct device *dev)
 	cam_smmu_reset_iommu_table(CAM_SMMU_TABLE_INIT);
 	iommu_cb_set.cb_init_count = 0;
 	dma_set_mask(dev, DMA_BIT_MASK(64));
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	CAM_DBG(CAM_SMMU, "no of context banks :%d", iommu_cb_set.cb_num);
 	return 0;
@@ -2446,6 +2447,7 @@ static int cam_smmu_probe(struct platform_device *pdev)
 		icp_fw.pages = NULL;
 		icp_fw.num_pages = 0;
 		dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+		dma_set_max_seg_size(dev, UINT_MAX);
 		return rc;
 	}
 
