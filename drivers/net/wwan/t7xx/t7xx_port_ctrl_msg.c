@@ -73,6 +73,9 @@ static void control_msg_handler(struct t7xx_port *port, struct sk_buff *skb)
 		if (port->rx_ch == CCCI_CONTROL_RX)
 			fsm_append_event(ctl, CCCI_EVENT_MD_HS2,
 					 skb->data, ctrl_msg_h->data_length);
+		if (port->rx_ch == CCCI_SAP_CONTROL_RX)
+                        fsm_append_event(ctl, CCCI_EVENT_SAP_HS2, \
+                                        skb->data, ctrl_msg_h->data_length);
 
 		ccci_free_skb(&port->mtk_dev->pools, skb);
 		break;

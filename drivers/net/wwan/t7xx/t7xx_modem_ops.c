@@ -151,7 +151,7 @@ static int mtk_acpi_reset(struct mtk_pci_dev *mtk_dev, char *fn_name)
 
 int mtk_acpi_fldr_func(struct mtk_pci_dev *mtk_dev)
 {
-	return mtk_acpi_reset(mtk_dev, "_RST");
+	return mtk_acpi_reset(mtk_dev, "._RST");
 }
 
 static void reset_device_via_pmic(struct mtk_pci_dev *mtk_dev)
@@ -404,7 +404,7 @@ static int parse_host_rt_data(struct core_sys_info *core, struct device *dev,
 				return -EINVAL;
 			}
 
-			if (i == RT_ID_MD_PORT_ENUM)
+			if ((i == RT_ID_MD_PORT_ENUM) || (i == RT_ID_SAP_PORT_ENUM))
 				port_proxy_node_control(dev, (struct port_msg *)rt_feature->data);
 		}
 	}
@@ -508,13 +508,90 @@ static void md_hk_wq(struct work_struct *work)
 
 	/* clear the HS2 EXIT event appended in core_reset() */
 	fsm_clear_event(ctl, CCCI_EVENT_MD_HS2_EXIT);
-	cldma_switch_cfg(ID_CLDMA1);
+	cldma_switch_cfg(ID_CLDMA1, HIF_CFG1);
 	cldma_start(ID_CLDMA1);
 	fsm_broadcast_state(ctl, MD_STATE_WAITING_FOR_HS2);
 	md = container_of(work, struct mtk_modem, handshake_work);
 	atomic_set(&md->core_md.handshake_ongoing, 1);
 	core_hk_handler(md, ctl, CCCI_EVENT_MD_HS2, CCCI_EVENT_MD_HS2_EXIT);
 }
+
+static void core_sap_handler(struct mtk_modem *md,
+			    struct ccci_fsm_ctl *ctl, enum ccci_fsm_event_state event_id,
+			    enum ccci_fsm_event_state err_detect)
+{
+	struct core_sys_info *core_info = &md->core_sap;
+	struct device *dev = &md->mtk_dev->pdev->dev;
+	struct ccci_fsm_event *event;
+	unsigned long flags;
+	int ret;
+
+	prepare_host_rt_data_query(core_info);
+
+	while (1) {
+		spin_lock_irqsave(&ctl->event_lock, flags);
+		if (list_empty(&ctl->event_queue)) {
+			spin_unlock_irqrestore(&ctl->event_lock, flags);
+			wait_event_interruptible(ctl->event_wq,
+						 !list_empty(&ctl->event_queue));
+			continue;
+		}
+
+		event = list_first_entry(&ctl->event_queue,
+					 struct ccci_fsm_event, entry);
+
+		if (event->event_id == err_detect) {
+			list_del(&event->entry);
+			dev_err(dev, "core handshake 2 exit\n");
+			spin_unlock_irqrestore(&ctl->event_lock, flags);
+			goto exit;
+		} else if (event->event_id == event_id) {
+			break;
+		}
+
+		spin_unlock_irqrestore(&ctl->event_lock, flags);
+	}
+
+	list_del(&event->entry);
+	spin_unlock_irqrestore(&ctl->event_lock, flags);
+	if (atomic_read(&ctl->exp_flg))
+		goto exit;
+
+	ret = parse_host_rt_data(core_info, dev, event->data, event->length);
+	if (ret) {
+		dev_err(dev, "core handshake 2 fail for the SAP :%d\n", ret);
+		goto exit;
+	}
+	if (atomic_read(&ctl->exp_flg))
+		goto exit;
+
+	ret = prepare_device_rt_data(core_info, dev, event->data, event->length);
+	if (ret) {
+		dev_err(dev, "core: handshake 3 fail:%d", ret);
+		goto exit;
+	}
+
+	atomic_set(&core_info->ready, 1);
+	atomic_set(&core_info->handshake_ongoing, 0);
+	wake_up(&ctl->async_hk_wq);
+exit:
+	kfree(event);
+}
+
+static void sap_hk_wq(struct work_struct *work)
+{
+	struct mtk_modem *md = container_of(work, struct mtk_modem, sap_handshake_work);
+        struct core_sys_info *core_info;
+        struct ccci_fsm_ctl *ctl = fsm_get_entry ();
+
+	core_info = &(md->core_sap);
+        fsm_clear_event(ctl, CCCI_EVENT_AP_HS2_EXIT);
+	cldma_switch_cfg(ID_CLDMA0, HIF_CFG_DEF);
+	cldma_start(ID_CLDMA0);
+        atomic_set(&core_info->handshake_ongoing, 1);
+        core_sap_handler(md, ctl, CCCI_EVENT_SAP_HS2, CCCI_EVENT_AP_HS2_EXIT);
+}
+
 
 void mtk_md_event_notify(struct mtk_modem *md, enum md_event_id evt_id)
 {
@@ -553,6 +630,19 @@ void mtk_md_event_notify(struct mtk_modem *md, enum md_event_id evt_id)
 			/* unmask async handshake interrupt */
 			mhccif_mask_clr(md->mtk_dev, D2H_INT_ASYNC_MD_HK);
 		}
+		
+		if (md_info->exp_id & D2H_INT_ASYNC_SAP_HK) {
+			queue_work(md->sap_handshake_wq, &md->sap_handshake_work);
+			md_info->exp_id &= ~D2H_INT_ASYNC_SAP_HK;
+			mhccif_base = md->mtk_dev->base_addr.mhccif_rc_base;
+			iowrite32(D2H_INT_ASYNC_SAP_HK,
+				  mhccif_base + REG_EP2RC_SW_INT_ACK);
+			mhccif_mask_set(md->mtk_dev, D2H_INT_ASYNC_SAP_HK);
+		} else {
+			/* unmask async handshake interrupt */
+			mhccif_mask_clr(md->mtk_dev, D2H_INT_ASYNC_MD_HK);
+			mhccif_mask_clr(md->mtk_dev, D2H_INT_ASYNC_SAP_HK);
+		}
 
 		spin_unlock_irqrestore(&md_info->exp_spinlock, flags);
 		/* unmask exception interrupt */
@@ -566,6 +656,7 @@ void mtk_md_event_notify(struct mtk_modem *md, enum md_event_id evt_id)
 	case FSM_READY:
 		/* mask async handshake interrupt */
 		mhccif_mask_set(md->mtk_dev, D2H_INT_ASYNC_MD_HK);
+		mhccif_mask_set(md->mtk_dev, D2H_INT_ASYNC_SAP_HK);
 		break;
 
 	default:
@@ -636,6 +727,19 @@ static struct mtk_modem *ccci_md_alloc(struct mtk_pci_dev *mtk_dev)
 	md->core_md.feature_set[RT_ID_MD_PORT_ENUM] &= ~FEATURE_MSK;
 	md->core_md.feature_set[RT_ID_MD_PORT_ENUM] |=
 		FIELD_PREP(FEATURE_MSK, MTK_FEATURE_MUST_BE_SUPPORTED);
+
+	atomic_set(&md->core_sap.ready, 0);
+	atomic_set(&md->core_sap.handshake_ongoing, 0);
+	md->sap_handshake_wq =
+		alloc_workqueue("%s", WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_HIGHPRI, 
+					   0, "sap_hk_wq");
+	if (!md->sap_handshake_wq)
+		return NULL;
+	INIT_WORK(&md->sap_handshake_work, sap_hk_wq);
+	md->core_sap.feature_set[RT_ID_SAP_PORT_ENUM] &= ~FEATURE_MSK;
+	md->core_sap.feature_set[RT_ID_SAP_PORT_ENUM] |= 
+		FIELD_PREP(FEATURE_MSK, MTK_FEATURE_MUST_BE_SUPPORTED);
+
 	return md;
 }
 
@@ -648,6 +752,7 @@ void mtk_md_reset(struct mtk_pci_dev *mtk_dev)
 	md_structure_reset(md);
 	ccci_fsm_reset();
 	cldma_reset(ID_CLDMA1);
+	cldma_reset(ID_CLDMA0);
 	port_proxy_reset(&mtk_dev->pdev->dev);
 	md->md_init_finish = true;
 	core_reset(md);
@@ -677,6 +782,10 @@ int mtk_md_init(struct mtk_pci_dev *mtk_dev)
 	if (ret)
 		goto err_alloc;
 
+	ret = cldma_alloc(ID_CLDMA0, mtk_dev);
+	if (ret)
+		goto err_alloc;
+
 	/* initialize md ctrl block */
 	md_structure_reset(md);
 
@@ -692,6 +801,10 @@ int mtk_md_init(struct mtk_pci_dev *mtk_dev)
 	ret = cldma_init(ID_CLDMA1);
 	if (ret)
 		goto err_ccmni_init;
+
+	ret = cldma_init(ID_CLDMA0);
+	if (ret)
+		goto err_cldma_init;
 
 	ret = port_proxy_init(mtk_dev->md);
 	if (ret)
@@ -713,6 +826,7 @@ err_fsm_init:
 	ccci_fsm_uninit();
 err_alloc:
 	destroy_workqueue(md->handshake_wq);
+	destroy_workqueue(md->sap_handshake_wq);
 
 	dev_err(&mtk_dev->pdev->dev, "modem init failed\n");
 	return ret;
@@ -734,8 +848,10 @@ void mtk_md_exit(struct mtk_pci_dev *mtk_dev)
 	/* change FSM state, will auto jump to stopped */
 	fsm_append_command(fsm_ctl, CCCI_COMMAND_PRE_STOP, 1);
 	port_proxy_uninit();
+	cldma_exit(ID_CLDMA0);
 	cldma_exit(ID_CLDMA1);
 	ccmni_exit(mtk_dev);
 	ccci_fsm_uninit();
 	destroy_workqueue(md->handshake_wq);
+	destroy_workqueue(md->sap_handshake_wq);
 }

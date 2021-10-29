@@ -30,6 +30,7 @@ enum ccci_fsm_state {
 enum ccci_fsm_event_state {
 	CCCI_EVENT_INVALID,
 	CCCI_EVENT_MD_HS2,
+	CCCI_EVENT_SAP_HS2,
 	CCCI_EVENT_MD_EX,
 	CCCI_EVENT_MD_EX_REC_OK,
 	CCCI_EVENT_MD_EX_PASS,
@@ -77,11 +78,17 @@ struct ccci_fsm_monitor {
 	struct ccci_skb_queue rx_skb_list;
 };
 
+struct coprocessor_ctl {
+	unsigned int last_dummy_reg;
+	struct timer_list event_check_timer;
+};
+
 struct ccci_fsm_ctl {
 	struct mtk_modem *md;
 	enum md_state md_state;
 	unsigned int curr_state;
 	unsigned int last_state;
+	u32 prev_status;
 	struct list_head command_queue;
 	struct list_head event_queue;
 	wait_queue_head_t command_wq;
@@ -95,6 +102,7 @@ struct ccci_fsm_ctl {
 	struct ccci_fsm_monitor monitor_ctl;
 	spinlock_t notifier_lock;	/* protects notifier_list */
 	struct list_head notifier_list;
+	struct coprocessor_ctl sap_state_ctl;
 };
 
 struct ccci_fsm_event {

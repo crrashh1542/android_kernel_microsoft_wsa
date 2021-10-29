@@ -63,6 +63,7 @@ static int port_char_open(struct inode *inode, struct file *file)
 	struct t7xx_port *port;
 
 	port = port_proxy_get_port(major, minor);
+
 	if (!port)
 		return -EINVAL;
 
@@ -164,7 +165,7 @@ static ssize_t port_char_write(struct file *file, const char __user *buf,
 	if (port_write_room_to_md(port) <= 0 && !blocking)
 		return -EAGAIN;
 
-	txq_mtu = CLDMA_TXQ_MTU;
+	txq_mtu = cldma_txq_mtu(port->txq_index);
 	if (port->flags & PORT_F_RAW_DATA || port->flags & PORT_F_USER_HEADER) {
 		if (port->flags & PORT_F_USER_HEADER && count > txq_mtu) {
 			dev_err(port->dev, "packet size: %zu larger than MTU on %s\n",

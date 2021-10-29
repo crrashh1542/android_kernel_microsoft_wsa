@@ -31,6 +31,13 @@ enum cldma_queue_type {
 	CLDMA_DEDICATED_Q,
 };
 
+typedef enum {
+        HIF_CFG_DEF = 0,
+        HIF_CFG1,
+        HIF_CFG2,
+        HIF_CFG_MAX,
+} HIF_CFG_ENUM;
+
 struct cldma_request {
 	void *gpd;		/* virtual address for CPU */
 	dma_addr_t gpd_addr;	/* physical address for DMA */
@@ -135,7 +142,7 @@ void cldma_hif_hw_init(enum cldma_id hif_id);
 int cldma_init(enum cldma_id hif_id);
 void cldma_exception(enum cldma_id hif_id, enum hif_ex_stage stage);
 void cldma_exit(enum cldma_id hif_id);
-void cldma_switch_cfg(enum cldma_id hif_id);
+void cldma_switch_cfg(enum cldma_id hif_id, unsigned int cfg_id);
 int cldma_write_room(enum cldma_id hif_id, unsigned char qno);
 void cldma_start(enum cldma_id hif_id);
 int cldma_stop(enum cldma_id hif_id);
@@ -144,5 +151,6 @@ void cldma_set_recv_skb(enum cldma_id hif_id,
 			int (*recv_skb)(struct cldma_queue *queue, struct sk_buff *skb));
 int cldma_send_skb(enum cldma_id hif_id, int qno, struct sk_buff *skb,
 		   bool skb_from_pool, bool blocking);
+int cldma_txq_mtu(unsigned char qno);
 
 #endif /* __T7XX_HIF_CLDMA_H__ */

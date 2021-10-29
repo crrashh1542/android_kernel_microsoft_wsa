@@ -17,7 +17,8 @@
 			 D2H_INT_EXCEPTION_CLEARQ_DONE |	\
 			 D2H_INT_EXCEPTION_ALLQ_RESET |		\
 			 D2H_INT_PORT_ENUM |			\
-			 D2H_INT_ASYNC_MD_HK)
+			 D2H_INT_ASYNC_MD_HK |			\
+			 D2H_INT_ASYNC_SAP_HK)
 
 void mhccif_mask_set(struct mtk_pci_dev *mtk_dev, u32 val);
 void mhccif_mask_clr(struct mtk_pci_dev *mtk_dev, u32 val);

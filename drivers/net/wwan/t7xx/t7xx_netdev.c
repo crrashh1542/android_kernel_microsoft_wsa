@@ -260,7 +260,7 @@ static void ccmni_wwan_setup(struct net_device *dev)
 	dev->header_ops = NULL;
 	dev->hard_header_len += sizeof(struct ccci_header);
 
-	dev->mtu = WWAN_DEFAULT_MTU;
+	dev->mtu = 1500;
 	dev->max_mtu = CCMNI_MTU_MAX;
 	dev->tx_queue_len = CCMNI_TX_QUEUE;
 	dev->watchdog_timeo = CCMNI_NETDEV_WDT_TO;

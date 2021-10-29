@@ -42,8 +42,6 @@ static struct class *dev_class;
 	     i++, (p) = &(proxy)->ports[i])
 
 static struct t7xx_port md_ccci_ports[] = {
-	{CCCI_UART2_TX, CCCI_UART2_RX, DATA_AT_CMD_Q, DATA_AT_CMD_Q, 0xff,
-	 0xff, ID_CLDMA1, PORT_F_RX_CHAR_NODE, &wwan_sub_port_ops, 0, "ttyC0", WWAN_PORT_AT},
 	{CCCI_MD_LOG_TX, CCCI_MD_LOG_RX, 7, 7, 7, 7, ID_CLDMA1,
 	 PORT_F_RX_CHAR_NODE, &char_port_ops, 2, "ttyCMdLog", WWAN_PORT_AT},
 	{CCCI_LB_IT_TX, CCCI_LB_IT_RX, 0, 0, 0xff, 0xff, ID_CLDMA1,
@@ -52,6 +50,18 @@ static struct t7xx_port md_ccci_ports[] = {
 	 PORT_F_RX_CHAR_NODE, &tty_port_ops, 1, "ttyCMIPC0",},
 	{CCCI_MBIM_TX, CCCI_MBIM_RX, 2, 2, 0, 0, ID_CLDMA1,
 	 PORT_F_RX_CHAR_NODE, &wwan_sub_port_ops, 10, "ttyCMBIM0", WWAN_PORT_MBIM},
+	/*{CCCI_SAP_GNSS_TX, CCCI_SAP_GNSS_RX, 0, 0, 0, 0, ID_CLDMA0,
+	 PORT_F_RX_CHAR_NODE, &char_port_ops, 6, "ccci_sap_gnss",},*/
+	{CCCI_SAP_GNSS_TX, CCCI_SAP_GNSS_RX, 0, 0, 0, 0, ID_CLDMA0, 
+	PORT_F_RX_CHAR_NODE, &wwan_sub_port_ops, 0, "ccci_sap_gnss", WWAN_PORT_AT},
+	{CCCI_UART2_TX, CCCI_UART2_RX, DATA_AT_CMD_Q, DATA_AT_CMD_Q, 0xff,
+	 0xff, ID_CLDMA1, PORT_F_RX_CHAR_NODE, &wwan_sub_port_ops, 0, "ttyC0", WWAN_PORT_AT},
+   	{CCCI_SAP_META_TX, CCCI_SAP_META_RX, 1, 1, 0, 0, ID_CLDMA0,
+	 PORT_F_RX_CHAR_NODE, &char_port_ops, 7, "ccci_sap_meta",},
+	{CCCI_SAP_LOG_TX, CCCI_SAP_LOG_RX, 2, 2, 0, 0, ID_CLDMA0, 
+	 PORT_F_RX_CHAR_NODE, &char_port_ops, 8, "ccci_sap_log",},
+    	{CCCI_SAP_ADB_TX, CCCI_SAP_ADB_RX, 3, 3, 0, 0, ID_CLDMA0, 
+	 PORT_F_RX_CHAR_NODE, &char_port_ops, 9, "ccci_sap_adb",},
 	{CCCI_UART1_TX, CCCI_UART1_RX, 1, 1, 1, 1, ID_CLDMA1,
 	 PORT_F_RX_CHAR_NODE, &char_port_ops, 11, "ttyCMdMeta",},
 	{CCCI_DSS0_TX, CCCI_DSS0_RX, 3, 3, 3, 3, ID_CLDMA1,
@@ -72,6 +82,10 @@ static struct t7xx_port md_ccci_ports[] = {
 	 PORT_F_RX_CHAR_NODE, &char_port_ops, 20, "ttyCMBIMDSS7",},
 	{CCCI_CONTROL_TX, CCCI_CONTROL_RX, 0, 0, 0, 0, ID_CLDMA1,
 	 0, &ctl_port_ops, 0xff, "ccci_ctrl",},
+    	{0xFFFF, 0xFFFF, 0, 0, 0, 0, ID_CLDMA0, PORT_F_RX_CHAR_NODE|PORT_F_RAW_DATA,
+		&char_port_ops, 1, "brom_download",},
+	{CCCI_SAP_CONTROL_TX, CCCI_SAP_CONTROL_RX, 0, 0, 0, 0, ID_CLDMA0, 0,
+                &ctl_port_ops, 0xFF, "ccci_sap_ctrl",},
 };
 
 static int port_netlink_send_msg(struct t7xx_port *port, int grp,
@@ -376,6 +390,7 @@ int port_send_skb_to_md(struct t7xx_port *port, struct sk_buff *skb, bool blocki
 		if (md_state == MD_STATE_STOPPED ||
 		    md_state == MD_STATE_WAITING_TO_STOP ||
 		    md_state == MD_STATE_INVALID) {
+			pr_info("%s: md_state = %d fsm_state = %d \n", __func__, md_state, fsm_state);
 			return -ENODEV;
 		}
 	}
@@ -609,6 +624,10 @@ static void proxy_init_all_ports(struct mtk_modem *md)
 			md->core_md.ctl_port = port;
 		}
 
+		if (port->tx_ch == CCCI_SAP_CONTROL_TX) {
+                        md->core_sap.ctl_port = port;
+		}
+
 		port->major = port_prox->major;
 		port->minor_base = port_prox->minor_base;
 		port->mtk_dev = md->mtk_dev;
@@ -737,6 +756,7 @@ int port_proxy_init(struct mtk_modem *md)
 		goto err_netlink;
 
 	cldma_set_recv_skb(ID_CLDMA1, port_proxy_recv_skb);
+	cldma_set_recv_skb(ID_CLDMA0, port_proxy_recv_skb);
 
 	return 0;
 

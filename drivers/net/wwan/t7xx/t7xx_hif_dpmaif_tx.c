@@ -87,8 +87,10 @@ static unsigned short dpmaif_release_tx_buffer(struct dpmaif_ctrl *dpmaif_ctrl,
 		cur_drb = drb_base + cur_idx;
 		if (FIELD_GET(DRB_PD_DTYP, cur_drb->header) == DES_DTYP_PD) {
 			cur_drb_skb = drb_skb_base + cur_idx;
-			dma_unmap_single(dpmaif_ctrl->dev, cur_drb_skb->bus_addr,
-					 cur_drb_skb->data_len, DMA_TO_DEVICE);
+			if (!(FIELD_GET(DRB_SKB_IS_MSG, cur_drb_skb->config))) {
+				dma_unmap_single(dpmaif_ctrl->dev, cur_drb_skb->bus_addr,
+						 cur_drb_skb->data_len, DMA_TO_DEVICE);
+			}
 
 			if (!FIELD_GET(DRB_PD_CONT, cur_drb->header)) {
 				if (!cur_drb_skb->skb) {
@@ -700,8 +702,10 @@ static void dpmaif_tx_buf_rel(struct dpmaif_tx_queue *txq)
 		for (i = 0; i < txq->drb_size_cnt; i++) {
 			drb_skb = drb_skb_base + i;
 			if (drb_skb->skb) {
-				dma_unmap_single(txq->dpmaif_ctrl->dev, drb_skb->bus_addr,
-						 drb_skb->data_len, DMA_TO_DEVICE);
+				if (!(FIELD_GET(DRB_SKB_IS_MSG, drb_skb->config))) {
+					dma_unmap_single(txq->dpmaif_ctrl->dev, drb_skb->bus_addr,
+							drb_skb->data_len, DMA_TO_DEVICE);
+				}
 				if (FIELD_GET(DRB_SKB_IS_LAST, drb_skb->config)) {
 					kfree_skb(drb_skb->skb);
 					drb_skb->skb = NULL;
@@ -809,8 +813,10 @@ static void dpmaif_stop_txq(struct dpmaif_tx_queue *txq)
 		for (i = 0; i < txq->drb_size_cnt; i++) {
 			drb_skb = drb_skb_base + i;
 			if (drb_skb->skb) {
-				dma_unmap_single(txq->dpmaif_ctrl->dev, drb_skb->bus_addr,
-						 drb_skb->data_len, DMA_TO_DEVICE);
+				if (!(FIELD_GET(DRB_SKB_IS_MSG, drb_skb->config))) {
+					dma_unmap_single(txq->dpmaif_ctrl->dev, drb_skb->bus_addr,
+							 drb_skb->data_len, DMA_TO_DEVICE);
+				}
 				if (FIELD_GET(DRB_SKB_IS_LAST, drb_skb->config)) {
 					kfree_skb(drb_skb->skb);
 					drb_skb->skb = NULL;

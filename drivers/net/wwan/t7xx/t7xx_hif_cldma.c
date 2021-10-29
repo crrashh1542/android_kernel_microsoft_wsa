@@ -37,8 +37,10 @@ static DEFINE_MUTEX(ctl_cfg_mutex); /* protects CLDMA late init config */
 static enum cldma_queue_type rxq_type[CLDMA_RXQ_NUM];
 static enum cldma_queue_type txq_type[CLDMA_TXQ_NUM];
 static int rxq_buff_size[CLDMA_RXQ_NUM];
+static int txq_buff_size[CLDMA_TXQ_NUM];
 static int rxq_buff_num[CLDMA_RXQ_NUM];
 static int txq_buff_num[CLDMA_TXQ_NUM];
+extern bool da_down_stage_flag;
 
 static struct cldma_ctrl *md_cd_get(enum cldma_id hif_id)
 {
@@ -1088,8 +1090,12 @@ int cldma_write_room(enum cldma_id hif_id, unsigned char qno)
 	if (!queue)
 		return -EINVAL;
 
-	if (queue->budget > (MAX_TX_BUDGET - 1))
-		return queue->budget;
+	if (likely(!da_down_stage_flag))
+		return queue->budget; 
+	else {
+		if (queue->budget > (MAX_TX_BUDGET - 1))
+			return queue->budget;
+	}
 
 	return 0;
 }
@@ -1216,7 +1222,15 @@ exit:
 	return ret;
 }
 
-static void ccci_cldma_adjust_config(void)
+int cldma_txq_mtu(unsigned char qno)
+{
+	if (qno >= CLDMA_TXQ_NUM)
+		return -EINVAL;
+
+	return txq_buff_size[qno];
+}
+
+static void ccci_cldma_adjust_config(unsigned char cfg_id)
 {
 	int qno;
 
@@ -1230,13 +1244,36 @@ static void ccci_cldma_adjust_config(void)
 	rxq_buff_size[CLDMA_RXQ_NUM - 1] = MTK_SKB_64K;
 
 	for (qno = 0; qno < CLDMA_TXQ_NUM; qno++) {
+		txq_buff_size[qno] = MTK_SKB_4K;
 		txq_type[qno] = CLDMA_SHARED_Q;
 		txq_buff_num[qno] = MAX_TX_BUDGET;
+	}
+
+	switch (cfg_id) {
+	case HIF_CFG_DEF:
+		break;
+	case HIF_CFG1:
+		rxq_buff_size[7] = MTK_SKB_64K;
+		break;
+	case HIF_CFG2:
+		/*Download Port Configuration*/
+		rxq_type[0] = CLDMA_DEDICATED_Q;
+		txq_type[0] = CLDMA_DEDICATED_Q;
+		txq_buff_size[0] = MTK_SKB_2K;
+		rxq_buff_size[0] = MTK_SKB_2K;
+		/*Postdump Port Configuration*/
+		rxq_type[1] = CLDMA_DEDICATED_Q;
+		txq_type[1] = CLDMA_DEDICATED_Q;
+		txq_buff_size[1] = MTK_SKB_2K;
+		rxq_buff_size[1] = MTK_SKB_2K;
+		break;
+	default:
+		break;
 	}
 }
 
 /* this function contains longer duration initializations */
-static int cldma_late_init(struct cldma_ctrl *md_ctrl)
+static int cldma_late_init(struct cldma_ctrl *md_ctrl, unsigned int cfg_id)
 {
 	char dma_pool_name[32];
 	int i, ret;
@@ -1247,7 +1284,7 @@ static int cldma_late_init(struct cldma_ctrl *md_ctrl)
 	}
 
 	mutex_lock(&ctl_cfg_mutex);
-	ccci_cldma_adjust_config();
+	ccci_cldma_adjust_config(cfg_id);
 	/* init ring buffers */
 	snprintf(dma_pool_name, 32, "cldma_request_dma_hif%d", md_ctrl->hif_id);
 	md_ctrl->gpd_dmapool = dma_pool_create(dma_pool_name, md_ctrl->dev,
@@ -1314,17 +1351,24 @@ static inline void __iomem *pcie_addr_transfer(void __iomem *addr, u32 addr_trs1
 static void hw_info_init(struct cldma_ctrl *md_ctrl)
 {
 	struct cldma_hw_info *hw_info;
-	u32 phy_ao_base, phy_pd_base;
+	u32 phy_ao_base = 0, phy_pd_base = 0;
 	struct mtk_addr_base *pbase;
 
 	pbase = &md_ctrl->mtk_dev->base_addr;
 	hw_info = &md_ctrl->hw_info;
-	if (md_ctrl->hif_id != ID_CLDMA1)
-		return;
 
-	phy_ao_base = CLDMA1_AO_BASE;
-	phy_pd_base = CLDMA1_PD_BASE;
-	hw_info->phy_interrupt_id = CLDMA1_INT;
+	if (md_ctrl->hif_id == ID_CLDMA1) {
+		phy_ao_base = CLDMA1_AO_BASE;
+		phy_pd_base = CLDMA1_PD_BASE;
+		hw_info->phy_interrupt_id = CLDMA1_INT;
+	} else if (md_ctrl->hif_id == ID_CLDMA0) {
+		phy_ao_base = CLDMA0_AO_BASE;
+		phy_pd_base = CLDMA0_PD_BASE;
+		hw_info->phy_interrupt_id = CLDMA0_INT;
+	} else {
+		dev_err(md_ctrl->dev, "incorrect CLDMA id\n");
+ 		return;
+	}
 
 	hw_info->hw_mode = MODE_BIT_64;
 	hw_info->ap_ao_base = pcie_addr_transfer(pbase->pcie_ext_reg_base,
@@ -1434,8 +1478,7 @@ static int cldma_resume(struct mtk_pci_dev *mtk_dev, void *entity_param)
 	cldma_hw_dismask_txrxirq(&md_ctrl->hw_info, CLDMA_ALL_Q, false);
 	cldma_hw_dismask_eqirq(&md_ctrl->hw_info, CLDMA_ALL_Q, false);
 	spin_unlock_irqrestore(&md_ctrl->cldma_lock, flags);
-	if (md_ctrl->hif_id == ID_CLDMA1)
-		mhccif_mask_clr(mtk_dev, D2H_SW_INT_MASK);
+	mhccif_mask_clr(mtk_dev, D2H_SW_INT_MASK);
 
 	return 0;
 }
@@ -1466,8 +1509,8 @@ static int cldma_suspend(struct mtk_pci_dev *mtk_dev, void *entity_param)
 
 	md_ctrl = entity_param;
 	hw_info = &md_ctrl->hw_info;
-	if (md_ctrl->hif_id == ID_CLDMA1)
-		mhccif_mask_set(mtk_dev, D2H_SW_INT_MASK);
+
+	mhccif_mask_set(mtk_dev, D2H_SW_INT_MASK);
 
 	spin_lock_irqsave(&md_ctrl->cldma_lock, flags);
 	cldma_hw_mask_eqirq(hw_info, CLDMA_ALL_Q, false);
@@ -1540,6 +1583,7 @@ static irqreturn_t cldma_isr_handler(int irq, void *data)
 
 	md_ctrl = data;
 	hw_info = &md_ctrl->hw_info;
+
 	mtk_pcie_mac_clear_int(md_ctrl->mtk_dev, hw_info->phy_interrupt_id);
 	cldma_irq_work_cb(md_ctrl);
 	mtk_pcie_mac_clear_int_status(md_ctrl->mtk_dev, hw_info->phy_interrupt_id);
@@ -1611,14 +1655,14 @@ int cldma_init(enum cldma_id hif_id)
 	return 0;
 }
 
-void cldma_switch_cfg(enum cldma_id hif_id)
+void cldma_switch_cfg(enum cldma_id hif_id, unsigned int cfg_id)
 {
 	struct cldma_ctrl *md_ctrl;
 
 	md_ctrl = md_cd_get(hif_id);
 	if (md_ctrl) {
 		cldma_late_release(md_ctrl);
-		cldma_late_init(md_ctrl);
+		cldma_late_init(md_ctrl, cfg_id);
 	}
 }
 

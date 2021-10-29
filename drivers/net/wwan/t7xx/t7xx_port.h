@@ -38,6 +38,19 @@
  * 0:reserved, 1: to sAP, 2: to MD
  */
 enum ccci_ch {
+
+	/* to sAP */
+        CCCI_SAP_CONTROL_RX = 0X1000,
+        CCCI_SAP_CONTROL_TX = 0X1001,
+        CCCI_SAP_GNSS_RX = 0x1004,
+        CCCI_SAP_GNSS_TX = 0x1005,
+        CCCI_SAP_META_RX = 0x1006,
+        CCCI_SAP_META_TX = 0x1007,
+        CCCI_SAP_LOG_RX = 0x1008,
+        CCCI_SAP_LOG_TX = 0x1009,
+        CCCI_SAP_ADB_RX = 0x100a,
+        CCCI_SAP_ADB_TX = 0x100b,
+
 	/* to MD */
 	CCCI_CONTROL_RX = 0x2000,
 	CCCI_CONTROL_TX = 0x2001,

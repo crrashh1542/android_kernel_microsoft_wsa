@@ -13,7 +13,8 @@
 
 #define MTK_SKB_64K	64528		/* 63kB + CCCI header */
 #define MTK_SKB_4K	3584		/* 3.5kB */
-#define MTK_SKB_1_5K	(WWAN_DEFAULT_MTU + 16)	/* net MTU + CCCI_H, for network packet */
+#define MTK_SKB_2K  	2048
+#define MTK_SKB_1_5K	(1500 + 16)	/* net MTU + CCCI_H, for network packet */
 #define MTK_SKB_16	16		/* for struct ccci_header */
 #define NET_RX_BUF	MTK_SKB_4K
 

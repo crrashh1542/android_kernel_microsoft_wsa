@@ -109,10 +109,17 @@ enum mtk_pm_resume_state {
 };
 
 #define PCIE_MISC_DEV_STATUS			0x0d1c
+#define MISC_DEV_STATUS_MASK			GENMASK(15, 0)
 #define MISC_STAGE_MASK				GENMASK(2, 0)
+#define BROM_EVENT_MASK 			0x00000070
 #define MISC_RESET_TYPE_PLDR			BIT(26)
 #define MISC_RESET_TYPE_FLDR			BIT(27)
+#define INIT_STAGE				0
 #define LINUX_STAGE				4
+#define BROM_STAGE_PRE				1
+#define BROM_STAGE_POST				2
+#define BROM_STAGE_PRE				1
+#define BROM_STAGE_POST				2
 
 #define PCIE_RESOURCE_STATUS			0x0d28
 #define PCIE_RESOURCE_STATUS_MSK		GENMASK(4, 0)
@@ -142,6 +149,15 @@ enum pcie_int {
 	DPMAIF2_INT,
 	SAP_RGU_INT,
 	CLDMA3_INT,
+};
+
+enum brom_event_id_e {
+        BROM_EVENT_NORMAL = 0,
+        BROM_EVENT_JUMP_BL = 1,
+        BROM_EVENT_TIME_OUT = 2,
+        BROM_EVENT_JUMP_DA = 3,
+        BROM_EVENT_CREATE_DL_PORT = 4,
+        BROM_EVENT_RESET = 7,
 };
 
 /* DPMA definitions */

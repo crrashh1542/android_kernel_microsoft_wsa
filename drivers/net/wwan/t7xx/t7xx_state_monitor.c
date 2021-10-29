@@ -23,7 +23,13 @@
 #define FSM_DRM_DISABLE_DELAY_MS 200
 #define FSM_EX_REASON GENMASK(23, 16)
 
+#define HOST_EVENT_MASK 0xFFFF0000
+#define HOST_EVENT_OFFSET 28
+
 static struct ccci_fsm_ctl *ccci_fsm_entry;
+static int count;
+static int brom_dl_flag = 1;
+bool da_down_stage_flag = false;
 
 void fsm_notifier_register(struct fsm_notifier_block *notifier)
 {
@@ -239,6 +245,118 @@ static void fsm_routine_exception(struct ccci_fsm_ctl *ctl, struct ccci_fsm_comm
 		fsm_finish_command(ctl, cmd, FSM_CMD_RESULT_OK);
 }
 
+static void brom_event_monitor(struct timer_list *timer)
+{
+	struct mtk_modem *md;
+	unsigned int dummy_reg = 0;
+	struct coprocessor_ctl *temp_cocore_ctl = container_of(timer,
+		struct coprocessor_ctl, event_check_timer);
+	struct ccci_fsm_ctl *fsm_ctl = container_of(temp_cocore_ctl,
+		struct ccci_fsm_ctl, sap_state_ctl);
+
+	md = fsm_ctl->md;
+
+	/*store dummy register*/
+	dummy_reg = ioread32(IREG_BASE(md->mtk_dev) + PCIE_MISC_DEV_STATUS);
+	dummy_reg &= MISC_DEV_STATUS_MASK;
+	if (dummy_reg != fsm_ctl->prev_status)
+		fsm_append_command(fsm_ctl, CCCI_COMMAND_START, 0);
+	mod_timer(timer, jiffies + HZ/20);
+}
+
+static inline void start_brom_event_start_timer(struct ccci_fsm_ctl *ctl)
+{
+	if (!ctl->sap_state_ctl.event_check_timer.function) {
+		timer_setup(&(ctl->sap_state_ctl.event_check_timer),
+			brom_event_monitor, 0);
+		ctl->sap_state_ctl.event_check_timer.expires =
+			jiffies + (HZ/20); // 50ms
+		add_timer(&(ctl->sap_state_ctl.event_check_timer));
+	} else {
+		mod_timer(&(ctl->sap_state_ctl.event_check_timer),
+			jiffies + HZ/20);
+	}
+}
+
+static inline void stop_brom_event_start_timer(struct ccci_fsm_ctl *ctl)
+{
+	if (ctl->sap_state_ctl.event_check_timer.function) {
+		del_timer(&(ctl->sap_state_ctl.event_check_timer));
+		ctl->sap_state_ctl.event_check_timer.expires = 0;
+		ctl->sap_state_ctl.event_check_timer.function = NULL;
+	}
+}
+
+static inline void host_event_notify(
+	struct mtk_modem *md, unsigned int event_id) {
+
+	u32 dummy_reg_val_temp = 0;
+	dummy_reg_val_temp = ioread32(IREG_BASE(md->mtk_dev) + PCIE_MISC_DEV_STATUS);
+	dummy_reg_val_temp &= ~HOST_EVENT_MASK;
+	dummy_reg_val_temp |= event_id << HOST_EVENT_OFFSET;
+	iowrite32(dummy_reg_val_temp, IREG_BASE(md->mtk_dev) + PCIE_MISC_DEV_STATUS);
+}
+
+static inline void brom_stage_event_handling(struct ccci_fsm_ctl *ctl,
+	unsigned int dummy_reg)
+{
+	unsigned char brom_event;
+	struct t7xx_port *dl_port = NULL;
+	struct mtk_modem *md = ctl->md;
+	struct device *dev;
+
+	dev = &md->mtk_dev->pdev->dev;
+
+	/*get brom event id*/
+	brom_event = (dummy_reg & BROM_EVENT_MASK)>>4;
+	dev_info(dev, "device event: %x\n", brom_event);
+
+	switch (brom_event) {
+	case BROM_EVENT_NORMAL:
+	case BROM_EVENT_JUMP_BL:
+	case BROM_EVENT_TIME_OUT:
+		dev_info(dev, "Non Download Mode\n");
+		dev_info(dev, "jump next stage\n");
+		dl_port = port_get_by_name("brom_download");
+		if (dl_port != NULL)
+			dl_port->ops->disable_chl(dl_port);
+		else
+			dev_err(dev, "can't found DL port\n");
+		break;
+	case BROM_EVENT_JUMP_DA:
+		dev_info(dev, "jump DA and wait reset signal\n");
+		da_down_stage_flag = false;
+		host_event_notify(md, 2);
+		start_brom_event_start_timer(ctl);
+		dev_info(dev, "Device enter DA from Brom stage\n");
+		break;
+	case BROM_EVENT_CREATE_DL_PORT:
+		dev_info (dev, "create DL port,brom_dl_flag:%d\n",brom_dl_flag);
+		da_down_stage_flag = true;
+		cldma_hif_hw_init(ID_CLDMA0);
+		cldma_stop(ID_CLDMA0);
+		cldma_switch_cfg(ID_CLDMA0, HIF_CFG2);
+		//switch_port_cfg(ctl->md_id, PORT_CFG1);
+		dl_port = port_get_by_name("brom_download");
+		if (dl_port != NULL){
+			if (brom_dl_flag){
+				dl_port->ops->enable_chl(dl_port);
+				cldma_start(ID_CLDMA0);
+			}
+		}else
+			dev_err(dev, "can't found DL port/n");
+		/*start brom event check thread */
+		start_brom_event_start_timer(ctl);
+		break;
+	case BROM_EVENT_RESET:
+		break;
+	default:
+		dev_err(dev, "Brom Event region content error\n");
+		break;
+	}
+}
+
+
 static void fsm_stopped_handler(struct ccci_fsm_ctl *ctl)
 {
 	ctl->last_state = ctl->curr_state;
@@ -264,6 +382,9 @@ static void fsm_routine_stopping(struct ccci_fsm_ctl *ctl, struct ccci_fsm_comma
 {
 	struct mtk_pci_dev *mtk_dev;
 	int err;
+
+	/*remove timer to avoid pre start again*/
+	stop_brom_event_start_timer(ctl);
 
 	/* state sanity check */
 	if (ctl->curr_state == CCCI_FSM_STOPPED || ctl->curr_state == CCCI_FSM_STOPPING) {
@@ -342,6 +463,7 @@ static void fsm_routine_start(struct ccci_fsm_ctl *ctl, struct ccci_fsm_command 
 {
 	struct mtk_modem *md;
 	struct device *dev;
+	unsigned char device_stage;
 	u32 dev_status;
 
 	md = ctl->md;
@@ -349,6 +471,17 @@ static void fsm_routine_start(struct ccci_fsm_ctl *ctl, struct ccci_fsm_command 
 		return;
 
 	dev = &md->mtk_dev->pdev->dev;
+
+	dev_status = ioread32(IREG_BASE(md->mtk_dev) + PCIE_MISC_DEV_STATUS);
+	dev_status &= MISC_DEV_STATUS_MASK;
+	dev_info(dev, "dev_status = %x modem state = %d \n", dev_status, ctl->md_state);
+	if (dev_status == MISC_DEV_STATUS_MASK) {
+		dev_err(dev, "invalid device status\n");
+		fsm_finish_command(ctl, cmd, -1);
+		ctl->prev_status = dev_status;
+		return;
+	}
+
 	/* state sanity check */
 	if (ctl->curr_state != CCCI_FSM_INIT &&
 	    ctl->curr_state != CCCI_FSM_PRE_START &&
@@ -361,15 +494,42 @@ static void fsm_routine_start(struct ccci_fsm_ctl *ctl, struct ccci_fsm_command 
 	ctl->curr_state = CCCI_FSM_PRE_START;
 	mtk_md_event_notify(md, FSM_PRE_START);
 
-	read_poll_timeout(ioread32, dev_status, (dev_status & MISC_STAGE_MASK) == LINUX_STAGE,
-			  20000, 2000000, false, IREG_BASE(md->mtk_dev) + PCIE_MISC_DEV_STATUS);
-	if ((dev_status & MISC_STAGE_MASK) != LINUX_STAGE) {
-		dev_err(dev, "invalid device status 0x%lx\n", dev_status & MISC_STAGE_MASK);
-		fsm_finish_command(ctl, cmd, FSM_CMD_RESULT_FAIL);
-		return;
-	}
-	cldma_hif_hw_init(ID_CLDMA1);
-	fsm_routine_starting(ctl);
+	if (dev_status != ctl->prev_status) {
+		device_stage = dev_status & MISC_STAGE_MASK;
+		switch (device_stage) {
+		case INIT_STAGE:
+			fsm_append_command(ctl, CCCI_COMMAND_START, 0);
+			break;
+		case BROM_STAGE_PRE:
+                case BROM_STAGE_POST:
+                        brom_stage_event_handling(ctl,
+                                dev_status);
+			break;
+		case LINUX_STAGE:
+			da_down_stage_flag = false;
+			stop_brom_event_start_timer(ctl);
+			cldma_hif_hw_init(ID_CLDMA0);
+			cldma_hif_hw_init(ID_CLDMA1);
+			fsm_routine_starting(ctl);
+			break;
+		default:
+			break;
+		}
+		ctl->prev_status = dev_status;
+		count = 0;
+	} else {
+		if (dev_status == 0) {
+			if (count++ >= 200) {
+				count = 0;
+			} else {
+				msleep(100);
+				fsm_append_command(ctl, CCCI_COMMAND_START, 0);
+			}
+		} else {
+			count = 0;
+		}
+ 	}
+
 	fsm_finish_command(ctl, cmd, FSM_CMD_RESULT_OK);
 }
 
@@ -569,6 +729,7 @@ void ccci_fsm_reset(void)
 
 	ctl->last_state = CCCI_FSM_INIT;
 	ctl->curr_state = CCCI_FSM_STOPPED;
+	ctl->prev_status = 0;
 	atomic_set(&ctl->exp_flg, 0);
 }
 
@@ -613,8 +774,10 @@ void ccci_fsm_uninit(void)
 	if (!ctl)
 		return;
 
-	if (ctl->fsm_thread)
+	if (ctl->fsm_thread) {
+		stop_brom_event_start_timer(ctl);
 		kthread_stop(ctl->fsm_thread);
+	}
 
 	fsm_flush_queue(ctl);
 }
