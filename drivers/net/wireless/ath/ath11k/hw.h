@@ -171,6 +171,7 @@ struct ath11k_hw_params {
 	bool full_monitor_mode;
 	bool supports_shadow_regs;
 	bool idle_ps;
+	bool supports_sta_ps;
 	bool cold_boot_calib;
 	bool supports_suspend;
 	u32 hal_desc_sz;
