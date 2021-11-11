@@ -25,6 +25,7 @@
 #include <drm/drm_drv.h>
 #include <drm/i915_pciids.h>
 
+#include "i915_driver.h"
 #include "i915_drv.h"
 #include "i915_pci.h"
 
