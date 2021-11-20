@@ -47,12 +47,15 @@ extern "C" {
 #define DRM_VIRTGPU_WAIT     0x08
 #define DRM_VIRTGPU_GET_CAPS  0x09
 #define DRM_VIRTGPU_RESOURCE_CREATE_BLOB 0x0a
+#define DRM_VIRTGPU_CONTEXT_INIT 0x0b
 
 #define VIRTGPU_EXECBUF_FENCE_FD_IN	0x01
 #define VIRTGPU_EXECBUF_FENCE_FD_OUT	0x02
+#define VIRTGPU_EXECBUF_RING_IDX	0x04
 #define VIRTGPU_EXECBUF_FLAGS  (\
 		VIRTGPU_EXECBUF_FENCE_FD_IN |\
 		VIRTGPU_EXECBUF_FENCE_FD_OUT |\
+		VIRTGPU_EXECBUF_RING_IDX |\
 		0)
 
 struct drm_virtgpu_map {
@@ -68,6 +71,8 @@ struct drm_virtgpu_execbuffer {
 	__u64 bo_handles;
 	__u32 num_bo_handles;
 	__s32 fence_fd; /* in/out fence fd (see VIRTGPU_EXECBUF_FENCE_FD_IN/OUT) */
+	__u32 ring_idx; /* command ring index (see VIRTGPU_EXECBUF_RING_IDX) */
+	__u32 pad;
 };
 
 #define VIRTGPU_PARAM_3D_FEATURES 1 /* do we have 3D features in the hw */
@@ -75,6 +80,8 @@ struct drm_virtgpu_execbuffer {
 #define VIRTGPU_PARAM_RESOURCE_BLOB 3 /* DRM_VIRTGPU_RESOURCE_CREATE_BLOB */
 #define VIRTGPU_PARAM_HOST_VISIBLE 4 /* Host blob resources are mappable */
 #define VIRTGPU_PARAM_CROSS_DEVICE 5 /* Cross virtio-device resource sharing  */
+#define VIRTGPU_PARAM_CONTEXT_INIT 6 /* DRM_VIRTGPU_CONTEXT_INIT */
+#define VIRTGPU_PARAM_SUPPORTED_CAPSET_IDs 7 /* Bitmask of supported capability set ids */
 
 struct drm_virtgpu_getparam {
 	__u64 param;
@@ -105,6 +112,34 @@ struct drm_virtgpu_resource_info {
 	__u32 res_handle;
 	__u32 size;
 	__u32 blob_mem;
+};
+
+/* CHROMIUM */
+struct drm_virtgpu_resource_info_cros {
+	__u32 bo_handle;
+	__u32 res_handle;
+	__u32 size;
+
+/* Always returns res_handle, size, and blob_mem.
+ * !! RETURN SEMANTICS ARE CHANGED BY THIS COMMIT.
+ * !! User space changes are likely required for anything relying on
+ * !! getting extended info from VIRTGPU_RESOURCE_INFO_TYPE_DEFAULT.
+ */
+#define VIRTGPU_RESOURCE_INFO_TYPE_DEFAULT 0
+/* Always returns res_handle, size, and "extended info".
+ * !! Produces an error (EINVAL) for blob resources created with blob_mem ==
+ * !! VIRTGPU_BLOB_MEM_GUEST, which doesn't use host storage.
+ */
+#define VIRTGPU_RESOURCE_INFO_TYPE_EXTENDED 1
+	union {
+		__u32 type; /* in, VIRTGPU_RESOURCE_INFO_TYPE_* */
+		__u32 blob_mem;
+		__u32 stride;
+		__u32 strides[4]; /* strides[0] is accessible with stride. */
+	};
+	__u32 num_planes;
+	__u32 offsets[4];
+	__u64 format_modifier;
 };
 
 struct drm_virtgpu_3d_box {
@@ -173,6 +208,22 @@ struct drm_virtgpu_resource_create_blob {
 	__u64 blob_id;
 };
 
+#define VIRTGPU_CONTEXT_PARAM_CAPSET_ID       0x0001
+#define VIRTGPU_CONTEXT_PARAM_NUM_RINGS       0x0002
+#define VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK 0x0003
+struct drm_virtgpu_context_set_param {
+	__u64 param;
+	__u64 value;
+};
+
+struct drm_virtgpu_context_init {
+	__u32 num_params;
+	__u32 pad;
+
+	/* pointer to drm_virtgpu_context_set_param array */
+	__u64 ctx_set_params;
+};
+
 #define DRM_IOCTL_VIRTGPU_MAP \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_MAP, struct drm_virtgpu_map)
 
@@ -191,6 +242,11 @@ struct drm_virtgpu_resource_create_blob {
 #define DRM_IOCTL_VIRTGPU_RESOURCE_INFO \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_INFO, \
 		 struct drm_virtgpu_resource_info)
+
+/* same ioctl number as DRM_IOCTL_VIRTGPU_RESOURCE_INFO */
+#define DRM_IOCTL_VIRTGPU_RESOURCE_INFO_CROS \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_INFO, \
+		 struct drm_virtgpu_resource_info_cros)
 
 #define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_FROM_HOST,	\
@@ -211,6 +267,10 @@ struct drm_virtgpu_resource_create_blob {
 #define DRM_IOCTL_VIRTGPU_RESOURCE_CREATE_BLOB				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_CREATE_BLOB,	\
 		struct drm_virtgpu_resource_create_blob)
+
+#define DRM_IOCTL_VIRTGPU_CONTEXT_INIT					\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_CONTEXT_INIT,		\
+		struct drm_virtgpu_context_init)
 
 #if defined(__cplusplus)
 }

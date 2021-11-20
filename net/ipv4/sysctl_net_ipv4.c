@@ -219,6 +219,13 @@ static int ipv4_fwd_update_priority(struct ctl_table *table, int write,
 	return ret;
 }
 
+/* The current kernel does not rely on this value so we do nothing here */
+static int proc_tcp_default_init_rwnd(struct ctl_table *ctl, int write,
+				      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	return proc_dointvec(ctl, write, buffer, lenp, ppos);
+}
+
 static int proc_tcp_congestion_control(struct ctl_table *ctl, int write,
 				       void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -1405,6 +1412,13 @@ static struct ctl_table ipv4_net_table[] = {
 		.proc_handler	= proc_dou8vec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two,
+	},
+	{
+		.procname       = "tcp_default_init_rwnd",
+		.data           = &init_net.ipv4.sysctl_tcp_default_init_rwnd,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = proc_tcp_default_init_rwnd
 	},
 	{ }
 };

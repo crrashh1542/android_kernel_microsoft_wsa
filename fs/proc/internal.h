@@ -90,6 +90,9 @@ union proc_op {
 	const char *lsm;
 };
 
+
+extern const struct file_operations proc_totmaps_operations;
+
 struct proc_inode {
 	struct pid *pid;
 	unsigned int fd;
@@ -216,6 +219,7 @@ struct pde_opener {
 extern const struct inode_operations proc_link_inode_operations;
 extern const struct inode_operations proc_pid_link_inode_operations;
 extern const struct super_operations proc_sops;
+extern const struct file_operations proc_reclaim_operations;
 
 void proc_init_kmemcache(void);
 void proc_invalidate_siblings_dcache(struct hlist_head *inodes, spinlock_t *lock);
@@ -291,6 +295,7 @@ struct proc_maps_private {
 	struct mm_struct *mm;
 #ifdef CONFIG_MMU
 	struct vm_area_struct *tail_vma;
+	struct mem_size_stats *mss;
 #endif
 #ifdef CONFIG_NUMA
 	struct mempolicy *task_mempolicy;

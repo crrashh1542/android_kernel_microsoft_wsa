@@ -125,6 +125,7 @@ void pci_msix_init(struct pci_dev *dev);
 bool pci_bridge_d3_possible(struct pci_dev *dev);
 void pci_bridge_d3_update(struct pci_dev *dev);
 void pci_bridge_wait_for_secondary_bus(struct pci_dev *dev);
+void pci_bridge_reconfigure_ltr(struct pci_dev *dev);
 
 static inline void pci_wakeup_event(struct pci_dev *dev)
 {
@@ -743,5 +744,7 @@ extern const struct attribute_group aspm_ctrl_attr_group;
 #endif
 
 extern const struct attribute_group pci_dev_reset_method_attr_group;
+bool pci_drv_allowed_for_untrusted_devs(struct device_driver *drvr);
+bool pci_allowed_to_attach(struct pci_driver *drv, struct pci_dev *dev);
 
 #endif /* DRIVERS_PCI_H */

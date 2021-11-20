@@ -2327,7 +2327,7 @@ static int rt5682_set_component_pll(struct snd_soc_component *component,
 		pll2_fout1 = 3840000;
 		ret = rl6231_pll_calc(freq_in, pll2_fout1, &pll2f_code);
 		if (ret < 0) {
-			dev_err(component->dev, "Unsupport input clock %d\n",
+			dev_err(component->dev, "Unsupported input clock %d\n",
 				freq_in);
 			return ret;
 		}
@@ -2339,7 +2339,7 @@ static int rt5682_set_component_pll(struct snd_soc_component *component,
 
 		ret = rl6231_pll_calc(pll2_fout1, freq_out, &pll2b_code);
 		if (ret < 0) {
-			dev_err(component->dev, "Unsupport input clock %d\n",
+			dev_err(component->dev, "Unsupported input clock %d\n",
 				pll2_fout1);
 			return ret;
 		}
@@ -2390,7 +2390,7 @@ static int rt5682_set_component_pll(struct snd_soc_component *component,
 
 		ret = rl6231_pll_calc(freq_in, freq_out, &pll_code);
 		if (ret < 0) {
-			dev_err(component->dev, "Unsupport input clock %d\n",
+			dev_err(component->dev, "Unsupported input clock %d\n",
 				freq_in);
 			return ret;
 		}
@@ -2877,7 +2877,10 @@ static int rt5682_probe(struct snd_soc_component *component)
 	} else {
 #ifdef CONFIG_COMMON_CLK
 		/* Check if MCLK provided */
-		rt5682->mclk = devm_clk_get(component->dev, "mclk");
+		if (rt5682->pdata.mclk_name)
+			rt5682->mclk = clk_get(NULL, rt5682->pdata.mclk_name);
+		if (!rt5682->mclk)
+			rt5682->mclk = devm_clk_get(component->dev, "mclk");
 		if (IS_ERR(rt5682->mclk)) {
 			if (PTR_ERR(rt5682->mclk) != -ENOENT) {
 				ret = PTR_ERR(rt5682->mclk);
@@ -3051,6 +3054,7 @@ int rt5682_parse_dt(struct rt5682_priv *rt5682, struct device *dev)
 
 	rt5682->pdata.dmic_clk_driving_high = device_property_read_bool(dev,
 		"realtek,dmic-clk-driving-high");
+	device_property_read_string(dev, "realtek,mclk-name", &rt5682->pdata.mclk_name);
 
 	return 0;
 }

@@ -28,6 +28,11 @@
 
 #define RTW_WATCH_DOG_DELAY_TIME	round_jiffies_relative(HZ * 2)
 
+/* AP need to stop beaconing after hearing radar signal in 10s.
+ * So design 10s to restore NO_IR flag referenced by beacon hint.
+ */
+#define RTW_DFS_TIMEOUT			msecs_to_jiffies(10000)
+
 #define RFREG_MASK			0xfffff
 #define INV_RF_DATA			0xffffffff
 #define TX_PAGE_SIZE_SHIFT		7
@@ -41,6 +46,7 @@
 extern bool rtw_bf_support;
 extern bool rtw_disable_lps_deep_mode;
 extern unsigned int rtw_debug_mask;
+extern bool rtw_edcca_enabled;
 extern const struct ieee80211_ops rtw_ops;
 
 #define RTW_MAX_CHANNEL_NUM_2G 14
@@ -362,6 +368,8 @@ enum rtw_flags {
 	RTW_FLAG_BUSY_TRAFFIC,
 	RTW_FLAG_WOWLAN,
 	RTW_FLAG_RESTARTING,
+	RTW_FLAG_RESTART_TRIGGERING,
+	RTW_FLAG_USE_LOWEST_RATE,
 
 	NUM_OF_RTW_FLAGS,
 };
@@ -399,6 +407,13 @@ enum rtw_wow_flags {
 
 	/* keep it last */
 	RTW_WOW_FLAG_MAX,
+};
+
+enum rtw_sar_sources {
+	RTW_SAR_SOURCE_NONE,
+	RTW_SAR_SOURCE_VNDCMD,
+	RTW_SAR_SOURCE_ACPI_STATIC,
+	RTW_SAR_SOURCE_ACPI_DYNAMIC,
 };
 
 /* the power index is represented by differences, which cck-1s & ht40-1s are
@@ -543,6 +558,11 @@ struct rtw_rf_sipi_addr {
 	u32 hssi_2;
 	u32 lssi_read;
 	u32 lssi_read_pi;
+};
+
+struct rtw_hw_reg_offset {
+	struct rtw_hw_reg hw_reg;
+	u8 offset;
 };
 
 struct rtw_backup_info {
@@ -800,8 +820,22 @@ struct rtw_vif {
 
 struct rtw_regulatory {
 	char alpha2[2];
-	u8 chplan;
-	u8 txpwr_regd;
+	u8 txpwr_regd_2g;
+	u8 txpwr_regd_5g;
+};
+
+enum rtw_regd_state {
+	RTW_REGD_STATE_WORLDWIDE,
+	RTW_REGD_STATE_PROGRAMMED,
+	RTW_REGD_STATE_SETTING,
+
+	RTW_REGD_STATE_NR,
+};
+
+struct rtw_regd {
+	enum rtw_regd_state state;
+	const struct rtw_regulatory *regulatory;
+	enum nl80211_dfs_regions dfs_region;
 };
 
 struct rtw_chip_ops {
@@ -839,6 +873,8 @@ struct rtw_chip_ops {
 			      struct ieee80211_bss_conf *conf);
 	void (*cfg_csi_rate)(struct rtw_dev *rtwdev, u8 rssi, u8 cur_rate,
 			     u8 fixrate_en, u8 *new_rate);
+	void (*adaptivity_init)(struct rtw_dev *rtwdev);
+	void (*adaptivity)(struct rtw_dev *rtwdev);
 	void (*cfo_init)(struct rtw_dev *rtwdev);
 	void (*cfo_track)(struct rtw_dev *rtwdev);
 	void (*config_tx_path)(struct rtw_dev *rtwdev, u8 tx_path,
@@ -1194,6 +1230,10 @@ struct rtw_chip_info {
 	u8 bfer_su_max_num;
 	u8 bfer_mu_max_num;
 
+	struct rtw_hw_reg_offset *edcca_th;
+	s8 l2h_th_ini_cs;
+	s8 l2h_th_ini_ad;
+
 	const char *wow_fw_name;
 	const struct wiphy_wowlan_support *wowlan_stub;
 	const u8 max_sched_scan_ssids;
@@ -1542,6 +1582,20 @@ struct rtw_gapk_info {
 	u8 channel;
 };
 
+#define EDCCA_TH_L2H_IDX 0
+#define EDCCA_TH_H2L_IDX 1
+#define EDCCA_TH_L2H_LB 48
+#define EDCCA_ADC_BACKOFF 12
+#define EDCCA_IGI_BASE 50
+#define EDCCA_IGI_L2H_DIFF 8
+#define EDCCA_L2H_H2L_DIFF 7
+#define EDCCA_L2H_H2L_DIFF_NORMAL 8
+
+enum rtw_edcca_mode {
+	RTW_EDCCA_NORMAL	= 0,
+	RTW_EDCCA_ADAPTIVITY	= 1,
+};
+
 struct rtw_cfo_track {
 	bool is_adjust;
 	u8 crystal_cap;
@@ -1589,6 +1643,7 @@ struct rtw_dm_info {
 	u8 cck_gi_u_bnd;
 	u8 cck_gi_l_bnd;
 
+	u8 fix_rate;
 	u8 tx_rate;
 	u32 rrsr_val_init;
 	u32 rrsr_mask_min;
@@ -1633,6 +1688,8 @@ struct rtw_dm_info {
 	struct rtw_gapk_info gapk;
 	bool is_bt_iqk_timeout;
 
+	s8 l2h_th_ini;
+	enum rtw_edcca_mode edcca_mode;
 	u8 scan_density;
 };
 
@@ -1763,6 +1820,10 @@ struct rtw_fw_state {
 	u32 feature;
 };
 
+struct rtw_sar {
+	enum rtw_sar_sources source;
+};
+
 struct rtw_hal {
 	u32 rcr;
 
@@ -1808,6 +1869,10 @@ struct rtw_hal {
 			  [RTW_CHANNEL_WIDTH_MAX]
 			  [RTW_RATE_SECTION_MAX]
 			  [RTW_MAX_CHANNEL_NUM_5G];
+	s8 tx_pwr_sar_2g[RTW_REGD_MAX][RTW_RF_PATH_MAX][RTW_RATE_SECTION_MAX]
+			[RTW_MAX_CHANNEL_NUM_2G];
+	s8 tx_pwr_sar_5g[RTW_REGD_MAX][RTW_RF_PATH_MAX][RTW_RATE_SECTION_MAX]
+			[RTW_MAX_CHANNEL_NUM_5G];
 	s8 tx_pwr_tbl[RTW_RF_PATH_MAX]
 		     [DESC_RATE_MAX];
 };
@@ -1833,7 +1898,7 @@ struct rtw_dev {
 	struct rtw_efuse efuse;
 	struct rtw_sec_desc sec;
 	struct rtw_traffic_stats stats;
-	struct rtw_regulatory regd;
+	struct rtw_regd regd;
 	struct rtw_bf_info bf_info;
 
 	struct rtw_dm_info dm_info;
@@ -1895,6 +1960,13 @@ struct rtw_dev {
 
 	bool need_rfk;
 	struct completion fw_scan_density;
+
+	struct rtw_sar sar;
+
+	/* protects dfs channel context */
+	struct mutex dfs_mutex;
+	u32 dfs_channel_map;
+	unsigned long dfs_last_update;
 
 	/* hci related data, must be last */
 	u8 priv[] __aligned(sizeof(void *));
@@ -2011,5 +2083,7 @@ void rtw_core_fw_scan_notify(struct rtw_dev *rtwdev, bool start);
 int rtw_dump_fw(struct rtw_dev *rtwdev, const u32 ocp_src, u32 size,
 		u32 fwcd_item);
 int rtw_dump_reg(struct rtw_dev *rtwdev, const u32 addr, const u32 size);
+void rtw_replace_radar_flag_with_no_ir(struct ieee80211_hw *hw);
+void rtw_restore_no_ir_flag(struct rtw_dev *rtwdev);
 
 #endif

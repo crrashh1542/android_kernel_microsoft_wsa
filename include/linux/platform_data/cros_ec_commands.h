@@ -2340,6 +2340,12 @@ enum motionsense_command {
 	 */
 	MOTIONSENSE_CMD_SENSOR_SCALE = 18,
 
+	/*
+	 * Activity management
+	 * Retrieve current status of given activity.
+	 */
+	MOTIONSENSE_CMD_GET_ACTIVITY = 20,
+
 	/* Number of motionsense sub-commands. */
 	MOTIONSENSE_NUM_CMDS
 };
@@ -2354,6 +2360,7 @@ enum motionsensor_type {
 	MOTIONSENSE_TYPE_ACTIVITY = 5,
 	MOTIONSENSE_TYPE_BARO = 6,
 	MOTIONSENSE_TYPE_SYNC = 7,
+	MOTIONSENSE_TYPE_LIGHT_RGB = 8,
 	MOTIONSENSE_TYPE_MAX,
 };
 
@@ -2387,6 +2394,7 @@ enum motionsensor_chip {
 	MOTIONSENSE_CHIP_LSM6DS3 = 17,
 	MOTIONSENSE_CHIP_LSM6DSO = 18,
 	MOTIONSENSE_CHIP_LNG2DM = 19,
+	MOTIONSENSE_CHIP_TCS3400 = 20,
 	MOTIONSENSE_CHIP_MAX,
 };
 
@@ -2399,6 +2407,11 @@ enum motionsensor_orientation {
 	MOTIONSENSE_ORIENTATION_UNKNOWN = 4,
 };
 
+struct ec_response_activity_data {
+	uint8_t activity; /* motionsensor_activity */
+	uint8_t state;
+} __ec_todo_packed;
+
 struct ec_response_motion_sensor_data {
 	/* Flags for each sensor. */
 	uint8_t flags;
@@ -2406,15 +2419,14 @@ struct ec_response_motion_sensor_data {
 	uint8_t sensor_num;
 	/* Each sensor is up to 3-axis. */
 	union {
-		int16_t             data[3];
+		int16_t                                  data[3];
 		struct __ec_todo_packed {
-			uint16_t    reserved;
-			uint32_t    timestamp;
+			uint16_t                         reserved;
+			uint32_t                         timestamp;
 		};
 		struct __ec_todo_unpacked {
-			uint8_t     activity; /* motionsensor_activity */
-			uint8_t     state;
-			int16_t     add_info[2];
+			struct ec_response_activity_data activity_data;
+			int16_t                          add_info[2];
 		};
 	};
 } __ec_todo_packed;
@@ -2446,6 +2458,7 @@ enum motionsensor_activity {
 	MOTIONSENSE_ACTIVITY_SIG_MOTION = 1,
 	MOTIONSENSE_ACTIVITY_DOUBLE_TAP = 2,
 	MOTIONSENSE_ACTIVITY_ORIENTATION = 3,
+	MOTIONSENSE_ACTIVITY_BODY_DETECTION = 4,
 };
 
 struct ec_motion_sense_activity {
@@ -2529,13 +2542,19 @@ struct ec_params_motion_sense {
 
 		/*
 		 * Used for MOTIONSENSE_CMD_INFO, MOTIONSENSE_CMD_DATA
-		 * and MOTIONSENSE_CMD_PERFORM_CALIB.
 		 */
 		struct __ec_todo_unpacked {
 			uint8_t sensor_num;
-		} info, info_3, data, fifo_flush, perform_calib,
-				list_activities;
+		} info, info_3, data, fifo_flush, list_activities;
 
+		/*
+		 * Used for MOTIONSENSE_CMD_PERFORM_CALIB:
+		 * Allow entering/exiting the calibration mode.
+		 */
+		struct __ec_todo_unpacked {
+			uint8_t sensor_num;
+			uint8_t enable;
+		} perform_calib;
 		/*
 		 * Used for MOTIONSENSE_CMD_EC_RATE, MOTIONSENSE_CMD_SENSOR_ODR
 		 * and MOTIONSENSE_CMD_SENSOR_RANGE.
@@ -2623,6 +2642,7 @@ struct ec_params_motion_sense {
 			uint32_t max_data_vector;
 		} fifo_read;
 
+		/* Used for MOTIONSENSE_CMD_SET_ACTIVITY */
 		struct ec_motion_sense_activity set_activity;
 
 		/* Used for MOTIONSENSE_CMD_LID_ANGLE */
@@ -2668,6 +2688,14 @@ struct ec_params_motion_sense {
 			 */
 			int16_t hys_degree;
 		} tablet_mode_threshold;
+
+		/*
+		 * Used for MOTIONSENSE_CMD_GET_ACTIVITY.
+		 */
+		struct __ec_todo_unpacked {
+			uint8_t sensor_num;
+			uint8_t activity;  /* enum motionsensor_activity */
+		} get_activity;
 	};
 } __ec_todo_packed;
 
@@ -2785,6 +2813,10 @@ struct ec_response_motion_sense {
 			uint16_t hys_degree;
 		} tablet_mode_threshold;
 
+		/* USED for MOTIONSENSE_CMD_GET_ACTIVITY. */
+		struct __ec_todo_unpacked {
+			uint8_t     state;
+		} get_activity;
 	};
 } __ec_todo_packed;
 
@@ -5526,6 +5558,53 @@ enum pchg_state {
 	[PCHG_STATE_DOWNLOADING] = "DOWNLOADING", \
 	[PCHG_STATE_CONNECTED] = "CONNECTED", \
 	}
+
+/*****************************************************************************/
+/* Locate peripheral chips
+ *
+ * Return values:
+ * EC_RES_UNAVAILABLE: The chip type is supported but not found on system.
+ * EC_RES_INVALID_PARAM: The chip type was unrecognized.
+ * EC_RES_OVERFLOW: The index number exceeded the number of chip instances.
+ */
+#define EC_CMD_LOCATE_CHIP 0x0126
+
+enum ec_chip_type {
+	EC_CHIP_TYPE_CBI_EEPROM = 0,
+	EC_CHIP_TYPE_TCPC = 1,
+	EC_CHIP_TYPE_COUNT,
+	EC_CHIP_TYPE_MAX = 0xFF,
+};
+
+enum ec_bus_type {
+	EC_BUS_TYPE_I2C = 0,
+	EC_BUS_TYPE_EMBEDDED = 1,
+	EC_BUS_TYPE_COUNT,
+	EC_BUS_TYPE_MAX = 0xFF,
+};
+
+struct ec_i2c_info {
+	uint16_t port;		/* Physical port for device */
+	uint16_t addr_flags;	/* 7-bit (or 10-bit) address */
+};
+
+struct ec_params_locate_chip {
+	uint8_t type;		/* enum ec_chip_type */
+	uint8_t index;		/* Specifies one instance of chip type */
+	/* Used for type specific parameters in future */
+	union {
+		uint16_t reserved;
+	};
+} __ec_align2;
+
+
+struct ec_response_locate_chip {
+	uint8_t bus_type;	/* enum ec_bus_type */
+	uint8_t reserved;	/* Aligning the following union to 2 bytes */
+	union {
+		struct ec_i2c_info i2c_info;
+	};
+} __ec_align2;
 
 /*****************************************************************************/
 /* Voltage regulator controls */

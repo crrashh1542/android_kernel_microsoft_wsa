@@ -35,6 +35,13 @@ config CPU_FREQ_STAT
 
 	  If in doubt, say N.
 
+config CPU_FREQ_TIMES
+       bool "CPU frequency time-in-state statistics"
+       help
+         Export CPU time-in-state information through procfs.
+
+         If in doubt, say N.
+
 choice
 	prompt "Default CPUFreq governor"
 	default CPU_FREQ_DEFAULT_GOV_USERSPACE if ARM_SA1100_CPUFREQ || ARM_SA1110_CPUFREQ
@@ -204,6 +211,17 @@ config CPU_FREQ_GOV_SCHEDUTIL
 
 	  If in doubt, say N.
 
+config CPU_BOOST
+	tristate "Input event based short term CPU freq booster"
+	depends on INPUT
+	help
+	  This driver monitors events from input devices, such as
+	  touchscreen, trackpad, keyboard, etc., and boosts frequency
+	  of all CPUs in the system in response to user interacting with
+	  the device.
+
+	  If in doubt, say N.
+
 comment "CPU frequency scaling drivers"
 
 config CPUFREQ_DT
@@ -226,6 +244,15 @@ config CPUFREQ_DT_PLATDEV
 	  supported platforms.
 
 	  If in doubt, say N.
+
+config CPUFREQ_DUMMY
+	tristate "Dummy CPU frequency driver"
+	help
+	  This option adds a generic dummy CPUfreq driver, which sets a fake
+	  2-frequency table when initializing each policy and otherwise does
+	  nothing.
+
+	  If in doubt, say N
 
 if X86
 source "drivers/cpufreq/Kconfig.x86"

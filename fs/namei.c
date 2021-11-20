@@ -1020,8 +1020,8 @@ static inline void put_link(struct nameidata *nd)
 		path_put(&last->link);
 }
 
-int sysctl_protected_symlinks __read_mostly = 0;
-int sysctl_protected_hardlinks __read_mostly = 0;
+int sysctl_protected_symlinks __read_mostly = 1;
+int sysctl_protected_hardlinks __read_mostly = 1;
 int sysctl_protected_fifos __read_mostly;
 int sysctl_protected_regular __read_mostly;
 
@@ -2484,6 +2484,9 @@ int filename_lookup(int dfd, struct filename *name, unsigned flags,
 	if (likely(!retval))
 		audit_inode(name, path->dentry,
 			    flags & LOOKUP_MOUNTPOINT ? AUDIT_INODE_NOEVAL : 0);
+#ifdef CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT
+	path->link_count = nd.total_link_count | PATH_LINK_COUNT_VALID;
+#endif /* CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT */
 	restore_nameidata();
 	return retval;
 }
@@ -2526,6 +2529,9 @@ static int filename_parentat(int dfd, struct filename *name,
 		*type = nd.last_type;
 		audit_inode(name, parent->dentry, AUDIT_INODE_PARENT);
 	}
+#ifdef CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT
+	parent->link_count = nd.total_link_count | PATH_LINK_COUNT_VALID;
+#endif /* CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT */
 	restore_nameidata();
 	return retval;
 }

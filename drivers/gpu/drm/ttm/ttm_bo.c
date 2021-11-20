@@ -1110,7 +1110,7 @@ EXPORT_SYMBOL(ttm_bo_unmap_virtual);
 int ttm_bo_wait(struct ttm_buffer_object *bo,
 		bool interruptible, bool no_wait)
 {
-	long timeout = 15 * HZ;
+	long timeout = CONFIG_DRM_TTM_BO_WAIT_TIMEOUT * HZ;
 
 	if (no_wait) {
 		if (dma_resv_test_signaled(bo->base.resv, true))

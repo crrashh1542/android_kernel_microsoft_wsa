@@ -231,6 +231,17 @@ config PAGE_REPORTING
 	  those pages to another entity, such as a hypervisor, so that the
 	  memory can be freed within the host for other uses.
 
+config PROCESS_RECLAIM
+	bool "Enable process reclaim"
+	depends on PROC_FS && MMU
+	help
+	 It allows to reclaim pages of the process by /proc/pid/reclaim.
+
+	 (echo file > /proc/PID/reclaim) reclaims file-backed pages only.
+	 (echo anon > /proc/PID/reclaim) reclaims anonymous pages only.
+	 (echo all > /proc/PID/reclaim) reclaims all pages.
+
+	 Any other value is ignored.
 #
 # support for page migration
 #
@@ -320,6 +331,23 @@ config DEFAULT_MMAP_MIN_ADDR
 
 	  This value can be changed after boot using the
 	  /proc/sys/vm/mmap_min_addr tunable.
+
+config MMAP_NOEXEC_TAINT
+	int "Turns on tainting of mmap()d files from noexec mountpoints"
+	default 1 if MMU
+	default 0 if !MMU
+	help
+	  By default, the ability to change the protections of a virtual
+	  memory area to allow execution depend on if the vma has the
+	  VM_MAYEXEC flag.  When mapping regions from files, VM_MAYEXEC
+	  will be unset if the containing mountpoint is mounted MNT_NOEXEC.
+	  By setting the value to 0, any mmap()d region may be later
+	  mprotect()d with PROT_EXEC.
+
+	  If unsure, keep the value set to 1.
+
+	  This value can be changed after boot using the
+	  /proc/sys/vm/mmap_noexec_taint tunable.
 
 config ARCH_SUPPORTS_MEMORY_FAILURE
 	bool
@@ -893,6 +921,17 @@ config IO_MAPPING
 
 config SECRETMEM
 	def_bool ARCH_HAS_SET_DIRECT_MAP && !EMBEDDED
+
+config LOW_MEM_NOTIFY
+	bool "Create device that lets processes detect low-memory conditions"
+	default n
+	help
+	  A process can poll the /dev/low_mem device to be notified of
+	  low-memory conditions.  The process can then attempt to free memory
+	  before a OOM condition develops and the OOM killer takes over.  This
+	  is meant to be used in systems with no or very little swap space.  In
+	  the presence of large swap space, the system is likely to become
+	  unusable before the OOM killer is triggered.
 
 source "mm/damon/Kconfig"
 

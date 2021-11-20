@@ -312,6 +312,11 @@
 			};
 		};
 	};
+
+	usb_hub: usb-hub {
+		compatible = "realtek,rts5411", "onboard-usb-hub";
+		vdd-supply = <&pp3300_hub>;
+	};
 };
 
 &qfprom {
@@ -923,6 +928,22 @@ ap_spi_fp: &spi10 {
 
 &usb_1_dwc3 {
 	dr_mode = "host";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	/* 2.0 hub on port 1 */
+	hub@1 {
+		compatible = "usbbda,5411";
+		reg = <1>;
+		hub = <&usb_hub>;
+	};
+
+	/* 3.0 hub on port 2 */
+	hub@2 {
+		compatible = "usbbda,411";
+		reg = <2>;
+		hub = <&usb_hub>;
+	};
 };
 
 &usb_1_hsphy {
@@ -1523,13 +1544,13 @@ ap_spi_fp: &spi10 {
 		pinconf-cmd {
 			pins = "sdc1_cmd";
 			bias-pull-up;
-			drive-strength = <10>;
+			drive-strength = <16>;
 		};
 
 		pinconf-data {
 			pins = "sdc1_data";
 			bias-pull-up;
-			drive-strength = <10>;
+			drive-strength = <16>;
 		};
 
 		pinconf-rclk {

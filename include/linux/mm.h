@@ -202,6 +202,7 @@ static inline void __mm_zero_struct_page(struct page *page)
 #define DEFAULT_MAX_MAP_COUNT	(USHRT_MAX - MAPCOUNT_ELF_CORE_MARGIN)
 
 extern int sysctl_max_map_count;
+extern int sysctl_mmap_noexec_taint;
 
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
@@ -209,6 +210,8 @@ extern unsigned long sysctl_admin_reserve_kbytes;
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;
+
+extern int sysctl_disk_based_swap;
 
 int overcommit_ratio_handler(struct ctl_table *, int, void *, size_t *,
 		loff_t *);
@@ -2548,7 +2551,7 @@ static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
 extern struct vm_area_struct *vma_merge(struct mm_struct *,
 	struct vm_area_struct *prev, unsigned long addr, unsigned long end,
 	unsigned long vm_flags, struct anon_vma *, struct file *, pgoff_t,
-	struct mempolicy *, struct vm_userfaultfd_ctx);
+	struct mempolicy *, struct vm_userfaultfd_ctx, const char __user *);
 extern struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *);
 extern int __split_vma(struct mm_struct *, struct vm_area_struct *,
 	unsigned long addr, int new_below);
@@ -3245,6 +3248,7 @@ unsigned long wp_shared_mapping_range(struct address_space *mapping,
 #endif
 
 extern int sysctl_nr_trim_pages;
+extern int min_filelist_kbytes;
 
 #ifdef CONFIG_PRINTK
 void mem_dump_obj(void *object);

@@ -625,6 +625,8 @@ struct ath10k_hw_params {
 	bool supports_peer_stats_info;
 
 	bool dynamic_sar_support;
+
+	u32 start_retry;
 };
 
 struct htt_rx_desc;

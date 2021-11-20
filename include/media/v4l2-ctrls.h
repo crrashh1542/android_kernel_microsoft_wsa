@@ -18,6 +18,7 @@
  * This will move to the public headers once this API is fully stable.
  */
 #include <media/hevc-ctrls.h>
+#include <media/vp9-ctrls.h>
 
 /* forward references */
 struct file;

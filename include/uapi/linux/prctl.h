@@ -155,6 +155,9 @@ struct prctl_mm_map {
 #define PR_SET_PTRACER 0x59616d61
 # define PR_SET_PTRACER_ANY ((unsigned long)-1)
 
+#define PR_ALT_SYSCALL 0x43724f53
+# define PR_ALT_SYSCALL_SET_SYSCALL_TABLE 1
+
 #define PR_SET_CHILD_SUBREAPER	36
 #define PR_GET_CHILD_SUBREAPER	37
 
@@ -268,5 +271,8 @@ struct prctl_mm_map {
 # define PR_SCHED_CORE_SHARE_TO		2 /* push core_sched cookie to pid */
 # define PR_SCHED_CORE_SHARE_FROM	3 /* pull core_sched cookie to pid */
 # define PR_SCHED_CORE_MAX		4
+
+#define PR_SET_VMA		0x53564d41
+# define PR_SET_VMA_ANON_NAME		0
 
 #endif /* _LINUX_PRCTL_H */

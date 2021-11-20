@@ -27,6 +27,7 @@ struct sugov_policy {
 	struct list_head	tunables_hook;
 
 	raw_spinlock_t		update_lock;
+	u64			last_update;
 	u64			last_freq_update_time;
 	s64			freq_update_delay_ns;
 	unsigned int		next_freq;
@@ -187,9 +188,13 @@ static bool sugov_iowait_reset(struct sugov_cpu *sg_cpu, u64 time,
 			       bool set_iowait_boost)
 {
 	s64 delta_ns = time - sg_cpu->last_update;
+	unsigned int ticks = TICK_NSEC;
 
-	/* Reset boost only if a tick has elapsed since last request */
-	if (delta_ns <= TICK_NSEC)
+	if (sysctl_iowait_reset_ticks)
+		ticks = sysctl_iowait_reset_ticks * TICK_NSEC;
+
+	/* Reset boost only if enough ticks has elapsed since last request. */
+	if (delta_ns <= ticks)
 		return false;
 
 	sg_cpu->iowait_boost = set_iowait_boost ? IOWAIT_BOOST_MIN : 0;
@@ -261,6 +266,7 @@ static void sugov_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
  */
 static void sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time)
 {
+	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	unsigned long boost;
 
 	/* No boost currently required */
@@ -271,7 +277,9 @@ static void sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time)
 	if (sugov_iowait_reset(sg_cpu, time, false))
 		return;
 
-	if (!sg_cpu->iowait_boost_pending) {
+	if (!sg_cpu->iowait_boost_pending &&
+	    (!sysctl_iowait_apply_ticks ||
+	     (time - sg_policy->last_update > (sysctl_iowait_apply_ticks * TICK_NSEC)))) {
 		/*
 		 * No boost pending; reduce the boost value.
 		 */
@@ -449,6 +457,14 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 
 		if (!sugov_update_next_freq(sg_policy, time, next_f))
 			goto unlock;
+
+		/*
+		 * Required for ensuring iowait decay does not happen too
+		 * quickly.  This can happen, for example, if a neighboring CPU
+		 * does a cpufreq update immediately after a CPU that just
+		 * completed I/O.
+		 */
+		sg_policy->last_update = time;
 
 		if (sg_policy->policy->fast_switch_enabled)
 			cpufreq_driver_fast_switch(sg_policy->policy, next_f);
@@ -835,29 +851,3 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 #endif
 
 cpufreq_governor_init(schedutil_gov);
-
-#ifdef CONFIG_ENERGY_MODEL
-static void rebuild_sd_workfn(struct work_struct *work)
-{
-	rebuild_sched_domains_energy();
-}
-static DECLARE_WORK(rebuild_sd_work, rebuild_sd_workfn);
-
-/*
- * EAS shouldn't be attempted without sugov, so rebuild the sched_domains
- * on governor changes to make sure the scheduler knows about it.
- */
-void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
-				  struct cpufreq_governor *old_gov)
-{
-	if (old_gov == &schedutil_gov || policy->governor == &schedutil_gov) {
-		/*
-		 * When called from the cpufreq_register_driver() path, the
-		 * cpu_hotplug_lock is already held, so use a work item to
-		 * avoid nested locking in rebuild_sched_domains().
-		 */
-		schedule_work(&rebuild_sd_work);
-	}
-
-}
-#endif

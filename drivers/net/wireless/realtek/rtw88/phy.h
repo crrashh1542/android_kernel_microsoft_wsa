@@ -59,6 +59,8 @@ bool rtw_phy_pwrtrack_need_lck(struct rtw_dev *rtwdev);
 bool rtw_phy_pwrtrack_need_iqk(struct rtw_dev *rtwdev);
 void rtw_phy_config_swing_table(struct rtw_dev *rtwdev,
 				struct rtw_swing_table *swing_table);
+void rtw_phy_set_edcca_th(struct rtw_dev *rtwdev, u8 l2h, u8 h2l);
+void rtw_phy_adaptivity_set_mode(struct rtw_dev *rtwdev);
 void rtw_phy_parsing_cfo(struct rtw_dev *rtwdev,
 			 struct rtw_rx_pkt_stat *pkt_stat);
 void rtw_phy_tx_path_diversity(struct rtw_dev *rtwdev);
@@ -145,6 +147,7 @@ struct rtw_power_params {
 	u8 pwr_base;
 	s8 pwr_offset;
 	s8 pwr_limit;
+	s8 pwr_sar;
 	s8 pwr_remnant;
 };
 
@@ -152,6 +155,8 @@ void
 rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path,
 			u8 rate, u8 bw, u8 ch, u8 regd,
 			struct rtw_power_params *pwr_param);
+void rtw_phy_set_tx_power_sar(struct rtw_dev *rtwdev, u8 regd, u8 rfpath,
+			      u8 ch_start, u8 ch_end, u8 sar_q3);
 
 enum rtw_phy_cck_pd_lv {
 	CCK_PD_LV0,

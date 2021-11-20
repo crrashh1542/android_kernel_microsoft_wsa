@@ -56,6 +56,10 @@
 #define I2C_HID_PWR_ON		0x00
 #define I2C_HID_PWR_SLEEP	0x01
 
+#define EVE_TP_I2C_ADDR	0x49
+#define EVE_TP_RETRIES	10
+#define EVE_TP_DELAY_MS 1
+
 /* debug option */
 static bool debug;
 module_param(debug, bool, 0444);
@@ -522,9 +526,12 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 
 	i2c_hid_dbg(ihid, "input: %*ph\n", ret_size, ihid->inbuf);
 
-	if (test_bit(I2C_HID_STARTED, &ihid->flags))
+	if (test_bit(I2C_HID_STARTED, &ihid->flags)) {
+		pm_wakeup_event(&ihid->client->dev, 0);
+
 		hid_input_report(ihid->hid, HID_INPUT_REPORT, ihid->inbuf + 2,
 				ret_size - 2, 1);
+	}
 
 	return;
 }
@@ -914,7 +921,7 @@ static void i2c_hid_core_shutdown_tail(struct i2c_hid *ihid)
 int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 		       u16 hid_descriptor_address)
 {
-	int ret;
+	int ret, retries = 0;
 	struct i2c_hid *ihid;
 	struct hid_device *hid;
 
@@ -961,8 +968,22 @@ int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 
 	device_enable_async_suspend(&client->dev);
 
+	/*
+	 * Eve touchpad does not consistently ACK the slave address.
+	 * Retry the SMBUS sequence as a mitigation until proper fix
+	 * is prepared.
+	 * This is a temporary workaround for b/156232671.
+	 */
+	if (client->addr == EVE_TP_I2C_ADDR)
+		retries = EVE_TP_RETRIES;
+
 	/* Make sure there is something at this address */
 	ret = i2c_smbus_read_byte(client);
+	while ((ret < 0) && (retries--)) {
+		dev_err(&client->dev, "no response, retry left %d", retries);
+		msleep(EVE_TP_DELAY_MS);
+		ret = i2c_smbus_read_byte(client);
+	}
 	if (ret < 0) {
 		dev_dbg(&client->dev, "nothing at this address: %d\n", ret);
 		ret = -ENXIO;

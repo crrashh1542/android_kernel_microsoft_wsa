@@ -9,6 +9,7 @@
 #include "fw.h"
 #include "phy.h"
 #include "debug.h"
+#include "regd.h"
 
 struct phy_cfg_pair {
 	u32 addr;
@@ -119,6 +120,63 @@ static void rtw_phy_cck_pd_init(struct rtw_dev *rtwdev)
 	dm_info->cck_fa_avg = CCK_FA_AVG_RESET;
 }
 
+void rtw_phy_set_edcca_th(struct rtw_dev *rtwdev, u8 l2h, u8 h2l)
+{
+	struct rtw_hw_reg_offset *edcca_th = rtwdev->chip->edcca_th;
+
+	rtw_write32_mask(rtwdev,
+			 edcca_th[EDCCA_TH_L2H_IDX].hw_reg.addr,
+			 edcca_th[EDCCA_TH_L2H_IDX].hw_reg.mask,
+			 l2h + edcca_th[EDCCA_TH_L2H_IDX].offset);
+	rtw_write32_mask(rtwdev,
+			 edcca_th[EDCCA_TH_H2L_IDX].hw_reg.addr,
+			 edcca_th[EDCCA_TH_H2L_IDX].hw_reg.mask,
+			 h2l + edcca_th[EDCCA_TH_H2L_IDX].offset);
+}
+EXPORT_SYMBOL(rtw_phy_set_edcca_th);
+
+void rtw_phy_adaptivity_set_mode(struct rtw_dev *rtwdev)
+{
+	struct rtw_chip_info *chip = rtwdev->chip;
+	struct rtw_dm_info *dm_info = &rtwdev->dm_info;
+
+	/* turn off in debugfs for debug usage */
+	if (!rtw_edcca_enabled) {
+		dm_info->edcca_mode = RTW_EDCCA_NORMAL;
+		rtw_dbg(rtwdev, RTW_DBG_PHY, "EDCCA disabled, cannot be set\n");
+		return;
+	}
+
+	switch (rtwdev->regd.dfs_region) {
+	case NL80211_DFS_ETSI:
+		dm_info->edcca_mode = RTW_EDCCA_ADAPTIVITY;
+		dm_info->l2h_th_ini = chip->l2h_th_ini_ad;
+		break;
+	case NL80211_DFS_JP:
+		dm_info->edcca_mode = RTW_EDCCA_ADAPTIVITY;
+		dm_info->l2h_th_ini = chip->l2h_th_ini_cs;
+		break;
+	default:
+		dm_info->edcca_mode = RTW_EDCCA_NORMAL;
+		break;
+	}
+}
+
+static void rtw_phy_adaptivity_init(struct rtw_dev *rtwdev)
+{
+	struct rtw_chip_info *chip = rtwdev->chip;
+
+	rtw_phy_adaptivity_set_mode(rtwdev);
+	if (chip->ops->adaptivity_init)
+		chip->ops->adaptivity_init(rtwdev);
+}
+
+static void rtw_phy_adaptivity(struct rtw_dev *rtwdev)
+{
+	if (rtwdev->chip->ops->adaptivity)
+		rtwdev->chip->ops->adaptivity(rtwdev);
+}
+
 static void rtw_phy_cfo_init(struct rtw_dev *rtwdev)
 {
 	struct rtw_chip_info *chip = rtwdev->chip;
@@ -159,6 +217,7 @@ void rtw_phy_init(struct rtw_dev *rtwdev)
 	rtw_phy_cck_pd_init(rtwdev);
 
 	dm_info->iqk.done = false;
+	rtw_phy_adaptivity_init(rtwdev);
 	rtw_phy_cfo_init(rtwdev);
 	rtw_phy_tx_path_div_init(rtwdev);
 }
@@ -711,6 +770,11 @@ void rtw_phy_dynamic_mechanism(struct rtw_dev *rtwdev)
 	rtw_phy_cfo_track(rtwdev);
 	rtw_phy_dpk_track(rtwdev);
 	rtw_phy_pwr_track(rtwdev);
+
+	if (rtw_fw_feature_check(&rtwdev->fw, FW_FEATURE_ADAPTIVITY))
+		rtw_fw_adaptivity(rtwdev);
+	else
+		rtw_phy_adaptivity(rtwdev);
 }
 
 #define FRAC_BITS 3
@@ -1499,6 +1563,94 @@ static void rtw_phy_set_tx_power_limit(struct rtw_dev *rtwdev, u8 regd, u8 band,
 	}
 }
 
+static void
+rtw_phy_set_tx_power_sar_by_chidx(struct rtw_dev *rtwdev, u8 regd, u8 rfpath,
+				  u8 band, u8 rs, u8 ch_idx, s8 sar)
+{
+	struct rtw_hal *hal = &rtwdev->hal;
+	s8 base;
+	s8 ww_sar;
+	s8 s;
+
+	if (band == PHY_BAND_2G) {
+		base = hal->tx_pwr_by_rate_base_2g[rfpath][rs];
+		s = sar - base;
+		hal->tx_pwr_sar_2g[regd][rfpath][rs][ch_idx] = s;
+		if (regd == RTW_REGD_WW)
+			return;
+		ww_sar = hal->tx_pwr_sar_2g[RTW_REGD_WW][rfpath][rs][ch_idx];
+		ww_sar = min(ww_sar, s);
+		hal->tx_pwr_sar_2g[RTW_REGD_WW][rfpath][rs][ch_idx] = ww_sar;
+	} else {
+		base = hal->tx_pwr_by_rate_base_5g[rfpath][rs];
+		s = sar - base;
+		hal->tx_pwr_sar_5g[regd][rfpath][rs][ch_idx] = s;
+		if (regd == RTW_REGD_WW)
+			return;
+		ww_sar = hal->tx_pwr_sar_5g[RTW_REGD_WW][rfpath][rs][ch_idx];
+		ww_sar = min(ww_sar, s);
+		hal->tx_pwr_sar_5g[RTW_REGD_WW][rfpath][rs][ch_idx] = ww_sar;
+	}
+}
+
+static void
+rtw_phy_set_tx_power_sar_by_range(struct rtw_dev *rtwdev, u8 regd, u8 rfpath,
+				  u8 band, u8 chidx_start, u8 chidx_end, u8 sar_q3)
+{
+	u8 rs;
+	u8 ch_idx;
+	s8 sar;
+
+	if (regd >= RTW_REGD_MAX || rfpath >= RTW_RF_PATH_MAX)
+		return;
+
+	sar = sar_q3 >> (3 - (int)rtwdev->chip->txgi_factor);
+
+	for (ch_idx = chidx_start; ch_idx <= chidx_end; ch_idx++)
+		for (rs = 0; rs < RTW_RATE_SECTION_MAX; rs++)
+			rtw_phy_set_tx_power_sar_by_chidx(rtwdev, regd, rfpath,
+							  band, rs, ch_idx, sar);
+}
+
+void rtw_phy_set_tx_power_sar(struct rtw_dev *rtwdev, u8 regd, u8 rfpath,
+			      u8 ch_start, u8 ch_end, u8 sar_q3)
+{
+	u8 band_start, band_end;
+	int chidx_start, chidx_end;
+
+	band_start = ch_start <= 14 ? PHY_BAND_2G : PHY_BAND_5G;
+	band_end = ch_end <= 14 ? PHY_BAND_2G : PHY_BAND_5G;
+
+	if (band_start == band_end) {
+		chidx_start = rtw_channel_to_idx(band_start, ch_start);
+		chidx_end = rtw_channel_to_idx(band_start, ch_end);
+		if (chidx_start < 0 || chidx_end < 0)
+			goto err;
+		rtw_phy_set_tx_power_sar_by_range(rtwdev, regd, rfpath, band_start,
+						  chidx_start, chidx_end, sar_q3);
+		return;
+	}
+
+	chidx_start = rtw_channel_to_idx(PHY_BAND_2G, ch_start);
+	if (chidx_start < 0)
+		goto err;
+	rtw_phy_set_tx_power_sar_by_range(rtwdev, regd, rfpath, PHY_BAND_2G,
+					  chidx_start, RTW_MAX_CHANNEL_NUM_2G - 1,
+					  sar_q3);
+
+	chidx_end = rtw_channel_to_idx(PHY_BAND_5G, ch_end);
+	if (chidx_end < 0)
+		goto err;
+	rtw_phy_set_tx_power_sar_by_range(rtwdev, regd, rfpath, PHY_BAND_5G,
+					  0, chidx_end, sar_q3);
+
+	return;
+
+err:
+	rtw_warn(rtwdev, "SAR: invalid channel (start/end)=(%d/%d)\n",
+		 ch_start, ch_end);
+}
+
 /* cross-reference 5G power limits if values are not assigned */
 static void
 rtw_xref_5g_txpwr_lmt(struct rtw_dev *rtwdev, u8 regd,
@@ -1564,15 +1716,68 @@ static void rtw_xref_txpwr_lmt(struct rtw_dev *rtwdev)
 		rtw_xref_txpwr_lmt_by_bw(rtwdev, regd);
 }
 
+static void
+__cfg_txpwr_lmt_by_alt(struct rtw_hal *hal, u8 regd, u8 regd_alt, u8 bw, u8 rs)
+{
+	u8 ch;
+
+	for (ch = 0; ch < RTW_MAX_CHANNEL_NUM_2G; ch++)
+		hal->tx_pwr_limit_2g[regd][bw][rs][ch] =
+			hal->tx_pwr_limit_2g[regd_alt][bw][rs][ch];
+
+	for (ch = 0; ch < RTW_MAX_CHANNEL_NUM_5G; ch++)
+		hal->tx_pwr_limit_5g[regd][bw][rs][ch] =
+			hal->tx_pwr_limit_5g[regd_alt][bw][rs][ch];
+}
+
+static void
+rtw_cfg_txpwr_lmt_by_alt(struct rtw_dev *rtwdev, u8 regd, u8 regd_alt)
+{
+	u8 bw, rs;
+
+	for (bw = 0; bw < RTW_CHANNEL_WIDTH_MAX; bw++)
+		for (rs = 0; rs < RTW_RATE_SECTION_MAX; rs++)
+			__cfg_txpwr_lmt_by_alt(&rtwdev->hal, regd, regd_alt,
+					       bw, rs);
+}
+
 void rtw_parse_tbl_txpwr_lmt(struct rtw_dev *rtwdev,
 			     const struct rtw_table *tbl)
 {
 	const struct rtw_txpwr_lmt_cfg_pair *p = tbl->data;
 	const struct rtw_txpwr_lmt_cfg_pair *end = p + tbl->size;
+	u32 regd_cfg_flag = 0;
+	u8 regd_alt;
+	u8 i;
 
 	for (; p < end; p++) {
+		regd_cfg_flag |= BIT(p->regd);
 		rtw_phy_set_tx_power_limit(rtwdev, p->regd, p->band,
 					   p->bw, p->rs, p->ch, p->txpwr_lmt);
+	}
+
+	for (i = 0; i < RTW_REGD_MAX; i++) {
+		if (i == RTW_REGD_WW)
+			continue;
+
+		if (regd_cfg_flag & BIT(i))
+			continue;
+
+		rtw_dbg(rtwdev, RTW_DBG_REGD,
+			"txpwr regd %d does not be configured\n", i);
+
+		if (rtw_regd_has_alt(i, &regd_alt) &&
+		    regd_cfg_flag & BIT(regd_alt)) {
+			rtw_dbg(rtwdev, RTW_DBG_REGD,
+				"cfg txpwr regd %d by regd %d as alternative\n",
+				i, regd_alt);
+
+			rtw_cfg_txpwr_lmt_by_alt(rtwdev, i, regd_alt);
+			continue;
+		}
+
+		rtw_dbg(rtwdev, RTW_DBG_REGD, "cfg txpwr regd %d by WW\n", i);
+		rtw_cfg_txpwr_lmt_by_alt(rtwdev, i, RTW_REGD_WW);
 	}
 
 	rtw_xref_txpwr_lmt(rtwdev);
@@ -1887,9 +2092,10 @@ static u8 rtw_phy_get_5g_tx_power_index(struct rtw_dev *rtwdev,
 	return tx_power;
 }
 
-static s8 rtw_phy_get_tx_power_limit(struct rtw_dev *rtwdev, u8 band,
-				     enum rtw_bandwidth bw, u8 rf_path,
-				     u8 rate, u8 channel, u8 regd)
+static void rtw_phy_get_tx_power_limit(struct rtw_dev *rtwdev, u8 band,
+				       enum rtw_bandwidth bw, u8 rf_path,
+				       u8 rate, u8 channel, u8 regd,
+				       struct rtw_power_params *pwr_param)
 {
 	struct rtw_hal *hal = &rtwdev->hal;
 	u8 *cch_by_bw = hal->cch_by_bw;
@@ -1898,9 +2104,10 @@ static s8 rtw_phy_get_tx_power_limit(struct rtw_dev *rtwdev, u8 band,
 	int ch_idx;
 	u8 cur_bw, cur_ch;
 	s8 cur_lmt;
+	s8 sar, sar_ww;
 
 	if (regd > RTW_REGD_WW)
-		return power_limit;
+		goto err;
 
 	if (rate >= DESC_RATE1M && rate <= DESC_RATE11M)
 		rs = RTW_RATE_SECTION_CCK;
@@ -1940,48 +2147,72 @@ static s8 rtw_phy_get_tx_power_limit(struct rtw_dev *rtwdev, u8 band,
 		power_limit = min_t(s8, cur_lmt, power_limit);
 	}
 
-	return power_limit;
+	ch_idx = rtw_channel_to_idx(band, channel);
+	if (ch_idx < 0)
+		goto err;
+
+	if (band == PHY_BAND_2G) {
+		sar = hal->tx_pwr_sar_2g[regd][rf_path][rs][ch_idx];
+		sar_ww = hal->tx_pwr_sar_2g[RTW_REGD_WW][rf_path][rs][ch_idx];
+	} else {
+		sar = hal->tx_pwr_sar_5g[regd][rf_path][rs][ch_idx];
+		sar_ww = hal->tx_pwr_sar_5g[RTW_REGD_WW][rf_path][rs][ch_idx];
+	}
+	if (sar >= rtwdev->chip->max_power_index)
+		sar = sar_ww;
+
+	pwr_param->pwr_sar = sar;
+	pwr_param->pwr_limit = power_limit;
+	return;
 
 err:
 	WARN(1, "invalid arguments, band=%d, bw=%d, path=%d, rate=%d, ch=%d\n",
 	     band, bw, rf_path, rate, channel);
-	return (s8)rtwdev->chip->max_power_index;
+	pwr_param->pwr_sar = (s8)rtwdev->chip->max_power_index;
+	pwr_param->pwr_limit = (s8)rtwdev->chip->max_power_index;
 }
 
-void rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path, u8 rate, u8 bw,
-			     u8 ch, u8 regd, struct rtw_power_params *pwr_param)
+static void rtw_phy_get_tx_power_base(struct rtw_dev *rtwdev, u8 band,
+				      enum rtw_bandwidth bw, u8 path, u8 rate,
+				      u8 ch, struct rtw_power_params *pwr_param)
 {
 	struct rtw_hal *hal = &rtwdev->hal;
 	struct rtw_dm_info *dm_info = &rtwdev->dm_info;
 	struct rtw_txpwr_idx *pwr_idx;
-	u8 group, band;
-	u8 *base = &pwr_param->pwr_base;
-	s8 *offset = &pwr_param->pwr_offset;
-	s8 *limit = &pwr_param->pwr_limit;
-	s8 *remnant = &pwr_param->pwr_remnant;
+	u8 group;
+	u8 base;
+	s8 offset;
 
 	pwr_idx = &rtwdev->efuse.txpwr_idx_table[path];
 	group = rtw_get_channel_group(ch, rate);
 
 	/* base power index for 2.4G/5G */
-	if (IS_CH_2G_BAND(ch)) {
-		band = PHY_BAND_2G;
-		*base = rtw_phy_get_2g_tx_power_index(rtwdev,
-						      &pwr_idx->pwr_idx_2g,
-						      bw, rate, group);
-		*offset = hal->tx_pwr_by_rate_offset_2g[path][rate];
+	if (band == PHY_BAND_2G) {
+		base = rtw_phy_get_2g_tx_power_index(rtwdev,
+						     &pwr_idx->pwr_idx_2g,
+						     bw, rate, group);
+		offset = hal->tx_pwr_by_rate_offset_2g[path][rate];
 	} else {
-		band = PHY_BAND_5G;
-		*base = rtw_phy_get_5g_tx_power_index(rtwdev,
-						      &pwr_idx->pwr_idx_5g,
-						      bw, rate, group);
-		*offset = hal->tx_pwr_by_rate_offset_5g[path][rate];
+		base = rtw_phy_get_5g_tx_power_index(rtwdev,
+						     &pwr_idx->pwr_idx_5g,
+						     bw, rate, group);
+		offset = hal->tx_pwr_by_rate_offset_5g[path][rate];
 	}
 
-	*limit = rtw_phy_get_tx_power_limit(rtwdev, band, bw, path,
-					    rate, ch, regd);
-	*remnant = (rate <= DESC_RATE11M ? dm_info->txagc_remnant_cck :
-		    dm_info->txagc_remnant_ofdm);
+	pwr_param->pwr_base = base;
+	pwr_param->pwr_offset = offset;
+	pwr_param->pwr_remnant = (rate <= DESC_RATE11M ?
+				  dm_info->txagc_remnant_cck :
+				  dm_info->txagc_remnant_ofdm);
+}
+
+void rtw_get_tx_power_params(struct rtw_dev *rtwdev, u8 path, u8 rate, u8 bw,
+			     u8 ch, u8 regd, struct rtw_power_params *pwr_param)
+{
+	u8 band = IS_CH_2G_BAND(ch) ? PHY_BAND_2G : PHY_BAND_5G;
+
+	rtw_phy_get_tx_power_base(rtwdev, band, bw, path, rate, ch, pwr_param);
+	rtw_phy_get_tx_power_limit(rtwdev, band, bw, path, rate, ch, regd, pwr_param);
 }
 
 u8
@@ -1996,7 +2227,8 @@ rtw_phy_get_tx_power_index(struct rtw_dev *rtwdev, u8 rf_path, u8 rate,
 				channel, regd, &pwr_param);
 
 	tx_power = pwr_param.pwr_base;
-	offset = min_t(s8, pwr_param.pwr_offset, pwr_param.pwr_limit);
+	offset = min3(pwr_param.pwr_offset, pwr_param.pwr_limit,
+		      pwr_param.pwr_sar);
 
 	if (rtwdev->chip->en_dis_dpd)
 		offset += rtw_phy_get_dis_dpd_by_rate_diff(rtwdev, rate);
@@ -2014,7 +2246,7 @@ static void rtw_phy_set_tx_power_index_by_rs(struct rtw_dev *rtwdev,
 					     u8 ch, u8 path, u8 rs)
 {
 	struct rtw_hal *hal = &rtwdev->hal;
-	u8 regd = rtwdev->regd.txpwr_regd;
+	u8 regd = rtw_regd_get(rtwdev);
 	u8 *rates;
 	u8 size;
 	u8 rate;
@@ -2187,6 +2419,12 @@ void rtw_phy_init_tx_power(struct rtw_dev *rtwdev)
 			for (rs = 0; rs < RTW_RATE_SECTION_MAX; rs++)
 				rtw_phy_init_tx_power_limit(rtwdev, regd, bw,
 							    rs);
+
+	/* init tx power sar */
+	memset(hal->tx_pwr_sar_2g, rtwdev->chip->max_power_index,
+	       sizeof(hal->tx_pwr_sar_2g));
+	memset(hal->tx_pwr_sar_5g, rtwdev->chip->max_power_index,
+	       sizeof(hal->tx_pwr_sar_5g));
 }
 
 void rtw_phy_config_swing_table(struct rtw_dev *rtwdev,

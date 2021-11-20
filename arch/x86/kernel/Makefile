@@ -153,6 +153,8 @@ obj-$(CONFIG_AMD_MEM_ENCRYPT)		+= sev.o
 
 obj-$(CONFIG_ARCH_HAS_CC_PLATFORM)	+= cc_platform.o
 
+obj-$(CONFIG_ALT_SYSCALL)		+= alt-syscall.o
+
 ###
 # 64 bit specific files
 ifeq ($(CONFIG_X86_64),y)

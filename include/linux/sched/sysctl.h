@@ -35,6 +35,9 @@ enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_END,
 };
 
+extern unsigned int sysctl_iowait_reset_ticks;
+extern unsigned int sysctl_iowait_apply_ticks;
+
 /*
  *  control realtime throttling:
  *

@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
+#include <linux/power_supply.h>
 
 #include <linux/platform_data/cros_ec_commands.h>
 
@@ -115,6 +116,7 @@ struct cros_ec_command {
  *            code.
  * @pkt_xfer: Send packet to EC and get response.
  * @lock: One transaction at a time.
+ * @charger: Charger connected to the EC, if any.
  * @mkbp_event_supported: 0 if MKBP not supported. Otherwise its value is
  *                        the maximum supported version of the MKBP host event
  *                        command + 1.
@@ -159,6 +161,7 @@ struct cros_ec_device {
 			struct cros_ec_command *msg);
 	int (*pkt_xfer)(struct cros_ec_device *ec,
 			struct cros_ec_command *msg);
+	struct power_supply *charger;
 	struct mutex lock;
 	u8 mkbp_event_supported;
 	bool host_sleep_v1;
@@ -230,6 +233,9 @@ u32 cros_ec_get_host_event(struct cros_ec_device *ec_dev);
 int cros_ec_check_features(struct cros_ec_dev *ec, int feature);
 
 int cros_ec_get_sensor_count(struct cros_ec_dev *ec);
+
+int cros_ec_command(struct cros_ec_device *ec_dev, unsigned int version, int command, void *outdata,
+		    int outsize, void *indata, int insize);
 
 /**
  * cros_ec_get_time_ns() - Return time in ns.
