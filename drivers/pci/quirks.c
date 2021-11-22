@@ -5807,3 +5807,9 @@ static void chromeos_internal_but_untrusted_device(struct pci_dev *pdev)
 /* 5G Modem on x86 systems (Brya onwards) */
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_MEDIATEK, 0x4d75,
 			chromeos_internal_but_untrusted_device);
+
+static void nvidia_ion_ahci_fixup(struct pci_dev *pdev)
+{
+	pdev->dev_flags |= PCI_DEV_FLAGS_HAS_MSI_MASKING;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_NVIDIA, 0x0ab8, nvidia_ion_ahci_fixup);
