@@ -739,7 +739,6 @@ static const struct uvc_control_mapping uvc_ctrl_mappings[] = {
 	},
 	{
 		.id		= V4L2_CID_REGION_OF_INTEREST_AUTO,
-		.name		= "Region of Interest (auto)",
 		.entity		= UVC_GUID_UVC_CAMERA,
 		.selector	= UVC_CT_REGION_OF_INTEREST_CONTROL,
 		.size		= 16,
