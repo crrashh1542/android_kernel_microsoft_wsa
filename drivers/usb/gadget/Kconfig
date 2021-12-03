@@ -396,6 +396,7 @@ config USB_CONFIGFS_F_ACC
 config USB_CONFIGFS_F_AUDIO_SRC
 	bool "Audio Source gadget"
 	depends on USB_CONFIGFS
+	depends on USB_CONFIGFS_UEVENT
 	depends on SND
 	select SND_PCM
 	select USB_F_AUDIO_SRC
