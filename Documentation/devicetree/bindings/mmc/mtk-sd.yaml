@@ -39,6 +39,9 @@ properties:
           - const: mediatek,mt8195-mmc
           - const: mediatek,mt8183-mmc
 
+  reg:
+    maxItems: 1
+
   clocks:
     description:
       Should contain phandle for the clock feeding the MMC controller.
@@ -64,6 +67,9 @@ properties:
       - const: pclk_cg
       - const: axi_cg
       - const: ahb_cg
+
+  interrupts:
+    maxItems: 1
 
   pinctrl-names:
     items:
