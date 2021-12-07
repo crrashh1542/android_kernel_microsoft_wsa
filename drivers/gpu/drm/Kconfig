@@ -401,6 +401,8 @@ source "drivers/gpu/drm/xlnx/Kconfig"
 
 source "drivers/gpu/drm/gud/Kconfig"
 
+source "drivers/gpu/drm/sprd/Kconfig"
+
 source "drivers/gpu/drm/img-rogue/Kconfig"
 
 config DRM_HYPERV
