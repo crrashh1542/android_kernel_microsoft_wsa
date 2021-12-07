@@ -22,5 +22,4 @@
 
 menu "ARM GPU Configuration"
 source "drivers/gpu/arm/bifrost/Kconfig"
-source "drivers/gpu/arm/midgard/Kconfig"
 endmenu
