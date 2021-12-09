@@ -7,6 +7,7 @@
 #include "main.h"
 #include "phy.h"
 #include "debug.h"
+#include "vndcmd.h"
 
 static const struct nla_policy
 rtw_sar_rule_policy[REALTEK_VNDCMD_SAR_RULE_ATTR_MAX + 1] = {
