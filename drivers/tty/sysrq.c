@@ -459,7 +459,7 @@ static void sysrq_x_cros_signal_process(char *comm, char *parent, int sig)
 
 		printk(KERN_INFO "%s: signal %d %s pid %u tgid %u\n",
 		       __func__, sig, comm, p->pid, p->tgid);
-		do_send_sig_info(sig, SEND_SIG_PRIV, p, true);
+		do_send_sig_info(sig, SEND_SIG_PRIV, p, PIDTYPE_MAX);
 	}
 	read_unlock(&tasklist_lock);
 }
