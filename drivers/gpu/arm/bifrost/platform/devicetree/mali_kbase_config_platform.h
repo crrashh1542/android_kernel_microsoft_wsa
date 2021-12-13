@@ -46,3 +46,7 @@ extern struct kbase_platform_funcs_conf platform_funcs;
  * The delay time (in milliseconds) to be used for autosuspend
  */
 #define AUTO_SUSPEND_DELAY (100)
+
+#ifdef CONFIG_OF
+extern const struct of_device_id kbase_dt_ids[];
+#endif

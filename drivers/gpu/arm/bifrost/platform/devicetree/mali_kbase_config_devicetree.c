@@ -19,6 +19,9 @@
  *
  */
 
+#include <linux/module.h>
+#include <linux/of_device.h>
+
 #include <mali_kbase.h>
 #include <mali_kbase_config.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
@@ -51,3 +54,14 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation, u32 u
 	return 1;
 }
 #endif /* CONFIG_MALI_BIFROST_DVFS */
+
+#ifdef CONFIG_OF
+const struct of_device_id kbase_dt_ids[] = {
+	{ .compatible = "arm,malit6xx" },
+	{ .compatible = "arm,mali-midgard" },
+	{ .compatible = "arm,mali-bifrost" },
+	{ .compatible = "arm,mali-valhall" },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, kbase_dt_ids);
+#endif
