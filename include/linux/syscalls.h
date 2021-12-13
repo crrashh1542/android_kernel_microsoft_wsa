@@ -1382,8 +1382,6 @@ int __sys_getsockopt(int fd, int level, int optname, char __user *optval,
 int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
 		int optlen);
 
-#ifdef CONFIG_ALT_SYSCALL
-
 /* Only used with ALT_SYSCALL enabled */
 
 int ksys_prctl(int option, unsigned long arg2, unsigned long arg3,
@@ -1400,6 +1398,5 @@ int ksys_getcpu(unsigned __user *cpu, unsigned __user *node,
 int ksys_clock_adjtime32(clockid_t which_clock,
 			 struct old_timex32 __user *utp);
 int ksys_adjtimex_time32(struct old_timex32 __user *utp);
-#endif /* CONFIG_ALT_SYSCALL */
 
 #endif
