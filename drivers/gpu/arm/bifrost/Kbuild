@@ -144,7 +144,7 @@ subdir-ccflags-y += $(ccflags-y)
 # Kernel Modules
 #
 obj-$(CONFIG_MALI_BIFROST) += mali_kbase.o
-obj-$(CONFIG_MALI_BIFROST_ARBITRATION) += arbitration/
+# obj-$(CONFIG_MALI_BIFROST_ARBITRATION) += arbitration/
 obj-$(CONFIG_MALI_BIFROST_KUTF)    += tests/
 
 mali_kbase-y := \
