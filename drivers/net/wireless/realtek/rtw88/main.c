@@ -17,6 +17,7 @@
 #include "tx.h"
 #include "debug.h"
 #include "bf.h"
+#include "sar.h"
 
 bool rtw_disable_lps_deep_mode;
 EXPORT_SYMBOL(rtw_disable_lps_deep_mode);
@@ -697,6 +698,7 @@ void rtw_update_channel(struct rtw_dev *rtwdev, u8 center_channel,
 	struct rtw_hal *hal = &rtwdev->hal;
 	u8 *cch_by_bw = hal->cch_by_bw;
 	u32 center_freq, primary_freq;
+	enum rtw_sar_bands sar_band;
 	u8 primary_channel_idx;
 
 	center_freq = ieee80211_channel_to_frequency(center_channel, nl_band);
@@ -744,11 +746,31 @@ void rtw_update_channel(struct rtw_dev *rtwdev, u8 center_channel,
 		break;
 	}
 
+	switch (center_channel) {
+	case 1 ... 14:
+		sar_band = RTW_SAR_BAND_0;
+		break;
+	case 36 ... 64:
+		sar_band = RTW_SAR_BAND_1;
+		break;
+	case 100 ... 144:
+		sar_band = RTW_SAR_BAND_3;
+		break;
+	case 149 ... 177:
+		sar_band = RTW_SAR_BAND_4;
+		break;
+	default:
+		WARN(1, "unknown ch(%u) to SAR band\n", center_channel);
+		sar_band = RTW_SAR_BAND_0;
+		break;
+	}
+
 	hal->current_primary_channel_index = primary_channel_idx;
 	hal->current_band_width = bandwidth;
 	hal->primary_channel = primary_channel;
 	hal->current_channel = center_channel;
 	hal->current_band_type = band;
+	hal->sar_band = sar_band;
 }
 
 void rtw_get_channel_params(struct cfg80211_chan_def *chandef,
@@ -2148,6 +2170,8 @@ int rtw_register_hw(struct rtw_dev *rtwdev, struct ieee80211_hw *hw)
 #endif
 	rtw_set_supported_band(hw, rtwdev->chip);
 	SET_IEEE80211_PERM_ADDR(hw, rtwdev->efuse.addr);
+
+	hw->wiphy->sar_capa = &rtw_sar_capa;
 
 	ret = rtw_regd_init(rtwdev);
 	if (ret) {
