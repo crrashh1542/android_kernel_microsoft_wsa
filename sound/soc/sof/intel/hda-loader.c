@@ -24,7 +24,6 @@
 #include "../sof-priv.h"
 #include "hda.h"
 
-#define HDA_FW_BOOT_ATTEMPTS	3
 #define HDA_CL_STREAM_FORMAT 0x40
 
 static void hda_ssp_set_cbp_cfp(struct snd_sof_dev *sdev)
