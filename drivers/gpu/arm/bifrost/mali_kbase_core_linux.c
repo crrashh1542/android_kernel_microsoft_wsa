@@ -5271,10 +5271,7 @@ static int kbase_device_resume(struct device *dev)
 #ifdef CONFIG_MALI_BIFROST_DEVFREQ
 	dev_dbg(dev, "Callback %s\n", __func__);
 	if (kbdev->devfreq) {
-		mutex_lock(&kbdev->pm.lock);
-		if (kbdev->pm.active_count > 0)
-			kbase_devfreq_enqueue_work(kbdev, DEVFREQ_WORK_RESUME);
-		mutex_unlock(&kbdev->pm.lock);
+		kbase_devfreq_enqueue_work(kbdev, DEVFREQ_WORK_RESUME);
 		flush_workqueue(kbdev->devfreq_queue.workq);
 	}
 #endif
