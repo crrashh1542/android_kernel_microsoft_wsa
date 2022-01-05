@@ -42,6 +42,7 @@
 #include <linux/dma-buf.h>
 #include <linux/sizes.h>
 
+#include <drm/drm_drv.h>
 #include <drm/ttm/ttm_bo_api.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
@@ -1801,6 +1802,7 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
  */
 void amdgpu_ttm_fini(struct amdgpu_device *adev)
 {
+	int idx;
 	if (!adev->mman.initialized)
 		return;
 
@@ -1814,6 +1816,15 @@ void amdgpu_ttm_fini(struct amdgpu_device *adev)
 		amdgpu_bo_free_kernel(&adev->mman.stolen_reserved_memory,
 				      NULL, NULL);
 	amdgpu_ttm_fw_reserve_vram_fini(adev);
+
+	if (drm_dev_enter(adev_to_drm(adev), &idx)) {
+
+		if (adev->mman.aper_base_kaddr)
+			iounmap(adev->mman.aper_base_kaddr);
+		adev->mman.aper_base_kaddr = NULL;
+
+		drm_dev_exit(idx);
+	}
 
 	amdgpu_vram_mgr_fini(adev);
 	amdgpu_gtt_mgr_fini(adev);
