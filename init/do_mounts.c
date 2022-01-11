@@ -606,7 +606,6 @@ void __init prepare_namespace(void)
 		ssleep(root_delay);
 	}
 
-#if 0
 	/*
 	 * wait for the known devices to complete their probing
 	 *
@@ -615,8 +614,6 @@ void __init prepare_namespace(void)
 	 * for the touchpad of a laptop to initialize.
 	 */
 	wait_for_device_probe();
-#endif
-	async_synchronize_full();
 
 	md_run_setup();
 
