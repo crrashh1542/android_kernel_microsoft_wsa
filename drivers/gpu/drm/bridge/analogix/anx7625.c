@@ -24,8 +24,8 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_dp_aux_bus.h>
-#include <drm/drm_dp_helper.h>
+#include <drm/dp/drm_dp_aux_bus.h>
+#include <drm/dp/drm_dp_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_hdcp.h>
 #include <drm/drm_mipi_dsi.h>
