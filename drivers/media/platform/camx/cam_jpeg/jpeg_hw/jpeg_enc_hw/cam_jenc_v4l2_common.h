@@ -22,21 +22,22 @@
 /* Maximum number of planes supported by HW */
 #define JENC_HW_MAX_PLANES	3
 
-#define JENC_HW_MAX_WIDTH	3264
-#define JENC_HW_MAX_HEIGHT	2448
-
-#define JENC_HW_MIN_WIDTH	ALIGN(JENC_HW_MAX_WIDTH  >> 4, 16)
-#define JENC_HW_MIN_HEIGHT	ALIGN(JENC_HW_MAX_HEIGHT >> 4, 16)
+/* Offline Encode limist */
+#define JENC_HW_MAX_WIDTH	5376
+#define JENC_HW_MAX_HEIGHT	4032
 
 #define JENC_HW_DST_DEF_WIDTH	640
 #define JENC_HW_DST_DEF_HEIGHT	480
-#define JENC_HW_DST_WALIGN	16
+#define JENC_HW_DST_WALIGN	128
 #define JENC_HW_DST_HALIGN	2
 
 #define JENC_HW_SRC_DEF_WIDTH	2592
 #define JENC_HW_SRC_DEF_HEIGHT	1944
 #define JENC_HW_SRC_WALIGN	16
 #define JENC_HW_SRC_HALIGN	2
+
+#define JENC_HW_MIN_WIDTH	96
+#define JENC_HW_MIN_HEIGHT	72
 
 enum jenc_vid_id {
 	JENC_SRC_ID = 0,
