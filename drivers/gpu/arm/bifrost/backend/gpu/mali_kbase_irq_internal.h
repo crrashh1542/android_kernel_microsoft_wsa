@@ -40,4 +40,11 @@ void kbase_synchronize_irqs(struct kbase_device *kbdev);
 int kbasep_common_test_interrupt_handlers(
 					struct kbase_device * const kbdev);
 
+/* Kernel API for setting irq throttle hook callback and irq time in us */
+int kbase_set_custom_irq_handler(struct kbase_device *kbdev,
+				 irq_handler_t custom_handler,
+				 int irq_type);
+
+irqreturn_t kbase_gpu_irq_test_handler(int irq, void *data, u32 val);
+
 #endif /* _KBASE_IRQ_INTERNAL_H_ */
