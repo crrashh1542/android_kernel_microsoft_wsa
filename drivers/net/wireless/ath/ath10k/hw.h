@@ -633,6 +633,9 @@ struct ath10k_hw_params {
 
 	/* limit tx credit */
 	bool tx_credit_limit;
+
+	/* WAR - Delay the unmapping of the buffer */
+	bool delay_unmap_buffer;
 };
 
 struct htt_rx_desc;
