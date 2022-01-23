@@ -1439,7 +1439,7 @@ out_free:
 	return ret;
 }
 
-static int mcp251x_can_remove(struct spi_device *spi)
+static void mcp251x_can_remove(struct spi_device *spi)
 {
 	struct mcp251x_priv *priv = spi_get_drvdata(spi);
 	struct net_device *net = priv->net;
@@ -1454,8 +1454,6 @@ static int mcp251x_can_remove(struct spi_device *spi)
 	clk_disable_unprepare(priv->clk);
 
 	free_candev(net);
-
-	return 0;
 }
 
 static int __maybe_unused mcp251x_can_suspend(struct device *dev)

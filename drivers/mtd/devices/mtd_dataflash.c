@@ -923,7 +923,7 @@ static int dataflash_probe(struct spi_device *spi)
 	return status;
 }
 
-static int dataflash_remove(struct spi_device *spi)
+static void dataflash_remove(struct spi_device *spi)
 {
 	struct dataflash	*flash = spi_get_drvdata(spi);
 
@@ -932,8 +932,6 @@ static int dataflash_remove(struct spi_device *spi)
 	WARN_ON(mtd_device_unregister(&flash->mtd));
 
 	kfree(flash);
-
-	return 0;
 }
 
 static struct spi_driver dataflash_driver = {
