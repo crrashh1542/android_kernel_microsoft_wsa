@@ -192,6 +192,15 @@ static int virtballoon_free_page_report(struct page_reporting_dev_info *pr_dev_i
 	return 0;
 }
 
+static void update_balloon_size(struct virtio_balloon *vb)
+{
+	u32 actual = vb->num_pages;
+
+	/* Legacy balloon config space is LE, unlike all other devices. */
+	virtio_cwrite_le(vb->vdev, struct virtio_balloon_config, actual,
+			 &actual);
+}
+
 static void set_page_pfns(struct virtio_balloon *vb,
 			  __virtio32 pfns[], struct page *page)
 {
@@ -253,6 +262,8 @@ static unsigned fill_balloon(struct virtio_balloon *vb, size_t num)
 	/* Did we get any? */
 	if (vb->num_pfns != 0)
 		tell_host(vb, vb->inflate_vq);
+
+	update_balloon_size(vb);
 	mutex_unlock(&vb->balloon_lock);
 
 	return num_allocated_pages;
@@ -303,6 +314,7 @@ static unsigned leak_balloon(struct virtio_balloon *vb, size_t num)
 	 */
 	if (vb->num_pfns != 0)
 		tell_host(vb, vb->deflate_vq);
+	update_balloon_size(vb);
 	release_pages_balloon(vb, &pages);
 	mutex_unlock(&vb->balloon_lock);
 	return num_freed_pages;
@@ -454,15 +466,6 @@ static void virtballoon_changed(struct virtio_device *vdev)
 	spin_unlock_irqrestore(&vb->stop_update_lock, flags);
 }
 
-static void update_balloon_size(struct virtio_balloon *vb)
-{
-	u32 actual = vb->num_pages;
-
-	/* Legacy balloon config space is LE, unlike all other devices. */
-	virtio_cwrite_le(vb->vdev, struct virtio_balloon_config, actual,
-			 &actual);
-}
-
 static void update_balloon_stats_func(struct work_struct *work)
 {
 	struct virtio_balloon *vb;
@@ -488,7 +491,6 @@ static void update_balloon_size_func(struct work_struct *work)
 		diff -= fill_balloon(vb, diff);
 	else
 		diff += leak_balloon(vb, -diff);
-	update_balloon_size(vb);
 
 	if (diff)
 		queue_work(system_freezable_wq, work);
@@ -859,7 +861,6 @@ static int virtio_balloon_oom_notify(struct notifier_block *nb,
 
 	*freed += leak_balloon(vb, VIRTIO_BALLOON_OOM_NR_PAGES) /
 		  VIRTIO_BALLOON_PAGES_PER_PAGE;
-	update_balloon_size(vb);
 
 	return NOTIFY_OK;
 }
@@ -1049,7 +1050,6 @@ static void remove_common(struct virtio_balloon *vb)
 	/* There might be pages left in the balloon: free them. */
 	while (vb->num_pages)
 		leak_balloon(vb, vb->num_pages);
-	update_balloon_size(vb);
 
 	/* There might be free pages that are being reported: release them. */
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
@@ -1118,7 +1118,11 @@ static int virtballoon_restore(struct virtio_device *vdev)
 
 	if (towards_target(vb))
 		virtballoon_changed(vdev);
+
+	mutex_lock(&vb->balloon_lock);
 	update_balloon_size(vb);
+	mutex_unlock(&vb->balloon_lock);
+
 	return 0;
 }
 #endif
