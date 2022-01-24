@@ -31,12 +31,13 @@
 #include <linux/virtio_config.h>
 
 /* The feature bitmap for virtio balloon */
-#define VIRTIO_BALLOON_F_MUST_TELL_HOST	0 /* Tell before reclaiming pages */
-#define VIRTIO_BALLOON_F_STATS_VQ	1 /* Memory Stats virtqueue */
-#define VIRTIO_BALLOON_F_DEFLATE_ON_OOM	2 /* Deflate balloon on OOM */
-#define VIRTIO_BALLOON_F_FREE_PAGE_HINT	3 /* VQ to report free pages */
-#define VIRTIO_BALLOON_F_PAGE_POISON	4 /* Guest is using page poisoning */
-#define VIRTIO_BALLOON_F_REPORTING	5 /* Page reporting virtqueue */
+#define VIRTIO_BALLOON_F_MUST_TELL_HOST	  0 /* Tell before reclaiming pages */
+#define VIRTIO_BALLOON_F_STATS_VQ	  1 /* Memory Stats virtqueue */
+#define VIRTIO_BALLOON_F_DEFLATE_ON_OOM	  2 /* Deflate balloon on OOM */
+#define VIRTIO_BALLOON_F_FREE_PAGE_HINT	  3 /* VQ to report free pages */
+#define VIRTIO_BALLOON_F_PAGE_POISON	  4 /* Guest is using page poisoning */
+#define VIRTIO_BALLOON_F_REPORTING	  5 /* Page reporting virtqueue */
+#define VIRTIO_BALLOON_F_RESPONSIVE_HOST  6 /* Host monitors memory pressure */
 
 /* Size of a PFN in the balloon interface. */
 #define VIRTIO_BALLOON_PFN_SHIFT 12

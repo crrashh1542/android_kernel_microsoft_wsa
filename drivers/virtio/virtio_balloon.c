@@ -217,6 +217,14 @@ static void set_page_pfns(struct virtio_balloon *vb,
 					  page_to_balloon_pfn(page) + i);
 }
 
+static bool needs_adjust_managed_page_count(struct virtio_balloon *vb)
+{
+	return !virtio_has_feature(vb->vdev,
+				   VIRTIO_BALLOON_F_DEFLATE_ON_OOM) &&
+	       !virtio_has_feature(vb->vdev,
+				   VIRTIO_BALLOON_F_RESPONSIVE_HOST);
+}
+
 static unsigned fill_balloon(struct virtio_balloon *vb, size_t num)
 {
 	unsigned num_allocated_pages;
@@ -252,8 +260,7 @@ static unsigned fill_balloon(struct virtio_balloon *vb, size_t num)
 
 		set_page_pfns(vb, vb->pfns + vb->num_pfns, page);
 		vb->num_pages += VIRTIO_BALLOON_PAGES_PER_PAGE;
-		if (!virtio_has_feature(vb->vdev,
-					VIRTIO_BALLOON_F_DEFLATE_ON_OOM))
+		if (needs_adjust_managed_page_count(vb))
 			adjust_managed_page_count(page, -1);
 		vb->num_pfns += VIRTIO_BALLOON_PAGES_PER_PAGE;
 	}
@@ -275,8 +282,7 @@ static void release_pages_balloon(struct virtio_balloon *vb,
 	struct page *page, *next;
 
 	list_for_each_entry_safe(page, next, pages, lru) {
-		if (!virtio_has_feature(vb->vdev,
-					VIRTIO_BALLOON_F_DEFLATE_ON_OOM))
+		if (needs_adjust_managed_page_count(vb))
 			adjust_managed_page_count(page, 1);
 		list_del(&page->lru);
 		put_page(page); /* balloon reference */
@@ -777,7 +783,7 @@ static int virtballoon_migratepage(struct balloon_dev_info *vb_dev_info,
 	  * managed page count when inflating, we have to fixup the count of
 	  * both involved zones.
 	  */
-	if (!virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_DEFLATE_ON_OOM) &&
+	if (needs_adjust_managed_page_count(vb) &&
 	    page_zone(page) != page_zone(newpage)) {
 		adjust_managed_page_count(page, 1);
 		adjust_managed_page_count(newpage, -1);
@@ -1151,6 +1157,7 @@ static unsigned int features[] = {
 	VIRTIO_BALLOON_F_FREE_PAGE_HINT,
 	VIRTIO_BALLOON_F_PAGE_POISON,
 	VIRTIO_BALLOON_F_REPORTING,
+	VIRTIO_BALLOON_F_RESPONSIVE_HOST,
 };
 
 static struct virtio_driver virtio_balloon_driver = {
