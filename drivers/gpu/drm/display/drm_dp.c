@@ -28,6 +28,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
+#include <linux/string_helpers.h>
 
 #include <drm/display/drm_dp_helper.h>
 #include <drm/display/drm_dp_mst_helper.h>
@@ -1262,7 +1263,7 @@ void drm_dp_downstream_debug(struct seq_file *m,
 	bool branch_device = drm_dp_is_branch(dpcd);
 
 	seq_printf(m, "\tDP branch device present: %s\n",
-		   branch_device ? "yes" : "no");
+		   str_yes_no(branch_device));
 
 	if (!branch_device)
 		return;
