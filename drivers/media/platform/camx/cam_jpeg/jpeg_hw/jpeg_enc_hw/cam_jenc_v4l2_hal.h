@@ -43,7 +43,7 @@ struct jenc_bufq {
 		dma_addr_t iova;
 		size_t length;
 		u8 reg_id;
-	} mapped[CAM_PACKET_MAX_PLANES];
+	} mapped[VB2_MAX_FRAME][CAM_PACKET_MAX_PLANES];
 };
 
 struct jenc_context {
@@ -68,6 +68,10 @@ void jenc_hal_setup_we_engine(struct jenc_context *jctx, struct jenc_bufq *bq);
 
 struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
 				    enum jenc_vid_id id);
+
+int jenc_hal_dma_buffer_release(struct jenc_context *jctx, struct vb2_buffer *vb2);
+
+int jenc_hal_dma_buffer_acquire(struct jenc_context *jctx, struct vb2_buffer *vb2, int plane);
 
 int jenc_hal_process_exec(struct jenc_context *jctx,
 			  struct vb2_v4l2_buffer *src_vb,

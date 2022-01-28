@@ -129,6 +129,10 @@ static int op_jenc_vb2_buf_prepare(struct vb2_buffer *vb)
 		else
 			vb2_set_plane_payload(vb, i,
 					      pix_mp->plane_fmt[i].sizeimage);
+
+		rc = jenc_hal_dma_buffer_acquire(jctx, vb, i);
+		if (rc)
+			break;
 	}
 
 	return rc;
@@ -173,6 +177,8 @@ static void op_jenc_vb2_buf_finish(struct vb2_buffer *vb)
 
 	if (!jctx)
 		return;
+
+	jenc_hal_dma_buffer_release(jctx, vb);
 
 	dev_dbg(jctx->dev, "Result size:%zd\n", jctx->result_size);
 }

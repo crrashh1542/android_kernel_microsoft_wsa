@@ -265,21 +265,21 @@ static const u32 jenc_quant_table[] = {
 	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999
 };
 
-static int jenc_hal_dma_buffer_put(struct jenc_context *jctx,
-				   struct vb2_buffer *vb2)
+int jenc_hal_dma_buffer_release(struct jenc_context *jctx, struct vb2_buffer *vb2)
 {
 	struct jenc_bufq *bq = &jctx->bufq[TYPE2ID(vb2->type)];
 	int rc, pln;
 
 	for (pln = 0; pln < vb2->num_planes; pln++) {
-		if (bq->mapped[pln].iova && bq->mapped[pln].length) {
+		if (bq->mapped[vb2->index][pln].iova &&
+		    bq->mapped[vb2->index][pln].length) {
 			rc = cam_smmu_unmap_ext_buff(jctx->iommu_hdl,
-						     bq->mapped[pln].iova,
-						     bq->mapped[pln].length,
-						     bq->mapped[pln].reg_id);
-			bq->mapped[pln].iova   = 0;
-			bq->mapped[pln].length = 0;
-			bq->mapped[pln].reg_id = 0;
+						     bq->mapped[vb2->index][pln].iova,
+						     bq->mapped[vb2->index][pln].length,
+						     bq->mapped[vb2->index][pln].reg_id);
+			bq->mapped[vb2->index][pln].iova   = 0;
+			bq->mapped[vb2->index][pln].length = 0;
+			bq->mapped[vb2->index][pln].reg_id = 0;
 			if (rc) {
 				dev_err(jctx->dev, "Unmap ext buff failed");
 				return rc;
@@ -290,9 +290,7 @@ static int jenc_hal_dma_buffer_put(struct jenc_context *jctx,
 	return 0;
 }
 
-static int jenc_hal_dma_buffer_get(struct jenc_context *jctx,
-				   struct vb2_buffer *vb2, int plane,
-				   dma_addr_t *dma_addr)
+int jenc_hal_dma_buffer_acquire(struct jenc_context *jctx, struct vb2_buffer *vb2, int plane)
 {
 	struct jenc_bufq *bq = &jctx->bufq[TYPE2ID(vb2->type)];
 	struct sg_table *sgt;
@@ -319,11 +317,9 @@ static int jenc_hal_dma_buffer_get(struct jenc_context *jctx,
 	if (!length)
 		return -EINVAL;
 
-	bq->mapped[plane].reg_id = CAM_SMMU_REGION_IO;
-	bq->mapped[plane].iova	 = addr.iova;
-	bq->mapped[plane].length = length;
-
-	*dma_addr = addr.iova;
+	bq->mapped[vb2->index][plane].reg_id = CAM_SMMU_REGION_IO;
+	bq->mapped[vb2->index][plane].iova   = addr.iova;
+	bq->mapped[vb2->index][plane].length = length;
 
 	return 0;
 }
@@ -511,14 +507,9 @@ static const struct jenc_reg_info fe_clr_planes_queue[] = {
 static int jenc_hal_setup_fe_addr(struct jenc_context *jctx,
 				  struct vb2_buffer *vb2)
 {
-	dma_addr_t dma;
-	int rc, pln = 0;
-
-	rc = jenc_hal_dma_buffer_get(jctx, vb2, pln, &dma);
-	if (rc) {
-		dev_err(jctx->dev, "Buffer mapping failed rc:%d\n", rc);
-		return rc;
-	}
+	struct jenc_bufq *dbq = &jctx->bufq[JENC_SRC_ID];
+	int pln = 0;
+	dma_addr_t dma = dbq->mapped[vb2->index][pln].iova;
 
 	jctx->rmap[fe_pl_ptr[pln].offs] = (dma << fe_pl_ptr[pln].shift) &
 					  fe_pl_ptr[pln].mask;
@@ -832,15 +823,9 @@ static int jenc_hal_setup_we_addr(struct jenc_context *jctx,
 				  struct vb2_buffer *vb2)
 {
 	struct jenc_bufq *dbq = &jctx->bufq[JENC_DST_ID];
-	dma_addr_t dma;
 	struct qc_jfif *mptr;
-	int rc, pln = 0;
-
-	rc = jenc_hal_dma_buffer_get(jctx, vb2, pln, &dma);
-	if (rc) {
-		dev_err(jctx->dev, "Buffer mapping failed rc:%d\n", rc);
-		return rc;
-	}
+	int pln = 0;
+	dma_addr_t dma = dbq->mapped[vb2->index][pln].iova;
 
 	mptr = vb2_plane_vaddr(vb2, pln);
 	if (!mptr) {
@@ -1259,11 +1244,6 @@ void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 
 		v4l2_m2m_buf_done(dst_vb, bstate);
 	} while (cleanup);
-
-	if (bstate == VB2_BUF_STATE_DONE) {
-		jenc_hal_dma_buffer_put(jctx, &src_vb->vb2_buf);
-		jenc_hal_dma_buffer_put(jctx, &dst_vb->vb2_buf);
-	}
 
 	cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv, CAM_JPEG_CMD_SET_IRQ_CB,
 				 &irq_cd, sizeof(irq_cd));
