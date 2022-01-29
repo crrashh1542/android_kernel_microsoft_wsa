@@ -35,6 +35,8 @@
 
 #define JENC_REG_SCALE_DEFAULT_STEP 0x200000
 
+#define JENC_IRQ_TYPE_SESSION_DONE 0x1
+
 // QC JFIF Header and definition
 struct qc_jfif {
 	u8 soi_marker[2];
@@ -1219,16 +1221,13 @@ struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
 
 void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 {
-	unsigned long flags;
 	struct cam_jpeg_set_irq_cb irq_cd = {0};
 	struct vb2_v4l2_buffer *src_vb, *dst_vb;
 	enum vb2_buffer_state bstate = (cleanup) ? VB2_BUF_STATE_ERROR :
 						   VB2_BUF_STATE_DONE;
 
 	do {
-		spin_lock_irqsave(&jctx->irqlock, flags);
 		src_vb = v4l2_m2m_src_buf_remove(jctx->fh.m2m_ctx);
-		spin_unlock_irqrestore(&jctx->irqlock, flags);
 		if (!src_vb)
 			break;
 
@@ -1236,9 +1235,7 @@ void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 	} while (cleanup);
 
 	do {
-		spin_lock_irqsave(&jctx->irqlock, flags);
 		dst_vb = v4l2_m2m_dst_buf_remove(jctx->fh.m2m_ctx);
-		spin_unlock_irqrestore(&jctx->irqlock, flags);
 		if (!dst_vb)
 			break;
 
@@ -1256,11 +1253,11 @@ static int32_t jenc_hal_process_irq(u32 irq_status, s32 result_size, void *data)
 	dev_dbg(jctx->dev, "%s irq:%x size:%d ctx:%p\n", __func__, irq_status,
 		result_size, data);
 
-	jctx->result_size = result_size;
-
-	jenc_hal_process_done(jctx, false);
-
-	v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+	if (irq_status & JENC_IRQ_TYPE_SESSION_DONE) {
+		jctx->result_size = result_size;
+		jenc_hal_process_done(jctx, false);
+		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+	}
 
 	return 0;
 }
