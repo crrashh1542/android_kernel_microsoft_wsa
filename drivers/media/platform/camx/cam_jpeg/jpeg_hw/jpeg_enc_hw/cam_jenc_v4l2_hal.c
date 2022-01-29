@@ -296,7 +296,7 @@ static int jenc_hal_dma_buffer_get(struct jenc_context *jctx,
 {
 	struct jenc_bufq *bq = &jctx->bufq[TYPE2ID(vb2->type)];
 	struct sg_table *sgt;
-	size_t length;
+	size_t length = ALIGN(vb2_plane_size(vb2, plane), PAGE_SIZE);
 	union {
 		dma_addr_t iova;
 		u32 *mptr;
