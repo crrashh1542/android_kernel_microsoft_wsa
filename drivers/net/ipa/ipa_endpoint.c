@@ -1050,14 +1050,14 @@ static int ipa_endpoint_replenish_one(struct ipa_endpoint *endpoint)
 	u32 len;
 	int ret;
 
+	trans = ipa_endpoint_trans_alloc(endpoint, 1);
+	if (!trans)
+		return -ENOMEM;
+
 	buffer_size = endpoint->data->rx.buffer_size;
 	page = dev_alloc_pages(get_order(buffer_size));
 	if (!page)
-		return -ENOMEM;
-
-	trans = ipa_endpoint_trans_alloc(endpoint, 1);
-	if (!trans)
-		goto err_free_pages;
+		goto err_trans_free;
 
 	/* Offset the buffer to make space for skb headroom */
 	offset = NET_SKB_PAD;
@@ -1065,7 +1065,7 @@ static int ipa_endpoint_replenish_one(struct ipa_endpoint *endpoint)
 
 	ret = gsi_trans_page_add(trans, page, len, offset);
 	if (ret)
-		goto err_trans_free;
+		goto err_free_pages;
 	trans->data = page;	/* transaction owns page now */
 
 	if (++endpoint->replenish_ready == IPA_REPLENISH_BATCH) {
@@ -1077,10 +1077,10 @@ static int ipa_endpoint_replenish_one(struct ipa_endpoint *endpoint)
 
 	return 0;
 
+err_free_pages:
+	__free_pages(page, get_order(buffer_size));
 err_trans_free:
 	gsi_trans_free(trans);
-err_free_pages:
-	put_page(page);
 
 	return -ENOMEM;
 }
