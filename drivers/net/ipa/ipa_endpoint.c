@@ -1090,7 +1090,6 @@ static void ipa_endpoint_replenish(struct ipa_endpoint *endpoint)
 		return;
 
 	while ((trans = ipa_endpoint_trans_alloc(endpoint, 1))) {
-		WARN_ON(!atomic_dec_not_zero(&endpoint->replenish_backlog));
 		if (ipa_endpoint_replenish_one(endpoint, trans))
 			goto try_again_later;
 
@@ -1108,9 +1107,6 @@ static void ipa_endpoint_replenish(struct ipa_endpoint *endpoint)
 try_again_later:
 	gsi_trans_free(trans);
 	clear_bit(IPA_REPLENISH_ACTIVE, endpoint->replenish_flags);
-
-	/* The last one didn't succeed, so fix the backlog */
-	atomic_inc(&endpoint->replenish_backlog);
 
 	/* Whenever a receive buffer transaction completes we'll try to
 	 * replenish again.  It's unlikely, but if we fail to supply even
@@ -1350,7 +1346,6 @@ static void ipa_endpoint_rx_complete(struct ipa_endpoint *endpoint,
 	struct page *page;
 
 	ipa_endpoint_replenish(endpoint);
-	atomic_inc(&endpoint->replenish_backlog);
 
 	if (trans->cancelled)
 		return;
@@ -1694,8 +1689,6 @@ static void ipa_endpoint_setup_one(struct ipa_endpoint *endpoint)
 		 */
 		clear_bit(IPA_REPLENISH_ENABLED, endpoint->replenish_flags);
 		clear_bit(IPA_REPLENISH_ACTIVE, endpoint->replenish_flags);
-		atomic_set(&endpoint->replenish_backlog,
-			   gsi_channel_tre_max(gsi, endpoint->channel_id));
 		INIT_DELAYED_WORK(&endpoint->replenish_work,
 				  ipa_endpoint_replenish_work);
 	}
