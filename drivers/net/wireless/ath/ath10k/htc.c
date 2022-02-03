@@ -948,8 +948,7 @@ int ath10k_htc_wait_target(struct ath10k_htc *htc)
 	}
 
 	if (ar->hw_params.tx_credit_limit)
-		htc->total_transmit_credits =
-			__le16_to_cpu(HTC_HOST_MAX_CREDIT_COUNT);
+		htc->total_transmit_credits = HTC_HOST_MAX_CREDIT_COUNT;
 	else
 		htc->total_transmit_credits =
 			__le16_to_cpu(msg->ready.credit_count);
