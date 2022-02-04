@@ -28,6 +28,7 @@
 #include "t7xx_hif_dpmaif.h"
 #include "t7xx_hif_dpmaif_rx.h"
 #include "t7xx_hif_dpmaif_tx.h"
+#include "t7xx_netdev.h"
 #include "t7xx_pci.h"
 #include "t7xx_pcie_mac.h"
 #include "t7xx_state_monitor.h"
