@@ -793,7 +793,7 @@ static int _dpu_kms_drm_obj_init(struct dpu_kms *dpu_kms)
 			possible_crtcs = (1UL << max_crtc_count) - 1;
 
 		plane = dpu_plane_init(dev, catalog->sspp[i].id, type,
-				       possible_crtcs, 0);
+				       possible_crtcs);
 		if (IS_ERR(plane)) {
 			DPU_ERROR("dpu_plane_init failed\n");
 			ret = PTR_ERR(plane);
