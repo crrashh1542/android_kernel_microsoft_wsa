@@ -55,7 +55,9 @@ struct jenc_context {
 	struct jenc_bufq bufq[JENC_MAX_ID];
 	struct v4l2_ctrl_handler ctrl_hdl;
 	struct v4l2_ctrl *quality_ctl;
-	u32 quality;
+	struct mutex quality_mutex;
+	u32 quality_requested;
+	u32 quality_programmed;
 	struct v4l2_selection sel;
 	u32 rmap[JENC_S3_MMU_PF_CTL_L1_FILTER_REG];
 	s32 iommu_hdl;

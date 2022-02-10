@@ -37,6 +37,10 @@
 
 #define JENC_IRQ_TYPE_SESSION_DONE 0x1
 
+#define JENC_DQT_TABLE_COL  8
+#define JENC_MAX_DMI_INDEX 64
+#define JENC_DQT_QFP_SHIFT 20
+
 // QC JFIF Header and definition
 struct qc_jfif {
 	u8 soi_marker[2];
@@ -45,9 +49,9 @@ struct qc_jfif {
 	u8 dqt_length[2];
 
 	u8 dqt_id1[1];
-	u8 dqt_table1[64];
+	u8 dqt_table1[JENC_MAX_DMI_INDEX];
 	u8 dqt_id2[1];
-	u8 dqt_table2[64];
+	u8 dqt_table2[JENC_MAX_DMI_INDEX];
 
 	u8 sof0_marker[2];
 
@@ -110,28 +114,9 @@ static const struct qc_jfif jfif = {
 	.dqt_length = { 0, 0x84 },
 
 	.dqt_id1 = { 0 },
-	.dqt_table1 = {
-		0x02, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x01,
-		0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x04,
-		0x03, 0x02, 0x02, 0x02, 0x02, 0x05, 0x04, 0x04,
-		0x03, 0x04, 0x06, 0x05, 0x06, 0x06, 0x06, 0x05,
-		0x06, 0x06, 0x06, 0x07, 0x09, 0x08, 0x06, 0x07,
-		0x09, 0x07, 0x06, 0x06, 0x08, 0x0b, 0x08, 0x09,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x06, 0x08, 0x0b,
-		0x0c, 0x0b, 0x0a, 0x0c, 0x09, 0x0a, 0x0a, 0x0a,
-	},
-
+	.dqt_table1 = {},
 	.dqt_id2 = { 1 },
-	.dqt_table2 = {
-		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x05, 0x03,
-		0x03, 0x05, 0x0a, 0x07, 0x06, 0x07, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a
-	},
+	.dqt_table2 = {},
 
 	.sof0_marker = { 0xff, 0xc0 },
 
@@ -242,29 +227,46 @@ static const struct qc_jfif jfif = {
 	.sos_dummy = { 0 },
 };
 
+/* Luma base quantization table, 50% quality */
+static const u8 dqt_luma_base[] = {
+	16,  11,  10,  16,  24,  40,  51,  61,
+	12,  12,  14,  19,  26,  58,  60,  55,
+	14,  13,  16,  24,  40,  57,  69,  56,
+	14,  17,  22,  29,  51,  87,  80,  62,
+	18,  22,  37,  56,  68, 109, 103,  77,
+	24,  35,  55,  64,  81, 104, 113,  92,
+	49,  64,  78,  87, 103, 121, 120, 101,
+	72,  92,  95,  98, 112, 100, 103,  99
+};
+
+/* Chrome base quantization table, 50% quality */
+static const u8 dqt_chroma_base[] = {
+	17,  18,  24,  47,  99,  99,  99,  99,
+	18,  21,  26,  66,  99,  99,  99,  99,
+	24,  26,  56,  99,  99,  99,  99,  99,
+	47,  66,  99,  99,  99,  99,  99,  99,
+	99,  99,  99,  99,  99,  99,  99,  99,
+	99,  99,  99,  99,  99,  99,  99,  99,
+	99,  99,  99,  99,  99,  99,  99,  99,
+	99,  99,  99,  99,  99,  99,  99,  99
+};
+
+/* Lookup table for ZigZag reordering */
+static const u8 zz_lookup_table[] = {
+	 0,  1,  5,  6, 14, 15, 27, 28,
+	 2,  4,  7, 13, 16, 26, 29, 42,
+	 3,  8, 12, 17, 25, 30, 41, 43,
+	 9, 11, 18, 24, 31, 40, 44, 53,
+	10, 19, 23, 32, 39, 45, 52, 54,
+	20, 22, 33, 38, 46, 51, 55, 60,
+	21, 34, 37, 47, 50, 56, 59, 61,
+	35, 36, 48, 49, 57, 58, 62, 63
+};
+
 struct jenc_reg_info {
 	u32 offs;
 	u32 mask;
 	u32 shift;
-};
-
-static const u32 jenc_quant_table[] = {
-	0x8000, 0xffff, 0xffff, 0x8000, 0x8000, 0x4000, 0x3333, 0x2aaa,
-	0xffff, 0xffff, 0xffff, 0x8000, 0x5555, 0x2aaa, 0x2aaa, 0x2aaa,
-	0xffff, 0xffff, 0x8000, 0x8000, 0x4000, 0x2aaa, 0x2492, 0x2aaa,
-	0xffff, 0x8000, 0x8000, 0x5555, 0x3333, 0x1c71, 0x2000, 0x2aaa,
-	0x8000, 0x8000, 0x4000, 0x2aaa, 0x2492, 0x1745, 0x1999, 0x2000,
-	0x8000, 0x4000, 0x2aaa, 0x2aaa, 0x2000, 0x1999, 0x1745, 0x1c71,
-	0x3333, 0x2aaa, 0x2000, 0x1c71, 0x1999, 0x1555, 0x1555, 0x1999,
-	0x2492, 0x1c71, 0x1999, 0x1999, 0x1745, 0x1999, 0x1999, 0x1999,
-	0x8000, 0x8000, 0x8000, 0x3333, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x8000, 0x8000, 0x5555, 0x2492, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x8000, 0x5555, 0x2aaa, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x3333, 0x2492, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
-	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999
 };
 
 int jenc_hal_dma_buffer_release(struct jenc_context *jctx, struct vb2_buffer *vb2)
@@ -1143,17 +1145,15 @@ static void jenc_hal_setup_enc_scale(struct jenc_context *jctx)
 static void jenc_hal_apply_settings(struct jenc_context *jctx)
 {
 	u32 rid = JENC_CORE_CFG_REG;
-	struct cam_jpeg_rw_pair wr_pair[1];
+	struct cam_jpeg_rw_pair wr_pair;
 
 	for ( ; rid < ARRAY_SIZE(jctx->rmap); rid += sizeof(jctx->rmap[0])) {
-		if (/*!jctx->rmap[rid] ||*/
-		    (rid >= JENC_DMI_CFG_REG && rid <= JENC_DMI_DATA_REG))
+		if (rid >= JENC_DMI_CFG_REG && rid <= JENC_DMI_DATA_REG)
 			continue;
 
-		wr_pair[0].off = rid;
-		wr_pair[0].val = jctx->rmap[rid];
-		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair,
-				       ARRAY_SIZE(wr_pair)))
+		wr_pair.off = rid;
+		wr_pair.val = jctx->rmap[rid];
+		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1))
 			break;
 	}
 }
@@ -1182,35 +1182,76 @@ static void jenc_hal_apply_defaults(struct jenc_context *jctx)
 				      JENC_WE_CFG_BURST_LENGTH_MAX_MASK);
 }
 
-static void jenc_hal_apply_dmi_tables(struct jenc_context *jctx)
+static u8 jenc_hal_calculate_dqt(struct jenc_context *jctx, u8 dqt_value)
 {
-	struct cam_jpeg_rw_pair wr_pair[1];
+	u64 ratio;
+	u8 calc_val;
+
+	ratio = (JENC_QUALITY_MAX - jctx->quality_requested) << JENC_DQT_QFP_SHIFT;
+	ratio = max_t(u64, 1, ratio);
+	do_div(ratio, JENC_QUALITY_MID);
+
+	calc_val = DIV64_U64_ROUND_CLOSEST(ratio * dqt_value, 1LU << JENC_DQT_QFP_SHIFT);
+
+	return max_t(u8, 1, calc_val);
+}
+
+static void jenc_hal_dmi_tables_apply(struct jenc_context *jctx, struct vb2_buffer *vb2)
+{
+	struct cam_jpeg_rw_pair wr_pair;
 	union jenc_dmi_cfg  pcfg = { .w32 = 0x00000011 };
 	union jenc_dmi_addr addr = { .w32 = 0x00000000 };
-	int i;
+	struct qc_jfif *dqt_ptr = vb2_plane_vaddr(vb2, 0);
+	u8 dqt_val;
+	u32 reg_val;
+	int i, idx;
 
-	// DMI upload start sequence
-	wr_pair[0].off = JENC_DMI_CFG_REG;
-	wr_pair[0].val = pcfg.w32;
-	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
+	if (!dqt_ptr) {
+		dev_err(jctx->dev, "Get plane vaddr failed\n");
+	}
 
-	wr_pair[0].off = JENC_DMI_ADDR_REG;
-	wr_pair[0].val = addr.w32;
-	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
+	/* DMI upload start sequence */
+	wr_pair.off = JENC_DMI_ADDR_REG;
+	wr_pair.val = addr.w32;
+	cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1);
 
-	// DMI data upload
-	for (i = 0; i < ARRAY_SIZE(jenc_quant_table); i++) {
-		wr_pair[0].off = JENC_DMI_DATA_REG;
-		wr_pair[0].val = jenc_quant_table[i];
-		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair,
-				       ARRAY_SIZE(wr_pair)))
+	wr_pair.off = JENC_DMI_CFG_REG;
+	wr_pair.val = pcfg.w32;
+	cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1);
+
+	/* DMI Luma upload */
+	for (i = 0; i < ARRAY_SIZE(dqt_luma_base); i++) {
+		dqt_val = jenc_hal_calculate_dqt(jctx, dqt_luma_base[i]);
+		idx = zz_lookup_table[i];
+		dqt_ptr->dqt_table1[idx] = dqt_val;
+		reg_val = div_u64((u32)U16_MAX + 1, dqt_val);
+		wr_pair.off = JENC_DMI_DATA_REG;
+		wr_pair.val = clamp_t(u32, reg_val, 0, U16_MAX);
+		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1))
 			break;
 	}
 
-	// DMI upload end sequence
-	wr_pair[0].off = JENC_DMI_ADDR_REG;
-	wr_pair[0].val = pcfg.w32;
-	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
+	/* DMI Chroma upload */
+	for (i = 0; i < ARRAY_SIZE(dqt_chroma_base); i++) {
+		dqt_val = jenc_hal_calculate_dqt(jctx, dqt_chroma_base[i]);
+		idx = zz_lookup_table[i];
+		dqt_ptr->dqt_table2[idx] = dqt_val;
+		reg_val = div_u64((u32)U16_MAX + 1, dqt_val);
+		wr_pair.off = JENC_DMI_DATA_REG;
+		wr_pair.val = clamp_t(u32, reg_val, 0, U16_MAX);
+		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1))
+			break;
+	}
+
+	/* DMI upload end sequence */
+	wr_pair.off = JENC_DMI_CFG_REG;
+	wr_pair.val = addr.w32;
+	cam_jpeg_enc_write(jctx->jenc->hw_priv, &wr_pair, 1);
+
+	jctx->quality_programmed = jctx->quality_requested;
+
+	dev_dbg(jctx->dev, "%s ctx:%p quality_programmed:%d\n", __func__, jctx,
+		jctx->quality_programmed);
 }
 
 struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
@@ -1250,9 +1291,6 @@ static int32_t jenc_hal_process_irq(u32 irq_status, s32 result_size, void *data)
 {
 	struct jenc_context *jctx = data;
 
-	dev_dbg(jctx->dev, "%s irq:%x size:%d ctx:%p\n", __func__, irq_status,
-		result_size, data);
-
 	if (irq_status & JENC_IRQ_TYPE_SESSION_DONE) {
 		jctx->result_size = result_size;
 		jenc_hal_process_done(jctx, false);
@@ -1271,8 +1309,6 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 	struct cam_jpeg_set_irq_cb irq_cd;
 	int rc;
 
-	dev_dbg(jctx->dev, "%s(%d)\n", __func__, __LINE__);
-
 	rc = jenc_hal_setup_fe_addr(jctx, &src_vb->vb2_buf);
 	if (rc)
 		return rc;
@@ -1283,11 +1319,17 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 	if (rc)
 		return rc;
 
+	mutex_lock(&jctx->quality_mutex);
+	if (jctx->quality_requested != jctx->quality_programmed)
+		jenc_hal_dmi_tables_apply(jctx, &dst_vb->vb2_buf);
+	mutex_unlock(&jctx->quality_mutex);
+
 	jenc_hal_setup_we_engine(jctx, dbq);
 
 	jenc_hal_setup_enc_scale(jctx);
 
 	jenc_hal_apply_settings(jctx);
+
 	irq_cd.jpeg_hw_mgr_cb = jenc_hal_process_irq;
 	irq_cd.data	      = jctx;
 	irq_cd.b_set_cb	      = 1;
@@ -1316,7 +1358,7 @@ int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset)
 
 	jenc_hal_apply_defaults(jctx);
 
-	jenc_hal_apply_dmi_tables(jctx);
+	jctx->quality_requested = JENC_QUALITY_MAX;
 
 	return rc;
 }

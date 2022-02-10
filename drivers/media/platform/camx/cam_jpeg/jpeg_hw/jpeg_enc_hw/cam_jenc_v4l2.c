@@ -47,7 +47,9 @@ static int op_jenc_v4l2_set_ctrls(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_JPEG_COMPRESSION_QUALITY:
-		jctx->quality = ctrl->val;
+		mutex_lock(&jctx->quality_mutex);
+		jctx->quality_requested = ctrl->val;
+		mutex_unlock(&jctx->quality_mutex);
 		break;
 	default:
 		dev_err(jctx->dev, "%s Ivalid control:0x%x\n", __func__,
@@ -567,6 +569,7 @@ static int op_jenc_file_open(struct file *file)
 	}
 
 	mutex_init(&jctx->vb_mutex);
+	mutex_init(&jctx->quality_mutex);
 	spin_lock_init(&jctx->irqlock);
 
 	v4l2_fh_add(&jctx->fh);
