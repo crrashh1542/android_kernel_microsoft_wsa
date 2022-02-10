@@ -74,6 +74,7 @@
 #include "pxp/intel_pxp.h"
 #include "pxp/intel_pxp_pm.h"
 
+#include "i915_file_private.h"
 #include "i915_debugfs.h"
 #include "i915_driver.h"
 #include "i915_drv.h"
