@@ -924,6 +924,7 @@ static inline bool tb_switch_tmu_hifi_is_enabled(const struct tb_switch *sw,
 int tb_switch_xhci_connect(struct tb_switch *sw);
 void tb_switch_xhci_disconnect(struct tb_switch *sw);
 
+int tb_port_state(struct tb_port *port);
 int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged);
 int tb_port_add_nfc_credits(struct tb_port *port, int credits);
 int tb_port_clear_counter(struct tb_port *port, int counter);
@@ -956,7 +957,6 @@ static inline bool tb_port_use_credit_allocation(const struct tb_port *port)
 
 int tb_port_get_link_speed(struct tb_port *port);
 int tb_port_get_link_width(struct tb_port *port);
-int tb_port_state(struct tb_port *port);
 int tb_port_lane_bonding_enable(struct tb_port *port);
 void tb_port_lane_bonding_disable(struct tb_port *port);
 int tb_port_wait_for_link_width(struct tb_port *port, int width,
