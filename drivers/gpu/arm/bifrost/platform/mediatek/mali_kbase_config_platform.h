@@ -25,7 +25,7 @@
  * Attached value: pointer to @ref kbase_pm_callback_conf
  * Default value: See @ref kbase_pm_callback_conf
  */
-#define POWER_MANAGEMENT_CALLBACKS (&pm_callbacks)
+#define POWER_MANAGEMENT_CALLBACKS (NULL)
 
 /**
  * Platform specific configuration functions
@@ -33,10 +33,14 @@
  * Attached value: pointer to @ref kbase_platform_funcs_conf
  * Default value: See @ref kbase_platform_funcs_conf
  */
-#define PLATFORM_FUNCS (&platform_funcs)
+#define PLATFORM_FUNCS (NULL)
 
 #define CLK_RATE_TRACE_OPS (&clk_rate_trace_ops)
 
-extern struct kbase_pm_callback_conf pm_callbacks;
+extern struct kbase_pm_callback_conf mt8186_pm_callbacks;
 extern struct kbase_clk_rate_trace_op_conf clk_rate_trace_ops;
-extern struct kbase_platform_funcs_conf platform_funcs;
+extern struct kbase_platform_funcs_conf mt8186_platform_funcs;
+
+#ifdef CONFIG_OF
+extern const struct of_device_id kbase_dt_ids[];
+#endif

@@ -336,7 +336,7 @@ static void pm_callback_suspend(struct kbase_device *kbdev)
 	pm_callback_power_off(kbdev);
 }
 
-struct kbase_pm_callback_conf pm_callbacks = {
+struct kbase_pm_callback_conf mt8186_pm_callbacks = {
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
 	.power_suspend_callback = pm_callback_suspend,
@@ -508,7 +508,7 @@ static void platform_term(struct kbase_device *kbdev)
 	pm_domain_term(kbdev);
 }
 
-struct kbase_platform_funcs_conf platform_funcs = {
+struct kbase_platform_funcs_conf mt8186_platform_funcs = {
 	.platform_init_func = platform_init,
 	.platform_term_func = platform_term
 };
