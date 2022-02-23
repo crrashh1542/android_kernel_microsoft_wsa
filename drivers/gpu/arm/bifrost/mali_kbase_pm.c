@@ -76,13 +76,13 @@ int kbase_pm_context_active_handle_suspend(struct kbase_device *kbdev,
 		case KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE:
 			if (kbdev->pm.active_count != 0)
 				break;
-			/* FALLTHROUGH */
+			fallthrough;
 		case KBASE_PM_SUSPEND_HANDLER_DONT_INCREASE:
 			kbase_pm_unlock(kbdev);
 			return 1;
 
 		case KBASE_PM_SUSPEND_HANDLER_NOT_POSSIBLE:
-			/* FALLTHROUGH */
+			fallthrough;
 		default:
 			KBASE_DEBUG_ASSERT_MSG(false, "unreachable");
 			break;
