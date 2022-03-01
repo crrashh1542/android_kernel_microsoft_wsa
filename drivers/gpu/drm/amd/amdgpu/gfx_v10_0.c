@@ -8382,6 +8382,7 @@ static void gfx_v10_cntl_power_gating(struct amdgpu_device *adev, bool enable)
 		switch (adev->ip_versions[GC_HWIP][0]) {
 		case IP_VERSION(10, 3, 1):
 		case IP_VERSION(10, 3, 3):
+		case IP_VERSION(10, 3, 7):
 			data = 0x4E20 & RLC_PG_DELAY_3__CGCG_ACTIVE_BEFORE_CGPG_MASK_Vangogh;
 			WREG32_SOC15(GC, 0, mmRLC_PG_DELAY_3, data);
 			break;
@@ -8452,6 +8453,7 @@ static int gfx_v10_0_set_powergating_state(void *handle,
 		break;
 	case IP_VERSION(10, 3, 1):
 	case IP_VERSION(10, 3, 3):
+	case IP_VERSION(10, 3, 7):
 		gfx_v10_cntl_pg(adev, enable);
 		amdgpu_gfx_off_ctrl(adev, enable);
 		break;
