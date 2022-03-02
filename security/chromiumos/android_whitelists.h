@@ -39,8 +39,10 @@
 static asmlinkage long android_getpriority(struct pt_regs *regs);
 /* Android does not get to call keyctl. */
 static asmlinkage long android_keyctl(struct pt_regs *regs);
+#ifdef CONFIG_KCMP
 /* Android does not get to call kcmp with type==KCMP_SYSVEM. */
 static asmlinkage long android_kcmp(struct pt_regs *regs);
+#endif
 /* Make sure nothing sets a nice value more favorable than -10. */
 static asmlinkage long android_setpriority(struct pt_regs *regs);
 static asmlinkage long android_sched_setscheduler(struct pt_regs *regs);
@@ -127,7 +129,11 @@ static const struct syscall_whitelist_entry android_whitelist[] __initconst = {
         SYSCALL_ENTRY(io_submit),
 	SYSCALL_ENTRY(ioprio_set),
         SYSCALL_ENTRY_ALT(keyctl, android_keyctl),
+#ifdef CONFIG_KCMP
 	SYSCALL_ENTRY_ALT(kcmp, android_kcmp),
+#else
+	SYSCALL_ENTRY(kcmp),
+#endif
 	SYSCALL_ENTRY(kill),
 	SYSCALL_ENTRY(lgetxattr),
 	SYSCALL_ENTRY(linkat),
@@ -403,7 +409,11 @@ static const struct syscall_whitelist_entry android_compat_whitelist[] __initcon
         COMPAT_SYSCALL_ENTRY(io_submit),
 	COMPAT_SYSCALL_ENTRY(ioprio_set),
         COMPAT_SYSCALL_ENTRY_ALT(keyctl, android_keyctl),
+#ifdef CONFIG_KCMP
 	COMPAT_SYSCALL_ENTRY_ALT(kcmp, android_kcmp),
+#else
+	COMPAT_SYSCALL_ENTRY(kcmp),
+#endif
 	COMPAT_SYSCALL_ENTRY(kill),
 	COMPAT_SYSCALL_ENTRY(lgetxattr),
 	COMPAT_SYSCALL_ENTRY(link),

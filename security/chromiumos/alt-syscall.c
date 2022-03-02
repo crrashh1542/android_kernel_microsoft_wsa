@@ -152,6 +152,7 @@ static asmlinkage long android_keyctl(struct pt_regs *regs)
 	return -EACCES;
 }
 
+#ifdef CONFIG_KCMP
 static asmlinkage long android_kcmp(struct pt_regs *regs)
 {
 	struct task_struct *task = current;
@@ -171,6 +172,7 @@ static asmlinkage long android_kcmp(struct pt_regs *regs)
 	idx2 = args[4];
 	return ksys_kcmp(pid1, pid2, type, idx1, idx2);
 }
+#endif
 
 static asmlinkage long android_setpriority(struct pt_regs *regs)
 {
