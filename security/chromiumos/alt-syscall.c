@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kcmp.h>
 #include <linux/module.h>
 #include <linux/prctl.h>
 #include <linux/sched/types.h>
@@ -151,6 +152,25 @@ static asmlinkage long android_keyctl(struct pt_regs *regs)
 	return -EACCES;
 }
 
+static asmlinkage long android_kcmp(struct pt_regs *regs)
+{
+	struct task_struct *task = current;
+	unsigned long args[6];
+	pid_t pid1, pid2;
+	int type;
+	unsigned long idx1, idx2;
+
+	syscall_get_arguments(task, regs, args);
+	type = args[2];
+	if (type == KCMP_SYSVSEM)
+		return -ENOSYS;
+
+	pid1 = args[0];
+	pid2 = args[1];
+	idx1 = args[3];
+	idx2 = args[4];
+	return ksys_kcmp(pid1, pid2, type, idx1, idx2);
+}
 
 static asmlinkage long android_setpriority(struct pt_regs *regs)
 {
