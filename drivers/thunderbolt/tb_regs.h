@@ -146,14 +146,14 @@ struct tb_eeprom_ctl {
 
 struct tb_cap_plug_events {
 	struct tb_cap_extended_short cap_header;
-	u32 __unknown1:2;
-	u32 plug_events:5;
-	u32 __unknown2:25;
-	u32 __unknown3;
-	u32 __unknown4;
+	u32 __unknown1:2; /* VSC_CS_1 */
+	u32 plug_events:5; /* VSC_CS_1 */
+	u32 __unknown2:25; /* VSC_CS_1 */
+	u32 vsc_cs_2;
+	u32 vsc_cs_3;
 	struct tb_eeprom_ctl eeprom_ctl;
-	u32 __unknown5[7];
-	u32 drom_offset; /* 32 bit register, but eeprom addresses are 16 bit */
+	u32 __unknown5[7]; /* VSC_CS_5 -> VSC_CS_11 */
+	u32 drom_offset; /* VSC_CS_12: 32 bit register, but eeprom addresses are 16 bit */
 } __packed;
 
 /* device headers */
@@ -443,6 +443,10 @@ struct tb_regs_hop {
 } __packed;
 
 #define TB_PLUG_EVENTS_USB_DISABLE		BIT(2)
+#define TB_PLUG_EVENTS_CS_1_LANE_DISABLE	BIT(3)
+#define TB_PLUG_EVENTS_CS_1_DPOUT_DISABLE	BIT(4)
+#define TB_PLUG_EVENTS_CS_1_LOW_DPIN_DISABLE	BIT(5)
+#define TB_PLUG_EVENTS_CS_1_HIGH_DPIN_DISABLE	BIT(6)
 
 /* Common link controller registers */
 #define TB_LC_DESC			0x02
