@@ -27,6 +27,21 @@ void kbase_platform_unregister(void)
 #endif
 
 #ifdef CONFIG_OF
+static const struct kbase_platform_specific_conf mediatek_mt8183_data = {
+	.pm_callbacks = &mt8183_pm_callbacks,
+	.platform_funcs = &mt8183_platform_funcs,
+};
+
+static const struct kbase_platform_specific_conf mediatek_mt8192_data = {
+	.pm_callbacks = &mt8192_pm_callbacks,
+	.platform_funcs = &mt8192_platform_funcs,
+};
+
+static const struct kbase_platform_specific_conf mediatek_mt8195_data = {
+	.pm_callbacks = &mt8195_pm_callbacks,
+	.platform_funcs = &mt8195_platform_funcs,
+};
+
 static const struct kbase_platform_specific_conf mediatek_mt8186_data = {
 	.pm_callbacks = &mt8186_pm_callbacks,
 	.platform_funcs = &mt8186_platform_funcs,
@@ -37,6 +52,9 @@ const struct of_device_id kbase_dt_ids[] = {
 	{ .compatible = "arm,mali-midgard" },
 	{ .compatible = "arm,mali-bifrost" },
 	{ .compatible = "arm,mali-valhall" },
+	{ .compatible = "mediatek,mt8183-mali", .data = &mediatek_mt8183_data },
+	{ .compatible = "mediatek,mt8192-mali", .data = &mediatek_mt8192_data },
+	{ .compatible = "mediatek,mt8195-mali", .data = &mediatek_mt8195_data },
 	{ .compatible = "mediatek,mt8186-mali", .data = &mediatek_mt8186_data },
 	{ /* sentinel */ }
 };
