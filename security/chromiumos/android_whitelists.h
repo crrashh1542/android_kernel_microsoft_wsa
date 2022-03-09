@@ -55,7 +55,7 @@ static asmlinkage long android_compat_adjtimex(struct pt_regs *regs);
 static asmlinkage long android_compat_clock_adjtime(struct pt_regs *regs);
 #endif /* CONFIG_COMPAT */
 
-static struct syscall_whitelist_entry android_whitelist[] = {
+static const struct syscall_whitelist_entry android_whitelist[] __initconst = {
 	SYSCALL_ENTRY(accept),
 	SYSCALL_ENTRY(accept4),
 	SYSCALL_ENTRY_ALT(adjtimex, android_adjtimex),
@@ -328,7 +328,7 @@ static struct syscall_whitelist_entry android_whitelist[] = {
 }; /* end android_whitelist */
 
 #ifdef CONFIG_COMPAT
-static struct syscall_whitelist_entry android_compat_whitelist[] = {
+static const struct syscall_whitelist_entry android_compat_whitelist[] __initconst = {
 	COMPAT_SYSCALL_ENTRY(access),
 	COMPAT_SYSCALL_ENTRY_ALT(adjtimex, android_compat_adjtimex),
 	COMPAT_SYSCALL_ENTRY(brk),
