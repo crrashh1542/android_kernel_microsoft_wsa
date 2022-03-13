@@ -71,7 +71,7 @@ obj-$(CONFIG_VIDEO_ATMEL_XISC)		+= atmel/
 
 obj-$(CONFIG_VIDEO_STM32_DCMI)		+= stm32/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_VPU)	+= mtk-vpu/
+obj-$(CONFIG_VIDEO_MEDIATEK_VPU)	+= mediatek/mtk-vpu/
 
 obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC)	+= mediatek/mtk-vcodec/
 
