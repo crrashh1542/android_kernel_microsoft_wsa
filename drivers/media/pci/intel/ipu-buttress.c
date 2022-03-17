@@ -1207,7 +1207,7 @@ u64 ipu_buttress_tsc_ticks_to_ns(u64 ticks, const struct ipu_device *isp)
 
 	/*
 	 * converting TSC tick count to ns is calculated by:
-	 * Example (TSC clock freqency is 19.2MHz):
+	 * Example (TSC clock frequency is 19.2MHz):
 	 * ns = ticks * 1000 000 000 / 19.2Mhz
 	 *    = ticks * 1000 000 000 / 19200000Hz
 	 *    = ticks * 10000 / 192 ns
@@ -1305,7 +1305,7 @@ int ipu_buttress_init(struct ipu_device *isp)
 	writel(BUTTRESS_IRQS, isp->base + BUTTRESS_REG_ISR_CLEAR);
 	writel(BUTTRESS_IRQS, isp->base + BUTTRESS_REG_ISR_ENABLE);
 
-	/* get ref_clk freqency by reading the indication in btrs control */
+	/* get ref_clk frequency by reading the indication in btrs control */
 	val = readl(isp->base + BUTTRESS_REG_BTRS_CTRL);
 	val &= BUTTRESS_REG_BTRS_CTRL_REF_CLK_IND;
 	val >>= 8;
