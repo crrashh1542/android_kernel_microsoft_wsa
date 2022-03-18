@@ -31,6 +31,8 @@
 #define MAX_VOLT_BIAS (250000) /* uV */
 #define VOLT_TOL (125) /* uV */
 
+#define MFG_SYS_TIMER 0x130
+
 /**
  * Maximum frequency GPU will be clocked at. Given in kHz.
  * This must be specified as there is no default value.
@@ -107,9 +109,38 @@ struct mfg_base {
 	struct clk *subsys_mfg_cg;
 	struct platform_device *gpu_core1_dev;
 	struct platform_device *gpu_core2_dev;
+	void __iomem *g_mfg_base;
 	bool is_powered;
 	bool reg_is_powered;
 };
+
+static int map_mfg_base(struct mfg_base *mfg, const char *node_name)
+{
+	struct device_node *node;
+
+	node = of_find_compatible_node(NULL, NULL, node_name);
+	if (!node)
+		return -ENODEV;
+
+	mfg->g_mfg_base = of_iomap(node, 0);
+	of_node_put(node);
+	if (!mfg->g_mfg_base)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void unmap_mfg_base(struct mfg_base *mfg)
+{
+	iounmap(mfg->g_mfg_base);
+}
+
+static void enable_sys_timer(struct kbase_device *kbdev)
+{
+	struct mfg_base *mfg = kbdev->platform_context;
+
+	writel(0x3, mfg->g_mfg_base + MFG_SYS_TIMER);
+}
 
 static int pm_callback_power_on(struct kbase_device *kbdev)
 {
@@ -163,6 +194,8 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 			"subsys_mfg_cg clock enable failed (err: %d)\n", error);
 		return error;
 	}
+
+	enable_sys_timer(kbdev);
 
 	mfg->is_powered = true;
 
@@ -383,6 +416,12 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 #endif
 	}
 
+	err = map_mfg_base(mfg, "mediatek,mt8183-mfgcfg");
+	if (err) {
+		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
+		return err;
+	}
+
 	mfg->is_powered = false;
 	mfg->reg_is_powered = false;
 
@@ -585,6 +624,7 @@ static void platform_term(struct kbase_device *kbdev)
 {
 	struct mfg_base *mfg = kbdev->platform_context;
 
+	unmap_mfg_base(mfg);
 	kfree(mfg);
 	kbdev->platform_context = NULL;
 	pm_runtime_disable(kbdev->dev);
