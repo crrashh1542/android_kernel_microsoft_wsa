@@ -229,7 +229,7 @@ static void nlmsg_set_perm_for_type(u32 perm, u16 type)
 	}
 }
 
-/**
+/*
  * Use nlmsg_readpriv as the permission for RTM_GETLINK messages if the
  * netlink_route_getlink policy capability is set. Otherwise use nlmsg_read.
  * Similarly, use nlmsg_getneigh for RTM_GETNEIGH and RTM_GETNEIGHTBL if the

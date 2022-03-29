@@ -374,6 +374,11 @@ struct kbase_clk_rate_trace_op_conf {
 		void *gpu_clk_handle, struct notifier_block *nb);
 };
 
+struct kbase_platform_specific_conf {
+	struct kbase_pm_callback_conf *pm_callbacks;
+	struct kbase_platform_funcs_conf *platform_funcs;
+};
+
 #if IS_ENABLED(CONFIG_OF)
 struct kbase_platform_config {
 };

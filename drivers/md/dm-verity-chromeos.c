@@ -18,7 +18,6 @@
  */
 #include <linux/bio.h>
 #include <linux/blkdev.h>
-#include <linux/chromeos_platform.h>
 #include <linux/device.h>
 #include <linux/device-mapper.h>
 #include <linux/err.h>
@@ -40,7 +39,6 @@ static void chromeos_invalidate_kernel_endio(struct bio *bio)
 	if (bio->bi_status) {
 		DMERR("%s: bio operation failed (status=0x%x)", __func__,
 		      bio->bi_status);
-		chromeos_set_need_recovery();
 	}
 	complete(bio->bi_private);
 }
@@ -117,7 +115,18 @@ found_nothing:
 	return 0;
 }
 
-/* Replaces the first 8 bytes of a partition with DMVERROR */
+/*
+ * Invalidate the kernel which corresponds to the root block device.
+ *
+ * This function stamps DMVERROR on the beginning of the kernel partition.
+ *
+ * The kernel_guid commandline parameter is used to find the kernel partition
+ *  number.
+ * If that fails, the kernel partition is found by subtracting 1 from
+ *  the root partition.
+ * The DMVERROR string is stamped over only the CHROMEOS string at the
+ *  beginning of the kernel blob, leaving the rest of it intact.
+ */
 static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 {
 	int ret = 0;
@@ -229,23 +238,6 @@ failed_to_read:
 	return ret;
 }
 
-/*
- * Invalidate the kernel which corresponds to the root block device.
- *
- * This function stamps DMVERROR on the beginning of the kernel partition.
- *
- * The kernel partition is attempted to be found by subtracting 1 from
- *  the root partition.
- * If that fails, then the kernel_guid commandline parameter is used to
- *  find the kernel partition number.
- * The DMVERROR string is stamped over only the CHROMEOS string at the
- *  beginning of the kernel blob, leaving the rest of it intact.
- */
-static int chromeos_invalidate_kernel(struct block_device *root_bdev)
-{
-	return chromeos_invalidate_kernel_bio(root_bdev);
-}
-
 static int error_handler(struct notifier_block *nb, unsigned long transient,
 			 void *opaque_err)
 {
@@ -255,16 +247,8 @@ static int error_handler(struct notifier_block *nb, unsigned long transient,
 	if (transient)
 		return 0;
 
-	/* TODO(wad) Implement phase 2:
-	 * - Attempt to read the dev_status_offset from the hash dev.
-	 * - If the status offset is 0, replace the first byte of the sector
-	 *   with 01 and panic().
-	 * - If the status offset is not 0, invalidate the associated kernel
-	 *   partition, then reboot.
-	 * - make user space tools clear the last sector
-	 */
-	if (chromeos_invalidate_kernel(err->dev))
-		chromeos_set_need_recovery();
+	/* Mark the kernel partition as invalid. */
+	chromeos_invalidate_kernel_bio(err->dev);
 	return 0;
 }
 

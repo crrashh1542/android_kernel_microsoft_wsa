@@ -997,7 +997,7 @@
 		gpu: mfgsys-gpu@13000000 {
 			compatible = "mediatek,mt8173-gpu";
 			reg = <0 0x13000000 0 0xffff>, <0 0x13fff000 0 0x1000>;
-			power-domains =	<&scpsys MT8173_POWER_DOMAIN_MFG>;
+			power-domains =	<&spm MT8173_POWER_DOMAIN_MFG>;
 			operating-points = <
 				253500 1000000
 				299000 1000000
@@ -1043,6 +1043,7 @@
 			assigned-clocks = <&topckgen CLK_TOP_MM_SEL>;
 			assigned-clock-rates = <400000000>;
 			#clock-cells = <1>;
+			#reset-cells = <1>;
 			mboxes = <&gce 0 CMDQ_THR_PRIO_HIGHEST>,
 				 <&gce 1 CMDQ_THR_PRIO_HIGHEST>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0 0x1000>;
@@ -1257,6 +1258,7 @@
 				 <&mmsys CLK_MM_DSI0_DIGITAL>,
 				 <&mipi_tx0>;
 			clock-names = "engine", "digital", "hs";
+			resets = <&mmsys MT8173_MMSYS_SW0_RST_B_DISP_DSI0>;
 			phys = <&mipi_tx0>;
 			phy-names = "dphy";
 			status = "disabled";

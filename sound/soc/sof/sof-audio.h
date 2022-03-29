@@ -36,6 +36,7 @@ struct snd_sof_pcm_stream {
 	struct snd_dma_buffer page_table;
 	struct sof_ipc_stream_posn posn;
 	struct snd_pcm_substream *substream;
+	struct snd_compr_stream *cstream;
 	struct work_struct period_elapsed_work;
 	struct snd_soc_dapm_widget_list *list; /* list of connected DAPM widgets */
 	bool d0i3_compatible; /* DSP can be in D0I3 when this pcm is opened */
@@ -73,12 +74,14 @@ struct snd_sof_control {
 	u32 readback_offset; /* offset to mmapped data if used */
 	struct sof_ipc_ctrl_data *control_data;
 	u32 size;	/* cdata size */
-	enum sof_ipc_ctrl_cmd cmd;
 	u32 *volume_table; /* volume table computed from tlv data*/
 
 	struct list_head list;	/* list in sdev control list */
 
 	struct snd_sof_led_control led_ctl;
+
+	/* if true, the control's data needs to be updated from Firmware */
+	bool comp_data_dirty;
 };
 
 struct snd_sof_widget;
@@ -169,6 +172,8 @@ int snd_sof_bytes_ext_get(struct snd_kcontrol *kcontrol,
 			  unsigned int size);
 int snd_sof_bytes_ext_volatile_get(struct snd_kcontrol *kcontrol, unsigned int __user *binary_data,
 				   unsigned int size);
+void snd_sof_control_notify(struct snd_sof_dev *sdev,
+			    struct sof_ipc_ctrl_data *cdata);
 
 /*
  * Topology.
@@ -176,14 +181,8 @@ int snd_sof_bytes_ext_volatile_get(struct snd_kcontrol *kcontrol, unsigned int _
  * be freed by snd_soc_unregister_component,
  */
 int snd_sof_load_topology(struct snd_soc_component *scomp, const char *file);
-int snd_sof_complete_pipeline(struct device *dev,
+int snd_sof_complete_pipeline(struct snd_sof_dev *sdev,
 			      struct snd_sof_widget *swidget);
-
-int sof_load_pipeline_ipc(struct device *dev,
-			  struct sof_ipc_pipe_new *pipeline,
-			  struct sof_ipc_comp_reply *r);
-int sof_pipeline_core_enable(struct snd_sof_dev *sdev,
-			     const struct snd_sof_widget *swidget);
 
 /*
  * Stream IPC
@@ -226,23 +225,27 @@ struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_soc_component *scomp,
 const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
 						     int pipeline_id);
 void snd_sof_pcm_period_elapsed(struct snd_pcm_substream *substream);
-void snd_sof_pcm_period_elapsed_work(struct work_struct *work);
+void snd_sof_pcm_init_elapsed_work(struct work_struct *work);
+
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_COMPRESS)
+void snd_sof_compr_fragment_elapsed(struct snd_compr_stream *cstream);
+void snd_sof_compr_init_elapsed_work(struct work_struct *work);
+#else
+static inline void snd_sof_compr_fragment_elapsed(struct snd_compr_stream *cstream) { }
+static inline void snd_sof_compr_init_elapsed_work(struct work_struct *work) { }
+#endif
 
 /*
  * Mixer IPC
  */
-int snd_sof_ipc_set_get_comp_data(struct snd_sof_control *scontrol,
-				  u32 ipc_cmd,
-				  enum sof_ipc_ctrl_type ctrl_type,
-				  enum sof_ipc_ctrl_cmd ctrl_cmd,
-				  bool send);
+int snd_sof_ipc_set_get_comp_data(struct snd_sof_control *scontrol, bool set);
 
 /* DAI link fixup */
 int sof_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd, struct snd_pcm_hw_params *params);
 
 /* PM */
-int sof_set_up_pipelines(struct device *dev, bool verify);
-int sof_tear_down_pipelines(struct device *dev, bool verify);
+int sof_set_up_pipelines(struct snd_sof_dev *sdev, bool verify);
+int sof_tear_down_pipelines(struct snd_sof_dev *sdev, bool verify);
 int sof_set_hw_params_upon_resume(struct device *dev);
 bool snd_sof_stream_suspend_ignored(struct snd_sof_dev *sdev);
 bool snd_sof_dsp_only_d0i3_compatible_stream_active(struct snd_sof_dev *sdev);
@@ -257,4 +260,8 @@ int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget);
 /* PCM */
 int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir);
 int sof_widget_list_free(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir);
+int sof_pcm_dsp_pcm_free(struct snd_pcm_substream *substream, struct snd_sof_dev *sdev,
+			 struct snd_sof_pcm *spcm);
+int sof_pcm_stream_free(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+			struct snd_sof_pcm *spcm, int dir, bool free_widget_list);
 #endif

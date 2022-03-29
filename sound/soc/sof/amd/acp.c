@@ -20,6 +20,22 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
+static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
+{
+	pci_write_config_dword(dev, 0x60, smn_addr);
+	pci_write_config_dword(dev, 0x64, data);
+
+	return 0;
+}
+
+static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
+{
+	pci_write_config_dword(dev, 0x60, smn_addr);
+	pci_read_config_dword(dev, 0x64, data);
+
+	return 0;
+}
+
 static void configure_acp_groupregisters(struct acp_dev_data *adata)
 {
 	struct snd_sof_dev *sdev = adata->dev;
@@ -135,6 +151,25 @@ int configure_and_run_dma(struct acp_dev_data *adata, unsigned int src_addr,
 	return ret;
 }
 
+static int psp_fw_validate(struct acp_dev_data *adata)
+{
+	struct snd_sof_dev *sdev = adata->dev;
+	int timeout;
+	u32 data;
+
+	smn_write(adata->smn_dev, MP0_C2PMSG_26_REG, MBOX_ACP_SHA_DMA_COMMAND);
+
+	for (timeout = ACP_PSP_TIMEOUT_COUNTER; timeout > 0; timeout--) {
+		msleep(20);
+		smn_read(adata->smn_dev, MP0_C2PMSG_26_REG, &data);
+		if (data & MBOX_READY_MASK)
+			return 0;
+	}
+
+	dev_err(sdev->dev, "FW validation timedout: status %x\n", data & MBOX_STATUS_MASK);
+	return -ETIMEDOUT;
+}
+
 int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 			      unsigned int start_addr, unsigned int dest_addr,
 			      unsigned int image_length)
@@ -174,7 +209,9 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 		return ret;
 	}
 
-	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER, DSP_FW_RUN_ENABLE);
+	ret = psp_fw_validate(adata);
+	if (ret)
+		return ret;
 
 	fw_qualifier = snd_sof_dsp_read(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER);
 	if (!(fw_qualifier & DSP_FW_RUN_ENABLE)) {
@@ -182,7 +219,7 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 		return -EINVAL;
 	}
 
-	return ret;
+	return 0;
 }
 
 int acp_dma_status(struct acp_dev_data *adata, unsigned char ch)
@@ -231,6 +268,41 @@ static int acp_memory_init(struct snd_sof_dev *sdev)
 	init_dma_descriptor(adata);
 
 	return 0;
+}
+
+static irqreturn_t acp_irq_thread(int irq, void *context)
+{
+	struct snd_sof_dev *sdev = context;
+	unsigned int val;
+
+	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, ACP_EXTERNAL_INTR_STAT);
+	if (val & ACP_SHA_STAT) {
+		/* Clear SHA interrupt raised by PSP */
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_EXTERNAL_INTR_STAT, val);
+		return IRQ_HANDLED;
+	}
+
+	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, ACP_DSP_SW_INTR_STAT);
+	if (val & ACP_DSP_TO_HOST_IRQ) {
+		sof_ops(sdev)->irq_thread(irq, sdev);
+		val |= ACP_DSP_TO_HOST_IRQ;
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_DSP_SW_INTR_STAT, val);
+		return IRQ_HANDLED;
+	}
+
+	return IRQ_NONE;
+};
+
+static irqreturn_t acp_irq_handler(int irq, void *dev_id)
+{
+	struct snd_sof_dev *sdev = dev_id;
+	unsigned int val;
+
+	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, ACP_DSP_SW_INTR_STAT);
+	if (val)
+		return IRQ_WAKE_THREAD;
+
+	return IRQ_NONE;
 }
 
 static int acp_power_on(struct snd_sof_dev *sdev)
@@ -298,6 +370,7 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 {
 	struct pci_dev *pci = to_pci_dev(sdev->dev);
 	struct acp_dev_data *adata;
+	const struct sof_amd_acp_desc *chip;
 	unsigned int addr;
 	int ret;
 
@@ -318,11 +391,38 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 
 	sdev->pdata->hw_pdata = adata;
 
-	ret = acp_init(sdev);
-	if (ret < 0)
+	chip = get_chip_info(sdev->pdata);
+	if (!chip) {
+		dev_err(sdev->dev, "no such device supported, chip id:%x\n", pci->device);
+		return -EIO;
+	}
+
+	adata->smn_dev = pci_get_device(PCI_VENDOR_ID_AMD, chip->host_bridge_id, NULL);
+	if (!adata->smn_dev) {
+		dev_err(sdev->dev, "Failed to get host bridge device\n");
+		return -ENODEV;
+	}
+
+	sdev->ipc_irq = pci->irq;
+	ret = request_threaded_irq(sdev->ipc_irq, acp_irq_handler, acp_irq_thread,
+				   IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to register IRQ %d\n",
+			sdev->ipc_irq);
+		pci_dev_put(adata->smn_dev);
 		return ret;
+	}
+
+	ret = acp_init(sdev);
+	if (ret < 0) {
+		free_irq(sdev->ipc_irq, sdev);
+		pci_dev_put(adata->smn_dev);
+		return ret;
+	}
 
 	acp_memory_init(sdev);
+
+	acp_dsp_stream_init(sdev);
 
 	return 0;
 }
@@ -330,6 +430,14 @@ EXPORT_SYMBOL_NS(amd_sof_acp_probe, SND_SOC_SOF_AMD_COMMON);
 
 int amd_sof_acp_remove(struct snd_sof_dev *sdev)
 {
+	struct acp_dev_data *adata = sdev->pdata->hw_pdata;
+
+	if (adata->smn_dev)
+		pci_dev_put(adata->smn_dev);
+
+	if (sdev->ipc_irq)
+		free_irq(sdev->ipc_irq, sdev);
+
 	return acp_reset(sdev);
 }
 EXPORT_SYMBOL_NS(amd_sof_acp_remove, SND_SOC_SOF_AMD_COMMON);
