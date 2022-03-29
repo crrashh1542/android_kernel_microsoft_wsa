@@ -1279,7 +1279,8 @@ void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 		dst_vb = v4l2_m2m_dst_buf_remove(jctx->fh.m2m_ctx);
 		if (!dst_vb)
 			break;
-
+		/* Update with the real buffer payload after compression */
+		vb2_set_plane_payload(&dst_vb->vb2_buf, 0, jctx->result_size + sizeof(jfif));
 		v4l2_m2m_buf_done(dst_vb, bstate);
 	} while (cleanup);
 

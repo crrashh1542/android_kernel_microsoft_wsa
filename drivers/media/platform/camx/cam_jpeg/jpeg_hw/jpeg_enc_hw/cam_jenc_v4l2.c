@@ -124,14 +124,6 @@ static int op_jenc_vb2_buf_prepare(struct vb2_buffer *vb)
 	pix_mp = &bufq->vf.fmt.pix_mp;
 
 	for (i = 0; i < pix_mp->num_planes; i++) {
-		if (V4L2_TYPE_IS_CAPTURE(vb->type))
-			vb2_set_plane_payload(vb, i,
-					      pix_mp->plane_fmt[i].sizeimage /
-					      JENC_PAYLOAD_DIV);
-		else
-			vb2_set_plane_payload(vb, i,
-					      pix_mp->plane_fmt[i].sizeimage);
-
 		rc = jenc_hal_dma_buffer_acquire(jctx, vb, i);
 		if (rc)
 			break;

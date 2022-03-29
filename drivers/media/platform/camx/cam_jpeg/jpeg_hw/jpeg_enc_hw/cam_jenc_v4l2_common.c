@@ -56,7 +56,7 @@ static const struct jenc_v4l2_format jenc_dst_formats[] = {
 		.id	= JENC_DST_ID,
 		.deept	= { 24 },
 		.x_div	= { 1 },
-		.y_div	= { 1 }
+		.y_div	= { 2 }	/* Compression is ~50% in worst case (Quality == 100) */
 	}
 };
 
@@ -112,11 +112,12 @@ static void jenc_update_planes(struct jenc_context *jctx,
 	memset(pfmt, 0, sizeof(struct v4l2_plane_pix_format));
 
 	for (i = 0; i < pix_mp->num_planes; i++) {
-		pfmt[i].bytesperline = width * jf->deept[i] / jf->x_div[i] /
-				       BITS_PER_BYTE;
-		pfmt[i].sizeimage = pfmt[i].bytesperline * height /
-				    jf->y_div[i];
+		pfmt[i].bytesperline = width * jf->deept[i] / jf->x_div[i] / BITS_PER_BYTE;
+		pfmt[i].sizeimage = pfmt[i].bytesperline * height / jf->y_div[i];
 	}
+
+	if (jf->fourcc == V4L2_PIX_FMT_JPEG)
+	   pfmt[i].sizeimage = PAGE_ALIGN(pfmt[i].sizeimage);
 }
 
 int jenc_v4l2_enum_fmt_src(struct v4l2_fmtdesc *f)
