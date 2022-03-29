@@ -1391,8 +1391,6 @@ static int kbase_kcpu_fence_signal_prepare(
 		goto fd_flags_fail;
 	}
 
-	fd_install(fd, sync_file->file);
-
 	fence.basep.fd = fd;
 
 	current_command->type = BASE_KCPU_COMMAND_TYPE_FENCE_SIGNAL;
@@ -1404,6 +1402,11 @@ static int kbase_kcpu_fence_signal_prepare(
 		goto fd_flags_fail;
 	}
 
+	/* 'sync_file' pointer can't be safely dereferenced once 'fd' is
+	 * installed, so the install step needs to be done at the last
+	 * before returning success.
+	 */
+	fd_install(fd, sync_file->file);
 	return 0;
 
 fd_flags_fail:
