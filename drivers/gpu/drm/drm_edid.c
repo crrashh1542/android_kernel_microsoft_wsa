@@ -1621,6 +1621,13 @@ static int edid_block_get_checksum(const void *_block)
 	return block->checksum;
 }
 
+static int edid_block_tag(const void *_block)
+{
+	const u8 *block = _block;
+
+	return block[0];
+}
+
 static bool drm_edid_is_zero(const u8 *in_edid, int length)
 {
 	if (memchr_inv(in_edid, 0, length))
@@ -1713,7 +1720,7 @@ bool drm_edid_block_valid(u8 *raw_edid, int block, bool print_bad_edid,
 			*edid_corrupt = true;
 
 		/* allow CEA to slide through, switches mangle this */
-		if (raw_edid[0] == CEA_EXT) {
+		if (edid_block_tag(raw_edid) == CEA_EXT) {
 			DRM_DEBUG("EDID checksum is invalid, remainder is %d\n", csum);
 			DRM_DEBUG("Assuming a KVM switch modified the CEA block but left the original checksum\n");
 		} else {
@@ -1725,7 +1732,7 @@ bool drm_edid_block_valid(u8 *raw_edid, int block, bool print_bad_edid,
 	}
 
 	/* per-block-type checks */
-	switch (raw_edid[0]) {
+	switch (edid_block_tag(raw_edid)) {
 	case 0: /* base */
 		if (edid->version != 1) {
 			DRM_NOTE("EDID has major version %d, instead of 1\n", edid->version);
@@ -3369,7 +3376,7 @@ const u8 *drm_find_edid_extension(const struct edid *edid,
 	/* Find CEA extension */
 	for (i = *ext_index; i < edid->extensions; i++) {
 		edid_ext = (const u8 *)edid + EDID_LENGTH * (i + 1);
-		if (edid_ext[0] == ext_id)
+		if (edid_block_tag(edid_ext) == ext_id)
 			break;
 	}
 
