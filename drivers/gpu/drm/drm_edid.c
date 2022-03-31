@@ -1827,9 +1827,10 @@ bool drm_edid_is_valid(struct edid *edid)
 EXPORT_SYMBOL(drm_edid_is_valid);
 
 static struct edid *edid_filter_invalid_blocks(const struct edid *edid,
-					       int valid_extensions)
+					       int invalid_blocks)
 {
 	struct edid *new, *dest_block;
+	int valid_extensions = edid->extensions - invalid_blocks;
 	int i;
 
 	new = kmalloc_array(valid_extensions + 1, EDID_LENGTH, GFP_KERNEL);
@@ -2065,7 +2066,7 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 			      size_t len),
 	void *data)
 {
-	int j, valid_extensions = 0;
+	int j, invalid_blocks = 0;
 	struct edid *edid, *new, *override;
 
 	override = drm_get_override_edid(connector);
@@ -2076,12 +2077,10 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 	if (!edid)
 		return NULL;
 
-	/* if there's no extensions or no connector, we're done */
-	valid_extensions = edid->extensions;
-	if (valid_extensions == 0)
+	if (edid->extensions == 0)
 		return edid;
 
-	new = krealloc(edid, (valid_extensions + 1) * EDID_LENGTH, GFP_KERNEL);
+	new = krealloc(edid, (edid->extensions + 1) * EDID_LENGTH, GFP_KERNEL);
 	if (!new)
 		goto out;
 	edid = new;
@@ -2098,13 +2097,13 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 		}
 
 		if (try == 4)
-			valid_extensions--;
+			invalid_blocks++;
 	}
 
-	if (valid_extensions != edid->extensions) {
+	if (invalid_blocks) {
 		connector_bad_edid(connector, (u8 *)edid, edid->extensions + 1);
 
-		edid = edid_filter_invalid_blocks(edid, valid_extensions);
+		edid = edid_filter_invalid_blocks(edid, invalid_blocks);
 	}
 
 	return edid;
