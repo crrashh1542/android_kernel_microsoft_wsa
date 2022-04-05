@@ -3543,8 +3543,7 @@ static int wm8962_set_pdata_from_of(struct i2c_client *i2c,
 	return 0;
 }
 
-static int wm8962_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static int wm8962_i2c_probe(struct i2c_client *i2c)
 {
 	struct wm8962_pdata *pdata = dev_get_platdata(&i2c->dev);
 	struct wm8962_priv *wm8962;
@@ -3889,7 +3888,7 @@ static struct i2c_driver wm8962_i2c_driver = {
 		.of_match_table = wm8962_of_match,
 		.pm = &wm8962_pm,
 	},
-	.probe =    wm8962_i2c_probe,
+	.probe_new = wm8962_i2c_probe,
 	.remove =   wm8962_i2c_remove,
 	.id_table = wm8962_i2c_id,
 };
