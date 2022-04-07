@@ -3848,6 +3848,22 @@ static int hci_init_sync(struct hci_dev *hdev)
 	return 0;
 }
 
+static void set_quality_report(struct hci_dev *hdev, bool enable)
+{
+	int err;
+
+	if (hdev->set_quality_report)
+		err = hdev->set_quality_report(hdev, enable);
+	else
+		err = aosp_set_quality_report(hdev, enable);
+
+	if (err)
+		bt_dev_err(hdev, "set quality report error %d (enable %d)",
+			   err, enable);
+	else
+		bt_dev_info(hdev, "set quality report (enable %d)", enable);
+}
+
 int hci_dev_open_sync(struct hci_dev *hdev)
 {
 	int ret = 0;
@@ -4005,6 +4021,9 @@ setup_failed:
 	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
 		msft_do_open(hdev);
 		aosp_do_open(hdev);
+
+		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
+			set_quality_report(hdev, true);
 	}
 
 	clear_bit(HCI_INIT, &hdev->flags);
@@ -4086,6 +4105,16 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 
 	hci_request_cancel_all(hdev);
 
+	/* Disable quality report and close aosp before shutdown()
+	 * is called. Otherwise, some chips may panic.
+	 */
+	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
+			set_quality_report(hdev, false);
+
+		aosp_do_close(hdev);
+	}
+
 	if (!hci_dev_test_flag(hdev, HCI_UNREGISTER) &&
 	    !hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
 	    test_bit(HCI_UP, &hdev->flags)) {
@@ -4148,10 +4177,11 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 
 	hci_sock_dev_event(hdev, HCI_DEV_DOWN);
 
-	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
-		aosp_do_close(hdev);
+	/* TODO: May be better to close msft early in the beginning of
+	 * hci_dev_do_close before shutdown() is called.
+	 */
+	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
 		msft_do_close(hdev);
-	}
 
 	if (hdev->flush)
 		hdev->flush(hdev);
