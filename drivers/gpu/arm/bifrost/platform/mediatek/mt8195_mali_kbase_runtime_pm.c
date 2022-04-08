@@ -29,7 +29,7 @@
 #define MAX_VOLT_BIAS (250000)	/* uV */
 #define VOLT_TOL (125)	/* uV */
 
-#define GPU_CORE_NUM 5
+#define NUM_PM_DOMAINS 5
 
 /* Definition for MFG registers */
 #define MFG_QCHANNEL_CON 0xb4
@@ -62,6 +62,14 @@
  */
 #define AUTO_SUSPEND_DELAY (50)
 
+const struct mtk_hw_config mt8195_hw_config = {
+	.num_pm_domains = NUM_PM_DOMAINS,
+};
+
+struct mtk_platform_context mt8195_platform_context = {
+	.config = &mt8195_hw_config,
+};
+
 enum gpu_clk_idx {mux, pll, main, sub, cg};
 /* list of clocks required by GPU */
 static const char * const gpu_clocks[] = {
@@ -76,7 +84,7 @@ static int kbase_pm_domain_init(struct kbase_device *kbdev)
 {
 	int err;
 	int i, num_domains, num_domain_names;
-	const char *pd_names[GPU_CORE_NUM];
+	const char *pd_names[NUM_PM_DOMAINS];
 
 	num_domains = of_count_phandle_with_args(kbdev->dev->of_node,
 						 "power-domains",
@@ -147,16 +155,9 @@ err:
 	return err;
 }
 
-struct mfg_base {
-	struct clk_bulk_data *clks;
-	int num_clks;
-	void __iomem *g_mfg_base;
-	bool is_powered;
-};
-
 static void check_bus_idle(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 	u32 val;
 
 	/* MFG_QCHANNEL_CON (0x13fb_f0b4) bit [1:0] = 0x1 */
@@ -174,7 +175,7 @@ static void check_bus_idle(struct kbase_device *kbdev)
 
 static void enable_timestamp_register(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 
 	/* MFG_TIMESTAMP (0x13fb_f130) bit [0:0]: TOP_TSVALUEB_EN,
 	 * write 1 into 0x13fb_f130 bit 0 to enable timestamp register
@@ -197,7 +198,7 @@ static void *get_mfg_base(const char *node_name)
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int error, err, r_idx, p_idx;
-	struct mfg_base *mfg = kbdev->platform_context;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 
 	if (mfg->is_powered) {
 		dev_dbg(kbdev->dev, "mali_device is already powered\n");
@@ -269,8 +270,8 @@ reg_err:
 
 static void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
 	int error, i;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 
 	if (!mfg->is_powered) {
 		dev_dbg(kbdev->dev, "mali_device is already powered off\n");
@@ -330,12 +331,12 @@ struct kbase_pm_callback_conf mt8195_pm_callbacks = {
 };
 
 
-static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
+static int mali_mfgsys_init(struct kbase_device *kbdev, struct mtk_platform_context *mfg)
 {
 	int err, i;
 	unsigned long volt;
 
-	kbdev->num_pm_domains = GPU_CORE_NUM;
+	kbdev->num_pm_domains = NUM_PM_DOMAINS;
 
 	err = kbase_pm_domain_init(kbdev);
 	if (err < 0)
@@ -403,7 +404,7 @@ static void voltage_range_check(struct kbase_device *kbdev,
 static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 {
 	int err;
-	struct mfg_base *mfg = kbdev->platform_context;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 
 	if (kbdev->current_freqs[0] != freq) {
 		err = clk_set_parent(mfg->clks[mux].clk, mfg->clks[sub].clk);
@@ -435,17 +436,14 @@ static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err, i;
-	struct mfg_base *mfg;
+	struct mtk_platform_context *mfg = &mt8195_platform_context;
 
-	mfg = devm_kzalloc(kbdev->dev, sizeof(*mfg), GFP_KERNEL);
-	if (!mfg)
-		return -ENOMEM;
+	kbdev->platform_context = mfg;
 
 	err = mali_mfgsys_init(kbdev, mfg);
 	if (err)
 		return err;
 
-	kbdev->platform_context = mfg;
 	for (i = 0; i < kbdev->num_pm_domains; i++) {
 		pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i],
 						AUTO_SUSPEND_DELAY);

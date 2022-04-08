@@ -13,6 +13,7 @@
 
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <mali_kbase.h>
