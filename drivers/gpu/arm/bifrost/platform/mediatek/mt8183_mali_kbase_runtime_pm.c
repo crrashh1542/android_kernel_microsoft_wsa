@@ -16,9 +16,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <mali_kbase.h>
-#include "mali_kbase_config_platform.h"
 #include <mali_kbase_defs.h>
 
+#include "mali_kbase_config_platform.h"
 
 /* Definition for PMIC regulators */
 #define VSRAM_GPU_MAX_VOLT (925000)	/* uV */

@@ -3,13 +3,11 @@
 
 #include <linux/of_address.h>
 #include <linux/of_device.h>
-#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
-#include <mali_kbase.h>
-#include "mali_kbase_config_platform.h"
-#include <mali_kbase_defs.h>
 
+#include "mali_kbase_config_platform.h"
+#include "mali_kbase_runtime_pm.h"
 
 /* Definition for PMIC regulators */
 #define VSRAM_GPU_MAX_VOLT (1050000)	/* uV */
@@ -63,16 +61,6 @@ static const char * const gpu_clocks[] = {
 	"clk_sub_parent",
 	"subsys_mfg_cg",
 };
-
-static void pm_domain_term(struct kbase_device *kbdev)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(kbdev->pm_domain_devs); i++) {
-		if (kbdev->pm_domain_devs[i])
-			dev_pm_domain_detach(kbdev->pm_domain_devs[i], true);
-	}
-}
 
 static int pm_domain_init(struct kbase_device *kbdev)
 {
@@ -305,27 +293,6 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 	}
 }
 
-static int kbase_device_runtime_init(struct kbase_device *kbdev)
-{
-	dev_dbg(kbdev->dev, "%s\n", __func__);
-
-	return 0;
-}
-
-static void kbase_device_runtime_disable(struct kbase_device *kbdev)
-{
-	dev_dbg(kbdev->dev, "%s\n", __func__);
-}
-
-static int pm_callback_runtime_on(struct kbase_device *kbdev)
-{
-	return 0;
-}
-
-static void pm_callback_runtime_off(struct kbase_device *kbdev)
-{
-}
-
 static void pm_callback_resume(struct kbase_device *kbdev)
 {
 	pm_callback_power_on(kbdev);
@@ -500,12 +467,6 @@ static int platform_init(struct kbase_device *kbdev)
 #endif
 
 	return 0;
-}
-
-static void platform_term(struct kbase_device *kbdev)
-{
-	kbdev->platform_context = NULL;
-	pm_domain_term(kbdev);
 }
 
 struct kbase_platform_funcs_conf mt8186_platform_funcs = {
