@@ -9,16 +9,6 @@
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 
-/* Definition for PMIC regulators */
-#define VSRAM_GPU_MAX_VOLT (1050000)	/* uV */
-#define VSRAM_GPU_MIN_VOLT (850000)	/* uV */
-#define VGPU_MAX_VOLT (950000)	/* uV */
-#define VGPU_MIN_VOLT (612500)	/* uV */
-
-#define MIN_VOLT_BIAS (100000)	/* uV */
-#define MAX_VOLT_BIAS (250000)	/* uV */
-#define VOLT_TOL (125)	/* uV */
-
 #define NUM_PM_DOMAINS 2
 
 /* Definition for MFG registers */
@@ -54,6 +44,13 @@
 
 const struct mtk_hw_config mt8186_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
+	.vgpu_min_microvolt = 612500,
+	.vgpu_max_microvolt = 950000,
+	.vsram_gpu_min_microvolt = 850000,
+	.vsram_gpu_max_microvolt = 1050000,
+	.bias_min_microvolt = 100000,
+	.bias_max_microvolt = 250000,
+	.supply_tolerance_microvolt = 125,
 };
 
 struct mtk_platform_context mt8186_platform_context = {
@@ -328,6 +325,7 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 	int err, i;
 	unsigned long volt;
 	struct mtk_platform_context *mfg = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = mfg->config;
 
 	kbdev->num_pm_domains = NUM_PM_DOMAINS;
 
@@ -358,9 +356,9 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 	}
 
 	for (i = 0; i < kbdev->nr_regulators; i++) {
-		volt = (i == 0) ? VGPU_MAX_VOLT : VSRAM_GPU_MAX_VOLT;
+		volt = (i == 0) ? cfg->vgpu_max_microvolt : cfg->vsram_gpu_max_microvolt;
 		err = regulator_set_voltage(kbdev->regulators[i],
-			volt, volt + VOLT_TOL);
+			volt, volt + cfg->supply_tolerance_microvolt);
 		if (err < 0) {
 			dev_err(kbdev->dev,
 				"Regulator %d set voltage failed: %d\n",
@@ -384,14 +382,6 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 }
 
 #ifdef CONFIG_MALI_BIFROST_DEVFREQ
-static void voltage_range_check(struct kbase_device *kbdev,
-				unsigned long *voltages)
-{
-	voltages[1] = voltages[0] + MIN_VOLT_BIAS;
-	voltages[1] = clamp_t(unsigned long, voltages[1], VSRAM_GPU_MIN_VOLT,
-			      VSRAM_GPU_MAX_VOLT);
-}
-
 static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 {
 	int err;

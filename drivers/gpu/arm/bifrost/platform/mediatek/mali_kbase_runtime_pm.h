@@ -11,10 +11,27 @@
 /**
  * mtk_hw_config - config of the hardware specific constants
  * @num_pm_domains: number of GPU power domains
+ * @vgpu_min_microvolt: Minimal required voltage for vgpu.
+ * @vgpu_max_microvolt: Maximal acceptable voltage for vgpu.
+ * @vsram_gpu_min_microvolt: Minimal required voltage for vsram-gpu.
+ * @vsram_gpu_max_microvolt: Maximal acceptable voltage for vsram-gpu.
+ * @bias_min_microvolt: Minimal required voltage bias between vgpu and vsram-gpu.
+ * @bias_max_microvolt: Maximal acceptable voltage bias between vgpu and vsram-gpu.
+ *		        @bias_min_microvolt <= vsram - vgpu <= @bias_max_microvolt
+ * @supply_tolerance_microvolt: The voltage diff tolerance.
  */
 struct mtk_hw_config {
 	/* Power domain */
 	int num_pm_domains;
+
+	/* Voltage configuration for PMIC regulators */
+	unsigned long vgpu_min_microvolt;
+	unsigned long vgpu_max_microvolt;
+	unsigned long vsram_gpu_min_microvolt;
+	unsigned long vsram_gpu_max_microvolt;
+	unsigned long bias_min_microvolt;
+	unsigned long bias_max_microvolt;
+	unsigned long supply_tolerance_microvolt;
 };
 
 /**
@@ -36,6 +53,8 @@ struct mtk_platform_context {
 
 	const struct mtk_hw_config *config;
 };
+
+void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
 
 void kbase_pm_domain_term(struct kbase_device *kbdev);
 int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);
