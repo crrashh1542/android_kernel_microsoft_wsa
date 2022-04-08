@@ -16,6 +16,30 @@ void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
 			   cfg->vsram_gpu_max_microvolt);
 }
 
+int map_mfg_base(struct mtk_platform_context *ctx)
+{
+	struct device_node *node;
+	const struct mt_hw_config *cfg = ctx->config;
+
+
+	WARN_ON(cfg->mfg_compatible_name == NULL);
+	node = of_find_compatible_node(NULL, NULL, cfg->mfg_compatible_name);
+	if (!node)
+		return -ENODEV;
+
+	ctx->g_mfg_base = of_iomap(node, 0);
+	of_node_put(node);
+	if (!ctx->g_mfg_base)
+		return -ENOMEM;
+
+	return 0;
+}
+
+void unmap_mfg_base(struct mtk_platform_context *ctx)
+{
+	iounmap(ctx->g_mfg_base);
+}
+
 void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;
@@ -45,6 +69,9 @@ void kbase_pm_runtime_callback_off(struct kbase_device *kbdev)
 
 void platform_term(struct kbase_device *kbdev)
 {
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+
+	unmap_mfg_base(ctx);
 	kbdev->platform_context = NULL;
 	kbase_pm_domain_term(kbdev);
 }

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2021 Mediatek Inc.
 
-#include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -44,6 +43,7 @@
 
 const struct mtk_hw_config mt8186_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
+	.mfg_compatible_name = "mediatek,mt8186-mfgsys",
 	.vgpu_min_microvolt = 612500,
 	.vgpu_max_microvolt = 950000,
 	.vsram_gpu_min_microvolt = 850000,
@@ -170,18 +170,6 @@ static void enable_timestamp_register(struct kbase_device *kbdev)
 	 * write 1 into 0x13fb_f130 bit 0 to enable timestamp register
 	 */
 	writel(TOP_TSVALUEB_EN, mfg->g_mfg_base + MFG_TIMESTAMP);
-}
-
-static void *get_mfg_base(const char *node_name)
-{
-	struct device_node *node;
-
-	node = of_find_compatible_node(NULL, NULL, node_name);
-
-	if (node)
-		return of_iomap(node, 0);
-
-	return NULL;
 }
 
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
@@ -370,10 +358,10 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 #endif
 	}
 
-	mfg->g_mfg_base = get_mfg_base("mediatek,mt8186-mfgsys");
-	if (!mfg->g_mfg_base) {
+	err = map_mfg_base(mfg);
+	if (err) {
 		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
-		return -ENODEV;
+		return err;
 	}
 
 	mfg->is_powered = false;

@@ -11,7 +11,6 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 
-#include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -54,6 +53,7 @@
 
 const struct mtk_hw_config mt8195_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
+	.mfg_compatible_name = "mediatek,mt8195-mfgcfg",
 	.vgpu_min_microvolt = 625000,
 	.vgpu_max_microvolt = 750000,
 	.vsram_gpu_min_microvolt = 750000,
@@ -178,18 +178,6 @@ static void enable_timestamp_register(struct kbase_device *kbdev)
 	 * write 1 into 0x13fb_f130 bit 0 to enable timestamp register
 	 */
 	writel(TOP_TSVALUEB_EN, mfg->g_mfg_base + MFG_TIMESTAMP);
-}
-
-static void *get_mfg_base(const char *node_name)
-{
-	struct device_node *node;
-
-	node = of_find_compatible_node(NULL, NULL, node_name);
-
-	if (node)
-		return of_iomap(node, 0);
-
-	return NULL;
 }
 
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
@@ -378,10 +366,10 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 #endif
 	}
 
-	mfg->g_mfg_base = get_mfg_base("mediatek,mt8195-mfgcfg");
-	if (!mfg->g_mfg_base) {
+	err = map_mfg_base(mfg);
+	if (err) {
 		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
-		return -ENODEV;
+		return err;
 	}
 
 	mfg->is_powered = false;

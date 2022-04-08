@@ -4,13 +4,16 @@
 #ifndef _MALI_KBASE_RUNTIME_PM_H_
 #define _MALI_KBASE_RUNTIME_PM_H_
 
+#include <linux/of_address.h>
 #include <linux/pm_domain.h>
+
 #include <mali_kbase.h>
 #include <mali_kbase_defs.h>
 
 /**
  * mtk_hw_config - config of the hardware specific constants
  * @num_pm_domains: number of GPU power domains
+ * @mfg_compatible_name: MFG compatible name in DT
  * @vgpu_min_microvolt: Minimal required voltage for vgpu.
  * @vgpu_max_microvolt: Maximal acceptable voltage for vgpu.
  * @vsram_gpu_min_microvolt: Minimal required voltage for vsram-gpu.
@@ -23,6 +26,9 @@
 struct mtk_hw_config {
 	/* Power domain */
 	int num_pm_domains;
+
+	/* MFG */
+	const char *mfg_compatible_name;
 
 	/* Voltage configuration for PMIC regulators */
 	unsigned long vgpu_min_microvolt;
@@ -55,6 +61,9 @@ struct mtk_platform_context {
 };
 
 void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
+
+int map_mfg_base(struct mtk_platform_context *ctx);
+void unmap_mfg_base(struct mtk_platform_context *ctx);
 
 void kbase_pm_domain_term(struct kbase_device *kbdev);
 int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);
