@@ -10,12 +10,6 @@
 
 #define NUM_PM_DOMAINS 2
 
-/* Definition for MFG registers */
-#define MFG_QCHANNEL_CON 0xb4
-#define MFG_DEBUG_SEL 0x170
-#define MFG_DEBUG_TOP 0x178
-#define BUS_IDLE_BIT 0x4
-
 const struct mtk_hw_config mt8186_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
 	.mfg_compatible_name = "mediatek,mt8186-mfgsys",
@@ -122,24 +116,6 @@ static int kbase_pm_domain_init(struct kbase_device *kbdev)
 err:
 	kbase_pm_domain_term(kbdev);
 	return err;
-}
-
-static void check_bus_idle(struct kbase_device *kbdev)
-{
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-	u32 val;
-
-	/* MFG_QCHANNEL_CON (0x13fb_f0b4) bit [1:0] = 0x1 */
-	writel(0x00000001, mfg->g_mfg_base + MFG_QCHANNEL_CON);
-
-	/* set register MFG_DEBUG_SEL (0x13fb_f170) bit [7:0] = 0x03 */
-	writel(0x00000003, mfg->g_mfg_base + MFG_DEBUG_SEL);
-
-	/* polling register MFG_DEBUG_TOP (0x13fb_f178) bit 2 = 0x1 */
-	/* => 1 for bus idle, 0 for bus non-idle */
-	do {
-		val = readl(mfg->g_mfg_base + MFG_DEBUG_TOP);
-	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
 }
 
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)

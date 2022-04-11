@@ -49,6 +49,24 @@ void enable_timestamp_register(struct kbase_device *kbdev)
 	writel(cfg->top_tsvalueb_en, ctx->g_mfg_base + cfg->reg_mfg_timestamp);
 }
 
+void check_bus_idle(struct kbase_device *kbdev)
+{
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	u32 val;
+
+	/* Set register MFG_QCHANNEL_CON bit [1:0] = 0x1 */
+	writel(0x1, ctx->g_mfg_base + REG_MFG_QCHANNEL_CON);
+
+	/* Set register MFG_DEBUG_SEL bit [7:0] = 0x3 */
+	writel(0x3, ctx->g_mfg_base + REG_MFG_DEBUG_SEL);
+
+	/* Poll register MFG_DEBUG_TOP bit 2 = 0x1 */
+	/* => 1 for bus idle, 0 for bus non-idle */
+	do {
+		val = readl(ctx->g_mfg_base + REG_MFG_DEBUG_TOP);
+	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
+}
+
 void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;

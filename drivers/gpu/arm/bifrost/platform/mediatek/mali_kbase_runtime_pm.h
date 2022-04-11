@@ -10,6 +10,12 @@
 #include <mali_kbase.h>
 #include <mali_kbase_defs.h>
 
+#define REG_MFG_QCHANNEL_CON 0xb4
+#define REG_MFG_DEBUG_SEL 0x170
+#define REG_MFG_DEBUG_TOP 0x178
+#define TOP_TSVALUEB_EN 0x1
+#define BUS_IDLE_BIT 0x4
+
 /**
  * mtk_hw_config - config of the hardware specific constants
  * @num_pm_domains: number of GPU power domains
@@ -80,6 +86,7 @@ int map_mfg_base(struct mtk_platform_context *ctx);
 void unmap_mfg_base(struct mtk_platform_context *ctx);
 
 void enable_timestamp_register(struct kbase_device *kbdev);
+void check_bus_idle(struct kbase_device *kbdev);
 
 void kbase_pm_domain_term(struct kbase_device *kbdev);
 int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);
