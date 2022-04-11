@@ -2109,7 +2109,7 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 
 	edid = drm_get_override_edid(connector);
 	if (edid)
-		return edid;
+		goto ok;
 
 	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
 	if (!edid)
@@ -2120,7 +2120,7 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 	edid_block_status_print(status, edid, 0);
 
 	if (status == EDID_BLOCK_READ_FAIL)
-		goto out;
+		goto fail;
 
 	/* FIXME: Clarify what a corrupt EDID actually means. */
 	if (status == EDID_BLOCK_OK || status == EDID_BLOCK_VERSION)
@@ -2133,15 +2133,15 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 			connector->null_edid_counter++;
 
 		connector_bad_edid(connector, edid, 1);
-		goto out;
+		goto fail;
 	}
 
 	if (edid->extensions == 0)
-		return edid;
+		goto ok;
 
 	new = krealloc(edid, (edid->extensions + 1) * EDID_LENGTH, GFP_KERNEL);
 	if (!new)
-		goto out;
+		goto fail;
 	edid = new;
 
 	for (j = 1; j <= edid->extensions; j++) {
@@ -2153,7 +2153,7 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 
 		if (!edid_block_status_valid(status, edid_block_tag(block))) {
 			if (status == EDID_BLOCK_READ_FAIL)
-				goto out;
+				goto fail;
 			invalid_blocks++;
 		}
 	}
@@ -2164,9 +2164,10 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 		edid = edid_filter_invalid_blocks(edid, invalid_blocks);
 	}
 
+ok:
 	return edid;
 
-out:
+fail:
 	kfree(edid);
 	return NULL;
 }
