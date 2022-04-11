@@ -22,6 +22,8 @@
  * @bias_max_microvolt: Maximal acceptable voltage bias between vgpu and vsram-gpu.
  *		        @bias_min_microvolt <= vsram - vgpu <= @bias_max_microvolt
  * @supply_tolerance_microvolt: The voltage diff tolerance.
+ * @gpu_freq_min_khz: Minimum frequency GPU will be clocked at.
+ * @gpu_freq_max_khz: Maximum frequency GPU will be clocked at.
  */
 struct mtk_hw_config {
 	/* Power domain */
@@ -38,6 +40,10 @@ struct mtk_hw_config {
 	unsigned long bias_min_microvolt;
 	unsigned long bias_max_microvolt;
 	unsigned long supply_tolerance_microvolt;
+
+	/* GPU frequency */
+	unsigned long gpu_freq_min_khz;
+	unsigned long gpu_freq_max_khz;
 };
 
 /**

@@ -19,7 +19,7 @@ void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
 int map_mfg_base(struct mtk_platform_context *ctx)
 {
 	struct device_node *node;
-	const struct mt_hw_config *cfg = ctx->config;
+	const struct mtk_hw_config *cfg = ctx->config;
 
 
 	WARN_ON(cfg->mfg_compatible_name == NULL);

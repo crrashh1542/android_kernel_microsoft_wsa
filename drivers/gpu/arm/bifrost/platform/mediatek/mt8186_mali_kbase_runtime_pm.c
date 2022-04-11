@@ -19,22 +19,6 @@
 #define TOP_TSVALUEB_EN 0x3
 
 /**
- * Maximum frequency GPU will be clocked at. Given in kHz.
- * This must be specified as there is no default value.
- *
- * Attached value: number in kHz
- * Default value: NA
- */
-#define GPU_FREQ_KHZ_MAX (1000000)
-/**
- * Minimum frequency GPU will be clocked at. Given in kHz.
- * This must be specified as there is no default value.
- *
- * Attached value: number in kHz
- * Default value: NA
- */
-#define GPU_FREQ_KHZ_MIN (299000)
-/**
  * Autosuspend delay
  *
  * The delay time (in milliseconds) to be used for autosuspend
@@ -51,6 +35,8 @@ const struct mtk_hw_config mt8186_hw_config = {
 	.bias_min_microvolt = 100000,
 	.bias_max_microvolt = 250000,
 	.supply_tolerance_microvolt = 125,
+	.gpu_freq_min_khz = 299000,
+	.gpu_freq_max_khz = 1000000,
 };
 
 struct mtk_platform_context mt8186_platform_context = {
@@ -406,6 +392,7 @@ static int platform_init(struct kbase_device *kbdev)
 {
 	int err, i;
 	struct mtk_platform_context *mfg = &mt8186_platform_context;
+	const struct mtk_hw_config *cfg = mfg->config;
 
 	kbdev->platform_context = mfg;
 
@@ -425,10 +412,9 @@ static int platform_init(struct kbase_device *kbdev)
 		return err;
 	}
 
-	err = clk_set_rate(mfg->clks[pll].clk, GPU_FREQ_KHZ_MAX * 1000);
+	err = clk_set_rate(mfg->clks[pll].clk, cfg->gpu_freq_max_khz * 1000);
 	if (err) {
-		dev_err(kbdev->dev, "Failed to set clock %d kHz\n",
-			GPU_FREQ_KHZ_MAX);
+		dev_err(kbdev->dev, "Failed to set clock %d kHz\n", cfg->gpu_freq_max_khz);
 		return err;
 	}
 
