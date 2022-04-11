@@ -323,10 +323,11 @@ struct kbase_pm_callback_conf mt8186_pm_callbacks = {
 };
 
 
-static int mali_mfgsys_init(struct kbase_device *kbdev, struct mtk_platform_context *mfg)
+static int mali_mfgsys_init(struct kbase_device *kbdev)
 {
 	int err, i;
 	unsigned long volt;
+	struct mtk_platform_context *mfg = kbdev->platform_context;
 
 	kbdev->num_pm_domains = NUM_PM_DOMAINS;
 
@@ -430,7 +431,7 @@ static int platform_init(struct kbase_device *kbdev)
 
 	kbdev->platform_context = mfg;
 
-	err = mali_mfgsys_init(kbdev, mfg);
+	err = mali_mfgsys_init(kbdev);
 	if (err)
 		return err;
 
