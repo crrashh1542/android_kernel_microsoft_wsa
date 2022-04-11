@@ -29,6 +29,8 @@
 const struct mtk_hw_config mt8192_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
 	.mfg_compatible_name = "mediatek,mt8192-mfgcfg",
+	.reg_mfg_timestamp = 0x130,
+	.top_tsvalueb_en = 0x3,
 	.vgpu_min_microvolt = 562500,
 	.vgpu_max_microvolt = 843750,
 	.vsram_gpu_min_microvolt = 750000,

@@ -40,6 +40,15 @@ void unmap_mfg_base(struct mtk_platform_context *ctx)
 	iounmap(ctx->g_mfg_base);
 }
 
+void enable_timestamp_register(struct kbase_device *kbdev)
+{
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+
+	/* Set register MFG_TIMESTAMP to TOP_TSVALEUB_EN */
+	writel(cfg->top_tsvalueb_en, ctx->g_mfg_base + cfg->reg_mfg_timestamp);
+}
+
 void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;

@@ -14,6 +14,8 @@
  * mtk_hw_config - config of the hardware specific constants
  * @num_pm_domains: number of GPU power domains
  * @mfg_compatible_name: MFG compatible name in DT
+ * @reg_mfg_timestamp: MFG_TIMESTAMP register address
+ * @top_tsvalueb_en: MFG_TIMESTAMP enable bit
  * @vgpu_min_microvolt: Minimal required voltage for vgpu.
  * @vgpu_max_microvolt: Maximal acceptable voltage for vgpu.
  * @vsram_gpu_min_microvolt: Minimal required voltage for vsram-gpu.
@@ -32,6 +34,8 @@ struct mtk_hw_config {
 
 	/* MFG */
 	const char *mfg_compatible_name;
+	unsigned int reg_mfg_timestamp;
+	unsigned int top_tsvalueb_en;
 
 	/* Voltage configuration for PMIC regulators */
 	unsigned long vgpu_min_microvolt;
@@ -74,6 +78,8 @@ void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
 
 int map_mfg_base(struct mtk_platform_context *ctx);
 void unmap_mfg_base(struct mtk_platform_context *ctx);
+
+void enable_timestamp_register(struct kbase_device *kbdev);
 
 void kbase_pm_domain_term(struct kbase_device *kbdev);
 int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);

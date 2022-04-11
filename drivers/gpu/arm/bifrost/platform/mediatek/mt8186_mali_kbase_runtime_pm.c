@@ -15,12 +15,12 @@
 #define MFG_DEBUG_SEL 0x170
 #define MFG_DEBUG_TOP 0x178
 #define BUS_IDLE_BIT 0x4
-#define MFG_TIMESTAMP 0x130
-#define TOP_TSVALUEB_EN 0x3
 
 const struct mtk_hw_config mt8186_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
 	.mfg_compatible_name = "mediatek,mt8186-mfgsys",
+	.reg_mfg_timestamp = 0x130,
+	.top_tsvalueb_en = 0x3,
 	.vgpu_min_microvolt = 612500,
 	.vgpu_max_microvolt = 950000,
 	.vsram_gpu_min_microvolt = 850000,
@@ -140,16 +140,6 @@ static void check_bus_idle(struct kbase_device *kbdev)
 	do {
 		val = readl(mfg->g_mfg_base + MFG_DEBUG_TOP);
 	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
-}
-
-static void enable_timestamp_register(struct kbase_device *kbdev)
-{
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-
-	/* MFG_TIMESTAMP (0x13fb_f130) bit [0:0]: TOP_TSVALUEB_EN,
-	 * write 1 into 0x13fb_f130 bit 0 to enable timestamp register
-	 */
-	writel(TOP_TSVALUEB_EN, mfg->g_mfg_base + MFG_TIMESTAMP);
 }
 
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
