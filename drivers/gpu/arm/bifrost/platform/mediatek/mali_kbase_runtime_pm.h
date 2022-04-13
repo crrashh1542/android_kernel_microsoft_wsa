@@ -24,6 +24,7 @@
  * @supply_tolerance_microvolt: The voltage diff tolerance.
  * @gpu_freq_min_khz: Minimum frequency GPU will be clocked at.
  * @gpu_freq_max_khz: Maximum frequency GPU will be clocked at.
+ * @auto_suspend_delay_ms: The delay time to be used for auto-suspend.
  */
 struct mtk_hw_config {
 	/* Power domain */
@@ -44,6 +45,9 @@ struct mtk_hw_config {
 	/* GPU frequency */
 	unsigned long gpu_freq_min_khz;
 	unsigned long gpu_freq_max_khz;
+
+	/* Auto-suspend */
+	unsigned long auto_suspend_delay_ms;
 };
 
 /**

@@ -26,13 +26,6 @@
 #define MFG_DEBUG_TOP 0x178
 #define BUS_IDLE_BIT 0x4
 
-/**
- * Autosuspend delay
- *
- * The delay time (in milliseconds) to be used for autosuspend
- */
-#define AUTO_SUSPEND_DELAY (100)
-
 const struct mtk_hw_config mt8192_hw_config = {
 	.num_pm_domains = NUM_PM_DOMAINS,
 	.mfg_compatible_name = "mediatek,mt8192-mfgcfg",
@@ -45,6 +38,7 @@ const struct mtk_hw_config mt8192_hw_config = {
 	.supply_tolerance_microvolt = 125,
 	.gpu_freq_min_khz = 358000,
 	.gpu_freq_max_khz = 950000,
+	.auto_suspend_delay_ms = 50,
 };
 
 struct mtk_platform_context mt8192_platform_context = {
@@ -363,7 +357,8 @@ static int platform_init(struct kbase_device *kbdev)
 		return err;
 
 	for (i = 0; i < kbdev->num_pm_domains; i++) {
-		pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i], 50);
+		pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i],
+						 cfg->auto_suspend_delay_ms);
 		pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
 	}
 
