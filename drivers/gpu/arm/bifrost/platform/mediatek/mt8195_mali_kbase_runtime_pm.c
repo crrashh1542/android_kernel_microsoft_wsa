@@ -72,7 +72,7 @@ static const char * const gpu_clocks[] = {
 	"subsys_bg3d",
 };
 
-static int pm_domain_init(struct kbase_device *kbdev)
+static int kbase_pm_domain_init(struct kbase_device *kbdev)
 {
 	int err;
 	int i, num_domains, num_domain_names;
@@ -143,7 +143,7 @@ static int pm_domain_init(struct kbase_device *kbdev)
 	return 0;
 
 err:
-	pm_domain_term(kbdev);
+	kbase_pm_domain_term(kbdev);
 	return err;
 }
 
@@ -194,7 +194,7 @@ static void *get_mfg_base(const char *node_name)
 	return NULL;
 }
 
-static int pm_callback_power_on(struct kbase_device *kbdev)
+static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int error, err, r_idx, p_idx;
 	struct mfg_base *mfg = kbdev->platform_context;
@@ -267,7 +267,7 @@ reg_err:
 	return error;
 }
 
-static void pm_callback_power_off(struct kbase_device *kbdev)
+static void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 {
 	struct mfg_base *mfg = kbdev->platform_context;
 	int error, i;
@@ -301,26 +301,26 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 	}
 }
 
-static void pm_callback_resume(struct kbase_device *kbdev)
+static void kbase_pm_callback_resume(struct kbase_device *kbdev)
 {
-	pm_callback_power_on(kbdev);
+	kbase_pm_callback_power_on(kbdev);
 }
 
-static void pm_callback_suspend(struct kbase_device *kbdev)
+static void kbase_pm_callback_suspend(struct kbase_device *kbdev)
 {
-	pm_callback_power_off(kbdev);
+	kbase_pm_callback_power_off(kbdev);
 }
 
 struct kbase_pm_callback_conf mt8195_pm_callbacks = {
-	.power_on_callback = pm_callback_power_on,
-	.power_off_callback = pm_callback_power_off,
-	.power_suspend_callback = pm_callback_suspend,
-	.power_resume_callback = pm_callback_resume,
+	.power_on_callback = kbase_pm_callback_power_on,
+	.power_off_callback = kbase_pm_callback_power_off,
+	.power_suspend_callback = kbase_pm_callback_suspend,
+	.power_resume_callback = kbase_pm_callback_resume,
 #ifdef KBASE_PM_RUNTIME
-	.power_runtime_init_callback = kbase_device_runtime_init,
-	.power_runtime_term_callback = kbase_device_runtime_disable,
-	.power_runtime_on_callback = pm_callback_runtime_on,
-	.power_runtime_off_callback = pm_callback_runtime_off,
+	.power_runtime_init_callback = kbase_pm_runtime_callback_init,
+	.power_runtime_term_callback = kbase_pm_runtime_callback_term,
+	.power_runtime_on_callback = kbase_pm_runtime_callback_on,
+	.power_runtime_off_callback = kbase_pm_runtime_callback_off,
 #else				/* KBASE_PM_RUNTIME */
 	.power_runtime_init_callback = NULL,
 	.power_runtime_term_callback = NULL,
@@ -337,7 +337,7 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 
 	kbdev->num_pm_domains = GPU_CORE_NUM;
 
-	err = pm_domain_init(kbdev);
+	err = kbase_pm_domain_init(kbdev);
 	if (err < 0)
 		return err;
 

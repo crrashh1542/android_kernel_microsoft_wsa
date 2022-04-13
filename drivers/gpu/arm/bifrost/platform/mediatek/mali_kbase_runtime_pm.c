@@ -3,7 +3,7 @@
 
 #include "mali_kbase_runtime_pm.h"
 
-void pm_domain_term(struct kbase_device *kbdev)
+void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;
 
@@ -12,26 +12,26 @@ void pm_domain_term(struct kbase_device *kbdev)
 			dev_pm_domain_detach(kbdev->pm_domain_devs[i], true);
 }
 
-int kbase_device_runtime_init(struct kbase_device *kbdev)
+int kbase_pm_runtime_callback_init(struct kbase_device *kbdev)
 {
 	return 0;
 }
 
-void kbase_device_runtime_disable(struct kbase_device *kbdev)
+void kbase_pm_runtime_callback_term(struct kbase_device *kbdev)
 {
 }
 
-int pm_callback_runtime_on(struct kbase_device *kbdev)
+int kbase_pm_runtime_callback_on(struct kbase_device *kbdev)
 {
 	return 0;
 }
 
-void pm_callback_runtime_off(struct kbase_device *kbdev)
+void kbase_pm_runtime_callback_off(struct kbase_device *kbdev)
 {
 }
 
 void platform_term(struct kbase_device *kbdev)
 {
 	kbdev->platform_context = NULL;
-	pm_domain_term(kbdev);
+	kbase_pm_domain_term(kbdev);
 }
