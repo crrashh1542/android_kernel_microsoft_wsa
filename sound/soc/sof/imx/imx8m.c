@@ -232,7 +232,7 @@ static struct snd_soc_dai_driver imx8m_dai[] = {
 };
 
 /* i.MX8 ops */
-static const struct snd_sof_dsp_ops sof_imx8m_ops = {
+static struct snd_sof_dsp_ops sof_imx8m_ops = {
 	/* probe and remove */
 	.probe		= imx8m_probe,
 	.remove		= imx8m_remove,
