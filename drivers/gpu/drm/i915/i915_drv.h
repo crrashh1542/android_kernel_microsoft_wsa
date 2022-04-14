@@ -1569,7 +1569,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 	 IS_GT_STEP(__i915, since, until))
 
 #define IS_ADLP_DISPLAY_STEP(__i915, since, until) \
-	(IS_ALDERLAKE_P(__i915) && \
+	(IS_ALDERLAKE_P(__i915) && !IS_ADLP_N(__i915) &&\
 	 IS_DISPLAY_STEP(__i915, since, until))
 
 #define IS_ADLP_GT_STEP(__i915, since, until) \
