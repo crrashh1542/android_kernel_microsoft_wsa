@@ -67,6 +67,57 @@ void check_bus_idle(struct kbase_device *kbdev)
 	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
 }
 
+int kbase_pm_domain_init(struct kbase_device *kbdev)
+{
+	int err, i, num_domains;
+
+	num_domains = of_count_phandle_with_args(kbdev->dev->of_node,
+						 "power-domains",
+						 "#power-domain-cells");
+
+	if (WARN_ON(num_domains != kbdev->num_pm_domains)) {
+		dev_err(kbdev->dev,
+			"Incompatible power domain counts: %d provided, %d needed\n",
+			num_domains, kbdev->num_pm_domains);
+		return -EINVAL;
+	}
+
+	if (WARN_ON(num_domains > ARRAY_SIZE(kbdev->pm_domain_devs))) {
+		dev_err(kbdev->dev,
+			"Too many power domains: %d provided\n",
+			num_domains);
+		return -EINVAL;
+	}
+
+	/* Single power domain will be handled by the core. */
+	if (num_domains < 2)
+		return 0;
+
+	for (i = 0; i < num_domains; i++) {
+		kbdev->pm_domain_devs[i] =
+			dev_pm_domain_attach_by_id(kbdev->dev, i);
+		if (IS_ERR_OR_NULL(kbdev->pm_domain_devs[i])) {
+			err = PTR_ERR(kbdev->pm_domain_devs[i]) ? : -ENODATA;
+			kbdev->pm_domain_devs[i] = NULL;
+			if (err == -EPROBE_DEFER) {
+				dev_dbg(kbdev->dev,
+					"Probe deferral for pm-domain %d\n",
+					i);
+			} else {
+				dev_err(kbdev->dev,
+					"failed to get pm-domain %d: %d\n",
+					i, err);
+			}
+			goto err;
+		}
+	}
+
+	return 0;
+err:
+	kbase_pm_domain_term(kbdev);
+	return err;
+}
+
 void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;

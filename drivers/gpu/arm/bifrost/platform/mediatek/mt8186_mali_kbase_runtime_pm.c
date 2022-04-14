@@ -8,10 +8,8 @@
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 
-#define NUM_PM_DOMAINS 2
-
 const struct mtk_hw_config mt8186_hw_config = {
-	.num_pm_domains = NUM_PM_DOMAINS,
+	.num_pm_domains = 2,
 	.mfg_compatible_name = "mediatek,mt8186-mfgsys",
 	.reg_mfg_timestamp = 0x130,
 	.top_tsvalueb_en = 0x3,
@@ -40,83 +38,6 @@ static const char * const gpu_clocks[] = {
 	"subsys_mfg_cg",
 	"clk_pll_src",
 };
-
-static int kbase_pm_domain_init(struct kbase_device *kbdev)
-{
-	int err;
-	int i, num_domains, num_domain_names;
-	const char *pd_names[NUM_PM_DOMAINS];
-
-	num_domains = of_count_phandle_with_args(kbdev->dev->of_node,
-						 "power-domains",
-						 "#power-domain-cells");
-
-	num_domain_names = of_property_count_strings(kbdev->dev->of_node,
-					"power-domain-names");
-
-	/*
-	 * Single domain is handled by the core, and, if only a single power
-	 * the power domain is requested, the property is optional.
-	 */
-	if (num_domains < 2 && kbdev->num_pm_domains < 2)
-		return 0;
-
-	if (num_domains != num_domain_names) {
-		dev_err(kbdev->dev,
-			"Device tree power domains are not match: PD %d, PD names %d\n",
-			num_domains, num_domain_names);
-		return -EINVAL;
-	}
-
-	if (num_domains != kbdev->num_pm_domains) {
-		dev_err(kbdev->dev,
-			"Incorrect number of power domains: %d provided, %d needed\n",
-			num_domains, kbdev->num_pm_domains);
-		return -EINVAL;
-	}
-
-	if (num_domains > ARRAY_SIZE(kbdev->pm_domain_devs)) {
-		dev_err(kbdev->dev,
-			"Too many supplies in compatible structure.\n");
-		return -EINVAL;
-	}
-
-	err = of_property_read_string_array(kbdev->dev->of_node,
-					    "power-domain-names",
-					    pd_names,
-					    num_domain_names);
-
-	if (err < 0) {
-		dev_err(kbdev->dev, "Error reading supply-names: %d\n", err);
-		return err;
-	}
-
-	for (i = 0; i < num_domains; i++) {
-		kbdev->pm_domain_devs[i] =
-			dev_pm_domain_attach_by_name(kbdev->dev,
-					pd_names[i]);
-		if (IS_ERR_OR_NULL(kbdev->pm_domain_devs[i])) {
-			err = PTR_ERR(kbdev->pm_domain_devs[i]) ? : -ENODATA;
-			kbdev->pm_domain_devs[i] = NULL;
-			if (err == -EPROBE_DEFER) {
-				dev_dbg(kbdev->dev,
-					"Probe deferral for pm-domain %s(%d)\n",
-					pd_names[i], i);
-			} else {
-				dev_err(kbdev->dev,
-					"failed to get pm-domain %s(%d): %d\n",
-					pd_names[i], i, err);
-			}
-			goto err;
-		}
-	}
-
-	return 0;
-
-err:
-	kbase_pm_domain_term(kbdev);
-	return err;
-}
 
 static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 {
@@ -261,7 +182,7 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 	struct mtk_platform_context *mfg = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = mfg->config;
 
-	kbdev->num_pm_domains = NUM_PM_DOMAINS;
+	kbdev->num_pm_domains = cfg->num_pm_domains;
 
 	err = kbase_pm_domain_init(kbdev);
 	if (err < 0)
