@@ -41,14 +41,14 @@ struct mtk_platform_context mt8195_platform_context = {
 	.config = &mt8195_hw_config,
 };
 
-enum gpu_clk_idx {mux, pll, main, sub, cg};
+enum gpu_clk_idx {mux, main, sub, cg, pll};
 /* list of clocks required by GPU */
 static const char * const gpu_clocks[] = {
 	"clk_mux",
-	"clk_pll_src",
 	"clk_main_parent",
 	"clk_sub_parent",
 	"subsys_bg3d",
+	"clk_pll_src",
 };
 
 static int kbase_pm_domain_init(struct kbase_device *kbdev)
