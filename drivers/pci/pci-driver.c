@@ -1333,8 +1333,6 @@ static int pci_pm_runtime_resume(struct device *dev)
 	if (pm && pm->runtime_resume)
 		error = pm->runtime_resume(dev);
 
-	pci_dev->runtime_d3cold = false;
-
 	return error;
 }
 
