@@ -2806,6 +2806,19 @@ static void kvm_gen_update_masterclock(struct kvm *kvm)
 #endif
 }
 
+/*
+ * If kvm is built into kernel it is possible that tsc_khz saved into
+ * per-cpu cpu_tsc_khz was yet unrefined value. If CPU provides CONSTANT_TSC it
+ * doesn't make sense to snapshot it anyway so just return tsc_khz
+ */
+static unsigned long get_cpu_tsc_khz(void)
+{
+	if (static_cpu_has(X86_FEATURE_CONSTANT_TSC))
+		return tsc_khz;
+	else
+		return __this_cpu_read(cpu_tsc_khz);
+}
+
 u64 get_kvmclock_ns(struct kvm *kvm)
 {
 	struct kvm_arch *ka = &kvm->arch;
@@ -2826,8 +2839,8 @@ u64 get_kvmclock_ns(struct kvm *kvm)
 	/* both __this_cpu_read() and rdtsc() should be on the same cpu */
 	get_cpu();
 
-	if (__this_cpu_read(cpu_tsc_khz)) {
-		kvm_get_time_scale(NSEC_PER_SEC, __this_cpu_read(cpu_tsc_khz) * 1000LL,
+	if (get_cpu_tsc_khz()) {
+		kvm_get_time_scale(NSEC_PER_SEC, get_cpu_tsc_khz() * 1000LL,
 				   &hv_clock.tsc_shift,
 				   &hv_clock.tsc_to_system_mul);
 		ret = __pvclock_read_cycles(&hv_clock, rdtsc());
@@ -2925,7 +2938,7 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
 
 	/* Keep irq disabled to prevent changes to the clock */
 	local_irq_save(flags);
-	tgt_tsc_khz = __this_cpu_read(cpu_tsc_khz);
+	tgt_tsc_khz = get_cpu_tsc_khz();
 	if (unlikely(tgt_tsc_khz == 0)) {
 		local_irq_restore(flags);
 		kvm_make_request(KVM_REQ_CLOCK_UPDATE, v);
@@ -8242,9 +8255,12 @@ static void tsc_khz_changed(void *data)
 	struct cpufreq_freqs *freq = data;
 	unsigned long khz = 0;
 
+	if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
+		return;
+
 	if (data)
 		khz = freq->new;
-	else if (!boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
+	else
 		khz = cpufreq_quick_get(raw_smp_processor_id());
 	if (!khz)
 		khz = tsc_khz;
@@ -9569,7 +9585,7 @@ static void vcpu_do_suspend_time_adjustment(struct kvm_vcpu *vcpu,
 		return;
 	}
 
-	adj = __this_cpu_read(cpu_tsc_khz) *
+	adj = get_cpu_tsc_khz() *
 		div_u64(last_suspend_duration, 1000000);
 	adjust_tsc_offset_host(vcpu, -adj);
 	/*
