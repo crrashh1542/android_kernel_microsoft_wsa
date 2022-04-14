@@ -6,6 +6,7 @@
 
 #include <linux/of_address.h>
 #include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 
 #include <mali_kbase.h>
 #include <mali_kbase_defs.h>
@@ -65,7 +66,7 @@ struct mtk_hw_config {
  * @clks: GPU clocks
  * @num_clks: number of GPU clocks
  * @mfg_base_addr: MFG base address
- * @is_powered: GPU on/off status
+ * @gpu_is_powered: GPU on/off status
  * @config: pointer to the hardware config struct
  *
  * This holds general platform information e.g. data probed from device tree,
@@ -75,7 +76,7 @@ struct mtk_platform_context {
 	struct clk_bulk_data *clks;
 	int num_clks;
 	void __iomem *mfg_base_addr;
-	bool is_powered;
+	bool gpu_is_powered;
 
 	const struct mtk_hw_config *config;
 };
@@ -94,6 +95,10 @@ int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);
 void kbase_pm_runtime_callback_term(struct kbase_device *kbdev);
 int kbase_pm_runtime_callback_on(struct kbase_device *kbdev);
 void kbase_pm_runtime_callback_off(struct kbase_device *kbdev);
+int kbase_pm_callback_power_on(struct kbase_device *kbdev);
+void kbase_pm_callback_power_off(struct kbase_device *kbdev);
+void kbase_pm_callback_suspend(struct kbase_device *kbdev);
+void kbase_pm_callback_resume(struct kbase_device *kbdev);
 
 void platform_term(struct kbase_device *kbdev);
 #endif /* _MALI_KBASE_RUNTIME_PM_H_ */

@@ -12,7 +12,6 @@
  */
 
 #include <linux/of_device.h>
-#include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
 #include "mali_kbase_config_platform.h"
@@ -48,123 +47,6 @@ static const char * const gpu_clocks[] = {
 	"subsys_bg3d",
 	"clk_pll_src",
 };
-
-static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
-{
-	int error, err, r_idx, p_idx;
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-
-	if (mfg->is_powered) {
-		dev_dbg(kbdev->dev, "mali_device is already powered\n");
-		return 0;
-	}
-
-	for (r_idx = 0; r_idx < kbdev->nr_regulators; r_idx++) {
-		error = regulator_enable(kbdev->regulators[r_idx]);
-		if (error < 0) {
-			dev_err(kbdev->dev,
-				"Power on reg %d failed error = %d\n",
-				r_idx, error);
-			goto reg_err;
-		}
-	}
-
-	for (p_idx = 0; p_idx < kbdev->num_pm_domains; p_idx++) {
-		error = pm_runtime_get_sync(kbdev->pm_domain_devs[p_idx]);
-		if (error < 0) {
-			dev_err(kbdev->dev,
-				"Power on core %d failed (err: %d)\n",
-				p_idx+1, error);
-			goto pm_err;
-		}
-	}
-
-	error = clk_bulk_prepare_enable(mfg->num_clks, mfg->clks);
-	if (error < 0) {
-		dev_err(kbdev->dev,
-			"gpu clock enable failed (err: %d)\n",
-			error);
-		goto clk_err;
-	}
-
-	mfg->is_powered = true;
-
-	enable_timestamp_register(kbdev);
-
-	return 1;
-
-clk_err:
-	clk_bulk_disable_unprepare(mfg->num_clks, mfg->clks);
-
-pm_err:
-	if (p_idx >= kbdev->num_pm_domains)
-		p_idx = kbdev->num_pm_domains - 1;
-	for (; p_idx >= 0; p_idx--) {
-		pm_runtime_mark_last_busy(kbdev->pm_domain_devs[p_idx]);
-		err = pm_runtime_put_autosuspend(kbdev->pm_domain_devs[p_idx]);
-		if (err < 0)
-			dev_err(kbdev->dev,
-				"Power off core %d failed (err: %d)\n",
-				p_idx+1, err);
-	}
-
-reg_err:
-	if (r_idx >= kbdev->nr_regulators)
-		r_idx = kbdev->nr_regulators - 1;
-	for (; r_idx >= 0; r_idx--) {
-		err = regulator_disable(kbdev->regulators[r_idx]);
-		if (err < 0)
-			dev_err(kbdev->dev,
-				"Power off reg %d failed error = %d\n",
-				r_idx, err);
-	}
-
-	return error;
-}
-
-static void kbase_pm_callback_power_off(struct kbase_device *kbdev)
-{
-	int error, i;
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-
-	if (!mfg->is_powered) {
-		dev_dbg(kbdev->dev, "mali_device is already powered off\n");
-		return;
-	}
-
-	mfg->is_powered = false;
-
-	check_bus_idle(kbdev);
-
-	clk_bulk_disable_unprepare(mfg->num_clks, mfg->clks);
-
-	for (i = kbdev->num_pm_domains - 1; i >= 0; i--) {
-		pm_runtime_mark_last_busy(kbdev->pm_domain_devs[i]);
-		error = pm_runtime_put_autosuspend(kbdev->pm_domain_devs[i]);
-		if (error < 0)
-			dev_err(kbdev->dev,
-				"Power off core %d failed (err: %d)\n",
-				i+1, error);
-	}
-
-	for (i = kbdev->nr_regulators - 1; i >= 0; i--) {
-		error = regulator_disable(kbdev->regulators[i]);
-		if (error < 0)
-			dev_err(kbdev->dev,
-				"Power off reg %d failed error = %d\n",
-				i, error);
-	}
-}
-
-static void kbase_pm_callback_resume(struct kbase_device *kbdev)
-{
-	kbase_pm_callback_power_on(kbdev);
-}
-
-static void kbase_pm_callback_suspend(struct kbase_device *kbdev)
-{
-	kbase_pm_callback_power_off(kbdev);
-}
 
 struct kbase_pm_callback_conf mt8195_pm_callbacks = {
 	.power_on_callback = kbase_pm_callback_power_on,
@@ -241,7 +123,7 @@ static int mali_mfgsys_init(struct kbase_device *kbdev)
 		return err;
 	}
 
-	mfg->is_powered = false;
+	mfg->gpu_is_powered = false;
 
 	return 0;
 }

@@ -145,6 +145,123 @@ void kbase_pm_runtime_callback_off(struct kbase_device *kbdev)
 {
 }
 
+int kbase_pm_callback_power_on(struct kbase_device *kbdev)
+{
+	int ret, err, reg_idx, pm_idx;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+
+	if (ctx->gpu_is_powered) {
+		dev_dbg(kbdev->dev, "GPU is already powered on\n");
+		return 0;
+	}
+
+	for (reg_idx = 0; reg_idx < kbdev->nr_regulators; reg_idx++) {
+		ret = regulator_enable(kbdev->regulators[reg_idx]);
+		if (ret < 0) {
+			dev_err(kbdev->dev,
+				"Failed to power on reg %d: %d\n",
+				reg_idx, ret);
+			goto reg_err;
+		}
+	}
+
+	for (pm_idx = 0; pm_idx < kbdev->num_pm_domains; pm_idx++) {
+		ret = pm_runtime_get_sync(kbdev->pm_domain_devs[pm_idx]);
+		if (ret < 0) {
+			dev_err(kbdev->dev,
+				"Failed to power on power domain %d: %d\n",
+				pm_idx, ret);
+			goto pm_err;
+		}
+	}
+
+	ret = clk_bulk_prepare_enable(ctx->num_clks, ctx->clks);
+	if (ret < 0) {
+		dev_err(kbdev->dev,
+			"Failed to bulk-enable GPU clocks: %d\n",
+			ret);
+		goto clk_err;
+	}
+
+	enable_timestamp_register(kbdev);
+
+	ctx->gpu_is_powered = true;
+
+	return 1;
+
+clk_err:
+	clk_bulk_disable_unprepare(ctx->num_clks, ctx->clks);
+
+pm_err:
+	if (pm_idx >= kbdev->num_pm_domains)
+		pm_idx = kbdev->num_pm_domains - 1;
+	for (; pm_idx >= 0; pm_idx--) {
+		pm_runtime_mark_last_busy(kbdev->pm_domain_devs[pm_idx]);
+		err = pm_runtime_put_autosuspend(kbdev->pm_domain_devs[pm_idx]);
+		if (err < 0)
+			dev_err(kbdev->dev,
+				"Failed to power off core %d: %d\n",
+				pm_idx, err);
+	}
+
+reg_err:
+	if (reg_idx >= kbdev->nr_regulators)
+		reg_idx = kbdev->nr_regulators - 1;
+	for (; reg_idx >= 0; reg_idx--) {
+		err = regulator_disable(kbdev->regulators[reg_idx]);
+		if (err < 0)
+			dev_err(kbdev->dev,
+				"Failed to power off reg %d: %d\n",
+				reg_idx, err);
+	}
+
+	return ret;
+}
+
+void kbase_pm_callback_power_off(struct kbase_device *kbdev)
+{
+	int err, i;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+
+	if (!ctx->gpu_is_powered) {
+		dev_dbg(kbdev->dev, "GPU is already powered off\n");
+		return;
+	}
+
+	ctx->gpu_is_powered = false;
+
+	check_bus_idle(kbdev);
+
+	clk_bulk_disable_unprepare(ctx->num_clks, ctx->clks);
+
+	for (i = kbdev->num_pm_domains - 1; i >= 0; i--) {
+		pm_runtime_mark_last_busy(kbdev->pm_domain_devs[i]);
+		err = pm_runtime_put_autosuspend(kbdev->pm_domain_devs[i]);
+		if (err < 0)
+			dev_err(kbdev->dev,
+				"Failed to power off core %d: %d\n",
+				i, err);
+	}
+
+	for (i = kbdev->nr_regulators - 1; i >= 0; i--) {
+		err = regulator_disable(kbdev->regulators[i]);
+		if (err < 0)
+			dev_err(kbdev->dev,
+				"Failed to power off reg %d: %d\n",
+				i, err);
+	}
+}
+
+void kbase_pm_callback_suspend(struct kbase_device *kbdev)
+{
+	kbase_pm_callback_power_off(kbdev);
+}
+
+void kbase_pm_callback_resume(struct kbase_device *kbdev)
+{
+	kbase_pm_callback_power_on(kbdev);
+}
+
 void platform_term(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
