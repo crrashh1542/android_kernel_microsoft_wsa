@@ -17,8 +17,19 @@
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 
+/* list of clocks required by GPU */
+static const char * const mt8195_gpu_clks[] = {
+	"clk_mux",
+	"clk_main_parent",
+	"clk_sub_parent",
+	"subsys_bg3d",
+	"clk_pll_src",
+};
+
 const struct mtk_hw_config mt8195_hw_config = {
 	.num_pm_domains = 5,
+	.num_clks = ARRAY_SIZE(mt8195_gpu_clks),
+	.clk_names = mt8195_gpu_clks,
 	.mfg_compatible_name = "mediatek,mt8195-mfgcfg",
 	.reg_mfg_timestamp = 0x130,
 	.top_tsvalueb_en = 0x1,
@@ -38,16 +49,6 @@ struct mtk_platform_context mt8195_platform_context = {
 	.config = &mt8195_hw_config,
 };
 
-enum gpu_clk_idx {mux, main, sub, cg, pll};
-/* list of clocks required by GPU */
-static const char * const gpu_clocks[] = {
-	"clk_mux",
-	"clk_main_parent",
-	"clk_sub_parent",
-	"subsys_bg3d",
-	"clk_pll_src",
-};
-
 struct kbase_pm_callback_conf mt8195_pm_callbacks = {
 	.power_on_callback = kbase_pm_callback_power_on,
 	.power_off_callback = kbase_pm_callback_power_off,
@@ -65,68 +66,6 @@ struct kbase_pm_callback_conf mt8195_pm_callbacks = {
 	.power_runtime_off_callback = NULL,
 #endif				/* KBASE_PM_RUNTIME */
 };
-
-
-static int mali_mfgsys_init(struct kbase_device *kbdev)
-{
-	int err, i;
-	unsigned long volt;
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-	const struct mtk_hw_config *cfg = mfg->config;
-
-	kbdev->num_pm_domains = cfg->num_pm_domains;
-
-	err = kbase_pm_domain_init(kbdev);
-	if (err < 0)
-		return err;
-
-	for (i = 0; i < kbdev->nr_regulators; i++)
-		if (kbdev->regulators[i] == NULL)
-			return -EINVAL;
-
-	mfg->num_clks = ARRAY_SIZE(gpu_clocks);
-	mfg->clks = devm_kcalloc(kbdev->dev, mfg->num_clks,
-				     sizeof(*mfg->clks), GFP_KERNEL);
-
-	if (!mfg->clks)
-		return -ENOMEM;
-
-	for (i = 0; i < mfg->num_clks; ++i)
-		mfg->clks[i].id = gpu_clocks[i];
-
-	err = devm_clk_bulk_get(kbdev->dev, mfg->num_clks, mfg->clks);
-	if (err != 0) {
-		dev_err(kbdev->dev,
-			"clk_bulk_get error: %d\n",
-			err);
-		return err;
-	}
-
-	for (i = 0; i < kbdev->nr_regulators; i++) {
-		volt = (i == 0) ? cfg->vgpu_max_microvolt : cfg->vsram_gpu_max_microvolt;
-		err = regulator_set_voltage(kbdev->regulators[i],
-			volt, volt + cfg->supply_tolerance_microvolt);
-		if (err < 0) {
-			dev_err(kbdev->dev,
-				"Regulator %d set voltage failed: %d\n",
-				i, err);
-			return err;
-		}
-#ifdef CONFIG_MALI_VALHALL_DEVFREQ
-		kbdev->current_voltages[i] = volt;
-#endif
-	}
-
-	err = map_mfg_base(mfg);
-	if (err) {
-		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
-		return err;
-	}
-
-	mfg->gpu_is_powered = false;
-
-	return 0;
-}
 
 #ifdef CONFIG_MALI_VALHALL_DEVFREQ
 static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
@@ -169,7 +108,7 @@ static int platform_init(struct kbase_device *kbdev)
 
 	kbdev->platform_context = mfg;
 
-	err = mali_mfgsys_init(kbdev);
+	err = mfgsys_init(kbdev);
 	if (err)
 		return err;
 

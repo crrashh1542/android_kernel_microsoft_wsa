@@ -18,8 +18,29 @@
 #define BUS_IDLE_BIT 0x4
 
 /**
+ * Note that reordering the clock indices without extra care may cause
+ * fatal errors.
+ *
+ * Different MediaTek platforms expose different number of clocks to its GPU,
+ * and some of them are used for calibrating the GPU frequency.
+ *
+ * At the moment of this writing, the following pattern applies:
+ * - MT8183 and MT8186 have 4 clocks: mux, main, sub and cg.
+ *   The main clock is used for calibrating the GPU frequency.
+ * - MT8192 and MT8195 have 5 clocks: mux, main, sub, cg and pll.
+ *   The pll clock is used for calibrating the GPU frequency.
+ * Given the above we make some hard-coded assumption for the ease of migration.
+ *
+ * Please carefully change the order and the corresponding frequency-switching
+ * logic if a new HW design breaks the above rules.
+ */
+enum gpu_clk_idx {mux, main, sub, cg, pll};
+
+/**
  * mtk_hw_config - config of the hardware specific constants
  * @num_pm_domains: number of GPU power domains
+ * @num_clks: number of GPU clocks
+ * @clk_names: the list of GPU clock names
  * @mfg_compatible_name: MFG compatible name in DT
  * @reg_mfg_timestamp: MFG_TIMESTAMP register address
  * @top_tsvalueb_en: MFG_TIMESTAMP enable bit
@@ -38,6 +59,10 @@
 struct mtk_hw_config {
 	/* Power domain */
 	int num_pm_domains;
+
+	/* Clocks */
+	int num_clks;
+	const char * const *clk_names;
 
 	/* MFG */
 	const char *mfg_compatible_name;
@@ -64,7 +89,6 @@ struct mtk_hw_config {
 /**
  * mtk_platform_context - MediaTek platform context
  * @clks: GPU clocks
- * @num_clks: number of GPU clocks
  * @mfg_base_addr: MFG base address
  * @gpu_is_powered: GPU on/off status
  * @config: pointer to the hardware config struct
@@ -74,7 +98,6 @@ struct mtk_hw_config {
  */
 struct mtk_platform_context {
 	struct clk_bulk_data *clks;
-	int num_clks;
 	void __iomem *mfg_base_addr;
 	bool gpu_is_powered;
 
@@ -88,6 +111,8 @@ void unmap_mfg_base(struct mtk_platform_context *ctx);
 
 void enable_timestamp_register(struct kbase_device *kbdev);
 void check_bus_idle(struct kbase_device *kbdev);
+
+int mfgsys_init(struct kbase_device *kbdev);
 
 int kbase_pm_domain_init(struct kbase_device *kbdev);
 void kbase_pm_domain_term(struct kbase_device *kbdev);

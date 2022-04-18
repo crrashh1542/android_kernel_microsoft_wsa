@@ -67,6 +67,71 @@ void check_bus_idle(struct kbase_device *kbdev)
 	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
 }
 
+int mfgsys_init(struct kbase_device *kbdev)
+{
+	int err, i;
+	unsigned long volt;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+
+	if (WARN_ON(cfg->num_pm_domains <= 0))
+		return -EINVAL;
+	kbdev->num_pm_domains = cfg->num_pm_domains;
+
+	err = kbase_pm_domain_init(kbdev);
+	if (err < 0)
+		return err;
+
+	for (i = 0; i < kbdev->nr_regulators; i++)
+		if (kbdev->regulators[i] == NULL)
+			return -EINVAL;
+
+	if (WARN_ON(cfg->num_clks <= 0))
+		return -EINVAL;
+	ctx->clks = devm_kcalloc(kbdev->dev, cfg->num_clks,
+				     sizeof(*ctx->clks), GFP_KERNEL);
+
+	if (!ctx->clks)
+		return -ENOMEM;
+
+	for (i = 0; i < cfg->num_clks; ++i)
+		ctx->clks[i].id = cfg->clk_names[i];
+
+	err = devm_clk_bulk_get(kbdev->dev, cfg->num_clks, ctx->clks);
+	if (err < 0) {
+		dev_err(kbdev->dev,
+			"clk_bulk_get error: %d\n",
+			err);
+		return err;
+	}
+
+	for (i = 0; i < kbdev->nr_regulators; i++) {
+		volt = (i == 0) ? cfg->vgpu_max_microvolt
+				: cfg->vsram_gpu_max_microvolt;
+		err = regulator_set_voltage(kbdev->regulators[i],
+			volt, volt + cfg->supply_tolerance_microvolt);
+		if (err < 0) {
+			dev_err(kbdev->dev,
+				"Regulator %d set voltage failed: %d\n",
+				i, err);
+			return err;
+		}
+#if defined(CONFIG_MALI_BIFROST_DEVFREQ) || defined(CONFIG_MALI_VALHALL_DEVFREQ)
+		kbdev->current_voltages[i] = volt;
+#endif
+	}
+
+	err = map_mfg_base(ctx);
+	if (err) {
+		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
+		return err;
+	}
+
+	ctx->gpu_is_powered = false;
+
+	return 0;
+}
+
 int kbase_pm_domain_init(struct kbase_device *kbdev)
 {
 	int err, i, num_domains;
@@ -149,6 +214,7 @@ int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int ret, err, reg_idx, pm_idx;
 	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 
 	if (ctx->gpu_is_powered) {
 		dev_dbg(kbdev->dev, "GPU is already powered on\n");
@@ -175,7 +241,7 @@ int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 		}
 	}
 
-	ret = clk_bulk_prepare_enable(ctx->num_clks, ctx->clks);
+	ret = clk_bulk_prepare_enable(cfg->num_clks, ctx->clks);
 	if (ret < 0) {
 		dev_err(kbdev->dev,
 			"Failed to bulk-enable GPU clocks: %d\n",
@@ -190,7 +256,7 @@ int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 	return 1;
 
 clk_err:
-	clk_bulk_disable_unprepare(ctx->num_clks, ctx->clks);
+	clk_bulk_disable_unprepare(cfg->num_clks, ctx->clks);
 
 pm_err:
 	if (pm_idx >= kbdev->num_pm_domains)
@@ -222,6 +288,7 @@ void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 {
 	int err, i;
 	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 
 	if (!ctx->gpu_is_powered) {
 		dev_dbg(kbdev->dev, "GPU is already powered off\n");
@@ -232,7 +299,7 @@ void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 
 	check_bus_idle(kbdev);
 
-	clk_bulk_disable_unprepare(ctx->num_clks, ctx->clks);
+	clk_bulk_disable_unprepare(cfg->num_clks, ctx->clks);
 
 	for (i = kbdev->num_pm_domains - 1; i >= 0; i--) {
 		pm_runtime_mark_last_busy(kbdev->pm_domain_devs[i]);
