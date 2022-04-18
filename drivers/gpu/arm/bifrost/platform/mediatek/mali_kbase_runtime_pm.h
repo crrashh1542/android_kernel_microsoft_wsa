@@ -105,6 +105,7 @@ struct mtk_platform_context {
 };
 
 void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
+int set_frequency(struct kbase_device *kbdev, unsigned long freq);
 
 int map_mfg_base(struct mtk_platform_context *ctx);
 void unmap_mfg_base(struct mtk_platform_context *ctx);

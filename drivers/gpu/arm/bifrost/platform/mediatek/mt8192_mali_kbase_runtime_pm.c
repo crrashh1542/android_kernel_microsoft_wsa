@@ -12,7 +12,6 @@
  */
 
 #include <linux/of_device.h>
-#include <linux/regulator/consumer.h>
 
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
@@ -66,39 +65,6 @@ struct kbase_pm_callback_conf mt8192_pm_callbacks = {
 #endif				/* KBASE_PM_RUNTIME */
 };
 
-#ifdef CONFIG_MALI_VALHALL_DEVFREQ
-static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
-{
-	int err;
-	struct mtk_platform_context *mfg = kbdev->platform_context;
-
-	if (kbdev->current_freqs[0] != freq) {
-		err = clk_set_parent(mfg->clks[mux].clk, mfg->clks[sub].clk);
-		if (err) {
-			dev_err(kbdev->dev, "Failed to select sub clock src\n");
-			return err;
-		}
-
-		err = clk_set_rate(mfg->clks[main].clk, freq);
-		if (err) {
-			dev_err(kbdev->dev,
-				"Failed to set clock rate: %lu (err: %d)\n",
-				freq, err);
-			return err;
-		}
-		kbdev->current_freqs[0] = freq;
-
-		err = clk_set_parent(mfg->clks[mux].clk, mfg->clks[main].clk);
-		if (err) {
-			dev_err(kbdev->dev, "Failed to select main clock src\n");
-			return err;
-		}
-	}
-
-	return 0;
-}
-#endif
-
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err, i;
@@ -117,23 +83,9 @@ static int platform_init(struct kbase_device *kbdev)
 		pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
 	}
 
-	err = clk_set_parent(mfg->clks[mux].clk, mfg->clks[sub].clk);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to select sub clock src\n");
+	err = set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
+	if (err)
 		return err;
-	}
-
-	err = clk_set_rate(mfg->clks[main].clk, cfg->gpu_freq_max_khz * 1000);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to set clock %d kHz\n", cfg->gpu_freq_max_khz);
-		return err;
-	}
-
-	err = clk_set_parent(mfg->clks[mux].clk, mfg->clks[main].clk);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to select main clock src\n");
-		return err;
-	}
 
 #ifdef CONFIG_MALI_VALHALL_DEVFREQ
 	kbdev->devfreq_ops.set_frequency = set_frequency;

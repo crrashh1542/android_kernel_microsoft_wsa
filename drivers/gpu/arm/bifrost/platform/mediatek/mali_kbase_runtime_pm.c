@@ -16,6 +16,48 @@ void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
 			   cfg->vsram_gpu_max_microvolt);
 }
 
+int set_frequency(struct kbase_device *kbdev, unsigned long freq)
+{
+	int err;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+
+	if (kbdev->current_freqs[0] == freq)
+		return 0;
+
+	err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[sub].clk);
+	if (err) {
+		dev_err(kbdev->dev, "Failed to set sub clock as src: %d\n", err);
+		return err;
+	}
+
+	/* Hard-coded rules about which clock should be used for freq setting */
+	switch (cfg->num_clks) {
+	case 5: /* there's pll clock */
+		err = clk_set_rate(ctx->clks[pll].clk, freq);
+		break;
+	case 4:
+		err = clk_set_rate(ctx->clks[main].clk, freq);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+	if (err) {
+		dev_err(kbdev->dev, "Failed to set clock rate to %lu: %d\n", freq, err);
+		return err;
+	}
+	kbdev->current_freqs[0] = freq;
+
+	err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[main].clk);
+	if (err) {
+		dev_err(kbdev->dev, "Failed to set main clock as src: %d\n", err);
+		return err;
+	}
+
+	return 0;
+}
+
 int map_mfg_base(struct mtk_platform_context *ctx)
 {
 	struct device_node *node;
