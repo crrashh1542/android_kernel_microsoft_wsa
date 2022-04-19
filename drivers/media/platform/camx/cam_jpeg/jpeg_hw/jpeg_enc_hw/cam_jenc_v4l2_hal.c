@@ -38,7 +38,6 @@
 #define JENC_IRQ_TYPE_SESSION_DONE 0x1
 
 #define JENC_DQT_TABLE_COL  8
-#define JENC_MAX_DMI_INDEX 64
 #define JENC_DQT_QFP_SHIFT 20
 
 // QC JFIF Header and definition
@@ -1196,19 +1195,14 @@ static u8 jenc_hal_calculate_dqt(struct jenc_context *jctx, u8 dqt_value)
 	return max_t(u8, 1, calc_val);
 }
 
-static void jenc_hal_dmi_tables_apply(struct jenc_context *jctx, struct vb2_buffer *vb2)
+static void jenc_hal_dmi_tables_calculate(struct jenc_context *jctx)
 {
 	struct cam_jpeg_rw_pair wr_pair;
 	union jenc_dmi_cfg  pcfg = { .w32 = 0x00000011 };
 	union jenc_dmi_addr addr = { .w32 = 0x00000000 };
-	struct qc_jfif *dqt_ptr = vb2_plane_vaddr(vb2, 0);
 	u8 dqt_val;
 	u32 reg_val;
 	int i, idx;
-
-	if (!dqt_ptr) {
-		dev_err(jctx->dev, "Get plane vaddr failed\n");
-	}
 
 	/* DMI upload start sequence */
 	wr_pair.off = JENC_DMI_ADDR_REG;
@@ -1223,7 +1217,7 @@ static void jenc_hal_dmi_tables_apply(struct jenc_context *jctx, struct vb2_buff
 	for (i = 0; i < ARRAY_SIZE(dqt_luma_base); i++) {
 		dqt_val = jenc_hal_calculate_dqt(jctx, dqt_luma_base[i]);
 		idx = zz_lookup_table[i];
-		dqt_ptr->dqt_table1[idx] = dqt_val;
+		jctx->dqt_table1[idx] = dqt_val;
 		reg_val = div_u64((u32)U16_MAX + 1, dqt_val);
 		wr_pair.off = JENC_DMI_DATA_REG;
 		wr_pair.val = clamp_t(u32, reg_val, 0, U16_MAX);
@@ -1235,7 +1229,7 @@ static void jenc_hal_dmi_tables_apply(struct jenc_context *jctx, struct vb2_buff
 	for (i = 0; i < ARRAY_SIZE(dqt_chroma_base); i++) {
 		dqt_val = jenc_hal_calculate_dqt(jctx, dqt_chroma_base[i]);
 		idx = zz_lookup_table[i];
-		dqt_ptr->dqt_table2[idx] = dqt_val;
+		jctx->dqt_table2[idx] = dqt_val;
 		reg_val = div_u64((u32)U16_MAX + 1, dqt_val);
 		wr_pair.off = JENC_DMI_DATA_REG;
 		wr_pair.val = clamp_t(u32, reg_val, 0, U16_MAX);
@@ -1307,8 +1301,14 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 {
 	struct jenc_bufq *sbq = &jctx->bufq[JENC_SRC_ID];
 	struct jenc_bufq *dbq = &jctx->bufq[JENC_DST_ID];
+	struct qc_jfif *dqt_ptr = vb2_plane_vaddr(&dst_vb->vb2_buf, 0);
 	struct cam_jpeg_set_irq_cb irq_cd;
 	int rc;
+
+	if (!dqt_ptr) {
+		dev_err(jctx->dev, "Get plane vaddr failed\n");
+		return -EIO;
+	}
 
 	rc = jenc_hal_setup_fe_addr(jctx, &src_vb->vb2_buf);
 	if (rc)
@@ -1321,9 +1321,13 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 		return rc;
 
 	mutex_lock(&jctx->quality_mutex);
-	if (jctx->quality_requested != jctx->quality_programmed)
-		jenc_hal_dmi_tables_apply(jctx, &dst_vb->vb2_buf);
+	if (jctx->quality_programmed != jctx->quality_requested)
+		jenc_hal_dmi_tables_calculate(jctx);
 	mutex_unlock(&jctx->quality_mutex);
+
+	/* Copy the DQT tables in output buffer */
+	memcpy(dqt_ptr->dqt_table1, jctx->dqt_table1, sizeof(dqt_ptr->dqt_table1));
+	memcpy(dqt_ptr->dqt_table2, jctx->dqt_table2, sizeof(dqt_ptr->dqt_table2));
 
 	jenc_hal_setup_we_engine(jctx, dbq);
 

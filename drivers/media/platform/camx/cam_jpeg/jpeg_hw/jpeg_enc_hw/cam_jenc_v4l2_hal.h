@@ -35,6 +35,7 @@
 #include "cam_jenc_v4l2_common.h"
 
 #define JENC_PAYLOAD_DIV 3 // Chrome: Maximum payload of jpeg buffer
+#define JENC_MAX_DMI_INDEX 64
 
 struct jenc_bufq {
 	struct v4l2_format vf;
@@ -62,6 +63,8 @@ struct jenc_context {
 	u32 rmap[JENC_S3_MMU_PF_CTL_L1_FILTER_REG];
 	s32 iommu_hdl;
 	size_t result_size;
+	u8 dqt_table1[JENC_MAX_DMI_INDEX];
+	u8 dqt_table2[JENC_MAX_DMI_INDEX];
 };
 
 void jenc_hal_setup_fe_engine(struct jenc_context *jctx, struct jenc_bufq *bq);
