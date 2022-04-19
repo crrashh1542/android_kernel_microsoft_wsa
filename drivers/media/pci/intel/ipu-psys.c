@@ -667,7 +667,6 @@ kbuf_map_fail:
 	list_del(&kbuf->list);
 	if (!kbuf->userptr)
 		kfree(kbuf);
-	return ret;
 
 mapbuf_fail:
 	dma_buf_put(dbuf);
