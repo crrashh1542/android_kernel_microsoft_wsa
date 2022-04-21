@@ -1241,7 +1241,7 @@ static int ipu_psys_fw_init(struct ipu_psys *psys)
 	int i;
 
 	size = IPU6SE_FW_PSYS_N_PSYS_CMD_QUEUE_ID;
-	if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP)
+	if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP || ipu_ver == IPU_VER_6EP_MTL)
 		size = IPU6_FW_PSYS_N_PSYS_CMD_QUEUE_ID;
 
 	queue_cfg = devm_kzalloc(&psys->adev->dev, sizeof(*queue_cfg) * size,
@@ -1598,6 +1598,7 @@ static const struct pci_device_id ipu_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_P_PCI_ID)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_N_PCI_ID)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_RPL_P_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_MTL_PCI_ID)},
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);

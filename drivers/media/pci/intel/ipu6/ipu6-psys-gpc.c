@@ -181,7 +181,7 @@ int ipu_psys_gpc_init_debugfs(struct ipu_psys *psys)
 			goto err;
 
 		debugfs_create_bool("enable", 0600, dir,
-					&psys_gpcs->gpc[idx].enable);
+				    &psys_gpcs->gpc[idx].enable);
 
 		debugfs_create_u32("source", 0600, dir,
 				   &psys_gpcs->gpc[idx].source);

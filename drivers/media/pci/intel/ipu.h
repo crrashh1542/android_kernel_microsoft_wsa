@@ -19,12 +19,14 @@
 #define IPU6EP_ADL_P_PCI_ID	0x465d
 #define IPU6EP_ADL_N_PCI_ID	0x462e
 #define IPU6EP_RPL_P_PCI_ID	0xa75d
+#define IPU6EP_MTL_PCI_ID	0x7d19
 
 enum ipu_version {
 	IPU_VER_INVALID = 0,
 	IPU_VER_6,
 	IPU_VER_6SE,
 	IPU_VER_6EP,
+	IPU_VER_6EP_MTL,
 };
 
 /*
