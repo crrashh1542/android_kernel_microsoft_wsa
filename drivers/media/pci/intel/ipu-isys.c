@@ -748,6 +748,7 @@ static int isys_runtime_pm_suspend(struct device *dev)
 	isys->reset_needed = false;
 	mutex_unlock(&isys->mutex);
 
+	isys->phy_termcal_val = 0;
 	cpu_latency_qos_update_request(&isys->pm_qos, PM_QOS_DEFAULT_VALUE);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
@@ -1102,6 +1103,7 @@ static int isys_probe(struct ipu_bus_device *adev)
 	spin_lock_init(&isys->lock);
 	spin_lock_init(&isys->power_lock);
 	isys->power = 0;
+	isys->phy_termcal_val = 0;
 
 	mutex_init(&isys->mutex);
 	mutex_init(&isys->stream_mutex);
