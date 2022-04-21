@@ -19,8 +19,8 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 
-#include <drm/dp/drm_dp_aux_bus.h>
-#include <drm/dp/drm_dp_helper.h>
+#include <drm/display/drm_dp_aux_bus.h>
+#include <drm/display/drm_dp_helper.h>
 
 struct dp_aux_ep_device_with_data {
 	struct dp_aux_ep_device aux_ep;
