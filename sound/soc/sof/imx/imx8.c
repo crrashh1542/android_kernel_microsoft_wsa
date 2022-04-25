@@ -391,9 +391,8 @@ static struct snd_sof_dsp_ops sof_imx8_ops = {
 	.ipc_msg_data	= sof_ipc_msg_data,
 	.set_stream_data_offset = sof_set_stream_data_offset,
 
-	/* module loading */
-	.load_module	= snd_sof_parse_module_memcpy,
 	.get_bar_index	= imx8_get_bar_index,
+
 	/* firmware loading */
 	.load_firmware	= snd_sof_load_firmware_memcpy,
 
@@ -444,9 +443,8 @@ static struct snd_sof_dsp_ops sof_imx8x_ops = {
 	.ipc_msg_data	= sof_ipc_msg_data,
 	.set_stream_data_offset = sof_set_stream_data_offset,
 
-	/* module loading */
-	.load_module	= snd_sof_parse_module_memcpy,
 	.get_bar_index	= imx8_get_bar_index,
+
 	/* firmware loading */
 	.load_firmware	= snd_sof_load_firmware_memcpy,
 
