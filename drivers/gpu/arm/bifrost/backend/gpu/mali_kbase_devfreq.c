@@ -30,8 +30,12 @@
 
 #include <linux/version.h>
 #include <linux/pm_opp.h>
+#include <linux/nvmem-consumer.h>
 
 #include "mali_kbase_devfreq.h"
+
+/* number of max tables counts*/
+#define MAX_TABS	5
 
 /**
  * get_voltage() - Get the voltage value corresponding to the nominal frequency
@@ -461,10 +465,59 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 #else
 	struct device_node *opp_node = of_parse_phandle(kbdev->dev->of_node,
 			"operating-points-v2", 0);
+	struct nvmem_cell *cell;
+	u32 *buf;
+	char opp_microvolt_name[30] = "opp-microvolt";
+	u32 table_mapping[MAX_TABS];
+	int table_count;
+	size_t len;
 	struct device_node *node;
 	int i = 0;
 	int count;
+	int err;
+	int idx;
 	u64 shader_present = kbdev->gpu_props.props.raw_props.shader_present;
+
+	cell = nvmem_cell_get(kbdev->dev, "volt-bin");
+
+	if (IS_ERR(cell)) {
+		dev_warn(kbdev->dev, "No volt-bin detected, using default opp table\n");
+		goto skip_volt_bin;
+	}
+
+	buf = (u32 *)nvmem_cell_read(cell, &len);
+	nvmem_cell_put(cell);
+
+	if (IS_ERR(buf)) {
+		dev_err(kbdev->dev, "Invalid cell buffer, using default opp table\n");
+		goto skip_volt_bin;
+	}
+
+	table_count = of_property_count_u32_elems(kbdev->dev->of_node, "volt-bin-mapping");
+
+	if (table_count > MAX_TABS)
+		table_count = MAX_TABS;
+
+	err = of_property_read_u32_array(kbdev->dev->of_node, "volt-bin-mapping",
+					table_mapping, table_count);
+
+	if (err)
+		goto skip_volt_bin;
+
+	for (idx = 0; idx < table_count; idx++) {
+		if (*buf == table_mapping[idx]) {
+			err = snprintf(opp_microvolt_name, sizeof(opp_microvolt_name),
+					"opp-microvolt-bin%d", table_mapping[idx]);
+
+			if (err < 0) {
+				dev_err(kbdev->dev, "Invalid opp microvolt name\n");
+				goto skip_volt_bin;
+			}
+		}
+	}
+
+skip_volt_bin:
+	kfree(buf);
 
 	if (!opp_node)
 		return 0;
@@ -516,11 +569,17 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 		}
 #if IS_ENABLED(CONFIG_REGULATOR)
 		err = of_property_read_u32_array(node,
-			"opp-microvolt", opp_volts, kbdev->nr_regulators);
+			opp_microvolt_name, opp_volts, kbdev->nr_regulators);
+
 		if (err < 0) {
-			dev_warn(kbdev->dev, "Failed to read opp-microvolt property with error %d\n",
+			err = of_property_read_u32_array(node,
+				"opp-microvolt", opp_volts, kbdev->nr_regulators);
+
+			if (err < 0) {
+				dev_warn(kbdev->dev, "Failed to read opp-microvolt property with error %d\n",
 					err);
-			continue;
+				continue;
+			}
 		}
 #endif
 
