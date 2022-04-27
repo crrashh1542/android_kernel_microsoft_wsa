@@ -16,6 +16,10 @@
 	compatible = "google,trogdor", "qcom,sc7180";
 };
 
+&ap_tp_i2c {
+	status = "okay";
+};
+
 ap_ts_pen_1v8: &i2c4 {
 	status = "okay";
 	clock-frequency = <400000>;
