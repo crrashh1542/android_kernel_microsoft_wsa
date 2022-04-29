@@ -1,5 +1,3 @@
 set noparent
 
-briannorris@chromium.org
-dianders@chromium.org
-groeck@chromium.org
+include chromiumos/owners:v1:/kernel/OWNERS.build
