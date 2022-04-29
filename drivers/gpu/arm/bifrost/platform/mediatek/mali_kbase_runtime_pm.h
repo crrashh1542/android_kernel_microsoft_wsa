@@ -64,7 +64,7 @@ struct mtk_hw_config {
  * mtk_platform_context - MediaTek platform context
  * @clks: GPU clocks
  * @num_clks: number of GPU clocks
- * @g_mfg_base: MFG base address
+ * @mfg_base_addr: MFG base address
  * @is_powered: GPU on/off status
  * @config: pointer to the hardware config struct
  *
@@ -74,7 +74,7 @@ struct mtk_hw_config {
 struct mtk_platform_context {
 	struct clk_bulk_data *clks;
 	int num_clks;
-	void __iomem *g_mfg_base;
+	void __iomem *mfg_base_addr;
 	bool is_powered;
 
 	const struct mtk_hw_config *config;

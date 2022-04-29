@@ -27,9 +27,9 @@ int map_mfg_base(struct mtk_platform_context *ctx)
 	if (!node)
 		return -ENODEV;
 
-	ctx->g_mfg_base = of_iomap(node, 0);
+	ctx->mfg_base_addr = of_iomap(node, 0);
 	of_node_put(node);
-	if (!ctx->g_mfg_base)
+	if (!ctx->mfg_base_addr)
 		return -ENOMEM;
 
 	return 0;
@@ -37,7 +37,7 @@ int map_mfg_base(struct mtk_platform_context *ctx)
 
 void unmap_mfg_base(struct mtk_platform_context *ctx)
 {
-	iounmap(ctx->g_mfg_base);
+	iounmap(ctx->mfg_base_addr);
 }
 
 void enable_timestamp_register(struct kbase_device *kbdev)
@@ -46,7 +46,7 @@ void enable_timestamp_register(struct kbase_device *kbdev)
 	const struct mtk_hw_config *cfg = ctx->config;
 
 	/* Set register MFG_TIMESTAMP to TOP_TSVALEUB_EN */
-	writel(cfg->top_tsvalueb_en, ctx->g_mfg_base + cfg->reg_mfg_timestamp);
+	writel(cfg->top_tsvalueb_en, ctx->mfg_base_addr + cfg->reg_mfg_timestamp);
 }
 
 void check_bus_idle(struct kbase_device *kbdev)
@@ -55,15 +55,15 @@ void check_bus_idle(struct kbase_device *kbdev)
 	u32 val;
 
 	/* Set register MFG_QCHANNEL_CON bit [1:0] = 0x1 */
-	writel(0x1, ctx->g_mfg_base + REG_MFG_QCHANNEL_CON);
+	writel(0x1, ctx->mfg_base_addr + REG_MFG_QCHANNEL_CON);
 
 	/* Set register MFG_DEBUG_SEL bit [7:0] = 0x3 */
-	writel(0x3, ctx->g_mfg_base + REG_MFG_DEBUG_SEL);
+	writel(0x3, ctx->mfg_base_addr + REG_MFG_DEBUG_SEL);
 
 	/* Poll register MFG_DEBUG_TOP bit 2 = 0x1 */
 	/* => 1 for bus idle, 0 for bus non-idle */
 	do {
-		val = readl(ctx->g_mfg_base + REG_MFG_DEBUG_TOP);
+		val = readl(ctx->mfg_base_addr + REG_MFG_DEBUG_TOP);
 	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
 }
 
