@@ -538,6 +538,7 @@
 		pinctrl-0 = <&bt_en>, <&sw_ctrl>;
 		enable-gpios = <&tlmm 85 GPIO_ACTIVE_HIGH>;
 		swctrl-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
+		wlan-gpio = <&tlmm 84 GPIO_ACTIVE_HIGH>;
 		vddaon-supply = <&vreg_s7b_0p9>;
 		vddbtcxmx-supply = <&vreg_s7b_0p9>;
 		vddrfacmn-supply = <&vreg_s7b_0p9>;
