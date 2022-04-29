@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/elf.h>
@@ -1646,7 +1647,7 @@ static int ath11k_qmi_host_cap_send(struct ath11k_base *ab)
 	req.bdf_support_valid = 1;
 	req.bdf_support = 1;
 
-	if (ab->bus_params.m3_fw_support) {
+	if (ab->hw_params.m3_fw_support) {
 		req.m3_support_valid = 1;
 		req.m3_support = 1;
 		req.m3_cache_support_valid = 1;
@@ -1799,7 +1800,7 @@ static int ath11k_qmi_respond_fw_mem_request(struct ath11k_base *ab)
 	 * failure to FW and FW will then request mulitple blocks of small
 	 * chunk size memory.
 	 */
-	if (!(ab->bus_params.fixed_mem_region ||
+	if (!(ab->hw_params.fixed_mem_region ||
 	      test_bit(ATH11K_FLAG_FIXED_MEM_RGN, &ab->dev_flags)) &&
 	      ab->qmi.target_mem_delayed) {
 		delayed = true;
@@ -1868,7 +1869,7 @@ static void ath11k_qmi_free_target_mem_chunk(struct ath11k_base *ab)
 	int i;
 
 	for (i = 0; i < ab->qmi.mem_seg_count; i++) {
-		if ((ab->bus_params.fixed_mem_region ||
+		if ((ab->hw_params.fixed_mem_region ||
 		     test_bit(ATH11K_FLAG_FIXED_MEM_RGN, &ab->dev_flags)) &&
 		     ab->qmi.target_mem[i].iaddr)
 			iounmap(ab->qmi.target_mem[i].iaddr);
@@ -2107,7 +2108,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 
 	memset(&resp, 0, sizeof(resp));
 
-	if (ab->bus_params.fixed_bdf_addr) {
+	if (ab->hw_params.fixed_bdf_addr) {
 		bdf_addr = ioremap(ab->hw_params.bdf_addr, ab->hw_params.fw.board_size);
 		if (!bdf_addr) {
 			ath11k_warn(ab, "qmi ioremap error for bdf_addr\n");
@@ -2136,7 +2137,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 			req->end = 1;
 		}
 
-		if (ab->bus_params.fixed_bdf_addr ||
+		if (ab->hw_params.fixed_bdf_addr ||
 		    type == ATH11K_QMI_FILE_TYPE_EEPROM) {
 			req->data_valid = 0;
 			req->end = 1;
@@ -2145,7 +2146,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 			memcpy(req->data, temp, req->data_len);
 		}
 
-		if (ab->bus_params.fixed_bdf_addr) {
+		if (ab->hw_params.fixed_bdf_addr) {
 			if (type == ATH11K_QMI_FILE_TYPE_CALDATA)
 				bdf_addr += ab->hw_params.fw.cal_offset;
 
@@ -2184,7 +2185,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 			goto err_iounmap;
 		}
 
-		if (ab->bus_params.fixed_bdf_addr ||
+		if (ab->hw_params.fixed_bdf_addr ||
 		    type == ATH11K_QMI_FILE_TYPE_EEPROM) {
 			remaining = 0;
 		} else {
@@ -2197,7 +2198,7 @@ static int ath11k_qmi_load_file_target_mem(struct ath11k_base *ab,
 	}
 
 err_iounmap:
-	if (ab->bus_params.fixed_bdf_addr)
+	if (ab->hw_params.fixed_bdf_addr)
 		iounmap(bdf_addr);
 
 err_free_req:
@@ -2336,7 +2337,7 @@ static void ath11k_qmi_m3_free(struct ath11k_base *ab)
 {
 	struct m3_mem_region *m3_mem = &ab->qmi.m3_mem;
 
-	if (!ab->bus_params.m3_fw_support || !m3_mem->vaddr)
+	if (!ab->hw_params.m3_fw_support || !m3_mem->vaddr)
 		return;
 
 	dma_free_coherent(ab->dev, m3_mem->size,
@@ -2356,7 +2357,7 @@ static int ath11k_qmi_wlanfw_m3_info_send(struct ath11k_base *ab)
 	memset(&req, 0, sizeof(req));
 	memset(&resp, 0, sizeof(resp));
 
-	if (ab->bus_params.m3_fw_support) {
+	if (ab->hw_params.m3_fw_support) {
 		ret = ath11k_qmi_m3_load(ab);
 		if (ret) {
 			ath11k_err(ab, "failed to load m3 firmware: %d", ret);
@@ -2772,7 +2773,7 @@ static void ath11k_qmi_msg_mem_request_cb(struct qmi_handle *qmi_hdl,
 			   msg->mem_seg[i].type, msg->mem_seg[i].size);
 	}
 
-	if (ab->bus_params.fixed_mem_region ||
+	if (ab->hw_params.fixed_mem_region ||
 	    test_bit(ATH11K_FLAG_FIXED_MEM_RGN, &ab->dev_flags)) {
 		ret = ath11k_qmi_assign_target_mem_chunk(ab);
 		if (ret) {
