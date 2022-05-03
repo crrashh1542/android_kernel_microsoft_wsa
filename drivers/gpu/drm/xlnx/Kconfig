@@ -8,7 +8,6 @@ config DRM_ZYNQMP_DPSUB
 	select DMA_ENGINE
 	select DRM_DP_HELPER
 	select DRM_GEM_CMA_HELPER
-	select DRM_KMS_CMA_HELPER
 	select DRM_KMS_HELPER
 	select GENERIC_PHY
 	help
