@@ -74,7 +74,7 @@ static int platform_init(struct kbase_device *kbdev)
 
 	kbdev->platform_context = ctx;
 
-	err = mfgsys_init(kbdev);
+	err = mtk_mfgsys_init(kbdev);
 	if (err)
 		return err;
 
@@ -84,13 +84,13 @@ static int platform_init(struct kbase_device *kbdev)
 		pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
 	}
 
-	err = set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
+	err = mtk_set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
 	if (err)
 		return err;
 
 #ifdef CONFIG_MALI_VALHALL_DEVFREQ
-	kbdev->devfreq_ops.set_frequency = set_frequency;
-	kbdev->devfreq_ops.voltage_range_check = voltage_range_check;
+	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
+	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
 #endif
 
 	return 0;

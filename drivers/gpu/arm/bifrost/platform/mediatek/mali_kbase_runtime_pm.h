@@ -104,16 +104,16 @@ struct mtk_platform_context {
 	const struct mtk_hw_config *config;
 };
 
-void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
-int set_frequency(struct kbase_device *kbdev, unsigned long freq);
+void mtk_voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
+int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq);
 
-int map_mfg_base(struct mtk_platform_context *ctx);
-void unmap_mfg_base(struct mtk_platform_context *ctx);
+int mtk_map_mfg_base(struct mtk_platform_context *ctx);
+void mtk_unmap_mfg_base(struct mtk_platform_context *ctx);
 
-void enable_timestamp_register(struct kbase_device *kbdev);
-void check_bus_idle(struct kbase_device *kbdev);
+void mtk_enable_timestamp_register(struct kbase_device *kbdev);
+void mtk_check_bus_idle(struct kbase_device *kbdev);
 
-int mfgsys_init(struct kbase_device *kbdev);
+int mtk_mfgsys_init(struct kbase_device *kbdev);
 
 int kbase_pm_domain_init(struct kbase_device *kbdev);
 void kbase_pm_domain_term(struct kbase_device *kbdev);

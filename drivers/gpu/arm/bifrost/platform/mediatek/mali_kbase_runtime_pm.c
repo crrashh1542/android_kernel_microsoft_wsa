@@ -3,7 +3,7 @@
 
 #include "mali_kbase_runtime_pm.h"
 
-void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
+void mtk_voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
@@ -16,7 +16,7 @@ void voltage_range_check(struct kbase_device *kbdev, unsigned long *volts)
 			   cfg->vsram_gpu_max_microvolt);
 }
 
-int set_frequency(struct kbase_device *kbdev, unsigned long freq)
+int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq)
 {
 	int err;
 	struct mtk_platform_context *ctx = kbdev->platform_context;
@@ -58,7 +58,7 @@ int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 	return 0;
 }
 
-int map_mfg_base(struct mtk_platform_context *ctx)
+int mtk_map_mfg_base(struct mtk_platform_context *ctx)
 {
 	struct device_node *node;
 	const struct mtk_hw_config *cfg = ctx->config;
@@ -77,12 +77,12 @@ int map_mfg_base(struct mtk_platform_context *ctx)
 	return 0;
 }
 
-void unmap_mfg_base(struct mtk_platform_context *ctx)
+void mtk_unmap_mfg_base(struct mtk_platform_context *ctx)
 {
 	iounmap(ctx->mfg_base_addr);
 }
 
-void enable_timestamp_register(struct kbase_device *kbdev)
+void mtk_enable_timestamp_register(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
@@ -91,7 +91,7 @@ void enable_timestamp_register(struct kbase_device *kbdev)
 	writel(cfg->top_tsvalueb_en, ctx->mfg_base_addr + cfg->reg_mfg_timestamp);
 }
 
-void check_bus_idle(struct kbase_device *kbdev)
+void mtk_check_bus_idle(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	u32 val;
@@ -109,7 +109,7 @@ void check_bus_idle(struct kbase_device *kbdev)
 	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
 }
 
-int mfgsys_init(struct kbase_device *kbdev)
+int mtk_mfgsys_init(struct kbase_device *kbdev)
 {
 	int err, i;
 	unsigned long volt;
@@ -163,7 +163,7 @@ int mfgsys_init(struct kbase_device *kbdev)
 #endif
 	}
 
-	err = map_mfg_base(ctx);
+	err = mtk_map_mfg_base(ctx);
 	if (err) {
 		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
 		return err;
@@ -291,7 +291,7 @@ int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 		goto clk_err;
 	}
 
-	enable_timestamp_register(kbdev);
+	mtk_enable_timestamp_register(kbdev);
 
 	ctx->gpu_is_powered = true;
 
@@ -339,7 +339,7 @@ void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 
 	ctx->gpu_is_powered = false;
 
-	check_bus_idle(kbdev);
+	mtk_check_bus_idle(kbdev);
 
 	clk_bulk_disable_unprepare(cfg->num_clks, ctx->clks);
 
@@ -375,7 +375,7 @@ void platform_term(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 
-	unmap_mfg_base(ctx);
+	mtk_unmap_mfg_base(ctx);
 	kbdev->platform_context = NULL;
 	kbase_pm_domain_term(kbdev);
 }
