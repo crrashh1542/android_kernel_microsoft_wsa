@@ -59,10 +59,10 @@ struct kbase_pm_callback_conf mt8186_pm_callbacks = {
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err, i;
-	struct mtk_platform_context *mfg = &mt8186_platform_context;
-	const struct mtk_hw_config *cfg = mfg->config;
+	struct mtk_platform_context *ctx = &mt8186_platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 
-	kbdev->platform_context = mfg;
+	kbdev->platform_context = ctx;
 
 	err = mfgsys_init(kbdev);
 	if (err)
