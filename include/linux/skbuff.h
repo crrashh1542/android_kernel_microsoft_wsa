@@ -1503,6 +1503,11 @@ static inline void skb_set_end_offset(struct sk_buff *skb, unsigned int offset)
 }
 #endif
 
+static inline unsigned int skb_data_area_size(struct sk_buff *skb)
+{
+	return skb_end_pointer(skb) - skb->data;
+}
+
 /* Internal */
 #define skb_shinfo(SKB)	((struct skb_shared_info *)(skb_end_pointer(SKB)))
 
