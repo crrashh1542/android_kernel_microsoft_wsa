@@ -1879,7 +1879,7 @@ static int mt_suspend(struct hid_device *hdev, pm_message_t state)
 		mt_set_modes(hdev, HID_LATENCY_HIGH, true, true);
 
 	if (td->is_haptic_touchpad)
-		hid_haptic_resume(hdev, haptic);
+		hid_haptic_suspend(hdev, haptic);
 
 	return 0;
 }
@@ -1912,7 +1912,7 @@ static int mt_resume(struct hid_device *hdev)
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, true, true);
 
 	if (td->is_haptic_touchpad)
-		hid_haptic_suspend(hdev, haptic);
+		hid_haptic_resume(hdev, haptic);
 
 	return 0;
 }
