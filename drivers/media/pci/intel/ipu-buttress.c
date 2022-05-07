@@ -1301,6 +1301,12 @@ int ipu_buttress_init(struct ipu_device *isp)
 	dev_info(&isp->pdev->dev, "IPU in %s mode\n",
 		 isp->secure_mode ? "secure" : "non-secure");
 
+	dev_info(&isp->pdev->dev, "IPU secure touch = 0x%x\n",
+		 readl(isp->base + BUTTRESS_REG_SECURITY_TOUCH));
+
+	dev_info(&isp->pdev->dev, "IPU camera mask = 0x%x\n",
+		 readl(isp->base + BUTTRESS_REG_CAMERA_MASK));
+
 	b->wdt_cached_value = readl(isp->base + BUTTRESS_REG_WDT);
 	writel(BUTTRESS_IRQS, isp->base + BUTTRESS_REG_ISR_CLEAR);
 	writel(BUTTRESS_IRQS, isp->base + BUTTRESS_REG_ISR_ENABLE);

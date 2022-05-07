@@ -368,6 +368,7 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct fwnode_handle *fwnode = dev_fwnode(&pdev->dev);
 	u32 is_es;
 	int rval;
+	u32 val;
 
 	if (!fwnode || fwnode_property_read_u32(fwnode, "is_es", &is_es))
 		is_es = 0;
@@ -587,7 +588,10 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Configure the arbitration mechanisms for VC requests */
 	ipu_configure_vc_mechanism(isp);
 
-	dev_info(&pdev->dev, "IPU driver version %d.%d\n", IPU_MAJOR_VERSION,
+	val = readl(isp->base + BUTTRESS_REG_SKU);
+	dev_info(&pdev->dev, "IPU%u-v%u driver version %d.%d\n",
+		 val & 0xf, (val >> 4) & 0x7,
+		 IPU_MAJOR_VERSION,
 		 IPU_MINOR_VERSION);
 
 	return 0;
