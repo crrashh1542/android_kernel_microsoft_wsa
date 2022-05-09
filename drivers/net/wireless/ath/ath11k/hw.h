@@ -203,6 +203,7 @@ struct ath11k_hw_params {
 	bool static_window_map;
 	bool hybrid_bus_type;
 	bool fixed_fw_mem;
+	bool support_off_channel_tx;
 };
 
 struct ath11k_hw_ops {
