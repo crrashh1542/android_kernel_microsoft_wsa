@@ -45,10 +45,6 @@
 
 #include "drm_crtc_internal.h"
 
-#define version_greater(edid, maj, min) \
-	(((edid)->version > (maj)) || \
-	 ((edid)->version == (maj) && (edid)->revision > (min)))
-
 static int oui(u8 first, u8 second, u8 third)
 {
 	return (first << 16) | (second << 8) | third;
@@ -1578,6 +1574,15 @@ struct drm_edid {
 	size_t size;
 	const struct edid *edid;
 };
+
+static bool version_greater(const struct drm_edid *drm_edid,
+			    u8 version, u8 revision)
+{
+	const struct edid *edid = drm_edid->edid;
+
+	return edid->version > version ||
+		(edid->version == version && edid->revision > revision);
+}
 
 static int edid_extension_block_count(const struct edid *edid)
 {
@@ -3235,7 +3240,7 @@ do_inferred_modes(const struct detailed_timing *timing, void *c)
 						  closure->drm_edid,
 						  timing);
 
-	if (!version_greater(closure->drm_edid->edid, 1, 1))
+	if (!version_greater(closure->drm_edid, 1, 1))
 		return; /* GTF not defined yet */
 
 	switch (range->flags) {
@@ -3246,7 +3251,7 @@ do_inferred_modes(const struct detailed_timing *timing, void *c)
 							  timing);
 		break;
 	case 0x04: /* cvt, only in 1.4+ */
-		if (!version_greater(closure->drm_edid->edid, 1, 3))
+		if (!version_greater(closure->drm_edid, 1, 3))
 			break;
 
 		closure->modes += drm_cvt_modes_for_range(closure->connector,
@@ -3267,7 +3272,7 @@ static int add_inferred_modes(struct drm_connector *connector,
 		.drm_edid = drm_edid,
 	};
 
-	if (version_greater(drm_edid->edid, 1, 0))
+	if (version_greater(drm_edid, 1, 0))
 		drm_for_each_detailed_block(drm_edid, do_inferred_modes, &closure);
 
 	return closure.modes;
@@ -3344,7 +3349,7 @@ static int add_established_modes(struct drm_connector *connector,
 		}
 	}
 
-	if (version_greater(edid, 1, 0))
+	if (version_greater(drm_edid, 1, 0))
 		drm_for_each_detailed_block(drm_edid, do_established_modes,
 					    &closure);
 
@@ -3399,7 +3404,7 @@ static int add_standard_modes(struct drm_connector *connector,
 		}
 	}
 
-	if (version_greater(drm_edid->edid, 1, 0))
+	if (version_greater(drm_edid, 1, 0))
 		drm_for_each_detailed_block(drm_edid, do_standard_modes,
 					    &closure);
 
@@ -3479,7 +3484,7 @@ add_cvt_modes(struct drm_connector *connector, const struct drm_edid *drm_edid)
 		.drm_edid = drm_edid,
 	};
 
-	if (version_greater(drm_edid->edid, 1, 2))
+	if (version_greater(drm_edid, 1, 2))
 		drm_for_each_detailed_block(drm_edid, do_cvt_mode, &closure);
 
 	/* XXX should also look for CVT codes in VTB blocks */
@@ -3535,7 +3540,7 @@ static int add_detailed_modes(struct drm_connector *connector,
 		.quirks = quirks,
 	};
 
-	if (closure.preferred && !version_greater(drm_edid->edid, 1, 3))
+	if (closure.preferred && !version_greater(drm_edid, 1, 3))
 		closure.preferred =
 		    (drm_edid->edid->features & DRM_EDID_FEATURE_PREFERRED_TIMING);
 
@@ -5594,7 +5599,7 @@ static void drm_get_monitor_range(struct drm_connector *connector,
 {
 	struct drm_display_info *info = &connector->display_info;
 
-	if (!version_greater(drm_edid->edid, 1, 1))
+	if (!version_greater(drm_edid, 1, 1))
 		return;
 
 	drm_for_each_detailed_block(drm_edid, get_monitor_range,
