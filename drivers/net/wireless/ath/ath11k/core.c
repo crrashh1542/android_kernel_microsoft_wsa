@@ -1530,6 +1530,7 @@ static void ath11k_core_pre_reconfigure_recovery(struct ath11k_base *ab)
 		complete(&ar->completed_11d_scan);
 		complete(&ar->scan.started);
 		complete_all(&ar->scan.completed);
+		complete(&ar->scan.on_channel);
 		complete(&ar->peer_assoc_done);
 		complete(&ar->peer_delete_done);
 		complete(&ar->install_key_done);
