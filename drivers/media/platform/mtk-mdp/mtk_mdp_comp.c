@@ -54,7 +54,7 @@ MODULE_DEVICE_TABLE(of, mtk_mdp_comp_driver_dt_match);
 int mtk_mdp_comp_power_on(struct mtk_mdp_comp *comp)
 
 {
-	int err, status;
+	int err;
 
 	err = pm_runtime_get_sync(comp->dev);
 	if (err < 0) {
@@ -65,7 +65,6 @@ int mtk_mdp_comp_power_on(struct mtk_mdp_comp *comp)
 	err = mtk_mdp_comp_clock_on(comp);
 	if (err) {
 		dev_err(comp->dev, "failed to turn on clock. err=%d", err);
-		status = err;
 		goto err_mtk_mdp_comp_clock_on;
 	}
 
