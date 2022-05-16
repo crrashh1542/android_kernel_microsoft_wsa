@@ -65,6 +65,39 @@ struct kbase_pm_callback_conf mt8192_pm_callbacks = {
 #endif				/* KBASE_PM_RUNTIME */
 };
 
+/**
+ * mt8192_disable_acp() - Disable ACP (Accelerator Coherency Port) on MT8192
+ *
+ * The experiemental ACP path on MT8192 should be disabled by default to avoid
+ * breaking IO coherency on MT6873.
+ *
+ * Return: 0 on success, or error code on failure.
+ */
+static int mt8192_disable_acp(void)
+{
+	const char *infracfg_compatible_name = "mediatek,mt8192-infracfg";
+	const unsigned int INFRA_CTL = 0x290;
+	const unsigned int DIS_MFG2ACP_BIT = 9;
+	struct device_node *node;
+	void __iomem *infracfg_base_addr;
+	unsigned int val;
+
+	node = of_find_compatible_node(NULL, NULL, infracfg_compatible_name);
+	if (!node)
+		return -ENODEV;
+
+	infracfg_base_addr = of_iomap(node, 0);
+	of_node_put(node);
+	if (!infracfg_base_addr)
+		return -ENOMEM;
+
+	val = readl(infracfg_base_addr + INFRA_CTL) | BIT(DIS_MFG2ACP_BIT);
+	writel(val, infracfg_base_addr + INFRA_CTL);
+
+	iounmap(infracfg_base_addr);
+	return 0;
+}
+
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err;
@@ -93,6 +126,12 @@ static int platform_init(struct kbase_device *kbdev)
 	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
 	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
 #endif
+
+	err = mt8192_disable_acp();
+	if (err) {
+		dev_err(kbdev->dev, "Failed to disable ACP: %d", err);
+		return err;
+	}
 
 	return 0;
 }
