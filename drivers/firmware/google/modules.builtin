@@ -1,0 +1,6 @@
+kernel/drivers/firmware/google/gsmi.ko
+kernel/drivers/firmware/google/coreboot_table.ko
+kernel/drivers/firmware/google/coreboot_table-acpi.ko
+kernel/drivers/firmware/google/memconsole.ko
+kernel/drivers/firmware/google/memconsole-coreboot.ko
+kernel/drivers/firmware/google/vpd-sysfs.ko

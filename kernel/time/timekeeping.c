@@ -482,7 +482,7 @@ static __always_inline u64 __ktime_get_fast_ns(struct tk_fast *tkf)
  * of the following timestamps. Callers need to be aware of that and
  * deal with it.
  */
-u64 ktime_get_mono_fast_ns(void)
+u64 notrace ktime_get_mono_fast_ns(void)
 {
 	return __ktime_get_fast_ns(&tk_fast_mono);
 }
@@ -494,7 +494,7 @@ EXPORT_SYMBOL_GPL(ktime_get_mono_fast_ns);
  * Contrary to ktime_get_mono_fast_ns() this is always correct because the
  * conversion factor is not affected by NTP/PTP correction.
  */
-u64 ktime_get_raw_fast_ns(void)
+u64 notrace ktime_get_raw_fast_ns(void)
 {
 	return __ktime_get_fast_ns(&tk_fast_raw);
 }
@@ -618,6 +618,16 @@ void ktime_get_fast_timestamps(struct ktime_timestamps *snapshot)
 	snapshot->real = __ktime_get_real_fast(&tk_fast_mono, &snapshot->mono);
 	snapshot->boot = snapshot->mono + ktime_to_ns(data_race(tk->offs_boot));
 }
+
+/**
+ * ktime_get_offs_boot_ns - boottime offset to monotonic.
+ * Return: boottime offset in nanoseconds.
+ */
+u64 ktime_get_offs_boot_ns(void)
+{
+	return ktime_to_ns(tk_core.timekeeper.offs_boot);
+}
+EXPORT_SYMBOL_GPL(ktime_get_offs_boot_ns);
 
 /**
  * halt_fast_timekeeper - Prevent fast timekeeper from accessing clocksource.

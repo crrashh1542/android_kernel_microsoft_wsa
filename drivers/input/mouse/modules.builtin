@@ -1,0 +1,3 @@
+kernel/drivers/input/mouse/cyapatp.ko
+kernel/drivers/input/mouse/elan_i2c.ko
+kernel/drivers/input/mouse/psmouse.ko

@@ -38,6 +38,7 @@
 #include "mgmt_util.h"
 #include "mgmt_config.h"
 #include "msft.h"
+#include "aosp.h"
 
 #define MGMT_VERSION	1
 #define MGMT_REVISION	21
@@ -3862,7 +3863,8 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 		idx++;
 	}
 
-	if (hdev && hdev->set_quality_report) {
+	if (hdev && (aosp_has_quality_report(hdev) ||
+		     hdev->set_quality_report)) {
 		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
 			flags = BIT(0);
 		else
@@ -3873,21 +3875,12 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 		idx++;
 	}
 
-	if (hdev) {
-		if (hdev->get_data_path_id) {
-			/* BIT(0): indicating if offload codecs are
-			 * supported by controller.
-			 */
+	if (hdev && hdev->get_data_path_id) {
+		if (hci_dev_test_flag(hdev, HCI_OFFLOAD_CODECS_ENABLED))
 			flags = BIT(0);
-
-			/* BIT(1): indicating if codec offload feature
-			 * is enabled.
-			 */
-			if (hci_dev_test_flag(hdev, HCI_OFFLOAD_CODECS_ENABLED))
-				flags |= BIT(1);
-		} else {
+		else
 			flags = 0;
-		}
+
 		memcpy(rp->features[idx].uuid, offload_codecs_uuid, 16);
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
@@ -3935,7 +3928,9 @@ static int exp_debug_feature_changed(bool enabled, struct sock *skip)
 }
 #endif
 
-static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
+static int exp_quality_report_feature_changed(bool enabled,
+					      struct hci_dev *hdev,
+					      struct sock *skip)
 {
 	struct mgmt_ev_exp_feature_changed ev;
 
@@ -3943,7 +3938,7 @@ static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
 	memcpy(ev.uuid, quality_report_uuid, 16);
 	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
 
-	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, NULL,
+	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
 }
@@ -4133,7 +4128,7 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 	val = !!cp->param[0];
 	changed = (val != hci_dev_test_flag(hdev, HCI_QUALITY_REPORT));
 
-	if (!hdev->set_quality_report) {
+	if (!aosp_has_quality_report(hdev) && !hdev->set_quality_report) {
 		err = mgmt_cmd_status(sk, hdev->id,
 				      MGMT_OP_SET_EXP_FEATURE,
 				      MGMT_STATUS_NOT_SUPPORTED);
@@ -4141,13 +4136,18 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	if (changed) {
-		err = hdev->set_quality_report(hdev, val);
+		if (hdev->set_quality_report)
+			err = hdev->set_quality_report(hdev, val);
+		else
+			err = aosp_set_quality_report(hdev, val);
+
 		if (err) {
 			err = mgmt_cmd_status(sk, hdev->id,
 					      MGMT_OP_SET_EXP_FEATURE,
 					      MGMT_STATUS_FAILED);
 			goto unlock_quality_report;
 		}
+
 		if (val)
 			hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
 		else
@@ -4159,19 +4159,20 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 	memcpy(rp.uuid, quality_report_uuid, 16);
 	rp.flags = cpu_to_le32(val ? BIT(0) : 0);
 	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
-	err = mgmt_cmd_complete(sk, hdev->id,
-				MGMT_OP_SET_EXP_FEATURE, 0,
+
+	err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_SET_EXP_FEATURE, 0,
 				&rp, sizeof(rp));
 
 	if (changed)
-		exp_quality_report_feature_changed(val, sk);
+		exp_quality_report_feature_changed(val, hdev, sk);
 
 unlock_quality_report:
 	hci_req_sync_unlock(hdev);
 	return err;
 }
 
-static int exp_offload_codec_feature_changed(bool enabled, struct sock *skip)
+static int exp_offload_codec_feature_changed(bool enabled, struct hci_dev *hdev,
+					     struct sock *skip)
 {
 	struct mgmt_ev_exp_feature_changed ev;
 
@@ -4179,7 +4180,7 @@ static int exp_offload_codec_feature_changed(bool enabled, struct sock *skip)
 	memcpy(ev.uuid, offload_codecs_uuid, 16);
 	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
 
-	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, NULL,
+	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
 }
@@ -4237,7 +4238,7 @@ static int set_offload_codec_func(struct sock *sk, struct hci_dev *hdev,
 				&rp, sizeof(rp));
 
 	if (changed)
-		exp_offload_codec_feature_changed(val, sk);
+		exp_offload_codec_feature_changed(val, hdev, sk);
 
 	return err;
 }

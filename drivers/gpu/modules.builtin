@@ -1,0 +1,10 @@
+kernel/drivers/gpu/drm/drm_kms_helper.ko
+kernel/drivers/gpu/drm/drm.ko
+kernel/drivers/gpu/drm/drm_panel_orientation_quirks.ko
+kernel/drivers/gpu/drm/gma500/gma500_gfx.ko
+kernel/drivers/gpu/drm/i915/i915.ko
+kernel/drivers/gpu/drm/nouveau/nouveau.ko
+kernel/drivers/gpu/drm/ttm/ttm.ko
+kernel/drivers/gpu/drm/udl/udl.ko
+kernel/drivers/gpu/drm/vgem/vgem.ko
+kernel/drivers/gpu/drm/virtio/virtio-gpu.ko

@@ -1,0 +1,3 @@
+kernel/drivers/video/backlight/backlight.ko
+kernel/drivers/video/backlight/generic_bl.ko
+kernel/drivers/video/fbdev/core/fb.ko

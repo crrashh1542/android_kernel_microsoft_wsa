@@ -1,0 +1,3 @@
+kernel/sound/soc/intel/atom/snd-soc-sst-atom-hifi2-platform.ko
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-core.ko
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-acpi.ko

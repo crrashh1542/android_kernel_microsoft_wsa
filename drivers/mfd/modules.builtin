@@ -1,0 +1,7 @@
+kernel/drivers/mfd/cros_ec_dev.ko
+kernel/drivers/mfd/mfd-core.ko
+kernel/drivers/mfd/lpc_sch.ko
+kernel/drivers/mfd/lpc_ich.ko
+kernel/drivers/mfd/intel-lpss.ko
+kernel/drivers/mfd/intel-lpss-pci.ko
+kernel/drivers/mfd/intel-lpss-acpi.ko

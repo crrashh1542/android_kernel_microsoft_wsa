@@ -609,8 +609,6 @@ void tpm_sysfs_add_device(struct tpm_chip *chip)
 	/* FIXME: update tpm_sysfs to explicitly lock chip->ops for TPM 2.0 */
 	int i;
 
-	WARN_ON(chip->groups_cnt != 0);
-
 	if (chip->flags & TPM_CHIP_FLAG_TPM2)
 		chip->groups[chip->groups_cnt++] = &tpm2_dev_group;
 	else

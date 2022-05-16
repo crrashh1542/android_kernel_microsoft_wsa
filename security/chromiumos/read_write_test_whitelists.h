@@ -27,7 +27,7 @@
 
 #include "alt-syscall.h"
 
-static struct syscall_whitelist_entry read_write_test_whitelist[] = {
+static const struct syscall_whitelist_entry read_write_test_whitelist[] __initconst = {
 	SYSCALL_ENTRY(exit),
 	SYSCALL_ENTRY(openat),
 	SYSCALL_ENTRY(close),
@@ -42,7 +42,7 @@ static struct syscall_whitelist_entry read_write_test_whitelist[] = {
 }; /* end read_write_test_whitelist */
 
 #ifdef CONFIG_COMPAT
-static struct syscall_whitelist_entry read_write_test_compat_whitelist[] = {
+static const struct syscall_whitelist_entry read_write_test_compat_whitelist[] __initconst = {
 	COMPAT_SYSCALL_ENTRY(exit),
 	COMPAT_SYSCALL_ENTRY(open),
 	COMPAT_SYSCALL_ENTRY(openat),

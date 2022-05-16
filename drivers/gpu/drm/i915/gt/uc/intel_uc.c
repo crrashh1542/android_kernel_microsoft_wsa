@@ -35,7 +35,7 @@ static void uc_expand_default_options(struct intel_uc *uc)
 	}
 
 	/* Intermediate platforms are HuC authentication only */
-	if (IS_DG1(i915) || IS_ALDERLAKE_S(i915)) {
+	if (IS_ALDERLAKE_S(i915)) {
 		i915->params.enable_guc = ENABLE_GUC_LOAD_HUC;
 		return;
 	}
@@ -494,6 +494,10 @@ static int __uc_init_hw(struct intel_uc *uc)
 
 	if (intel_uc_uses_guc_submission(uc))
 		intel_guc_submission_enable(guc);
+	else
+		intel_uncore_rmw(uc_to_gt(uc)->uncore,
+				 GUC_GPM_WGBOXPERF_INTR_ENABLE,
+				 0, GUC_GPM_ARAT);
 
 	if (intel_uc_uses_guc_slpc(uc)) {
 		ret = intel_guc_slpc_enable(&guc->slpc);

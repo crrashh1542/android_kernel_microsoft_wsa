@@ -1391,6 +1391,8 @@ int ksys_getpriority(int which, int who);
 int ksys_perf_event_open(
 		struct perf_event_attr __user *attr_uptr,
 		pid_t pid, int cpu, int group_fd, unsigned long flags);
+int ksys_kcmp(pid_t pid1, pid_t pid2, int type,
+		unsigned long idx1, unsigned long idx2);
 int ksys_clock_adjtime(const clockid_t which_clock, struct __kernel_timex __user * utx);
 int ksys_adjtimex(struct __kernel_timex __user *txc_p);
 int ksys_getcpu(unsigned __user *cpu, unsigned __user *node,

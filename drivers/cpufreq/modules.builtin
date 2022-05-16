@@ -1,0 +1,6 @@
+kernel/drivers/cpufreq/cpufreq_performance.ko
+kernel/drivers/cpufreq/cpufreq_powersave.ko
+kernel/drivers/cpufreq/cpufreq_userspace.ko
+kernel/drivers/cpufreq/cpufreq_ondemand.ko
+kernel/drivers/cpufreq/cpufreq_conservative.ko
+kernel/drivers/cpufreq/acpi-cpufreq.ko

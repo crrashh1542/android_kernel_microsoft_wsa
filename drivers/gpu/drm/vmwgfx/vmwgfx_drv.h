@@ -34,7 +34,6 @@
 #include <drm/drm_auth.h>
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
-#include <drm/drm_hashtab.h>
 #include <drm/drm_rect.h>
 
 #include <drm/ttm/ttm_bo_driver.h>
@@ -43,6 +42,7 @@
 #include "ttm_object.h"
 
 #include "vmwgfx_fence.h"
+#include "vmwgfx_hashtab.h"
 #include "vmwgfx_reg.h"
 #include "vmwgfx_validation.h"
 
@@ -59,11 +59,8 @@
 #define VMWGFX_DRIVER_MINOR 19
 #define VMWGFX_DRIVER_PATCHLEVEL 0
 #define VMWGFX_FIFO_STATIC_SIZE (1024*1024)
-#define VMWGFX_MAX_RELOCATIONS 2048
-#define VMWGFX_MAX_VALIDATIONS 2048
 #define VMWGFX_MAX_DISPLAYS 16
 #define VMWGFX_CMD_BOUNCE_INIT_SIZE 32768
-#define VMWGFX_ENABLE_SCREEN_TARGET_OTABLE 1
 
 #define VMWGFX_PCI_ID_SVGA2              0x0405
 #define VMWGFX_PCI_ID_SVGA3              0x0406
@@ -82,8 +79,9 @@
 			VMWGFX_NUM_GB_SURFACE +\
 			VMWGFX_NUM_GB_SCREEN_TARGET)
 
-#define VMW_PL_GMR (TTM_PL_PRIV + 0)
-#define VMW_PL_MOB (TTM_PL_PRIV + 1)
+#define VMW_PL_GMR      (TTM_PL_PRIV + 0)
+#define VMW_PL_MOB      (TTM_PL_PRIV + 1)
+#define VMW_PL_SYSTEM   (TTM_PL_PRIV + 2)
 
 #define VMW_RES_CONTEXT ttm_driver_type0
 #define VMW_RES_SURFACE ttm_driver_type1
@@ -133,7 +131,7 @@ struct vmw_buffer_object {
  */
 struct vmw_validate_buffer {
 	struct ttm_validate_buffer base;
-	struct drm_hash_item hash;
+	struct vmwgfx_hash_item hash;
 	bool validate_as_mob;
 };
 
@@ -406,7 +404,7 @@ struct vmw_ctx_validation_info;
  * @ctx: The validation context
  */
 struct vmw_sw_context{
-	struct drm_open_hash res_ht;
+	struct vmwgfx_open_hash res_ht;
 	bool res_ht_initialized;
 	bool kernel;
 	struct vmw_fpriv *fp;
@@ -626,9 +624,6 @@ struct vmw_private {
 	struct vmw_fifo_state *fifo;
 	struct vmw_cmdbuf_man *cman;
 	DECLARE_BITMAP(irqthread_pending, VMW_IRQTHREAD_MAX);
-
-	/* Validation memory reservation */
-	struct vmw_validation_mem vvm;
 
 	uint32 *devcaps;
 
@@ -1027,9 +1022,6 @@ vmw_is_cursor_bypass3_enabled(const struct vmw_private *dev_priv)
 
 extern int vmw_mmap(struct file *filp, struct vm_area_struct *vma);
 
-extern void vmw_validation_mem_init_ttm(struct vmw_private *dev_priv,
-					size_t gran);
-
 /**
  * TTM buffer object driver - vmwgfx_ttm_buffer.c
  */
@@ -1039,7 +1031,6 @@ extern struct ttm_placement vmw_vram_placement;
 extern struct ttm_placement vmw_vram_sys_placement;
 extern struct ttm_placement vmw_vram_gmr_placement;
 extern struct ttm_placement vmw_sys_placement;
-extern struct ttm_placement vmw_evictable_placement;
 extern struct ttm_placement vmw_srf_placement;
 extern struct ttm_placement vmw_mob_placement;
 extern struct ttm_placement vmw_nonfixed_placement;
@@ -1115,15 +1106,14 @@ extern int vmw_execbuf_fence_commands(struct drm_file *file_priv,
 				      struct vmw_private *dev_priv,
 				      struct vmw_fence_obj **p_fence,
 				      uint32_t *p_handle);
-extern void vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
+extern int vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 					struct vmw_fpriv *vmw_fp,
 					int ret,
 					struct drm_vmw_fence_rep __user
 					*user_fence_rep,
 					struct vmw_fence_obj *fence,
 					uint32_t fence_handle,
-					int32_t out_fence_fd,
-					struct sync_file *sync_file);
+					int32_t out_fence_fd);
 bool vmw_cmd_describe(const void *buf, u32 *size, char const **cmd);
 
 /**
@@ -1252,6 +1242,12 @@ int vmw_gmrid_man_init(struct vmw_private *dev_priv, int type);
 void vmw_gmrid_man_fini(struct vmw_private *dev_priv, int type);
 
 /**
+ * System memory manager
+ */
+int vmw_sys_man_init(struct vmw_private *dev_priv);
+void vmw_sys_man_fini(struct vmw_private *dev_priv);
+
+/**
  * Prime - vmwgfx_prime.c
  */
 
@@ -1322,18 +1318,6 @@ extern int vmw_gb_surface_define_ioctl(struct drm_device *dev, void *data,
 				       struct drm_file *file_priv);
 extern int vmw_gb_surface_reference_ioctl(struct drm_device *dev, void *data,
 					  struct drm_file *file_priv);
-int vmw_surface_gb_priv_define(struct drm_device *dev,
-			       uint32_t user_accounting_size,
-			       SVGA3dSurfaceAllFlags svga3d_flags,
-			       SVGA3dSurfaceFormat format,
-			       bool for_scanout,
-			       uint32_t num_mip_levels,
-			       uint32_t multisample_count,
-			       uint32_t array_size,
-			       struct drm_vmw_size size,
-			       SVGA3dMSPattern multisample_pattern,
-			       SVGA3dMSQualityLevel quality_level,
-			       struct vmw_surface **srf_out);
 extern int vmw_gb_surface_define_ext_ioctl(struct drm_device *dev,
 					   void *data,
 					   struct drm_file *file_priv);
@@ -1342,7 +1326,6 @@ extern int vmw_gb_surface_reference_ext_ioctl(struct drm_device *dev,
 					      struct drm_file *file_priv);
 
 int vmw_gb_surface_define(struct vmw_private *dev_priv,
-			  uint32_t user_accounting_size,
 			  const struct vmw_surface_metadata *req,
 			  struct vmw_surface **srf_out);
 
@@ -1403,7 +1386,6 @@ void vmw_dx_streamoutput_cotable_list_scrub(struct vmw_private *dev_priv,
 extern struct vmw_cmdbuf_res_manager *
 vmw_cmdbuf_res_man_create(struct vmw_private *dev_priv);
 extern void vmw_cmdbuf_res_man_destroy(struct vmw_cmdbuf_res_manager *man);
-extern size_t vmw_cmdbuf_res_man_size(void);
 extern struct vmw_resource *
 vmw_cmdbuf_res_lookup(struct vmw_cmdbuf_res_manager *man,
 		      enum vmw_cmdbuf_res_type res_type,
@@ -1551,11 +1533,6 @@ void vmw_bo_dirty_unmap(struct vmw_buffer_object *vbo,
 vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf);
 vm_fault_t vmw_bo_vm_mkwrite(struct vm_fault *vmf);
 
-/* Transparent hugepage support - vmwgfx_thp.c */
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-extern int vmw_thp_init(struct vmw_private *dev_priv);
-void vmw_thp_fini(struct vmw_private *dev_priv);
-#endif
 
 /**
  * VMW_DEBUG_KMS - Debug output for kernel mode-setting
@@ -1598,11 +1575,6 @@ vmw_bo_reference(struct vmw_buffer_object *buf)
 {
 	ttm_bo_get(&buf->base);
 	return buf;
-}
-
-static inline struct ttm_mem_global *vmw_mem_glob(struct vmw_private *dev_priv)
-{
-	return &ttm_mem_glob;
 }
 
 static inline void vmw_fifo_resource_inc(struct vmw_private *dev_priv)

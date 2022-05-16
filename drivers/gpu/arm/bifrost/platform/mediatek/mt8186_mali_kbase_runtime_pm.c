@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: GPL-2.0
+// Copyright (c) 2021 Mediatek Inc.
+
+#include <linux/of_device.h>
+
+#include "mali_kbase_config_platform.h"
+#include "mali_kbase_runtime_pm.h"
+
+/* list of clocks required by GPU */
+static const char * const mt8186_gpu_clks[] = {
+	"clk_mux",
+	"clk_main_parent",
+	"clk_sub_parent",
+	"subsys_mfg_cg",
+	"clk_pll_src",
+};
+
+const struct mtk_hw_config mt8186_hw_config = {
+	.num_pm_domains = 2,
+	.num_clks = ARRAY_SIZE(mt8186_gpu_clks),
+	.clk_names = mt8186_gpu_clks,
+	.mfg_compatible_name = "mediatek,mt8186-mfgsys",
+	.reg_mfg_timestamp = 0x130,
+	.top_tsvalueb_en = 0x3,
+	.vgpu_min_microvolt = 612500,
+	.vgpu_max_microvolt = 950000,
+	.vsram_gpu_min_microvolt = 850000,
+	.vsram_gpu_max_microvolt = 1050000,
+	.bias_min_microvolt = 100000,
+	.bias_max_microvolt = 250000,
+	.supply_tolerance_microvolt = 125,
+	.gpu_freq_min_khz = 299000,
+	.gpu_freq_max_khz = 1000000,
+	.auto_suspend_delay_ms = 50,
+};
+
+struct mtk_platform_context mt8186_platform_context = {
+	.config = &mt8186_hw_config,
+};
+
+struct kbase_pm_callback_conf mt8186_pm_callbacks = {
+	.power_on_callback = kbase_pm_callback_power_on,
+	.power_off_callback = kbase_pm_callback_power_off,
+	.power_suspend_callback = kbase_pm_callback_suspend,
+	.power_resume_callback = kbase_pm_callback_resume,
+#ifdef KBASE_PM_RUNTIME
+	.power_runtime_init_callback = kbase_pm_runtime_callback_init,
+	.power_runtime_term_callback = kbase_pm_runtime_callback_term,
+	.power_runtime_on_callback = kbase_pm_runtime_callback_on,
+	.power_runtime_off_callback = kbase_pm_runtime_callback_off,
+#else				/* KBASE_PM_RUNTIME */
+	.power_runtime_init_callback = NULL,
+	.power_runtime_term_callback = NULL,
+	.power_runtime_on_callback = NULL,
+	.power_runtime_off_callback = NULL,
+#endif				/* KBASE_PM_RUNTIME */
+};
+
+static int platform_init(struct kbase_device *kbdev)
+{
+	int err, i;
+	struct mtk_platform_context *ctx = &mt8186_platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+
+	kbdev->platform_context = ctx;
+
+	err = mtk_mfgsys_init(kbdev);
+	if (err)
+		return err;
+
+	for (i = 0; i < kbdev->num_pm_domains; i++) {
+		pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i],
+						 cfg->auto_suspend_delay_ms);
+		pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
+	}
+
+	err = mtk_set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
+	if (err)
+		return err;
+
+#ifdef CONFIG_MALI_BIFROST_DEVFREQ
+	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
+	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
+#endif
+
+	return 0;
+}
+
+struct kbase_platform_funcs_conf mt8186_platform_funcs = {
+	.platform_init_func = platform_init,
+	.platform_term_func = platform_term
+};

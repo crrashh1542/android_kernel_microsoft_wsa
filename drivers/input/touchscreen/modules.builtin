@@ -1,0 +1,6 @@
+kernel/drivers/input/touchscreen/of_touchscreen.ko
+kernel/drivers/input/touchscreen/atmel_mxt_ts.ko
+kernel/drivers/input/touchscreen/elants_i2c.ko
+kernel/drivers/input/touchscreen/melfas_mip4.ko
+kernel/drivers/input/touchscreen/raydium_i2c_ts.ko
+kernel/drivers/input/touchscreen/wdt87xx_i2c.ko

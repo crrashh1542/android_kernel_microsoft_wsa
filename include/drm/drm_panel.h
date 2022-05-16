@@ -29,6 +29,7 @@
 #include <linux/list.h>
 
 struct backlight_device;
+struct dentry;
 struct device_node;
 struct drm_connector;
 struct drm_device;
@@ -68,13 +69,6 @@ enum drm_panel_orientation;
  * does not need to implement the functionality to enable/disable backlight.
  */
 struct drm_panel_funcs {
-	/**
-	 * @prepare_power:
-	 *
-	 * Turn on panel power.
-	 */
-	int (*prepare_power)(struct drm_panel *panel);
-
 	/**
 	 * @prepare:
 	 *
@@ -123,13 +117,6 @@ struct drm_panel_funcs {
 			 struct drm_connector *connector);
 
 	/**
-	 * @unprepare_power:
-	 *
-	 * Turn off panel_power.
-	 */
-	int (*unprepare_power)(struct drm_panel *panel);
-
-	/**
 	 * @get_timings:
 	 *
 	 * Copy display timings into the provided array and return
@@ -139,6 +126,13 @@ struct drm_panel_funcs {
 	 */
 	int (*get_timings)(struct drm_panel *panel, unsigned int num_timings,
 			   struct display_timing *timings);
+
+	/**
+	 * @debugfs_init:
+	 *
+	 * Allows panels to create panels-specific debugfs files.
+	 */
+	void (*debugfs_init)(struct drm_panel *panel, struct dentry *root);
 };
 
 /**
@@ -193,9 +187,6 @@ void drm_panel_init(struct drm_panel *panel, struct device *dev,
 
 void drm_panel_add(struct drm_panel *panel);
 void drm_panel_remove(struct drm_panel *panel);
-
-int drm_panel_prepare_power(struct drm_panel *panel);
-int drm_panel_unprepare_power(struct drm_panel *panel);
 
 int drm_panel_prepare(struct drm_panel *panel);
 int drm_panel_unprepare(struct drm_panel *panel);

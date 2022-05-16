@@ -1,0 +1,2 @@
+kernel/drivers/net/phy/libphy.ko
+kernel/drivers/net/phy/fixed_phy.ko

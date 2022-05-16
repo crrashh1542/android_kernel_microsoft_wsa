@@ -1188,7 +1188,7 @@ static int vmw_create_bo_proxy(struct drm_device *dev,
 	metadata.base_size.depth = 1;
 	metadata.scanout = true;
 
-	ret = vmw_gb_surface_define(vmw_priv(dev), 0, &metadata, srf_out);
+	ret = vmw_gb_surface_define(vmw_priv(dev), &metadata, srf_out);
 	if (ret) {
 		DRM_ERROR("Failed to allocate proxy content buffer\n");
 		return ret;
@@ -2516,7 +2516,7 @@ void vmw_kms_helper_validation_finish(struct vmw_private *dev_priv,
 	if (file_priv)
 		vmw_execbuf_copy_fence_user(dev_priv, vmw_fpriv(file_priv),
 					    ret, user_fence_rep, fence,
-					    handle, -1, NULL);
+					    handle, -1);
 	if (out_fence)
 		*out_fence = fence;
 	else

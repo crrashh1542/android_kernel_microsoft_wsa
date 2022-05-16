@@ -68,7 +68,13 @@ unsigned long sched_core_update_cookie(struct task_struct *p, unsigned long cook
 	 * a cookie until after we've removed it, we must have core scheduling
 	 * enabled here.
 	 */
-	SCHED_WARN_ON((p->core_cookie || cookie) && !sched_core_enabled(rq));
+	/*
+     * Disable the warning that came in from upstream code. On AMD devices, core
+     * scheduling is diabled via an out of tree patch (see arch/x86/bugs.c). Thus
+     * this warning appears even though the condition is valid.
+     *
+     * SCHED_WARN_ON((p->core_cookie || cookie) && !sched_core_enabled(rq));
+     */
 
 	enqueued = sched_core_enqueued(p);
 	if (enqueued)

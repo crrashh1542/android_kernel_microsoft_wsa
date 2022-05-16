@@ -1,0 +1,12 @@
+kernel/sound/soundcore.ko
+kernel/sound/core/snd.ko
+kernel/sound/core/snd-timer.ko
+kernel/sound/core/snd-pcm.ko
+kernel/sound/core/snd-compress.ko
+kernel/sound/soc/snd-soc-acpi.ko
+kernel/sound/soc/snd-soc-core.ko
+kernel/sound/soc/codecs/snd-soc-ts3a227e.ko
+kernel/sound/soc/intel/atom/snd-soc-sst-atom-hifi2-platform.ko
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-core.ko
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-acpi.ko
+kernel/sound/soc/intel/common/snd-soc-acpi-intel-match.ko

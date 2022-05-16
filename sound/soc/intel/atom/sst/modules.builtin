@@ -1,0 +1,2 @@
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-core.ko
+kernel/sound/soc/intel/atom/sst/snd-intel-sst-acpi.ko

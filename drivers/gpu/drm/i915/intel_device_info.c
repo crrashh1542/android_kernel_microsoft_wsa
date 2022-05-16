@@ -97,17 +97,22 @@ static const char *iommu_name(void)
 void intel_device_info_print_static(const struct intel_device_info *info,
 				    struct drm_printer *p)
 {
-	if (info->graphics_rel)
-		drm_printf(p, "graphics version: %u.%02u\n", info->graphics_ver, info->graphics_rel);
+	if (info->graphics.rel)
+		drm_printf(p, "graphics version: %u.%02u\n", info->graphics.ver,
+			   info->graphics.rel);
 	else
-		drm_printf(p, "graphics version: %u\n", info->graphics_ver);
+		drm_printf(p, "graphics version: %u\n", info->graphics.ver);
 
-	if (info->media_rel)
-		drm_printf(p, "media version: %u.%02u\n", info->media_ver, info->media_rel);
+	if (info->media.rel)
+		drm_printf(p, "media version: %u.%02u\n", info->media.ver, info->media.rel);
 	else
-		drm_printf(p, "media version: %u\n", info->media_ver);
+		drm_printf(p, "media version: %u\n", info->media.ver);
 
-	drm_printf(p, "display version: %u\n", info->display.ver);
+	if (info->display.rel)
+		drm_printf(p, "display version: %u.%02u\n", info->display.ver, info->display.rel);
+	else
+		drm_printf(p, "display version: %u\n", info->display.ver);
+
 	drm_printf(p, "gt: %d\n", info->gt);
 	drm_printf(p, "iommu: %s\n", iommu_name());
 	drm_printf(p, "memory-regions: %x\n", info->memory_regions);
@@ -177,6 +182,14 @@ static const u16 subplatform_portf_ids[] = {
 	INTEL_ICL_PORT_F_IDS(0),
 };
 
+static const u16 subplatform_n_ids[] = {
+	INTEL_ADLN_IDS(0),
+};
+
+static const u16 subplatform_rpls_ids[] = {
+	INTEL_RPLS_IDS(0),
+};
+
 static bool find_devid(u16 id, const u16 *p, unsigned int num)
 {
 	for (; num; num--, p++) {
@@ -213,6 +226,12 @@ void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 	} else if (find_devid(devid, subplatform_portf_ids,
 			      ARRAY_SIZE(subplatform_portf_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_PORTF);
+	} else if (find_devid(devid, subplatform_n_ids,
+				ARRAY_SIZE(subplatform_n_ids))) {
+		mask = BIT(INTEL_SUBPLATFORM_N);
+	} else if (find_devid(devid, subplatform_rpls_ids,
+			      ARRAY_SIZE(subplatform_rpls_ids))) {
+		mask = BIT(INTEL_SUBPLATFORM_RPL_S);
 	}
 
 	if (IS_TIGERLAKE(i915)) {

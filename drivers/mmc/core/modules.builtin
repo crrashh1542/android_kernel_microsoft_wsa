@@ -1,0 +1,2 @@
+kernel/drivers/mmc/core/mmc_core.ko
+kernel/drivers/mmc/core/mmc_block.ko

@@ -1,0 +1,3 @@
+kernel/drivers/char/tpm/tpm.ko
+kernel/drivers/char/tpm/tpm_tis_core.ko
+kernel/drivers/char/tpm/tpm_tis.ko

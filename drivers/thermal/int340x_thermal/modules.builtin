@@ -1,0 +1,6 @@
+kernel/drivers/thermal/int340x_thermal/int3400_thermal.ko
+kernel/drivers/thermal/int340x_thermal/int340x_thermal_zone.ko
+kernel/drivers/thermal/int340x_thermal/int3402_thermal.ko
+kernel/drivers/thermal/int340x_thermal/int3403_thermal.ko
+kernel/drivers/thermal/int340x_thermal/processor_thermal_device.ko
+kernel/drivers/thermal/int340x_thermal/acpi_thermal_rel.ko

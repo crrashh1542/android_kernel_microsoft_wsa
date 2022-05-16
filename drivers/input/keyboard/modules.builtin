@@ -1,0 +1,3 @@
+kernel/drivers/input/keyboard/atkbd.ko
+kernel/drivers/input/keyboard/cros_ec_keyb.ko
+kernel/drivers/input/keyboard/gpio_keys.ko
