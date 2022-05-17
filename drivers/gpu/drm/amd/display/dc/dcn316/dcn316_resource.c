@@ -137,6 +137,7 @@ struct _vcs_dpi_ip_params_st dcn3_16_ip = {
 	.hostvm_max_page_table_levels = 2,
 	.rob_buffer_size_kbytes = 64,
 	.det_buffer_size_kbytes = DCN3_16_DEFAULT_DET_SIZE,
+	.min_comp_buffer_size_kbytes = 64,
 	.config_return_buffer_size_in_kbytes = 1024,
 	.compressed_buffer_segment_size_in_kbytes = 64,
 	.meta_fifo_size_in_kentries = 32,
