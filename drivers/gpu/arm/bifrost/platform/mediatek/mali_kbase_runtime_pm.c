@@ -206,15 +206,7 @@ int kbase_pm_domain_init(struct kbase_device *kbdev)
 		if (IS_ERR_OR_NULL(kbdev->pm_domain_devs[i])) {
 			err = PTR_ERR(kbdev->pm_domain_devs[i]) ? : -ENODATA;
 			kbdev->pm_domain_devs[i] = NULL;
-			if (err == -EPROBE_DEFER) {
-				dev_dbg(kbdev->dev,
-					"Probe deferral for pm-domain %d\n",
-					i);
-			} else {
-				dev_err(kbdev->dev,
-					"failed to get pm-domain %d: %d\n",
-					i, err);
-			}
+			dev_err_probe(kbdev->dev, err, "Cannot attach PM domain %d\n", i);
 			goto err;
 		}
 	}
