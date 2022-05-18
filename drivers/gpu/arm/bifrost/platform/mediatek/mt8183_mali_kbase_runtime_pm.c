@@ -240,18 +240,6 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 		"Power off core 0 failed (err: %d)\n", error);
 }
 
-static int kbase_device_runtime_init(struct kbase_device *kbdev)
-{
-	dev_dbg(kbdev->dev, "%s\n", __func__);
-
-	return 0;
-}
-
-static void kbase_device_runtime_disable(struct kbase_device *kbdev)
-{
-	dev_dbg(kbdev->dev, "%s\n", __func__);
-}
-
 static int pm_callback_runtime_on(struct kbase_device *kbdev)
 {
 	struct mfg_base *mfg = kbdev->platform_context;
@@ -346,8 +334,8 @@ struct kbase_pm_callback_conf mt8183_pm_callbacks = {
 	.power_suspend_callback = pm_callback_suspend,
 	.power_resume_callback = pm_callback_resume,
 #ifdef KBASE_PM_RUNTIME
-	.power_runtime_init_callback = kbase_device_runtime_init,
-	.power_runtime_term_callback = kbase_device_runtime_disable,
+	.power_runtime_init_callback = kbase_pm_runtime_callback_init,
+	.power_runtime_term_callback = kbase_pm_runtime_callback_term,
 	.power_runtime_on_callback = pm_callback_runtime_on,
 	.power_runtime_off_callback = pm_callback_runtime_off,
 #else				/* KBASE_PM_RUNTIME */
