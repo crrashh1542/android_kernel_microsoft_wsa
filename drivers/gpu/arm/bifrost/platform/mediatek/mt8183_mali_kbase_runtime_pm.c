@@ -22,16 +22,6 @@
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 
-/* Definition for PMIC regulators */
-#define VSRAM_GPU_MAX_VOLT (925000)	/* uV */
-#define VSRAM_GPU_MIN_VOLT (850000) /* uV */
-#define VGPU_MAX_VOLT (825000)	/* uV */
-#define VGPU_MIN_VOLT (625000)	/* uV */
-
-#define MIN_VOLT_BIAS (100000) /* uV */
-#define MAX_VOLT_BIAS (250000) /* uV */
-#define VOLT_TOL (125) /* uV */
-
 #define MFG_SYS_TIMER 0x130
 
 /**
@@ -58,6 +48,13 @@
 #define AUTO_SUSPEND_DELAY (100)
 
 const struct mtk_hw_config mt8183_hw_config = {
+	.vgpu_min_microvolt = 625000,
+	.vgpu_max_microvolt = 825000,
+	.vsram_gpu_min_microvolt = 850000,
+	.vsram_gpu_max_microvolt = 925000,
+	.bias_min_microvolt = 100000,
+	.bias_max_microvolt = 250000,
+	.supply_tolerance_microvolt = 125,
 };
 
 struct mtk_platform_context mt8183_platform_context = {
@@ -358,6 +355,8 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 {
 	int err = 0, i;
 	unsigned long volt;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 
 	if (!probe_gpu_core1_dev || !probe_gpu_core2_dev)
 		return -EPROBE_DEFER;
@@ -398,9 +397,10 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 	}
 
 	for (i = 0; i < kbdev->nr_regulators; i++) {
-		volt = (i == 0) ? VGPU_MAX_VOLT : VSRAM_GPU_MAX_VOLT;
+		volt = (i == 0) ? cfg->vgpu_max_microvolt
+				: cfg->vsram_gpu_max_microvolt;
 		err = regulator_set_voltage(kbdev->regulators[i],
-			volt, volt + VOLT_TOL);
+			volt, volt + cfg->supply_tolerance_microvolt);
 		if (err < 0) {
 			dev_err(kbdev->dev,
 				"Regulator %d set voltage failed: %d\n",
@@ -428,11 +428,15 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 static void voltage_range_check(struct kbase_device *kbdev,
 				unsigned long *voltages)
 {
-	if (voltages[1] - voltages[0] < MIN_VOLT_BIAS ||
-	    voltages[1] - voltages[0] > MAX_VOLT_BIAS)
-		voltages[1] = voltages[0] + MIN_VOLT_BIAS;
-	voltages[1] = clamp_t(unsigned long, voltages[1], VSRAM_GPU_MIN_VOLT,
-			      VSRAM_GPU_MAX_VOLT);
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+
+	if (voltages[1] - voltages[0] < cfg->bias_min_microvolt ||
+	    voltages[1] - voltages[0] > cfg->bias_max_microvolt)
+		voltages[1] = voltages[0] + cfg->bias_min_microvolt;
+	voltages[1] = clamp_t(unsigned long, voltages[1],
+			      cfg->vsram_gpu_min_microvolt,
+			      cfg->vsram_gpu_max_microvolt);
 }
 
 #ifdef CONFIG_REGULATOR
@@ -440,6 +444,13 @@ static bool get_step_volt(unsigned long *step_volt, unsigned long *target_volt,
 			  int nr_regulators, bool inc)
 {
 	int i;
+	/*
+	 * TODO: Get these bias voltages as parameters in a separate patch.
+	 * For now we just directly reference the values from the global HW
+	 * configs to avoid unnecessary changes.
+	 */
+	unsigned long bias_min_microvolt = mt8183_hw_config.bias_min_microvolt;
+	unsigned long bias_max_microvolt = mt8183_hw_config.bias_max_microvolt;
 
 	for (i = 0; i < nr_regulators; i++)
 		if (step_volt[i] != target_volt[i])
@@ -456,14 +467,14 @@ static bool get_step_volt(unsigned long *step_volt, unsigned long *target_volt,
 	 */
 	if (inc) {
 		step_volt[0] = min(target_volt[0],
-				   step_volt[1] - MIN_VOLT_BIAS);
+				   step_volt[1] - bias_min_microvolt);
 		step_volt[1] = min(target_volt[1],
-				   step_volt[0] + MAX_VOLT_BIAS);
+				   step_volt[0] + bias_max_microvolt);
 	} else {
 		step_volt[0] = max(target_volt[0],
-				   step_volt[1] - MAX_VOLT_BIAS);
+				   step_volt[1] - bias_max_microvolt);
 		step_volt[1] = max(target_volt[1],
-				   step_volt[0] + MIN_VOLT_BIAS);
+				   step_volt[0] + bias_min_microvolt);
 	}
 	return true;
 }
@@ -471,14 +482,16 @@ static bool get_step_volt(unsigned long *step_volt, unsigned long *target_volt,
 static int set_voltages(struct kbase_device *kbdev, unsigned long *voltages,
 			bool inc)
 {
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 	unsigned long step_volt[BASE_MAX_NR_CLOCKS_REGULATORS];
 	const unsigned long reg_min_volt[BASE_MAX_NR_CLOCKS_REGULATORS] = {
-		VGPU_MIN_VOLT,
-		VSRAM_GPU_MIN_VOLT,
+		cfg->vgpu_min_microvolt,
+		cfg->vsram_gpu_min_microvolt,
 	};
 	const unsigned long reg_max_volt[BASE_MAX_NR_CLOCKS_REGULATORS] = {
-		VGPU_MAX_VOLT,
-		VSRAM_GPU_MAX_VOLT,
+		cfg->vgpu_max_microvolt,
+		cfg->vsram_gpu_max_microvolt,
 	};
 	int i, err;
 
@@ -512,7 +525,7 @@ static int set_voltages(struct kbase_device *kbdev, unsigned long *voltages,
 
 			err = regulator_set_voltage(kbdev->regulators[i],
 						    step_volt[i],
-						    step_volt[i] + VOLT_TOL);
+						    step_volt[i] + cfg->supply_tolerance_microvolt);
 
 			if (err) {
 				dev_err(kbdev->dev,
