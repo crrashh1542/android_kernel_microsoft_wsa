@@ -20,6 +20,7 @@
 #include <mali_kbase_defs.h>
 
 #include "mali_kbase_config_platform.h"
+#include "mali_kbase_runtime_pm.h"
 
 /* Definition for PMIC regulators */
 #define VSRAM_GPU_MAX_VOLT (925000)	/* uV */
@@ -620,7 +621,7 @@ platform_init_err:
 	return err;
 }
 
-static void platform_term(struct kbase_device *kbdev)
+static void mt8183_platform_term(struct kbase_device *kbdev)
 {
 	struct mfg_base *mfg = kbdev->platform_context;
 
@@ -632,7 +633,7 @@ static void platform_term(struct kbase_device *kbdev)
 
 struct kbase_platform_funcs_conf mt8183_platform_funcs = {
 	.platform_init_func = platform_init,
-	.platform_term_func = platform_term
+	.platform_term_func = mt8183_platform_term
 };
 
 static int __init mtk_mfg_corex(void)
