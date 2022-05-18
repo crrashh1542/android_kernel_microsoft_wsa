@@ -57,6 +57,13 @@
  */
 #define AUTO_SUSPEND_DELAY (100)
 
+const struct mtk_hw_config mt8183_hw_config = {
+};
+
+struct mtk_platform_context mt8183_platform_context = {
+	.config = &mt8183_hw_config,
+};
+
 static struct platform_device *probe_gpu_core1_dev;
 static struct platform_device *probe_gpu_core2_dev;
 
@@ -559,6 +566,9 @@ static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err;
+	struct mtk_platform_context *ctx = &mt8183_platform_context;
+
+	kbdev->platform_context = ctx;
 
 	mfg = kzalloc(sizeof(*mfg), GFP_KERNEL);
 	if (!mfg)
