@@ -1513,6 +1513,11 @@
 				<GIC_SPI 278 IRQ_TYPE_LEVEL_LOW>;
 			interrupt-names = "job", "mmu", "gpu";
 
+			power-domains = <&spm MT8183_POWER_DOMAIN_MFG_CORE0>,
+					<&spm MT8183_POWER_DOMAIN_MFG_CORE1>,
+					<&spm MT8183_POWER_DOMAIN_MFG_2D>;
+			power-domain-names = "core0", "core1", "core2";
+
 			/*
 			 * Note: the properties below are not part of the
 			 * upstream binding.
@@ -1528,21 +1533,9 @@
 				"clk_sub_parent",
 				"subsys_mfg_cg";
 
-			power-domains = <&spm MT8183_POWER_DOMAIN_MFG_CORE0>;
-
 			#cooling-cells = <2>;
 			cooling-min-level = <0>;
 			cooling-max-level = <15>;
-		};
-
-		gpu_core1: mali_gpu_core1 {
-			compatible = "mediatek,gpu_core1";
-			power-domains = <&spm MT8183_POWER_DOMAIN_MFG_CORE1>;
-		};
-
-		gpu_core2: mali_gpu_core2 {
-			compatible = "mediatek,gpu_core2";
-			power-domains = <&spm MT8183_POWER_DOMAIN_MFG_2D>;
 		};
 
 		gpu_opp_table: opp_table0 {
