@@ -103,6 +103,12 @@ static struct platform_driver mtk_gpu_corex_driver = {
 	}
 };
 
+/*
+ * TODO: add a temp pointer *mfg so that we can use kbdev->platform_context
+ * to hold the new platform context structure.
+ * ideally MFG will be migrated into the platform context in tne end, and this
+ * should be removed by then.
+ */
 struct mfg_base {
 	struct clk *clk_mux;
 	struct clk *clk_main_parent;
@@ -113,7 +119,7 @@ struct mfg_base {
 	void __iomem *g_mfg_base;
 	bool is_powered;
 	bool reg_is_powered;
-};
+} *mfg;
 
 static int map_mfg_base(struct mfg_base *mfg, const char *node_name)
 {
@@ -138,15 +144,12 @@ static void unmap_mfg_base(struct mfg_base *mfg)
 
 static void enable_sys_timer(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
-
 	writel(0x3, mfg->g_mfg_base + MFG_SYS_TIMER);
 }
 
 static int pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int error;
-	struct mfg_base *mfg = kbdev->platform_context;
 
 	if (mfg->is_powered) {
 		dev_dbg(kbdev->dev, "mali_device is already powered\n");
@@ -205,7 +208,6 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 
 static void pm_callback_power_off(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
 	int error;
 
 	if (!mfg->is_powered) {
@@ -242,7 +244,6 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 
 static int pm_callback_runtime_on(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
 	int error, i;
 
 	if (mfg->reg_is_powered) {
@@ -290,7 +291,6 @@ static int pm_callback_runtime_on(struct kbase_device *kbdev)
 
 static void pm_callback_runtime_off(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
 	int error, i;
 
 	if (!mfg->reg_is_powered) {
@@ -524,7 +524,6 @@ static int set_voltages(struct kbase_device *kbdev, unsigned long *voltages,
 static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 {
 	int err, i;
-	struct mfg_base *mfg = kbdev->platform_context;
 
 	if (kbdev->current_freqs[0] != freq) {
 		err = clk_set_parent(mfg->clk_mux, mfg->clk_sub_parent);
@@ -560,7 +559,6 @@ static int set_frequency(struct kbase_device *kbdev, unsigned long freq)
 static int platform_init(struct kbase_device *kbdev)
 {
 	int err;
-	struct mfg_base *mfg;
 
 	mfg = kzalloc(sizeof(*mfg), GFP_KERNEL);
 	if (!mfg)
@@ -570,7 +568,6 @@ static int platform_init(struct kbase_device *kbdev)
 	if (err)
 		goto platform_init_err;
 
-	kbdev->platform_context = mfg;
 	pm_runtime_set_autosuspend_delay(kbdev->dev, 50);
 	pm_runtime_use_autosuspend(kbdev->dev);
 	pm_runtime_enable(kbdev->dev);
@@ -611,11 +608,8 @@ platform_init_err:
 
 static void mt8183_platform_term(struct kbase_device *kbdev)
 {
-	struct mfg_base *mfg = kbdev->platform_context;
-
 	unmap_mfg_base(mfg);
 	kfree(mfg);
-	kbdev->platform_context = NULL;
 	pm_runtime_disable(kbdev->dev);
 }
 
