@@ -29,6 +29,7 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 	struct drm_i915_private *i915 = pxp_to_gt(pxp)->i915;
 	struct i915_pxp_component *pxp_component = pxp->pxp_component;
 	int ret = 0;
+	u8 vtag = 1;
 
 	mutex_lock(&pxp->tee_mutex);
 
@@ -41,17 +42,20 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		goto unlock;
 	}
 
+	/* The vtag is stored in the first byte of the output buffer */
+	memcpy(&vtag, msg_out, sizeof(vtag));
+
 	if (pxp->last_tee_msg_interrupted) {
 		/* read and drop data from the previous iteration */
-		ret = pxp_component->ops->recv(pxp_component->tee_dev,
-						msg_out, msg_out_max_size, 1);
+		ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out,
+					msg_out_max_size, vtag);
 		if (ret == -EINTR)
 			goto unlock;
 
 		pxp->last_tee_msg_interrupted = false;
 	}
 
-	ret = pxp_component->ops->send(pxp_component->tee_dev, msg_in, msg_in_size, 1);
+	ret = pxp_component->ops->send(pxp_component->tee_dev, msg_in, msg_in_size, vtag);
 	if (ret) {
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)
@@ -61,7 +65,7 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		goto unlock;
 	}
 
-	ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out, msg_out_max_size, 1);
+	ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out, msg_out_max_size, vtag);
 	if (ret < 0) {
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)
@@ -219,9 +223,13 @@ int intel_pxp_tee_ioctl_io_message(struct intel_pxp *pxp,
 	}
 
 	if (copy_from_user(msg_in, u64_to_user_ptr(params->msg_in), params->msg_in_size)) {
-		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE message\n");
+		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE input message\n");
 		ret = -EFAULT;
 		goto end;
+	}
+
+	if (copy_from_user(msg_out, u64_to_user_ptr(params->msg_out), params->msg_out_buf_size)) {
+		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE vtag output message\n");
 	}
 
 	ret = intel_pxp_tee_io_message(pxp,
@@ -234,7 +242,7 @@ int intel_pxp_tee_ioctl_io_message(struct intel_pxp *pxp,
 	}
 
 	if (copy_to_user(u64_to_user_ptr(params->msg_out), msg_out, params->msg_out_ret_size)) {
-		drm_dbg(&i915->drm, "Failed copy_to_user for TEE message\n");
+		drm_dbg(&i915->drm, "Failed copy_to_user for TEE output message\n");
 		ret = -EFAULT;
 		goto end;
 	}
