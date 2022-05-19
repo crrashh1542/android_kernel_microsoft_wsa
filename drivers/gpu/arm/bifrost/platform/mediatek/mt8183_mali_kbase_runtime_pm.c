@@ -24,13 +24,6 @@
 
 #define MFG_SYS_TIMER 0x130
 
-/**
- * Autosuspend delay
- *
- * The delay time (in milliseconds) to be used for autosuspend
- */
-#define AUTO_SUSPEND_DELAY (100)
-
 const struct mtk_hw_config mt8183_hw_config = {
 	.vgpu_min_microvolt = 625000,
 	.vgpu_max_microvolt = 825000,
@@ -41,6 +34,7 @@ const struct mtk_hw_config mt8183_hw_config = {
 	.supply_tolerance_microvolt = 125,
 	.gpu_freq_min_khz = 300000,
 	.gpu_freq_max_khz = 800000,
+	.auto_suspend_delay_ms = 50,
 };
 
 struct mtk_platform_context mt8183_platform_context = {
@@ -564,7 +558,7 @@ static int platform_init(struct kbase_device *kbdev)
 	if (err)
 		goto platform_init_err;
 
-	pm_runtime_set_autosuspend_delay(kbdev->dev, 50);
+	pm_runtime_set_autosuspend_delay(kbdev->dev, cfg->auto_suspend_delay_ms);
 	pm_runtime_use_autosuspend(kbdev->dev);
 	pm_runtime_enable(kbdev->dev);
 
