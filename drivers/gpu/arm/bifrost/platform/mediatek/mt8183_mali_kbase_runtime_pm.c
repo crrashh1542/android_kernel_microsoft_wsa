@@ -24,7 +24,17 @@
 
 #define MFG_SYS_TIMER 0x130
 
+/* list of clocks required by GPU */
+static const char * const mt8183_gpu_clks[] = {
+	"clk_mux",
+	"clk_main_parent",
+	"clk_sub_parent",
+	"subsys_mfg_cg",
+};
+
 const struct mtk_hw_config mt8183_hw_config = {
+	.num_clks = ARRAY_SIZE(mt8183_gpu_clks),
+	.clk_names = mt8183_gpu_clks,
 	.vgpu_min_microvolt = 625000,
 	.vgpu_max_microvolt = 825000,
 	.vsram_gpu_min_microvolt = 850000,
