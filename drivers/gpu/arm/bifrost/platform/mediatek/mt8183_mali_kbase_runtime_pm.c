@@ -36,6 +36,7 @@ const struct mtk_hw_config mt8183_hw_config = {
 	.num_pm_domains = 3,
 	.num_clks = ARRAY_SIZE(mt8183_gpu_clks),
 	.clk_names = mt8183_gpu_clks,
+	.mfg_compatible_name = "mediatek,mt8183-mfgcfg",
 	.vgpu_min_microvolt = 625000,
 	.vgpu_max_microvolt = 825000,
 	.vsram_gpu_min_microvolt = 850000,
