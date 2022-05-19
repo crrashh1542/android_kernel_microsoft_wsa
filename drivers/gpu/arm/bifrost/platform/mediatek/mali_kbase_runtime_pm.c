@@ -116,26 +116,26 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
 
-	for (i = 0; i < kbdev->nr_regulators; i++)
-		if (kbdev->regulators[i] == NULL)
-			return -EINVAL;
-
+	/* Basic checks and pre-allocations */
 	if (WARN_ON(cfg->num_clks <= 0))
 		return -EINVAL;
 	ctx->clks = devm_kcalloc(kbdev->dev, cfg->num_clks,
 				     sizeof(*ctx->clks), GFP_KERNEL);
-
 	if (!ctx->clks)
 		return -ENOMEM;
 
-	for (i = 0; i < cfg->num_clks; ++i)
+	for (i = 0; i < cfg->num_clks; i++)
 		ctx->clks[i].id = cfg->clk_names[i];
 
+	for (i = 0; i < kbdev->nr_regulators; i++)
+		if (!kbdev->regulators[i])
+			return -EINVAL;
+
+
+	/* The actual initialization starts here */
 	err = devm_clk_bulk_get(kbdev->dev, cfg->num_clks, ctx->clks);
-	if (err < 0) {
-		dev_err(kbdev->dev,
-			"clk_bulk_get error: %d\n",
-			err);
+	if (err) {
+		dev_err_probe(kbdev->dev, err, "Failed to devm_clk_bulk_get: %d\n", err);
 		return err;
 	}
 
@@ -144,10 +144,8 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 				: cfg->vsram_gpu_max_microvolt;
 		err = regulator_set_voltage(kbdev->regulators[i],
 			volt, volt + cfg->supply_tolerance_microvolt);
-		if (err < 0) {
-			dev_err(kbdev->dev,
-				"Regulator %d set voltage failed: %d\n",
-				i, err);
+		if (err) {
+			dev_err(kbdev->dev, "Failed to set reg %d voltage: %d\n", i, err);
 			return err;
 		}
 #if defined(CONFIG_MALI_BIFROST_DEVFREQ) || defined(CONFIG_MALI_VALHALL_DEVFREQ)
@@ -157,7 +155,7 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 
 	err = mtk_map_mfg_base(ctx);
 	if (err) {
-		dev_err(kbdev->dev, "Cannot find mfgcfg node\n");
+		dev_err(kbdev->dev, "Cannot find mfgcfg node: %d\n", err);
 		return err;
 	}
 
