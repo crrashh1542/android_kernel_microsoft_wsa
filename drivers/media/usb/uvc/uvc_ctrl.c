@@ -384,6 +384,11 @@ static const struct uvc_menu_info power_line_frequency_controls_uvc15[] = {
 	{ 3, "Auto" },
 };
 
+static const struct uvc_menu_info power_line_frequency_controls_limited[] = {
+	{ 1, "50 Hz" },
+	{ 2, "60 Hz" },
+};
+
 static const struct uvc_menu_info exposure_auto_controls[] = {
 	{ 2, "Auto Mode" },
 	{ 1, "Manual Mode" },
@@ -768,6 +773,19 @@ struct uvc_control_mapping power_line_mapping_uvc15 = {
 	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
 	.menu_info	= power_line_frequency_controls_uvc15,
 	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_uvc15),
+};
+
+static const
+struct uvc_control_mapping power_line_mapping_limited = {
+	.id		= V4L2_CID_POWER_LINE_FREQUENCY,
+	.entity		= UVC_GUID_UVC_PROCESSING,
+	.selector	= UVC_PU_POWER_LINE_FREQUENCY_CONTROL,
+	.size		= 2,
+	.offset		= 0,
+	.v4l2_type	= V4L2_CTRL_TYPE_MENU,
+	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
+	.menu_info	= power_line_frequency_controls_limited,
+	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_limited),
 };
 
 /* ------------------------------------------------------------------------
@@ -2521,6 +2539,12 @@ struct uvc_roi *uvc_ctrl_roi(struct uvc_video_chain *chain, u8 query)
 static void uvc_ctrl_init_powerline(struct uvc_video_chain *chain,
 				    struct uvc_control *ctrl)
 {
+	if (chain->dev->quirks & UVC_QUIRK_LIMITED_POWERLINE) {
+		__uvc_ctrl_add_mapping(chain, ctrl,
+				       &power_line_mapping_limited);
+		return;
+	}
+
 	if (chain->dev->uvc_version < 0x0150) {
 		__uvc_ctrl_add_mapping(chain, ctrl,
 				       &power_line_mapping_uvc11);
