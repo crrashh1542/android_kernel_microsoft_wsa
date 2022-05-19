@@ -33,6 +33,7 @@ static const char * const mt8183_gpu_clks[] = {
 };
 
 const struct mtk_hw_config mt8183_hw_config = {
+	.num_pm_domains = 3,
 	.num_clks = ARRAY_SIZE(mt8183_gpu_clks),
 	.clk_names = mt8183_gpu_clks,
 	.vgpu_min_microvolt = 625000,
