@@ -9,7 +9,7 @@ config USB_DWC3
 	  Say Y or M here if your system has a Dual Role SuperSpeed
 	  USB controller based on the DesignWare USB3 IP Core.
 
-	  If you choose to build this driver is a dynamically linked
+	  If you choose to build this driver as a dynamically linked
 	  module, the module will be called dwc3.ko.
 
 if USB_DWC3
