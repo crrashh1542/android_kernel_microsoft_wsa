@@ -226,13 +226,6 @@ config DRM_GEM_CMA_HELPER
 	help
 	  Choose this if you need the GEM CMA helper functions
 
-config DRM_KMS_CMA_HELPER
-	bool
-	depends on DRM
-	select DRM_GEM_CMA_HELPER
-	help
-	  Choose this if you need the KMS CMA helper functions
-
 config DRM_GEM_SHMEM_HELPER
 	tristate
 	depends on DRM && MMU
@@ -407,6 +400,8 @@ source "drivers/gpu/drm/tidss/Kconfig"
 source "drivers/gpu/drm/xlnx/Kconfig"
 
 source "drivers/gpu/drm/gud/Kconfig"
+
+source "drivers/gpu/drm/sprd/Kconfig"
 
 source "drivers/gpu/drm/img-rogue/Kconfig"
 

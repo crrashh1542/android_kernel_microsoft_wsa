@@ -34,6 +34,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_sysfs.h>
+#include <drm/drm_gem_ttm_helper.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_range_manager.h>
 #include <drm/ttm/ttm_placement.h>
@@ -162,7 +163,7 @@
 static const struct drm_ioctl_desc vmw_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VMW_GET_PARAM, vmw_getparam_ioctl,
 			  DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(VMW_ALLOC_DMABUF, vmw_bo_alloc_ioctl,
+	DRM_IOCTL_DEF_DRV(VMW_ALLOC_DMABUF, vmw_gem_object_create_ioctl,
 			  DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(VMW_UNREF_DMABUF, vmw_bo_unref_ioctl,
 			  DRM_RENDER_ALLOW),
@@ -254,8 +255,8 @@ static const struct drm_ioctl_desc vmw_ioctls[] = {
 };
 
 static const struct pci_device_id vmw_pci_id_list[] = {
-	{ PCI_DEVICE(0x15ad, VMWGFX_PCI_ID_SVGA2) },
-	{ PCI_DEVICE(0x15ad, VMWGFX_PCI_ID_SVGA3) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_VMWARE, VMWGFX_PCI_ID_SVGA2) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_VMWARE, VMWGFX_PCI_ID_SVGA3) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, vmw_pci_id_list);
@@ -363,6 +364,7 @@ static void vmw_print_sm_type(struct vmw_private *dev_priv)
 		[VMW_SM_4] = "SM4",
 		[VMW_SM_4_1] = "SM4_1",
 		[VMW_SM_5] = "SM_5",
+		[VMW_SM_5_1X] = "SM_5_1X",
 		[VMW_SM_MAX] = "Invalid"
 	};
 	BUILD_BUG_ON(ARRAY_SIZE(names) != (VMW_SM_MAX + 1));
@@ -396,13 +398,9 @@ static int vmw_dummy_query_bo_create(struct vmw_private *dev_priv)
 	 * immediately succeed. This is because we're the only
 	 * user of the bo currently.
 	 */
-	vbo = kzalloc(sizeof(*vbo), GFP_KERNEL);
-	if (!vbo)
-		return -ENOMEM;
-
-	ret = vmw_bo_init(dev_priv, vbo, PAGE_SIZE,
-			  &vmw_sys_placement, false, true,
-			  &vmw_bo_bo_free);
+	ret = vmw_bo_create(dev_priv, PAGE_SIZE,
+			    &vmw_sys_placement, false, true,
+			    &vmw_bo_bo_free, &vbo);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -1078,8 +1076,11 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 			dev_priv->sm_type = VMW_SM_4_1;
 		if (has_sm4_1_context(dev_priv) &&
 				(dev_priv->capabilities2 & SVGA_CAP2_DX3)) {
-			if (vmw_devcap_get(dev_priv, SVGA3D_DEVCAP_SM5))
+			if (vmw_devcap_get(dev_priv, SVGA3D_DEVCAP_SM5)) {
 				dev_priv->sm_type = VMW_SM_5;
+				if (vmw_devcap_get(dev_priv, SVGA3D_DEVCAP_GL43))
+					dev_priv->sm_type = VMW_SM_5_1X;
+			}
 		}
 	}
 
@@ -1570,7 +1571,7 @@ static const struct file_operations vmwgfx_driver_fops = {
 
 static const struct drm_driver driver = {
 	.driver_features =
-	DRIVER_MODESET | DRIVER_RENDER | DRIVER_ATOMIC,
+	DRIVER_MODESET | DRIVER_RENDER | DRIVER_ATOMIC | DRIVER_GEM,
 	.ioctls = vmw_ioctls,
 	.num_ioctls = ARRAY_SIZE(vmw_ioctls),
 	.master_set = vmw_master_set,
@@ -1579,8 +1580,7 @@ static const struct drm_driver driver = {
 	.postclose = vmw_postclose,
 
 	.dumb_create = vmw_dumb_create,
-	.dumb_map_offset = vmw_dumb_map_offset,
-	.dumb_destroy = vmw_dumb_destroy,
+	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
 
 	.prime_fd_to_handle = vmw_prime_fd_to_handle,
 	.prime_handle_to_fd = vmw_prime_handle_to_fd,
@@ -1633,6 +1633,8 @@ static int vmw_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = drm_dev_register(&vmw->drm, 0);
 	if (ret)
 		goto out_unload;
+
+	vmw_debugfs_gem_init(vmw);
 
 	return 0;
 out_unload:

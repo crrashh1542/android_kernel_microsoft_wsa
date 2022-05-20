@@ -129,6 +129,7 @@ enum intel_ppgtt_type {
 	func(is_dgfx); \
 	/* Keep has_* in alphabetical order */ \
 	func(has_64bit_reloc); \
+	func(has_64k_pages); \
 	func(gpu_reset_clobbers_display); \
 	func(has_reset_engine); \
 	func(has_global_mocs); \
@@ -198,11 +199,6 @@ struct intel_device_info {
 
 	u8 gt; /* GT number, 0 if undefined */
 
-	u8 pipe_mask;
-	u8 cpu_transcoder_mask;
-
-	u8 abox_mask;
-
 #define DEFINE_FLAG(name) u8 name:1
 	DEV_INFO_FOR_EACH_FLAG(DEFINE_FLAG);
 #undef DEFINE_FLAG
@@ -210,6 +206,10 @@ struct intel_device_info {
 	struct {
 		u8 ver;
 		u8 rel;
+
+		u8 pipe_mask;
+		u8 cpu_transcoder_mask;
+		u8 abox_mask;
 
 #define DEFINE_FLAG(name) u8 name:1
 		DEV_INFO_DISPLAY_FOR_EACH_FLAG(DEFINE_FLAG);

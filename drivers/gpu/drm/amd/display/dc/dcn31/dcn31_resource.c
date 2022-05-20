@@ -977,7 +977,7 @@ static const struct dc_plane_cap plane_cap = {
 			.argb8888 = true,
 			.nv12 = true,
 			.fp16 = true,
-			.p010 = false,
+			.p010 = true,
 			.ayuv = false,
 	},
 
@@ -1032,6 +1032,7 @@ static const struct dc_debug_options debug_defaults_drv = {
 	},
 	.optimize_edp_link_rate = true,
 	.enable_sw_cntl_psr = true,
+	.apply_vendor_specific_lttpr_wa = true,
 };
 
 static const struct dc_debug_options debug_defaults_diags = {
@@ -1777,6 +1778,7 @@ static int dcn31_populate_dml_pipes_from_context(
 	int i, pipe_cnt;
 	struct resource_context *res_ctx = &context->res_ctx;
 	struct pipe_ctx *pipe;
+	bool upscaled = false;
 
 	dcn20_populate_dml_pipes_from_context(dc, context, pipes, fast_validate);
 
@@ -1787,6 +1789,11 @@ static int dcn31_populate_dml_pipes_from_context(
 			continue;
 		pipe = &res_ctx->pipe_ctx[i];
 		timing = &pipe->stream->timing;
+
+		if (pipe->plane_state &&
+				(pipe->plane_state->src_rect.height < pipe->plane_state->dst_rect.height ||
+				pipe->plane_state->src_rect.width < pipe->plane_state->dst_rect.width))
+			upscaled = true;
 
 		/*
 		 * Immediate flip can be set dynamically after enabling the plane.
@@ -1832,6 +1839,11 @@ static int dcn31_populate_dml_pipes_from_context(
 			context->bw_ctx.dml.ip.det_buffer_size_kbytes = 192;
 			pipes[0].pipe.src.unbounded_req_mode = true;
 		}
+	} else if (context->stream_count >= dc->debug.crb_alloc_policy_min_disp_count
+			&& dc->debug.crb_alloc_policy > DET_SIZE_DEFAULT) {
+		context->bw_ctx.dml.ip.det_buffer_size_kbytes = dc->debug.crb_alloc_policy * 64;
+	} else if (context->stream_count >= 3 && upscaled) {
+		context->bw_ctx.dml.ip.det_buffer_size_kbytes = 192;
 	}
 
 	return pipe_cnt;
@@ -2204,6 +2216,7 @@ static bool dcn31_resource_construct(
 	dc->caps.post_blend_color_processing = true;
 	dc->caps.force_dp_tps4_for_cp2520 = true;
 	dc->caps.dp_hpo = true;
+	dc->caps.hdmi_frl_pcon_support = true;
 	dc->caps.edp_dsc_support = true;
 	dc->caps.extended_aux_timeout_support = true;
 	dc->caps.dmcub_support = true;
@@ -2242,6 +2255,9 @@ static bool dcn31_resource_construct(
 	dc->caps.color.mpc.ogam_rom_caps.pq = 0;
 	dc->caps.color.mpc.ogam_rom_caps.hlg = 0;
 	dc->caps.color.mpc.ocsc = 1;
+
+	/* Use pipe context based otg sync logic */
+	dc->config.use_pipe_ctx_sync_logic = true;
 
 	/* read VBIOS LTTPR caps */
 	{

@@ -656,7 +656,7 @@ static const struct dc_plane_cap plane_cap = {
 			.argb8888 = true,
 			.nv12 = true,
 			.fp16 = true,
-			.p010 = false,
+			.p010 = true,
 			.ayuv = false,
 	},
 
@@ -1380,6 +1380,17 @@ static void set_wm_ranges(
 	pp_smu->nv_funcs.set_wm_ranges(&pp_smu->nv_funcs.pp_smu, &ranges);
 }
 
+static void dcn301_calculate_wm_and_dlg(
+		struct dc *dc, struct dc_state *context,
+		display_e2e_pipe_params_st *pipes,
+		int pipe_cnt,
+		int vlevel)
+{
+	DC_FP_START();
+	dcn301_calculate_wm_and_dlg_fp(dc, context, pipes, pipe_cnt, vlevel);
+	DC_FP_END();
+}
+
 static struct resource_funcs dcn301_res_pool_funcs = {
 	.destroy = dcn301_destroy_resource_pool,
 	.link_enc_create = dcn301_link_encoder_create,
@@ -1438,9 +1449,7 @@ static bool dcn301_resource_construct(
 	dc->caps.post_blend_color_processing = true;
 	dc->caps.force_dp_tps4_for_cp2520 = true;
 	dc->caps.extended_aux_timeout_support = true;
-#ifdef CONFIG_DRM_AMD_DC_DMUB
 	dc->caps.dmcub_support = true;
-#endif
 
 	/* Color pipeline capabilities */
 	dc->caps.color.dpp.dcn_arch = 1;
@@ -1475,6 +1484,23 @@ static bool dcn301_resource_construct(
 	dc->caps.color.mpc.ogam_rom_caps.pq = 0;
 	dc->caps.color.mpc.ogam_rom_caps.hlg = 0;
 	dc->caps.color.mpc.ocsc = 1;
+
+	/* read VBIOS LTTPR caps */
+	if (ctx->dc_bios->funcs->get_lttpr_caps) {
+		enum bp_result bp_query_result;
+		uint8_t is_vbios_lttpr_enable = 0;
+
+		bp_query_result = ctx->dc_bios->funcs->get_lttpr_caps(ctx->dc_bios, &is_vbios_lttpr_enable);
+		dc->caps.vbios_lttpr_enable = (bp_query_result == BP_RESULT_OK) && !!is_vbios_lttpr_enable;
+	}
+
+	if (ctx->dc_bios->funcs->get_lttpr_interop) {
+		enum bp_result bp_query_result;
+		uint8_t is_vbios_interop_enabled = 0;
+
+		bp_query_result = ctx->dc_bios->funcs->get_lttpr_interop(ctx->dc_bios, &is_vbios_interop_enabled);
+		dc->caps.vbios_lttpr_aware = (bp_query_result == BP_RESULT_OK) && !!is_vbios_interop_enabled;
+	}
 
 	if (dc->ctx->dce_environment == DCE_ENV_PRODUCTION_DRV)
 		dc->debug = debug_defaults_drv;
