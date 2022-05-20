@@ -226,6 +226,7 @@ enum sof_tokens {
 	SOF_CORE_TOKENS,
 	SOF_COMP_EXT_TOKENS,
 
+	SOF_ACPDMIC_TOKENS,
 	/* this should be the last */
 	SOF_TOKEN_COUNT,
 };
