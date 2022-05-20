@@ -116,14 +116,6 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
 
-	if (WARN_ON(cfg->num_pm_domains <= 0))
-		return -EINVAL;
-	kbdev->num_pm_domains = cfg->num_pm_domains;
-
-	err = kbase_pm_domain_init(kbdev);
-	if (err < 0)
-		return err;
-
 	for (i = 0; i < kbdev->nr_regulators; i++)
 		if (kbdev->regulators[i] == NULL)
 			return -EINVAL;

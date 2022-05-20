@@ -64,6 +64,14 @@ static int platform_init(struct kbase_device *kbdev)
 
 	kbdev->platform_context = ctx;
 
+	if (WARN_ON(cfg->num_pm_domains <= 0))
+		return -EINVAL;
+	kbdev->num_pm_domains = cfg->num_pm_domains;
+
+	err = kbase_pm_domain_init(kbdev);
+	if (err)
+		return err;
+
 	err = mtk_mfgsys_init(kbdev);
 	if (err)
 		return err;
