@@ -185,4 +185,8 @@
 /* COPIER */
 #define SOF_TKN_INTEL_COPIER_NODE_TYPE		1980
 
+/* ACPDMIC */
+#define SOF_TKN_AMD_ACPDMIC_RATE               1800
+#define SOF_TKN_AMD_ACPDMIC_CH                 1801
+
 #endif
