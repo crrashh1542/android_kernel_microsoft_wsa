@@ -167,6 +167,8 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 int kbase_pm_domain_init(struct kbase_device *kbdev)
 {
 	int err, i, num_domains;
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 
 	num_domains = of_count_phandle_with_args(kbdev->dev->of_node,
 						 "power-domains",
@@ -196,6 +198,12 @@ int kbase_pm_domain_init(struct kbase_device *kbdev)
 			kbdev->pm_domain_devs[i] = NULL;
 			dev_err_probe(kbdev->dev, err, "Cannot attach PM domain %d\n", i);
 			goto err;
+		}
+
+		if (cfg->auto_suspend_delay_ms) {
+			pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i],
+							 cfg->auto_suspend_delay_ms);
+			pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
 		}
 	}
 

@@ -58,7 +58,7 @@ struct kbase_pm_callback_conf mt8186_pm_callbacks = {
 
 static int platform_init(struct kbase_device *kbdev)
 {
-	int err, i;
+	int err;
 	struct mtk_platform_context *ctx = &mt8186_platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
 
@@ -75,12 +75,6 @@ static int platform_init(struct kbase_device *kbdev)
 	err = mtk_mfgsys_init(kbdev);
 	if (err)
 		return err;
-
-	for (i = 0; i < kbdev->num_pm_domains; i++) {
-		pm_runtime_set_autosuspend_delay(kbdev->pm_domain_devs[i],
-						 cfg->auto_suspend_delay_ms);
-		pm_runtime_use_autosuspend(kbdev->pm_domain_devs[i]);
-	}
 
 	err = mtk_set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
 	if (err)
