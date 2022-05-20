@@ -182,9 +182,7 @@ int kbase_pm_domain_init(struct kbase_device *kbdev)
 	}
 
 	if (WARN_ON(num_domains > ARRAY_SIZE(kbdev->pm_domain_devs))) {
-		dev_err(kbdev->dev,
-			"Too many power domains: %d provided\n",
-			num_domains);
+		dev_err(kbdev->dev, "Too many power domains: %d provided\n", num_domains);
 		return -EINVAL;
 	}
 
@@ -192,7 +190,7 @@ int kbase_pm_domain_init(struct kbase_device *kbdev)
 	if (num_domains < 2)
 		return 0;
 
-	for (i = 0; i < num_domains; i++) {
+	for (i = 0; i < kbdev->num_pm_domains; i++) {
 		kbdev->pm_domain_devs[i] =
 			dev_pm_domain_attach_by_id(kbdev->dev, i);
 		if (IS_ERR_OR_NULL(kbdev->pm_domain_devs[i])) {
@@ -213,7 +211,7 @@ void kbase_pm_domain_term(struct kbase_device *kbdev)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(kbdev->pm_domain_devs); i++)
+	for (i = 0; i < kbdev->num_pm_domains; i++)
 		if (kbdev->pm_domain_devs[i])
 			dev_pm_domain_detach(kbdev->pm_domain_devs[i], true);
 }
