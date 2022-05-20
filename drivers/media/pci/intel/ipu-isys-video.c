@@ -1551,7 +1551,7 @@ int ipu_isys_video_set_streaming(struct ipu_isys_video *av,
 	if (state) {
 		rval = start_stream_firmware(av, bl);
 		if (rval)
-			goto out_media_entity_stop_streaming;
+			goto out_update_stream_watermark;
 
 		dev_dbg(dev, "set stream: source %d, stream_handle %d\n",
 			ip->source, ip->stream_handle);
@@ -1576,6 +1576,10 @@ int ipu_isys_video_set_streaming(struct ipu_isys_video *av,
 
 out_media_entity_stop_streaming_firmware:
 	stop_streaming_firmware(av);
+
+out_update_stream_watermark:
+	if (av->aq.css_pin_type == IPU_FW_ISYS_PIN_TYPE_RAW_SOC)
+		update_stream_watermark(av, 0);
 
 out_media_entity_stop_streaming:
 	mutex_lock(&mdev->graph_mutex);
