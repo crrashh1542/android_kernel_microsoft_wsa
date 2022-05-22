@@ -1,5 +1,0 @@
-kernel/drivers/mmc/host/sdhci.ko
-kernel/drivers/mmc/host/sdhci-pci.ko
-kernel/drivers/mmc/host/sdhci-pci-data.ko
-kernel/drivers/mmc/host/sdhci-acpi.ko
-kernel/drivers/mmc/host/cqhci.ko

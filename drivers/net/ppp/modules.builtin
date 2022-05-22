@@ -1,3 +1,0 @@
-kernel/drivers/net/ppp/ppp_generic.ko
-kernel/drivers/net/ppp/ppp_async.ko
-kernel/drivers/net/ppp/ppp_mppe.ko

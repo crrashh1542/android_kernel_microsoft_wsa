@@ -1,3 +1,0 @@
-kernel/crypto/asymmetric_keys/public_key.ko
-kernel/crypto/asymmetric_keys/x509_key_parser.ko
-kernel/crypto/asymmetric_keys/pkcs7_message.ko

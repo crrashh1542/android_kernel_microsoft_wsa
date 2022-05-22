@@ -1,3 +1,0 @@
-kernel/drivers/char/hw_random/rng-core.ko
-kernel/drivers/char/hw_random/intel-rng.ko
-kernel/drivers/char/hw_random/amd-rng.ko

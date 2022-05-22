@@ -20,18 +20,23 @@ struct intel_framebuffer;
 struct intel_plane;
 struct intel_plane_state;
 
-enum intel_plane_caps {
-	PLANE_HAS_NO_CAPS = 0,
-	PLANE_HAS_TILING = BIT(0),
-	PLANE_HAS_CCS_RC = BIT(1),
-	PLANE_HAS_CCS_MC = BIT(2),
-};
+#define INTEL_PLANE_CAP_NONE		0
+#define INTEL_PLANE_CAP_CCS_RC		BIT(0)
+#define INTEL_PLANE_CAP_CCS_RC_CC	BIT(1)
+#define INTEL_PLANE_CAP_CCS_MC		BIT(2)
+#define INTEL_PLANE_CAP_TILING_X	BIT(3)
+#define INTEL_PLANE_CAP_TILING_Y	BIT(4)
+#define INTEL_PLANE_CAP_TILING_Yf	BIT(5)
+
+bool intel_fb_is_ccs_modifier(u64 modifier);
+bool intel_fb_is_rc_ccs_cc_modifier(u64 modifier);
+bool intel_fb_is_mc_ccs_modifier(u64 modifier);
 
 bool intel_fb_is_ccs_aux_plane(const struct drm_framebuffer *fb, int color_plane);
 int intel_fb_rc_ccs_cc_plane(const struct drm_framebuffer *fb);
 
 u64 *intel_fb_plane_get_modifiers(struct drm_i915_private *i915,
-				  enum intel_plane_caps plane_caps);
+				  u8 plane_caps);
 bool intel_fb_plane_supports_modifier(struct intel_plane *plane, u64 modifier);
 
 const struct drm_format_info *
@@ -84,5 +89,7 @@ struct drm_framebuffer *
 intel_user_framebuffer_create(struct drm_device *dev,
 			      struct drm_file *filp,
 			      const struct drm_mode_fb_cmd2 *user_mode_cmd);
+
+bool intel_fb_uses_dpt(const struct drm_framebuffer *fb);
 
 #endif /* __INTEL_FB_H__ */

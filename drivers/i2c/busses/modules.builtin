@@ -1,4 +1,0 @@
-kernel/drivers/i2c/busses/i2c-i801.ko
-kernel/drivers/i2c/busses/i2c-designware-core.ko
-kernel/drivers/i2c/busses/i2c-designware-platform.ko
-kernel/drivers/i2c/busses/i2c-designware-pci.ko

@@ -1,7 +1,0 @@
-kernel/drivers/pinctrl/intel/pinctrl-cherryview.ko
-kernel/drivers/pinctrl/intel/pinctrl-intel.ko
-kernel/drivers/pinctrl/intel/pinctrl-broxton.ko
-kernel/drivers/pinctrl/intel/pinctrl-cannonlake.ko
-kernel/drivers/pinctrl/intel/pinctrl-geminilake.ko
-kernel/drivers/pinctrl/intel/pinctrl-icelake.ko
-kernel/drivers/pinctrl/intel/pinctrl-sunrisepoint.ko

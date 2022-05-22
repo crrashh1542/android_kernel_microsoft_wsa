@@ -22,6 +22,7 @@
 #define DRIVER_NAME "mtk-spi-nor"
 
 #define MTK_NOR_REG_CMD			0x00
+#define MTK_NOR_CMD_AUTO_INCR		BIT(7)
 #define MTK_NOR_CMD_WRITE		BIT(4)
 #define MTK_NOR_CMD_PROGRAM		BIT(2)
 #define MTK_NOR_CMD_READ		BIT(0)
@@ -104,6 +105,11 @@ struct mtk_nor_caps {
 	 * more clock cycles for fetching data.
 	 */
 	u8 extra_dummy_bit;
+
+	/* TODO(b/230280803): Remove this hack after we find out the right way
+	 * to fix this issue.
+	 */
+	bool dma_en;
 };
 
 struct mtk_nor {
@@ -136,11 +142,16 @@ static inline void mtk_nor_rmw(struct mtk_nor *sp, u32 reg, u32 set, u32 clr)
 static inline int mtk_nor_cmd_exec(struct mtk_nor *sp, u32 cmd, ulong clk)
 {
 	ulong delay = CLK_TO_US(sp, clk);
-	u32 reg;
+	u32 reg, read_cmd;
 	int ret;
 
+	if (sp->caps->dma_en)
+		read_cmd = cmd;
+	else
+		read_cmd = cmd & 0x1f;
+
 	writel(cmd, sp->base + MTK_NOR_REG_CMD);
-	ret = readl_poll_timeout(sp->base + MTK_NOR_REG_CMD, reg, !(reg & cmd),
+	ret = readl_poll_timeout(sp->base + MTK_NOR_REG_CMD, reg, !(reg & read_cmd),
 				 delay / 3, (delay + 1) * 200);
 	if (ret < 0)
 		dev_err(sp->dev, "command %u timeout.\n", cmd);
@@ -435,12 +446,41 @@ static int mtk_nor_read_dma(struct mtk_nor *sp, const struct spi_mem_op *op)
 static int mtk_nor_read_pio(struct mtk_nor *sp, const struct spi_mem_op *op)
 {
 	u8 *buf = op->data.buf.in;
-	int ret;
+	int i, ret;
 
-	ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ, 6 * BITS_PER_BYTE);
-	if (!ret)
-		buf[0] = readb(sp->base + MTK_NOR_REG_RDATA);
-	return ret;
+	if (sp->caps->dma_en) {
+		ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ, 6 * BITS_PER_BYTE);
+		if (!ret)
+			buf[0] = readb(sp->base + MTK_NOR_REG_RDATA);
+		return ret;
+	}
+
+
+	for (i = 0; i < op->data.nbytes; i++) {
+		ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ |
+		      MTK_NOR_CMD_AUTO_INCR, 6 * BITS_PER_BYTE);
+		if (ret) {
+			dev_err(sp->dev, "cmd: 0x%x, %d.\n",
+				op->cmd.opcode, op->cmd.buswidth);
+
+			dev_err(sp->dev, "addr: 0x%x, %d %d.\n",
+				op->addr.buswidth, op->addr.nbytes,
+				op->addr.dtr);
+
+			dev_err(sp->dev, "dummy: 0x%x, %d %d.\n",
+				op->dummy.buswidth, op->dummy.nbytes,
+				op->dummy.dtr);
+
+			dev_err(sp->dev, "data: 0x%x, %d %d.\n",
+				op->data.buswidth, op->data.nbytes,
+				op->data.dtr);
+			return ret;
+		}
+
+		buf[i] = readb(sp->base + MTK_NOR_REG_RDATA);
+	}
+
+	return 0;
 }
 
 static int mtk_nor_write_buffer_enable(struct mtk_nor *sp)
@@ -612,7 +652,7 @@ static int mtk_nor_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		if (ret < 0)
 			return ret;
 		mtk_nor_setup_bus(sp, op);
-		if (op->data.nbytes == 1) {
+		if (op->data.nbytes == 1 || !sp->caps->dma_en) {
 			mtk_nor_set_addr(sp, op);
 			return mtk_nor_read_pio(sp, op);
 		} else {
@@ -773,16 +813,19 @@ static const struct spi_controller_mem_ops mtk_nor_mem_ops = {
 static const struct mtk_nor_caps mtk_nor_caps_mt8173 = {
 	.dma_bits = 32,
 	.extra_dummy_bit = 0,
+	.dma_en = false,
 };
 
 static const struct mtk_nor_caps mtk_nor_caps_mt8186 = {
 	.dma_bits = 32,
 	.extra_dummy_bit = 1,
+	.dma_en = true,
 };
 
 static const struct mtk_nor_caps mtk_nor_caps_mt8192 = {
 	.dma_bits = 36,
 	.extra_dummy_bit = 0,
+	.dma_en = true,
 };
 
 static const struct of_device_id mtk_nor_match[] = {

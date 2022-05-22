@@ -1,6 +1,0 @@
-kernel/drivers/platform/x86/intel_menlow.ko
-kernel/drivers/platform/x86/wmi.ko
-kernel/drivers/platform/x86/wmi-bmof.ko
-kernel/drivers/platform/x86/mxm-wmi.ko
-kernel/drivers/platform/x86/intel_pmc_core.ko
-kernel/drivers/platform/x86/intel_pmc_core_plat_drv.ko

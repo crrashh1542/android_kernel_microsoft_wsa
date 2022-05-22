@@ -1,9 +1,0 @@
-kernel/drivers/i2c/i2c-core.ko
-kernel/drivers/i2c/i2c-smbus.ko
-kernel/drivers/i2c/i2c-dev.ko
-kernel/drivers/i2c/i2c-mux.ko
-kernel/drivers/i2c/algos/i2c-algo-bit.ko
-kernel/drivers/i2c/busses/i2c-i801.ko
-kernel/drivers/i2c/busses/i2c-designware-core.ko
-kernel/drivers/i2c/busses/i2c-designware-platform.ko
-kernel/drivers/i2c/busses/i2c-designware-pci.ko

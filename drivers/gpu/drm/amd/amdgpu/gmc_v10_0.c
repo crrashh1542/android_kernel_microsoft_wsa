@@ -107,7 +107,7 @@ static int gmc_v10_0_process_interrupt(struct amdgpu_device *adev,
 
 		/* Process it onyl if it's the first fault for this address */
 		if (entry->ih != &adev->irq.ih_soft &&
-		    amdgpu_gmc_filter_faults(adev, addr, entry->pasid,
+		    amdgpu_gmc_filter_faults(adev, entry->ih, addr, entry->pasid,
 					     entry->timestamp))
 			return 1;
 
@@ -916,12 +916,6 @@ static int gmc_v10_0_sw_init(void *handle)
 		return r;
 	}
 
-	if (adev->gmc.xgmi.supported) {
-		r = adev->gfxhub.funcs->get_xgmi_info(adev);
-		if (r)
-			return r;
-	}
-
 	r = gmc_v10_0_mc_init(adev);
 	if (r)
 		return r;
@@ -1158,6 +1152,9 @@ static int gmc_v10_0_set_clockgating_state(void *handle,
 static void gmc_v10_0_get_clockgating_state(void *handle, u32 *flags)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	if (adev->ip_versions[GC_HWIP][0] == IP_VERSION(10, 1, 3))
+		return;
 
 	adev->mmhub.funcs->get_clockgating(adev, flags);
 

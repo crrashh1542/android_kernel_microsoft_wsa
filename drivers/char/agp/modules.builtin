@@ -1,3 +1,0 @@
-kernel/drivers/char/agp/agpgart.ko
-kernel/drivers/char/agp/intel-agp.ko
-kernel/drivers/char/agp/intel-gtt.ko

@@ -1,2 +1,0 @@
-kernel/drivers/firmware/efi/efivars.ko
-kernel/drivers/firmware/efi/efi-pstore.ko

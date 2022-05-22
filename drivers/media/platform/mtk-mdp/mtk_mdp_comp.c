@@ -230,7 +230,7 @@ int mtk_mdp_comp_init(struct mtk_mdp_comp *comp, struct device *dev)
 	int i;
 	struct device_node *node = dev->of_node;
 	enum mtk_mdp_comp_type comp_type =
-		 (enum mtk_mdp_comp_type)of_device_get_match_data(dev);
+		(long)of_device_get_match_data(dev);
 
 	INIT_LIST_HEAD(&comp->node);
 	comp->dev = dev;

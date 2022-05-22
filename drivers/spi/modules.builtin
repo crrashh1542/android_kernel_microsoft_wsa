@@ -1,3 +1,0 @@
-kernel/drivers/spi/spidev.ko
-kernel/drivers/spi/spi-pxa2xx-platform.ko
-kernel/drivers/spi/spi-pxa2xx-pci.ko

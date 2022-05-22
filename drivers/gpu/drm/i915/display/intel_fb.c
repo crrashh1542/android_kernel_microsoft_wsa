@@ -6,6 +6,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_modeset_helper.h>
 
+#include "i915_drv.h"
 #include "intel_display.h"
 #include "intel_display_types.h"
 #include "intel_dpt.h"
@@ -120,29 +121,29 @@ struct intel_modifier_desc {
 	.formats = format_list, \
 	.format_count = ARRAY_SIZE(format_list)
 
-	u8 tiling;
-	u8 is_linear:1;
+	u8 plane_caps;
 
 	struct {
-#define INTEL_CCS_RC		BIT(0)
-#define INTEL_CCS_RC_CC		BIT(1)
-#define INTEL_CCS_MC		BIT(2)
-
-#define INTEL_CCS_ANY		(INTEL_CCS_RC | INTEL_CCS_RC_CC | INTEL_CCS_MC)
-		u8 type:3;
 		u8 cc_planes:3;
 		u8 packed_aux_planes:4;
 		u8 planar_aux_planes:4;
 	} ccs;
 };
 
+#define INTEL_PLANE_CAP_CCS_MASK	(INTEL_PLANE_CAP_CCS_RC | \
+					 INTEL_PLANE_CAP_CCS_RC_CC | \
+					 INTEL_PLANE_CAP_CCS_MC)
+#define INTEL_PLANE_CAP_TILING_MASK	(INTEL_PLANE_CAP_TILING_X | \
+					 INTEL_PLANE_CAP_TILING_Y | \
+					 INTEL_PLANE_CAP_TILING_Yf)
+#define INTEL_PLANE_CAP_TILING_NONE	0
+
 static const struct intel_modifier_desc intel_modifiers[] = {
 	{
 		.modifier = I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS,
 		.display_ver = { 12, 13 },
-		.tiling = I915_TILING_Y,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Y | INTEL_PLANE_CAP_CCS_MC,
 
-		.ccs.type = INTEL_CCS_MC,
 		.ccs.packed_aux_planes = BIT(1),
 		.ccs.planar_aux_planes = BIT(2) | BIT(3),
 
@@ -150,18 +151,16 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
 		.display_ver = { 12, 13 },
-		.tiling = I915_TILING_Y,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Y | INTEL_PLANE_CAP_CCS_RC,
 
-		.ccs.type = INTEL_CCS_RC,
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(gen12_ccs_formats),
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC,
 		.display_ver = { 12, 13 },
-		.tiling = I915_TILING_Y,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Y | INTEL_PLANE_CAP_CCS_RC_CC,
 
-		.ccs.type = INTEL_CCS_RC_CC,
 		.ccs.cc_planes = BIT(2),
 		.ccs.packed_aux_planes = BIT(1),
 
@@ -169,39 +168,34 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 	}, {
 		.modifier = I915_FORMAT_MOD_Yf_TILED_CCS,
 		.display_ver = { 9, 11 },
-		.tiling = I915_TILING_NONE,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Yf | INTEL_PLANE_CAP_CCS_RC,
 
-		.ccs.type = INTEL_CCS_RC,
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(skl_ccs_formats),
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_CCS,
 		.display_ver = { 9, 11 },
-		.tiling = I915_TILING_Y,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Y | INTEL_PLANE_CAP_CCS_RC,
 
-		.ccs.type = INTEL_CCS_RC,
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(skl_ccs_formats),
 	}, {
 		.modifier = I915_FORMAT_MOD_Yf_TILED,
 		.display_ver = { 9, 11 },
-		.tiling = I915_TILING_NONE,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Yf,
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED,
 		.display_ver = { 9, 13 },
-		.tiling = I915_TILING_Y,
+		.plane_caps = INTEL_PLANE_CAP_TILING_Y,
 	}, {
 		.modifier = I915_FORMAT_MOD_X_TILED,
 		.display_ver = DISPLAY_VER_ALL,
-		.tiling = I915_TILING_X,
+		.plane_caps = INTEL_PLANE_CAP_TILING_X,
 	}, {
 		.modifier = DRM_FORMAT_MOD_LINEAR,
 		.display_ver = DISPLAY_VER_ALL,
-		.tiling = I915_TILING_NONE,
-
-		.is_linear = true,
 	},
 };
 
@@ -259,9 +253,54 @@ intel_fb_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 	return lookup_format_info(md->formats, md->format_count, cmd->pixel_format);
 }
 
-static bool is_ccs_type_modifier(const struct intel_modifier_desc *md, u8 ccs_type)
+static bool plane_caps_contain_any(u8 caps, u8 mask)
 {
-	return md->ccs.type & ccs_type;
+	return caps & mask;
+}
+
+static bool plane_caps_contain_all(u8 caps, u8 mask)
+{
+	return (caps & mask) == mask;
+}
+
+/**
+ * intel_fb_is_ccs_modifier: Check if a modifier is a CCS modifier type
+ * @modifier: Modifier to check
+ *
+ * Returns:
+ * Returns %true if @modifier is a render, render with color clear or
+ * media compression modifier.
+ */
+bool intel_fb_is_ccs_modifier(u64 modifier)
+{
+	return plane_caps_contain_any(lookup_modifier(modifier)->plane_caps,
+				      INTEL_PLANE_CAP_CCS_MASK);
+}
+
+/**
+ * intel_fb_is_rc_ccs_cc_modifier: Check if a modifier is an RC CCS CC modifier type
+ * @modifier: Modifier to check
+ *
+ * Returns:
+ * Returns %true if @modifier is a render with color clear modifier.
+ */
+bool intel_fb_is_rc_ccs_cc_modifier(u64 modifier)
+{
+	return plane_caps_contain_any(lookup_modifier(modifier)->plane_caps,
+				      INTEL_PLANE_CAP_CCS_RC_CC);
+}
+
+/**
+ * intel_fb_is_mc_ccs_modifier: Check if a modifier is an MC CCS modifier type
+ * @modifier: Modifier to check
+ *
+ * Returns:
+ * Returns %true if @modifier is a media compression modifier.
+ */
+bool intel_fb_is_mc_ccs_modifier(u64 modifier)
+{
+	return plane_caps_contain_any(lookup_modifier(modifier)->plane_caps,
+				      INTEL_PLANE_CAP_CCS_MC);
 }
 
 static bool check_modifier_display_ver_range(const struct intel_modifier_desc *md,
@@ -272,22 +311,13 @@ static bool check_modifier_display_ver_range(const struct intel_modifier_desc *m
 }
 
 static bool plane_has_modifier(struct drm_i915_private *i915,
-			       enum intel_plane_caps plane_caps,
+			       u8 plane_caps,
 			       const struct intel_modifier_desc *md)
 {
 	if (!IS_DISPLAY_VER(i915, md->display_ver.from, md->display_ver.until))
 		return false;
 
-	if (!md->is_linear &&
-	    !(plane_caps & PLANE_HAS_TILING))
-		return false;
-
-	if (is_ccs_type_modifier(md, INTEL_CCS_RC | INTEL_CCS_RC_CC) &&
-	    !(plane_caps & PLANE_HAS_CCS_RC))
-		return false;
-
-	if (is_ccs_type_modifier(md, INTEL_CCS_MC) &&
-	    !(plane_caps & PLANE_HAS_CCS_MC))
+	if (!plane_caps_contain_all(plane_caps, md->plane_caps))
 		return false;
 
 	return true;
@@ -303,7 +333,7 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
  * The caller must free the returned buffer.
  */
 u64 *intel_fb_plane_get_modifiers(struct drm_i915_private *i915,
-				  enum intel_plane_caps plane_caps)
+				  u8 plane_caps)
 {
 	u64 *list, *p;
 	int count = 1;		/* +1 for invalid modifier terminator */
@@ -355,7 +385,7 @@ static bool format_is_yuv_semiplanar(const struct intel_modifier_desc *md,
 	if (!info->is_yuv)
 		return false;
 
-	if (is_ccs_type_modifier(md, INTEL_CCS_ANY))
+	if (plane_caps_contain_any(md->plane_caps, INTEL_PLANE_CAP_CCS_MASK))
 		yuv_planes = 4;
 	else
 		yuv_planes = 2;
@@ -457,7 +487,7 @@ bool is_surface_linear(const struct drm_framebuffer *fb, int color_plane)
 
 int main_to_ccs_plane(const struct drm_framebuffer *fb, int main_plane)
 {
-	drm_WARN_ON(fb->dev, !is_ccs_modifier(fb->modifier) ||
+	drm_WARN_ON(fb->dev, !intel_fb_is_ccs_modifier(fb->modifier) ||
 		    (main_plane && main_plane >= fb->format->num_planes / 2));
 
 	return fb->format->num_planes / 2 + main_plane;
@@ -465,7 +495,7 @@ int main_to_ccs_plane(const struct drm_framebuffer *fb, int main_plane)
 
 int skl_ccs_to_main_plane(const struct drm_framebuffer *fb, int ccs_plane)
 {
-	drm_WARN_ON(fb->dev, !is_ccs_modifier(fb->modifier) ||
+	drm_WARN_ON(fb->dev, !intel_fb_is_ccs_modifier(fb->modifier) ||
 		    ccs_plane < fb->format->num_planes / 2);
 
 	if (is_gen12_ccs_cc_plane(fb, ccs_plane))
@@ -474,34 +504,11 @@ int skl_ccs_to_main_plane(const struct drm_framebuffer *fb, int ccs_plane)
 	return ccs_plane - fb->format->num_planes / 2;
 }
 
-static unsigned int gen12_aligned_scanout_stride(const struct intel_framebuffer *fb,
-						 int color_plane)
-{
-	struct drm_i915_private *i915 = to_i915(fb->base.dev);
-	unsigned int stride = fb->base.pitches[color_plane];
-
-	if (IS_ALDERLAKE_P(i915))
-		return roundup_pow_of_two(max(stride,
-					      8u * intel_tile_width_bytes(&fb->base, color_plane)));
-
-	return stride;
-}
-
 static unsigned int gen12_ccs_aux_stride(struct intel_framebuffer *fb, int ccs_plane)
 {
-	struct drm_i915_private *i915 = to_i915(fb->base.dev);
 	int main_plane = skl_ccs_to_main_plane(&fb->base, ccs_plane);
 	unsigned int main_stride = fb->base.pitches[main_plane];
 	unsigned int main_tile_width = intel_tile_width_bytes(&fb->base, main_plane);
-
-	/*
-	 * On ADL-P the AUX stride must align with a power-of-two aligned main
-	 * surface stride. The stride of the allocated main surface object can
-	 * be less than this POT stride, which is then autopadded to the POT
-	 * size.
-	 */
-	if (IS_ALDERLAKE_P(i915))
-		main_stride = gen12_aligned_scanout_stride(fb, main_plane);
 
 	return DIV_ROUND_UP(main_stride, 4 * main_tile_width) * 64;
 }
@@ -510,7 +517,7 @@ int skl_main_to_aux_plane(const struct drm_framebuffer *fb, int main_plane)
 {
 	struct drm_i915_private *i915 = to_i915(fb->dev);
 
-	if (is_ccs_modifier(fb->modifier))
+	if (intel_fb_is_ccs_modifier(fb->modifier))
 		return main_to_ccs_plane(fb, main_plane);
 	else if (DISPLAY_VER(i915) < 11 &&
 		 intel_format_info_is_yuv_semiplanar(fb->format, fb->modifier))
@@ -635,7 +642,31 @@ intel_fb_align_height(const struct drm_framebuffer *fb,
 
 static unsigned int intel_fb_modifier_to_tiling(u64 fb_modifier)
 {
-	return lookup_modifier(fb_modifier)->tiling;
+	u8 tiling_caps = lookup_modifier(fb_modifier)->plane_caps &
+			 INTEL_PLANE_CAP_TILING_MASK;
+
+	switch (tiling_caps) {
+	case INTEL_PLANE_CAP_TILING_Y:
+		return I915_TILING_Y;
+	case INTEL_PLANE_CAP_TILING_X:
+		return I915_TILING_X;
+	case INTEL_PLANE_CAP_TILING_Yf:
+	case INTEL_PLANE_CAP_TILING_NONE:
+		return I915_TILING_NONE;
+	default:
+		MISSING_CASE(tiling_caps);
+		return I915_TILING_NONE;
+	}
+}
+
+static bool intel_modifier_uses_dpt(struct drm_i915_private *i915, u64 modifier)
+{
+	return DISPLAY_VER(i915) >= 13 && modifier != DRM_FORMAT_MOD_LINEAR;
+}
+
+bool intel_fb_uses_dpt(const struct drm_framebuffer *fb)
+{
+	return fb && intel_modifier_uses_dpt(to_i915(fb->dev), fb->modifier);
 }
 
 unsigned int intel_cursor_alignment(const struct drm_i915_private *i915)
@@ -758,23 +789,12 @@ void intel_fb_plane_get_subsampling(int *hsub, int *vsub,
 
 static void intel_fb_plane_dims(const struct intel_framebuffer *fb, int color_plane, int *w, int *h)
 {
-	struct drm_i915_private *i915 = to_i915(fb->base.dev);
 	int main_plane = intel_fb_is_ccs_aux_plane(&fb->base, color_plane) ?
 			 skl_ccs_to_main_plane(&fb->base, color_plane) : 0;
 	unsigned int main_width = fb->base.width;
 	unsigned int main_height = fb->base.height;
 	int main_hsub, main_vsub;
 	int hsub, vsub;
-
-	/*
-	 * On ADL-P the CCS AUX surface layout always aligns with the
-	 * power-of-two aligned main surface stride. The main surface
-	 * stride in the allocated FB object may not be power-of-two
-	 * sized, in which case it is auto-padded to the POT size.
-	 */
-	if (IS_ALDERLAKE_P(i915) && intel_fb_is_ccs_aux_plane(&fb->base, color_plane))
-		main_width = gen12_aligned_scanout_stride(fb, 0) /
-			     fb->base.format->cpp[0];
 
 	intel_fb_plane_get_subsampling(&main_hsub, &main_vsub, &fb->base, main_plane);
 	intel_fb_plane_get_subsampling(&hsub, &vsub, &fb->base, color_plane);
@@ -872,7 +892,7 @@ u32 intel_plane_adjust_aligned_offset(int *x, int *y,
 {
 	return intel_adjust_aligned_offset(x, y, state->hw.fb, color_plane,
 					   state->hw.rotation,
-					   state->view.color_plane[color_plane].stride,
+					   state->view.color_plane[color_plane].mapping_stride,
 					   old_offset, new_offset);
 }
 
@@ -953,7 +973,7 @@ u32 intel_plane_compute_aligned_offset(int *x, int *y,
 	struct drm_i915_private *i915 = to_i915(intel_plane->base.dev);
 	const struct drm_framebuffer *fb = state->hw.fb;
 	unsigned int rotation = state->hw.rotation;
-	int pitch = state->view.color_plane[color_plane].stride;
+	int pitch = state->view.color_plane[color_plane].mapping_stride;
 	u32 alignment;
 
 	if (intel_plane->id == PLANE_CURSOR)
@@ -975,6 +995,7 @@ static int intel_fb_offset_to_xy(int *x, int *y,
 	u32 alignment;
 
 	if (DISPLAY_VER(i915) >= 12 &&
+	    !intel_fb_needs_pot_stride_remap(to_intel_framebuffer(fb)) &&
 	    is_semiplanar_uv_plane(fb, color_plane))
 		alignment = intel_tile_row_size(fb, color_plane);
 	else if (fb->modifier != DRM_FORMAT_MOD_LINEAR)
@@ -1086,7 +1107,7 @@ static bool intel_plane_can_remap(const struct intel_plane_state *plane_state)
 	 * The new CCS hash mode isn't compatible with remapping as
 	 * the virtual address of the pages affects the compressed data.
 	 */
-	if (is_ccs_modifier(fb->modifier))
+	if (intel_fb_is_ccs_modifier(fb->modifier))
 		return false;
 
 	/* Linear needs a page aligned stride for remapping */
@@ -1112,11 +1133,11 @@ bool intel_fb_needs_pot_stride_remap(const struct intel_framebuffer *fb)
 static int intel_fb_pitch(const struct intel_framebuffer *fb, int color_plane, unsigned int rotation)
 {
 	if (drm_rotation_90_or_270(rotation))
-		return fb->rotated_view.color_plane[color_plane].stride;
+		return fb->rotated_view.color_plane[color_plane].mapping_stride;
 	else if (intel_fb_needs_pot_stride_remap(fb))
-		return fb->remapped_view.color_plane[color_plane].stride;
+		return fb->remapped_view.color_plane[color_plane].mapping_stride;
 	else
-		return fb->normal_view.color_plane[color_plane].stride;
+		return fb->normal_view.color_plane[color_plane].mapping_stride;
 }
 
 static bool intel_plane_needs_remap(const struct intel_plane_state *plane_state)
@@ -1238,6 +1259,21 @@ plane_view_dst_stride_tiles(const struct intel_framebuffer *fb, int color_plane,
 }
 
 static unsigned int
+plane_view_scanout_stride(const struct intel_framebuffer *fb, int color_plane,
+			  unsigned int tile_width,
+			  unsigned int src_stride_tiles, unsigned int dst_stride_tiles)
+{
+	unsigned int stride_tiles;
+
+	if (IS_ALDERLAKE_P(to_i915(fb->base.dev)))
+		stride_tiles = src_stride_tiles;
+	else
+		stride_tiles = dst_stride_tiles;
+
+	return stride_tiles * tile_width * fb->base.format->cpp[color_plane];
+}
+
+static unsigned int
 plane_view_width_tiles(const struct intel_framebuffer *fb, int color_plane,
 		       const struct fb_plane_view_dims *dims,
 		       int x)
@@ -1327,7 +1363,8 @@ static u32 calc_plane_remap_info(const struct intel_framebuffer *fb, int color_p
 		color_plane_info->x = r.x1;
 		color_plane_info->y = r.y1;
 
-		color_plane_info->stride = remap_info->dst_stride * tile_height;
+		color_plane_info->mapping_stride = remap_info->dst_stride * tile_height;
+		color_plane_info->scanout_stride = color_plane_info->mapping_stride;
 
 		size += remap_info->dst_stride * remap_info->width;
 
@@ -1350,7 +1387,8 @@ static u32 calc_plane_remap_info(const struct intel_framebuffer *fb, int color_p
 		color_plane_info->y = y;
 
 		if (remap_info->linear) {
-			color_plane_info->stride = fb->base.pitches[color_plane];
+			color_plane_info->mapping_stride = fb->base.pitches[color_plane];
+			color_plane_info->scanout_stride = color_plane_info->mapping_stride;
 
 			size += remap_info->size;
 		} else {
@@ -1358,8 +1396,13 @@ static u32 calc_plane_remap_info(const struct intel_framebuffer *fb, int color_p
 									      remap_info->width);
 
 			assign_chk_ovf(i915, remap_info->dst_stride, dst_stride);
-			color_plane_info->stride = dst_stride *
-						   tile_width * fb->base.format->cpp[color_plane];
+			color_plane_info->mapping_stride = dst_stride *
+							   tile_width *
+							   fb->base.format->cpp[color_plane];
+			color_plane_info->scanout_stride =
+				plane_view_scanout_stride(fb, color_plane, tile_width,
+							  remap_info->src_stride,
+							  dst_stride);
 
 			size += dst_stride * remap_info->height;
 		}
@@ -1373,7 +1416,7 @@ static u32 calc_plane_remap_info(const struct intel_framebuffer *fb, int color_p
 	if (remap_info->linear)
 		intel_adjust_linear_offset(&color_plane_info->x, &color_plane_info->y,
 					   fb->base.format->cpp[color_plane],
-					   color_plane_info->stride,
+					   color_plane_info->mapping_stride,
 					   gtt_offset * tile_size, 0);
 	else
 		intel_adjust_tile_offset(&color_plane_info->x, &color_plane_info->y,
@@ -1484,7 +1527,9 @@ int intel_fill_fb_info(struct drm_i915_private *i915, struct intel_framebuffer *
 		 */
 		fb->normal_view.color_plane[i].x = x;
 		fb->normal_view.color_plane[i].y = y;
-		fb->normal_view.color_plane[i].stride = fb->base.pitches[i];
+		fb->normal_view.color_plane[i].mapping_stride = fb->base.pitches[i];
+		fb->normal_view.color_plane[i].scanout_stride =
+			fb->normal_view.color_plane[i].mapping_stride;
 
 		offset = calc_plane_aligned_offset(fb, i, &x, &y);
 
@@ -1534,7 +1579,7 @@ static void intel_plane_remap_gtt(struct intel_plane_state *plane_state)
 	src_w = drm_rect_width(&plane_state->uapi.src) >> 16;
 	src_h = drm_rect_height(&plane_state->uapi.src) >> 16;
 
-	drm_WARN_ON(&i915->drm, is_ccs_modifier(fb->modifier));
+	drm_WARN_ON(&i915->drm, intel_fb_is_ccs_modifier(fb->modifier));
 
 	/* Make src coordinates relative to the viewport */
 	drm_rect_translate(&plane_state->uapi.src,
@@ -1597,7 +1642,7 @@ u32 intel_fb_max_stride(struct drm_i915_private *dev_priv,
 	 *
 	 * The new CCS hash mode makes remapping impossible
 	 */
-	if (DISPLAY_VER(dev_priv) < 4 || is_ccs_modifier(modifier) ||
+	if (DISPLAY_VER(dev_priv) < 4 || intel_fb_is_ccs_modifier(modifier) ||
 	    intel_modifier_uses_dpt(dev_priv, modifier))
 		return intel_plane_fb_max_stride(dev_priv, pixel_format, modifier);
 	else if (DISPLAY_VER(dev_priv) >= 7)
@@ -1622,27 +1667,19 @@ intel_fb_stride_alignment(const struct drm_framebuffer *fb, int color_plane)
 		 * we need the stride to be page aligned.
 		 */
 		if (fb->pitches[color_plane] > max_stride &&
-		    !is_ccs_modifier(fb->modifier))
+		    !intel_fb_is_ccs_modifier(fb->modifier))
 			return intel_tile_size(dev_priv);
 		else
 			return 64;
 	}
 
 	tile_width = intel_tile_width_bytes(fb, color_plane);
-	if (is_ccs_modifier(fb->modifier)) {
-		/*
-		 * On ADL-P the stride must be either 8 tiles or a stride
-		 * that is aligned to 16 tiles, required by the 16 tiles =
-		 * 64 kbyte CCS AUX PTE granularity, allowing CCS FBs to be
-		 * remapped.
-		 */
-		if (IS_ALDERLAKE_P(dev_priv))
-			tile_width *= fb->pitches[0] <= tile_width * 8 ? 8 : 16;
+	if (intel_fb_is_ccs_modifier(fb->modifier)) {
 		/*
 		 * On TGL the surface stride must be 4 tile aligned, mapped by
 		 * one 64 byte cacheline on the CCS AUX surface.
 		 */
-		else if (DISPLAY_VER(dev_priv) >= 12)
+		if (DISPLAY_VER(dev_priv) >= 12)
 			tile_width *= 4;
 		/*
 		 * Display WA #0531: skl,bxt,kbl,glk
@@ -1678,7 +1715,7 @@ static int intel_plane_check_stride(const struct intel_plane_state *plane_state)
 		return 0;
 
 	/* FIXME other color planes? */
-	stride = plane_state->view.color_plane[0].stride;
+	stride = plane_state->view.color_plane[0].mapping_stride;
 	max_stride = plane->max_stride(plane, fb->format->format,
 				       fb->modifier, rotation);
 
