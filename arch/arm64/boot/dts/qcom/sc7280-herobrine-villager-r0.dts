@@ -76,6 +76,10 @@ ap_tp_i2c: &i2c0 {
 	status = "okay";
 };
 
+&pwmleds {
+	status = "okay";
+};
+
 /* For eMMC */
 &sdhc_1 {
 	status = "okay";
