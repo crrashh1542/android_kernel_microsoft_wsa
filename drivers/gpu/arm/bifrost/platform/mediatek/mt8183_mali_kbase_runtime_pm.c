@@ -425,20 +425,6 @@ static int mali_mfgsys_init(struct kbase_device *kbdev, struct mfg_base *mfg)
 }
 
 #ifdef CONFIG_MALI_VALHALL_DEVFREQ
-static void voltage_range_check(struct kbase_device *kbdev,
-				unsigned long *voltages)
-{
-	struct mtk_platform_context *ctx = kbdev->platform_context;
-	const struct mtk_hw_config *cfg = ctx->config;
-
-	if (voltages[1] - voltages[0] < cfg->bias_min_microvolt ||
-	    voltages[1] - voltages[0] > cfg->bias_max_microvolt)
-		voltages[1] = voltages[0] + cfg->bias_min_microvolt;
-	voltages[1] = clamp_t(unsigned long, voltages[1],
-			      cfg->vsram_gpu_min_microvolt,
-			      cfg->vsram_gpu_max_microvolt);
-}
-
 #ifdef CONFIG_REGULATOR
 static bool get_step_volt(unsigned long *step_volt, unsigned long *target_volt,
 			  int nr_regulators, bool inc)
@@ -619,7 +605,7 @@ static int platform_init(struct kbase_device *kbdev)
 #ifdef CONFIG_REGULATOR
 	kbdev->devfreq_ops.set_voltages = set_voltages;
 #endif
-	kbdev->devfreq_ops.voltage_range_check = voltage_range_check;
+	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
 #endif
 
 	return 0;
