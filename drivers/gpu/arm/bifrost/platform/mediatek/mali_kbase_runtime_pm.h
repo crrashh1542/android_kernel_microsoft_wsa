@@ -128,5 +128,6 @@ void kbase_pm_callback_power_off(struct kbase_device *kbdev);
 void kbase_pm_callback_suspend(struct kbase_device *kbdev);
 void kbase_pm_callback_resume(struct kbase_device *kbdev);
 
+int mtk_platform_init(struct kbase_device *kbdev);
 void platform_term(struct kbase_device *kbdev);
 #endif /* _MALI_KBASE_RUNTIME_PM_H_ */

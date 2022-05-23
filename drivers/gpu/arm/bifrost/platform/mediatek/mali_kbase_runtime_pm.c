@@ -360,6 +360,34 @@ void kbase_pm_callback_resume(struct kbase_device *kbdev)
 	kbase_pm_callback_power_on(kbdev);
 }
 
+int mtk_platform_init(struct kbase_device *kbdev)
+{
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+	int err;
+
+	if (WARN_ON(cfg->num_pm_domains <= 0))
+		return -EINVAL;
+	kbdev->num_pm_domains = cfg->num_pm_domains;
+
+	err = kbase_pm_domain_init(kbdev);
+	if (err)
+		goto error;
+
+	err = mtk_mfgsys_init(kbdev);
+	if (err)
+		goto error;
+
+	err = mtk_set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
+	if (err)
+		goto error;
+
+	return 0;
+error:
+	platform_term(kbdev);
+	return err;
+}
+
 void platform_term(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;

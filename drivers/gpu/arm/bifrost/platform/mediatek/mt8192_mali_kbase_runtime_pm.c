@@ -104,25 +104,12 @@ static int mt8192_disable_acp(void)
 
 static int platform_init(struct kbase_device *kbdev)
 {
-	int err;
 	struct mtk_platform_context *ctx = &mt8192_platform_context;
-	const struct mtk_hw_config *cfg = ctx->config;
+	int err;
 
 	kbdev->platform_context = ctx;
 
-	if (WARN_ON(cfg->num_pm_domains <= 0))
-		return -EINVAL;
-	kbdev->num_pm_domains = cfg->num_pm_domains;
-
-	err = kbase_pm_domain_init(kbdev);
-	if (err)
-		return err;
-
-	err = mtk_mfgsys_init(kbdev);
-	if (err)
-		return err;
-
-	err = mtk_set_frequency(kbdev, cfg->gpu_freq_max_khz * 1000);
+	err = mtk_platform_init(kbdev);
 	if (err)
 		return err;
 
