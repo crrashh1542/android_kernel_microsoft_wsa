@@ -665,6 +665,7 @@ static const struct of_device_id dt_match[] = {
 	{ .compatible = "arm,mali-t860-CHROMIUM", .data = &default_data, },
 	{ .compatible = "arm,mali-t880-CHROMIUM", .data = &default_data, },
 	{ .compatible = "arm,mali-bifrost-CHROMIUM", .data = &default_data, },
+	{ .compatible = "arm,mali-valhall-jm-CHROMIUM", .data = &default_data, },
 	{ .compatible = "mediatek,mt8183-mali-CHROMIUM", .data = &mediatek_mt8183_data },
 	{}
 };
