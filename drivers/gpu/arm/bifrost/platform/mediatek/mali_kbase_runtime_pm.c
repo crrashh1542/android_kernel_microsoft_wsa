@@ -94,19 +94,20 @@ void mtk_enable_timestamp_register(struct kbase_device *kbdev)
 void mtk_check_bus_idle(struct kbase_device *kbdev)
 {
 	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
 	u32 val;
 
 	/* Set register MFG_QCHANNEL_CON bit [1:0] = 0x1 */
-	writel(0x1, ctx->mfg_base_addr + REG_MFG_QCHANNEL_CON);
+	writel(0x1, ctx->mfg_base_addr + cfg->reg_mfg_qchannel_con);
 
 	/* Set register MFG_DEBUG_SEL bit [7:0] = 0x3 */
-	writel(0x3, ctx->mfg_base_addr + REG_MFG_DEBUG_SEL);
+	writel(0x3, ctx->mfg_base_addr + cfg->reg_mfg_debug_sel);
 
 	/* Poll register MFG_DEBUG_TOP bit 2 = 0x1 */
 	/* => 1 for bus idle, 0 for bus non-idle */
 	do {
-		val = readl(ctx->mfg_base_addr + REG_MFG_DEBUG_TOP);
-	} while ((val & BUS_IDLE_BIT) != BUS_IDLE_BIT);
+		val = readl(ctx->mfg_base_addr + cfg->reg_mfg_debug_top);
+	} while ((val & cfg->bus_idle_bit) != cfg->bus_idle_bit);
 }
 
 int mtk_mfgsys_init(struct kbase_device *kbdev)

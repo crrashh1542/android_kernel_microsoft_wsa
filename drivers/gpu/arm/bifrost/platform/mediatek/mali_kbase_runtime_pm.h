@@ -11,11 +11,6 @@
 #include <mali_kbase.h>
 #include <mali_kbase_defs.h>
 
-#define REG_MFG_QCHANNEL_CON 0xb4
-#define REG_MFG_DEBUG_SEL 0x170
-#define REG_MFG_DEBUG_TOP 0x178
-#define BUS_IDLE_BIT 0x4
-
 /**
  * Note that reordering the clock indices without extra care may cause
  * fatal errors.
@@ -42,7 +37,11 @@ enum gpu_clk_idx {mux, main, sub, cg, pll};
  * @clk_names: the list of GPU clock names
  * @mfg_compatible_name: MFG compatible name in DT
  * @reg_mfg_timestamp: MFG_TIMESTAMP register address
+ * @reg_mfg_qchannel_con: MFG_QCHANNEL_CON register address, used in bus idle check
+ * @reg_mfg_debug_sel: MFG_DEBUG_SEL register address, used in bus idle check
+ * @reg_mfg_debug_top: MFG_DEBUG_TOP register address, used in bus idle check
  * @top_tsvalueb_en: MFG_TIMESTAMP enable bit
+ * @bus_idle_bit: bus idle check bit
  * @vgpu_min_microvolt: Minimal required voltage for vgpu.
  * @vgpu_max_microvolt: Maximal acceptable voltage for vgpu.
  * @vsram_gpu_min_microvolt: Minimal required voltage for vsram-gpu.
@@ -66,7 +65,11 @@ struct mtk_hw_config {
 	/* MFG */
 	const char *mfg_compatible_name;
 	unsigned int reg_mfg_timestamp;
+	unsigned int reg_mfg_qchannel_con;
+	unsigned int reg_mfg_debug_sel;
+	unsigned int reg_mfg_debug_top;
 	unsigned int top_tsvalueb_en;
+	unsigned int bus_idle_bit;
 
 	/* Voltage configuration for PMIC regulators */
 	unsigned long vgpu_min_microvolt;
