@@ -14,7 +14,6 @@
 #define REG_MFG_QCHANNEL_CON 0xb4
 #define REG_MFG_DEBUG_SEL 0x170
 #define REG_MFG_DEBUG_TOP 0x178
-#define TOP_TSVALUEB_EN 0x1
 #define BUS_IDLE_BIT 0x4
 
 /**
