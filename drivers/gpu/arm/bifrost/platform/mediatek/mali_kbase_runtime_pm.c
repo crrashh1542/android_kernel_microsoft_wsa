@@ -63,7 +63,6 @@ int mtk_map_mfg_base(struct mtk_platform_context *ctx)
 	struct device_node *node;
 	const struct mtk_hw_config *cfg = ctx->config;
 
-
 	WARN_ON(cfg->mfg_compatible_name == NULL);
 	node = of_find_compatible_node(NULL, NULL, cfg->mfg_compatible_name);
 	if (!node)
@@ -87,6 +86,12 @@ void mtk_enable_timestamp_register(struct kbase_device *kbdev)
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
 
+	if (WARN_ON(!cfg->reg_mfg_timestamp) ||
+	    WARN_ON(!cfg->top_tsvalueb_en)) {
+		dev_err(kbdev->dev, "Cannot enable GPU timestamp due to missing configs\n");
+		return;
+	}
+
 	/* Set register MFG_TIMESTAMP to TOP_TSVALEUB_EN */
 	writel(cfg->top_tsvalueb_en, ctx->mfg_base_addr + cfg->reg_mfg_timestamp);
 }
@@ -96,6 +101,14 @@ void mtk_check_bus_idle(struct kbase_device *kbdev)
 	struct mtk_platform_context *ctx = kbdev->platform_context;
 	const struct mtk_hw_config *cfg = ctx->config;
 	u32 val;
+
+	if (WARN_ON_ONCE(!cfg->reg_mfg_qchannel_con) ||
+	    WARN_ON_ONCE(!cfg->reg_mfg_debug_sel) ||
+	    WARN_ON_ONCE(!cfg->reg_mfg_debug_top) ||
+	    WARN_ON_ONCE(!cfg->bus_idle_bit)) {
+		dev_err(kbdev->dev, "Cannot check bus idelness due to missing configs\n");
+		return;
+	}
 
 	/* Set register MFG_QCHANNEL_CON bit [1:0] = 0x1 */
 	writel(0x1, ctx->mfg_base_addr + cfg->reg_mfg_qchannel_con);
