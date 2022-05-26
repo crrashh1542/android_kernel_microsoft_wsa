@@ -57,12 +57,8 @@ struct cros_ec_keyb {
 	struct device *dev;
 	struct cros_ec_device *ec;
 
-	/* Keyboard input device */
 	struct input_dev *idev;
-	/* BUttons and switches input device */
 	struct input_dev *bs_idev;
-	u32 switch_map;
-	u32 button_map;
 	struct notifier_block notifier;
 
 	struct vivaldi_data vdata;
@@ -423,9 +419,6 @@ static int cros_ec_keyb_query_switches(struct cros_ec_keyb *ckdev)
 	union ec_response_get_next_data event_data = {};
 	int ret;
 
-	if (!ckdev->switch_map)
-		return 0;
-
 	ret = cros_ec_keyb_info(ec_dev, EC_MKBP_INFO_CURRENT,
 				EC_MKBP_EVENT_SWITCH, &event_data,
 				sizeof(event_data.switches));
@@ -450,7 +443,12 @@ static int cros_ec_keyb_query_switches(struct cros_ec_keyb *ckdev)
  */
 static __maybe_unused int cros_ec_keyb_resume(struct device *dev)
 {
-	return cros_ec_keyb_query_switches(dev_get_drvdata(dev));
+	struct cros_ec_keyb *ckdev = dev_get_drvdata(dev);
+
+	if (ckdev->bs_idev)
+		return cros_ec_keyb_query_switches(ckdev);
+
+	return 0;
 }
 
 /**
@@ -474,6 +472,8 @@ static int cros_ec_keyb_register_bs(struct cros_ec_keyb *ckdev)
 	struct input_dev *idev;
 	union ec_response_get_next_data event_data = {};
 	const char *phys;
+	u32 buttons;
+	u32 switches;
 	int ret;
 
 	ret = cros_ec_keyb_info(ec_dev, EC_MKBP_INFO_SUPPORTED,
@@ -481,16 +481,16 @@ static int cros_ec_keyb_register_bs(struct cros_ec_keyb *ckdev)
 				sizeof(event_data.buttons));
 	if (ret)
 		return ret;
-	ckdev->button_map = get_unaligned_le32(&event_data.buttons);
+	buttons = get_unaligned_le32(&event_data.buttons);
 
 	ret = cros_ec_keyb_info(ec_dev, EC_MKBP_INFO_SUPPORTED,
 				EC_MKBP_EVENT_SWITCH, &event_data,
 				sizeof(event_data.switches));
 	if (ret)
 		return ret;
-	ckdev->switch_map = get_unaligned_le32(&event_data.switches);
+	switches = get_unaligned_le32(&event_data.switches);
 
-	if (!ckdev->button_map && !ckdev->switch_map)
+	if (!buttons && !switches)
 		return 0;
 
 	/*
@@ -518,27 +518,25 @@ static int cros_ec_keyb_register_bs(struct cros_ec_keyb *ckdev)
 	input_set_drvdata(idev, ckdev);
 	ckdev->bs_idev = idev;
 
-	cros_ec_keyb_walker_bs(ckdev, EV_KEY, ckdev->button_map,
-			cros_ec_keyb_bs_set);
-	cros_ec_keyb_walker_bs(ckdev, EV_SW, ckdev->switch_map,
-			cros_ec_keyb_bs_set);
-
-	ret = input_register_device(ckdev->bs_idev);
-	if (ret) {
-		dev_err(dev, "cannot register input device\n");
-		return ret;
-	}
+	cros_ec_keyb_walker_bs(ckdev, EV_KEY, buttons, cros_ec_keyb_bs_set);
+	cros_ec_keyb_walker_bs(ckdev, EV_SW, buttons, cros_ec_keyb_bs_set);
 
 	ret = cros_ec_keyb_query_switches(ckdev);
 	if (ret) {
 		dev_err(dev, "cannot query switches\n");
 		return ret;
 	}
+
+	ret = input_register_device(ckdev->bs_idev);
+	if (ret) {
+		dev_err(dev, "cannot register input device\n");
+		return ret;
+	}
 	return 0;
 }
 
 /**
- * cros_ec_keyb_register_matrix - Register matrix keys
+ * cros_ec_keyb_register_bs - Register matrix keys
  *
  * Handles all the bits of the keyboard driver related to matrix keys.
  *
@@ -678,6 +676,9 @@ static int cros_ec_keyb_probe(struct platform_device *pdev)
 	struct cros_ec_keyb *ckdev;
 	int err;
 
+	if (!dev->of_node)
+		return -ENODEV;
+
 	ckdev = devm_kzalloc(dev, sizeof(*ckdev), GFP_KERNEL);
 	if (!ckdev)
 		return -ENOMEM;
@@ -686,12 +687,10 @@ static int cros_ec_keyb_probe(struct platform_device *pdev)
 	ckdev->dev = dev;
 	dev_set_drvdata(dev, ckdev);
 
-	if (dev->of_node) {
-		err = cros_ec_keyb_register_matrix(ckdev);
-		if (err) {
-			dev_err(dev, "register matrix inputs error: %d\n", err);
-			return err;
-		}
+	err = cros_ec_keyb_register_matrix(ckdev);
+	if (err) {
+		dev_err(dev, "cannot register matrix inputs: %d\n", err);
+		return err;
 	}
 
 	err = cros_ec_keyb_register_bs(ckdev);
