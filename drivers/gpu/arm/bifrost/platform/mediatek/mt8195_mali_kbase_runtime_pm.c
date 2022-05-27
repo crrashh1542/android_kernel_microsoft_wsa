@@ -11,8 +11,6 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 
-#include <linux/of_device.h>
-
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 

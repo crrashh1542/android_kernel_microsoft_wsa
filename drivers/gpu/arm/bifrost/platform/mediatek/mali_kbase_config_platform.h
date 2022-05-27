@@ -19,6 +19,8 @@
  *
  */
 
+#include <linux/mod_devicetable.h>
+
 /**
  * Power management configuration
  *

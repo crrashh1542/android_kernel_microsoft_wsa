@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2021 Mediatek Inc.
 
-#include <linux/of_device.h>
-
 #include "mali_kbase_config_platform.h"
 #include "mali_kbase_runtime_pm.h"
 
