@@ -58,6 +58,95 @@ int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq)
 	return 0;
 }
 
+static bool get_step_volt(struct kbase_device *kbdev, unsigned long *steps, unsigned long *targets,
+			  bool inc)
+{
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+	int i;
+
+	for (i = 0; i < kbdev->nr_regulators; i++)
+		if (steps[i] != targets[i])
+			break;
+
+	if (i == kbdev->nr_regulators)
+		return false;
+
+	/*
+	 * Do one round of *caterpillar move* - shrink the tail as much to the
+	 * head as possible, and then step ahead as far as possible.
+	 * Depending on the direction of voltage transition, a reversed
+	 * sequence of extend-and-shrink may apply, which leads to the same
+	 * result in the end.
+	 */
+	if (inc) {
+		steps[0] = min(targets[0], steps[1] - cfg->bias_min_microvolt);
+		steps[1] = min(targets[1], steps[0] + cfg->bias_max_microvolt);
+	} else {
+		steps[0] = max(targets[0], steps[1] - cfg->bias_max_microvolt);
+		steps[1] = max(targets[1], steps[0] + cfg->bias_min_microvolt);
+	}
+	return true;
+}
+
+int mtk_set_voltages(struct kbase_device *kbdev, unsigned long *target_volts, bool inc)
+{
+	struct mtk_platform_context *ctx = kbdev->platform_context;
+	const struct mtk_hw_config *cfg = ctx->config;
+	const unsigned long reg_min_volt[BASE_MAX_NR_CLOCKS_REGULATORS] = {
+		cfg->vgpu_min_microvolt,
+		cfg->vsram_gpu_min_microvolt,
+	};
+	const unsigned long reg_max_volt[BASE_MAX_NR_CLOCKS_REGULATORS] = {
+		cfg->vgpu_max_microvolt,
+		cfg->vsram_gpu_max_microvolt,
+	};
+	unsigned long step_volts[BASE_MAX_NR_CLOCKS_REGULATORS];
+	int i, err;
+
+	/* Nothing to do if the direction of voltage transition is incorrect. */
+	if ((inc && kbdev->current_voltages[0] > target_volts[0]) ||
+	   (!inc && kbdev->current_voltages[0] < target_volts[0]))
+		return 0;
+
+	for (i = 0; i < kbdev->nr_regulators; i++)
+		step_volts[i] = kbdev->current_voltages[i];
+
+	while (get_step_volt(kbdev, step_volts, target_volts, inc)) {
+		for (i = 0; i < kbdev->nr_regulators; i++) {
+			if (kbdev->current_voltages[i] == step_volts[i])
+				continue;
+
+			/* Assuming valid max voltages are always positive. */
+			if (reg_max_volt[i] > 0 &&
+			    (step_volts[i] < reg_min_volt[i] ||
+			     step_volts[i] > reg_max_volt[i])) {
+				dev_warn(kbdev->dev,
+					 "Reg %d: invalid voltage %lu, clamp into [%lu, %lu]\n",
+					 i, step_volts[i], reg_min_volt[i], reg_max_volt[i]);
+
+				step_volts[i] = clamp_val(step_volts[i],
+							  reg_min_volt[i],
+							  reg_max_volt[i]);
+			}
+
+			err = regulator_set_voltage(kbdev->regulators[i],
+						    step_volts[i],
+						    step_volts[i] + cfg->supply_tolerance_microvolt);
+
+			if (err) {
+				dev_err(kbdev->dev,
+					"Failed to set regulator %d voltage: %d\n",
+					i, err);
+				return err;
+			}
+			kbdev->current_voltages[i] = step_volts[i];
+		}
+	}
+
+	return 0;
+}
+
 int mtk_map_mfg_base(struct mtk_platform_context *ctx)
 {
 	struct device_node *node;

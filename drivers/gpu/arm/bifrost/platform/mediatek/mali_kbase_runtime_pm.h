@@ -7,6 +7,7 @@
 #include <linux/of_address.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/regulator/consumer.h>
 
 #include <mali_kbase.h>
 #include <mali_kbase_defs.h>
@@ -108,6 +109,7 @@ struct mtk_platform_context {
 
 void mtk_voltage_range_check(struct kbase_device *kbdev, unsigned long *volts);
 int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq);
+int mtk_set_voltages(struct kbase_device *kbdev, unsigned long *target_volts, bool inc);
 
 int mtk_map_mfg_base(struct mtk_platform_context *ctx);
 void mtk_unmap_mfg_base(struct mtk_platform_context *ctx);
