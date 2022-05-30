@@ -72,6 +72,9 @@ static int platform_init(struct kbase_device *kbdev)
 #ifdef CONFIG_MALI_BIFROST_DEVFREQ
 	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
 	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
+#ifdef CONFIG_REGULATOR
+	kbdev->devfreq_ops.set_voltages = mtk_set_voltages;
+#endif
 #endif
 
 	return 0;
