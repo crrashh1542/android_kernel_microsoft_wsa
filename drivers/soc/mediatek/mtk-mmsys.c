@@ -181,7 +181,6 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 	struct platform_device *clks;
 	struct platform_device *drm;
 	struct mtk_mmsys *mmsys;
-	struct platform_device *mdp;
 	int ret;
 
 	mmsys = devm_kzalloc(dev, sizeof(*mmsys), GFP_KERNEL);
@@ -219,27 +218,10 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 					    PLATFORM_DEVID_AUTO, NULL, 0);
 	if (IS_ERR(drm)) {
 		platform_device_unregister(clks);
-		ret = PTR_ERR(drm);
-		goto err_drm;
-	}
-
-	mdp = platform_device_register_data(&pdev->dev, "mtk-mdp",
-					    PLATFORM_DEVID_AUTO, NULL, 0);
-	if (IS_ERR(mdp)) {
-		ret = PTR_ERR(mdp);
-		dev_err(dev, "Failed to register mdp: %d\n", ret);
-		goto err_mdp;
+		return PTR_ERR(drm);
 	}
 
 	return 0;
-
-err_mdp:
-	platform_device_unregister(drm);
-
-err_drm:
-	platform_device_unregister(clks);
-
-	return ret;
 }
 
 static const struct of_device_id of_match_mtk_mmsys[] = {
