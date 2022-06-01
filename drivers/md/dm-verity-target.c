@@ -1205,7 +1205,7 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 	char **argv = *pargv;
 	int argc = *pargc;
 	char *key, *val;
-	int nargc = 10;
+	int nargc = 13;
 	char **nargv;
 	char *errstr;
 	int i;
@@ -1218,6 +1218,9 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 	nargv[3] = "4096";	/* hash block size */
 	nargv[4] = "4096";	/* data block size */
 	nargv[9] = "-";		/* salt (optional) */
+	nargv[10] = "2";
+	nargv[11] = DM_VERITY_OPT_ERROR_BEHAVIOR;
+	nargv[12] = verity_parse_error_behavior(error_behavior);
 
 	for (i = 0; i < argc; ++i) {
 		DMDEBUG("Argument %d: '%s'", i, argv[i]);
@@ -1261,19 +1264,17 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 		} else if (!strcmp(key, DM_VERITY_OPT_ERROR_BEHAVIOR)) {
 			char *behavior = verity_parse_error_behavior(val);
 
-			if (IS_ERR(behavior)) {
-				errstr = "Invalid error behavior";
-				goto err;
-			}
-			nargv[10] = "2";
-			nargv[11] = key;
 			nargv[12] = behavior;
-			nargc = 13;
 		}
 	}
 
 	if (!nargv[1] || !nargv[2] || !nargv[5] || !nargv[7] || !nargv[8]) {
 		errstr = "Missing argument";
+		goto err;
+	}
+
+	if (IS_ERR(nargv[12])) {
+		errstr = "Invalid error behavior";
 		goto err;
 	}
 
