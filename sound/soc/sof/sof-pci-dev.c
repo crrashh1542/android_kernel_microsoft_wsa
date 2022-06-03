@@ -73,9 +73,17 @@ static const struct dmi_system_id sof_tplg_table[] = {
 
 static const struct dmi_system_id community_key_platforms[] = {
 	{
-		.ident = "Up boards",
+		.ident = "Up Squared",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "AAEON"),
+			DMI_MATCH(DMI_BOARD_NAME, "UP-APL01"),
+		}
+	},
+	{
+		.ident = "Up Extreme",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "AAEON"),
+			DMI_MATCH(DMI_BOARD_NAME, "UP-WHL01"),
 		}
 	},
 	{
