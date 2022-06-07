@@ -22,12 +22,7 @@
 #include <linux/compat.h>
 
 #include <linux/version.h>
-#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
 #include <drm/drm_ioctl.h>
-#elif KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
-#else
-#include <drm/drmP.h>
-#endif
 #include <drm/drm_edid.h>
 #include "evdi_drm.h"
 
@@ -56,31 +51,18 @@ static int compat_evdi_connect(struct file *file,
 				unsigned long arg)
 {
 	struct drm_evdi_connect32 req32;
-	struct drm_evdi_connect __user *request;
+	struct drm_evdi_connect krequest;
 
 	if (copy_from_user(&req32, (void __user *)arg, sizeof(req32)))
 		return -EFAULT;
 
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE && KERNEL_VERSION(5, 14, 0) >= LINUX_VERSION_CODE || defined(EL8)
-	request = compat_alloc_user_space(sizeof(*request));
-#else
-	request = kmalloc(sizeof(*request), GFP_USER);
-#endif
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE || defined(EL8)
-	if (!access_ok(request, sizeof(*request))
-#else
-	if (!access_ok(VERIFY_WRITE, request, sizeof(*request))
-#endif
-		|| __put_user(req32.connected, &request->connected)
-		|| __put_user(req32.dev_index, &request->dev_index)
-		|| __put_user((void __user *)(unsigned long)req32.edid_ptr32,
-			  &request->edid)
-		|| __put_user(req32.edid_length, &request->edid_length)
-		|| __put_user(req32.sku_area_limit, &request->sku_area_limit))
-		return -EFAULT;
+	krequest.connected = req32.connected;
+	krequest.dev_index = req32.dev_index;
+	krequest.edid = compat_ptr(req32.edid_ptr32);
+	krequest.edid_length = req32.edid_length;
+	krequest.sku_area_limit = req32.sku_area_limit;
 
-	return drm_ioctl(file, DRM_IOCTL_EVDI_CONNECT,
-			 (unsigned long)request);
+	return drm_ioctl_kernel(file, evdi_painter_connect_ioctl, &krequest, 0);
 }
 
 static int compat_evdi_grabpix(struct file *file,
@@ -88,34 +70,28 @@ static int compat_evdi_grabpix(struct file *file,
 				unsigned long arg)
 {
 	struct drm_evdi_grabpix32 req32;
-	struct drm_evdi_grabpix __user *request;
+	struct drm_evdi_grabpix krequest;
+	int ret;
 
 	if (copy_from_user(&req32, (void __user *)arg, sizeof(req32)))
 		return -EFAULT;
 
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE && KERNEL_VERSION(5, 14, 0) >= LINUX_VERSION_CODE || defined(EL8)
-	request = compat_alloc_user_space(sizeof(*request));
-#else
-	request = kmalloc(sizeof(*request), GFP_USER);
-#endif
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE || defined(EL8)
-	if (!access_ok(request, sizeof(*request))
-#else
-	if (!access_ok(VERIFY_WRITE, request, sizeof(*request))
-#endif
-		|| __put_user(req32.mode, &request->mode)
-		|| __put_user(req32.buf_width, &request->buf_width)
-		|| __put_user(req32.buf_height, &request->buf_height)
-		|| __put_user(req32.buf_byte_stride, &request->buf_byte_stride)
-		|| __put_user((void __user *)(unsigned long)req32.buffer_ptr32,
-			  &request->buffer)
-		|| __put_user(req32.num_rects, &request->num_rects)
-		|| __put_user((void __user *)(unsigned long)req32.rects_ptr32,
-			  &request->rects))
-		return -EFAULT;
+	krequest.mode = req32.mode;
+	krequest.buf_width = req32.buf_width;
+	krequest.buf_height = req32.buf_height;
+	krequest.buf_byte_stride = req32.buf_byte_stride;
+	krequest.buffer = compat_ptr(req32.buffer_ptr32);
+	krequest.num_rects = req32.num_rects;
+	krequest.rects = compat_ptr(req32.rects_ptr32);
 
-	return drm_ioctl(file, DRM_IOCTL_EVDI_GRABPIX,
-			 (unsigned long)request);
+	ret = drm_ioctl_kernel(file, evdi_painter_grabpix_ioctl, &krequest, 0);
+	if (ret)
+		return ret;
+
+	req32.num_rects = krequest.num_rects;
+	if (copy_to_user((void __user *)arg, &req32, sizeof(req32)))
+                return -EFAULT;
+	return 0;
 }
 
 static drm_ioctl_compat_t *evdi_compat_ioctls[] = {
