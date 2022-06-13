@@ -66,12 +66,12 @@ static enum drm_mode_status evdi_mode_valid(struct drm_connector *connector,
 					    struct drm_display_mode *mode)
 {
 	struct evdi_device *evdi = connector->dev->dev_private;
-	uint32_t mode_limit = mode->hdisplay * mode->vdisplay * drm_mode_vrefresh(mode);
+	uint32_t mode_area = mode->hdisplay * mode->vdisplay;
 
-	if (evdi->pixel_per_second_limit == 0)
+	if (evdi->sku_area_limit == 0)
 		return MODE_OK;
 
-	if (mode_limit > evdi->pixel_per_second_limit) {
+	if (mode_area > evdi->sku_area_limit) {
 		EVDI_WARN("(card%d) Mode %dx%d@%d rejected\n",
 			evdi->dev_index,
 			mode->hdisplay,
