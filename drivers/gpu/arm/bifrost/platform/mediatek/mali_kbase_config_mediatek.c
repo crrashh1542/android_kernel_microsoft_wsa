@@ -14,18 +14,7 @@ struct kbase_platform_config *kbase_get_platform_config(void)
 	return &dummy_platform_config;
 }
 
-#ifndef CONFIG_OF
-int kbase_platform_register(void)
-{
-	return 0;
-}
-
-void kbase_platform_unregister(void)
-{
-}
-#endif
-
-#ifdef CONFIG_OF
+#if IS_ENABLED(CONFIG_OF)
 static const struct kbase_platform_specific_conf mediatek_mt8183_data = {
 	.pm_callbacks = &mt8183_pm_callbacks,
 	.platform_funcs = &mt8183_platform_funcs,
@@ -58,4 +47,13 @@ const struct of_device_id kbase_dt_ids[] = {
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, kbase_dt_ids);
-#endif
+#else
+int kbase_platform_register(void)
+{
+	return 0;
+}
+
+void kbase_platform_unregister(void)
+{
+}
+#endif /* IS_ENABLED(CONFIG_OF) */

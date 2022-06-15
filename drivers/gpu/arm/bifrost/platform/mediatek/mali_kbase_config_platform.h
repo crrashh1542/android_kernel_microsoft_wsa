@@ -53,6 +53,6 @@ extern struct kbase_platform_funcs_conf mt8195_platform_funcs;
 extern struct kbase_pm_callback_conf mt8186_pm_callbacks;
 extern struct kbase_platform_funcs_conf mt8186_platform_funcs;
 
-#ifdef CONFIG_OF
+#if IS_ENABLED(CONFIG_OF)
 extern const struct of_device_id kbase_dt_ids[];
 #endif
