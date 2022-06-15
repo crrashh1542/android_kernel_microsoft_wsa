@@ -38,7 +38,6 @@ enum devfreq_timer {
 
 struct devfreq;
 struct devfreq_governor;
-struct devfreq_cpu_data;
 struct thermal_cooling_device;
 
 /**
@@ -289,11 +288,6 @@ struct devfreq_simple_ondemand_data {
 #endif
 
 #if IS_ENABLED(CONFIG_DEVFREQ_GOV_PASSIVE)
-enum devfreq_parent_dev_type {
-	DEVFREQ_PARENT_DEV,
-	CPUFREQ_PARENT_DEV,
-};
-
 /**
  * struct devfreq_passive_data - ``void *data`` fed to struct devfreq
  *	and devfreq_add_device
@@ -305,10 +299,8 @@ enum devfreq_parent_dev_type {
  *			using governors except for passive governor.
  *			If the devfreq device has the specific method to decide
  *			the next frequency, should use this callback.
- + * @parent_type	parent type of the device
- + * @this:		the devfreq instance of own device.
- + * @nb:		the notifier block for DEVFREQ_TRANSITION_NOTIFIER list
- + * @cpudata:		the state min/max/current frequency of all online cpu's
+ * @this:	the devfreq instance of own device.
+ * @nb:		the notifier block for DEVFREQ_TRANSITION_NOTIFIER list
  *
  * The devfreq_passive_data have to set the devfreq instance of parent
  * device with governors except for the passive governor. But, don't need to
@@ -322,13 +314,9 @@ struct devfreq_passive_data {
 	/* Optional callback to decide the next frequency of passvice device */
 	int (*get_target_freq)(struct devfreq *this, unsigned long *freq);
 
-	/* Should set the type of parent device */
-	enum devfreq_parent_dev_type parent_type;
-
 	/* For passive governor's internal use. Don't need to set them */
 	struct devfreq *this;
 	struct notifier_block nb;
-	struct devfreq_cpu_data *cpudata[NR_CPUS];
 };
 #endif
 
