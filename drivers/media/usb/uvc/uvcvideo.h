@@ -256,6 +256,7 @@ struct uvc_control_mapping {
 
 	const struct uvc_menu_info *menu_info;
 	u32 menu_count;
+	u32 menu_min;
 
 	u32 master_id;
 	s32 master_manual;

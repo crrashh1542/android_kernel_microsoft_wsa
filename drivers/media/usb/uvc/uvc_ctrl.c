@@ -371,22 +371,11 @@ static const u32 uvc_control_classes[] = {
 	V4L2_CID_USER_CLASS,
 };
 
-static const struct uvc_menu_info power_line_frequency_controls_uvc11[] = {
-	{ 0, "Disabled" },
-	{ 1, "50 Hz" },
-	{ 2, "60 Hz" },
-};
-
-static const struct uvc_menu_info power_line_frequency_controls_uvc15[] = {
+static const struct uvc_menu_info power_line_frequency_controls[] = {
 	{ 0, "Disabled" },
 	{ 1, "50 Hz" },
 	{ 2, "60 Hz" },
 	{ 3, "Auto" },
-};
-
-static const struct uvc_menu_info power_line_frequency_controls_limited[] = {
-	{ 1, "50 Hz" },
-	{ 2, "60 Hz" },
 };
 
 static const struct uvc_menu_info exposure_auto_controls[] = {
@@ -758,8 +747,8 @@ struct uvc_control_mapping power_line_mapping_uvc11 = {
 	.offset		= 0,
 	.v4l2_type	= V4L2_CTRL_TYPE_MENU,
 	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
-	.menu_info	= power_line_frequency_controls_uvc11,
-	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_uvc11),
+	.menu_info	= power_line_frequency_controls,
+	.menu_count	= ARRAY_SIZE(power_line_frequency_controls) - 1,
 };
 
 static const
@@ -771,8 +760,8 @@ struct uvc_control_mapping power_line_mapping_uvc15 = {
 	.offset		= 0,
 	.v4l2_type	= V4L2_CTRL_TYPE_MENU,
 	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
-	.menu_info	= power_line_frequency_controls_uvc15,
-	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_uvc15),
+	.menu_info	= power_line_frequency_controls,
+	.menu_count	= ARRAY_SIZE(power_line_frequency_controls),
 };
 
 static const
@@ -784,8 +773,9 @@ struct uvc_control_mapping power_line_mapping_limited = {
 	.offset		= 0,
 	.v4l2_type	= V4L2_CTRL_TYPE_MENU,
 	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
-	.menu_info	= power_line_frequency_controls_limited,
-	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_limited),
+	.menu_min	= 1,
+	.menu_info	= power_line_frequency_controls,
+	.menu_count	= ARRAY_SIZE(power_line_frequency_controls) - 1,
 };
 
 /* ------------------------------------------------------------------------
@@ -1203,7 +1193,7 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 
 	switch (mapping->v4l2_type) {
 	case V4L2_CTRL_TYPE_MENU:
-		v4l2_ctrl->minimum = 0;
+		v4l2_ctrl->minimum = mapping->menu_min;
 		v4l2_ctrl->maximum = mapping->menu_count - 1;
 		v4l2_ctrl->step = 1;
 
