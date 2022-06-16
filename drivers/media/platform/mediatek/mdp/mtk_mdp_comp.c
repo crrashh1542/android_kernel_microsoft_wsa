@@ -103,14 +103,13 @@ err_pm_runtime_put_sync:
 
 int mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
 {
-	int i, err, status;
+	int i, err;
 
 	for (i = 0; i < ARRAY_SIZE(comp->clk); i++) {
 		if (IS_ERR(comp->clk[i]))
 			continue;
 		err = clk_prepare_enable(comp->clk[i]);
 		if (err) {
-			status = err;
 			dev_err(comp->dev, "failed to enable clock, err %d. i:%d\n", err, i);
 			goto err_clk_prepare_enable;
 		}
