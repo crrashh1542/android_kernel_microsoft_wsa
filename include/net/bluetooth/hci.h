@@ -247,6 +247,11 @@ enum {
 	 */
 	HCI_QUIRK_NO_SUSPEND_NOTIFIER,
 
+	/* CHROMIUM-only: This quirk prevents RTL8822 to perform remote wake
+	 * on system suspend to save power. This shouldn't be upstreamed.
+	 */
+	HCI_QUIRK_DISABLE_REMOTE_WAKE,
+
 	/*
 	 * When this quirk is set, LE tx power is not queried on startup
 	 * and the min/max tx power values default to HCI_TX_POWER_INVALID.
