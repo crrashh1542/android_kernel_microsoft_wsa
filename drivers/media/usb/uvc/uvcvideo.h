@@ -209,10 +209,7 @@
 #define UVC_QUIRK_RESTORE_CTRLS_ON_INIT	0x00000400
 #define UVC_QUIRK_FORCE_Y8		0x00000800
 #define UVC_QUIRK_FORCE_BPP		0x00001000
-#define UVC_QUIRK_LIMITED_POWERLINE     0x00002000
-
-/* ChromeOS defined quirks */
-#define UVC_QUIRK_PRIVACY_DURING_STREAM	0x80000000
+#define UVC_QUIRK_PRIVACY_DURING_STREAM	0x00002000
 
 /* Format flags */
 #define UVC_FMT_FLAG_COMPRESSED		0x00000001
@@ -256,7 +253,6 @@ struct uvc_control_mapping {
 
 	const struct uvc_menu_info *menu_info;
 	u32 menu_count;
-	u32 menu_min;
 
 	u32 master_id;
 	s32 master_manual;
