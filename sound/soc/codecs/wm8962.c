@@ -3491,7 +3491,6 @@ static const struct snd_soc_component_driver soc_component_dev_wm8962 = {
 	.set_pll		= wm8962_set_fll,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 /* Improve power consumption for IN4 DC measurement mode */
