@@ -867,8 +867,7 @@ static struct i915_vma *eb_lookup_vma(struct i915_execbuffer *eb, u32 handle)
 		 * this context, because the context itself will be banned when
 		 * the protected objects become invalid.
 		 */
-		if (i915_gem_context_uses_protected_content(eb->gem_context) &&
-		    i915_gem_object_is_protected(obj)) {
+		if (i915_gem_object_is_protected(obj)) {
 			err = intel_pxp_key_check(&vm->gt->pxp, obj, true);
 			if (err) {
 				i915_gem_object_put(obj);
