@@ -3564,6 +3564,9 @@ static int ath11k_start_scan(struct ath11k *ar,
 
 		if (ar->supports_6ghz)
 			timeout += 5 * HZ;
+
+		if (ar->state_11d != ATH11K_11D_IDLE)
+			timeout = 1 * HZ;
 	}
 
 	ret = wait_for_completion_timeout(&ar->scan.started, timeout);
