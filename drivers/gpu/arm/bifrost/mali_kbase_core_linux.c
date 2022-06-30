@@ -412,6 +412,12 @@ int assign_irqs(struct kbase_device *kbdev)
 {
 	struct platform_device *pdev;
 	int i;
+	int irq;
+	static const char * const irq_names[] = {
+		[JOB_IRQ_TAG] = "job",
+		[MMU_IRQ_TAG] = "mmu",
+		[GPU_IRQ_TAG] = "gpu",
+	};
 
 	if (!kbdev)
 		return -ENODEV;
@@ -419,32 +425,19 @@ int assign_irqs(struct kbase_device *kbdev)
 	pdev = to_platform_device(kbdev->dev);
 	/* 3 IRQ resources */
 	for (i = 0; i < 3; i++) {
-		struct resource *irq_res;
-		int irqtag;
-
-		irq_res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
-		if (!irq_res) {
-			dev_err(kbdev->dev, "No IRQ resource at index %d\n", i);
-			return -ENOENT;
+		/*
+		 * b/236583122: Workaround for CrOS kernel CI. After upstream
+		 * commit a1a2b7125e10, people are expected to use
+		 * platform_get_irq*() to get IRQ resources instead of
+		 * platform_get_resource().
+		 */
+		irq = platform_get_irq_byname(pdev, irq_names[i]);
+		if (irq < 0) {
+			dev_err(kbdev->dev, "No IRQ with name %s\n", irq_names[i]);
+			return irq;
 		}
 
-#if IS_ENABLED(CONFIG_OF)
-		if (!strncasecmp(irq_res->name, "JOB", 4)) {
-			irqtag = JOB_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "MMU", 4)) {
-			irqtag = MMU_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "GPU", 4)) {
-			irqtag = GPU_IRQ_TAG;
-		} else {
-			dev_err(&pdev->dev, "Invalid irq res name: '%s'\n",
-				irq_res->name);
-			return -EINVAL;
-		}
-#else
-		irqtag = i;
-#endif /* CONFIG_OF */
-		kbdev->irqs[irqtag].irq = irq_res->start;
-		kbdev->irqs[irqtag].flags = irq_res->flags & IRQF_TRIGGER_MASK;
+		kbdev->irqs[i].irq = irq;
 	}
 
 	return 0;
