@@ -2627,9 +2627,7 @@ static int btusb_mtk_setup(struct hci_dev *hdev)
 			return err;
 		}
 
-		/* MSFT HCI extension is disabled for MT7921 controller.
-		 * See b/230440998, b/233126864 for more details.
-		 */
+		hci_set_msft_opcode(hdev, 0xFD30);
 		hci_set_aosp_capable(hdev);
 		goto done;
 	default:
