@@ -49,7 +49,7 @@ static void msm_gpuboost_input_event(struct input_handle *handle,
 	 * a worker if the GPU is already ticking
 	 */
 	ret = pm_runtime_get_if_in_use(&gpu->pdev->dev);
-	if (ret == 0) {
+	if (ret <= 0) {
 		trace_msm_gpu_boost(type, code, value);
 		kthread_queue_work(gpu->worker, &gpu->boost_work);
 		return;
