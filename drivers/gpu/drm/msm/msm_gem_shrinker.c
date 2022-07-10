@@ -4,6 +4,9 @@
  * Author: Rob Clark <robdclark@gmail.com>
  */
 
+#include <linux/vmalloc.h>
+#include <linux/sched/mm.h>
+
 #include "msm_drv.h"
 #include "msm_gem.h"
 #include "msm_gpu.h"
@@ -12,7 +15,7 @@
 /* Default disabled for now until it has some more testing on the different
  * iommu combinations that can be paired with the driver:
  */
-bool enable_eviction = false;
+bool enable_eviction = true;
 MODULE_PARM_DESC(enable_eviction, "Enable swappable GEM buffers");
 module_param(enable_eviction, bool, 0600);
 

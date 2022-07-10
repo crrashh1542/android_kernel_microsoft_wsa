@@ -31,9 +31,11 @@
 #include <linux/kref.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 
 #include <asm/byteorder.h>
 
+#include <drm/display/drm_dp_helper.h>
 #include <drm/drm_print.h>
 
 #include "cgs_common.h"

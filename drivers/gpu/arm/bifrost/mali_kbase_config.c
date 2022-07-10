@@ -27,7 +27,7 @@ int kbasep_platform_device_init(struct kbase_device *kbdev)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_init_func)
 		return platform_funcs_p->platform_init_func(kbdev);
 
@@ -38,7 +38,7 @@ void kbasep_platform_device_term(struct kbase_device *kbdev)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_term_func)
 		platform_funcs_p->platform_term_func(kbdev);
 }
@@ -47,7 +47,7 @@ int kbasep_platform_device_late_init(struct kbase_device *kbdev)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_late_init_func)
 		platform_funcs_p->platform_late_init_func(kbdev);
 
@@ -58,7 +58,7 @@ void kbasep_platform_device_late_term(struct kbase_device *kbdev)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_late_term_func)
 		platform_funcs_p->platform_late_term_func(kbdev);
 }
@@ -68,7 +68,7 @@ int kbasep_platform_context_init(struct kbase_context *kctx)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kctx->kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_handler_context_init_func)
 		return platform_funcs_p->platform_handler_context_init_func(kctx);
 
@@ -79,7 +79,7 @@ void kbasep_platform_context_term(struct kbase_context *kctx)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = kctx->kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_handler_context_term_func)
 		platform_funcs_p->platform_handler_context_term_func(kctx);
 }
@@ -88,7 +88,7 @@ void kbasep_platform_event_atom_submit(struct kbase_jd_atom *katom)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = katom->kctx->kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_handler_atom_submit_func)
 		platform_funcs_p->platform_handler_atom_submit_func(katom);
 }
@@ -97,7 +97,7 @@ void kbasep_platform_event_atom_complete(struct kbase_jd_atom *katom)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
 
-	platform_funcs_p = (struct kbase_platform_funcs_conf *)PLATFORM_FUNCS;
+	platform_funcs_p = katom->kctx->kbdev->funcs->platform_funcs;
 	if (platform_funcs_p && platform_funcs_p->platform_handler_atom_complete_func)
 		platform_funcs_p->platform_handler_atom_complete_func(katom);
 }

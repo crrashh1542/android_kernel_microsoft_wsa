@@ -305,7 +305,7 @@ static int xen_initdom_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 				return -EINVAL;
 
 			map_irq.table_base = pci_resource_start(dev, bir);
-			map_irq.entry_nr = msidesc->msi_attrib.entry_nr;
+			map_irq.entry_nr = msidesc->pci.msi_attrib.entry_nr;
 		}
 
 		ret = -EINVAL;
@@ -397,7 +397,7 @@ static void xen_pv_teardown_msi_irqs(struct pci_dev *dev)
 {
 	struct msi_desc *msidesc = first_pci_msi_entry(dev);
 
-	if (msidesc->msi_attrib.is_msix)
+	if (msidesc->pci.msi_attrib.is_msix)
 		xen_pci_frontend_disable_msix(dev);
 	else
 		xen_pci_frontend_disable_msi(dev);
@@ -413,7 +413,7 @@ static int xen_msi_domain_alloc_irqs(struct irq_domain *domain,
 	if (WARN_ON_ONCE(!dev_is_pci(dev)))
 		return -EINVAL;
 
-	if (first_msi_entry(dev)->msi_attrib.is_msix)
+	if (first_msi_entry(dev)->pci.msi_attrib.is_msix)
 		type = PCI_CAP_ID_MSIX;
 	else
 		type = PCI_CAP_ID_MSI;
@@ -472,7 +472,6 @@ static __init void xen_setup_pci_msi(void)
 			xen_msi_ops.setup_msi_irqs = xen_setup_msi_irqs;
 		}
 		xen_msi_ops.teardown_msi_irqs = xen_pv_teardown_msi_irqs;
-		pci_msi_ignore_mask = 1;
 	} else if (xen_hvm_domain()) {
 		xen_msi_ops.setup_msi_irqs = xen_hvm_setup_msi_irqs;
 		xen_msi_ops.teardown_msi_irqs = xen_teardown_msi_irqs;
@@ -486,6 +485,11 @@ static __init void xen_setup_pci_msi(void)
 	 * in allocating the native domain and never use it.
 	 */
 	x86_init.irqs.create_pci_msi_domain = xen_create_pci_msi_domain;
+	/*
+	 * With XEN PIRQ/Eventchannels in use PCI/MSI[-X] masking is solely
+	 * controlled by the hypervisor.
+	 */
+	pci_msi_ignore_mask = 1;
 }
 
 #else /* CONFIG_PCI_MSI */

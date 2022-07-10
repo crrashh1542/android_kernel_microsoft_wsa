@@ -22,6 +22,7 @@
 #define DRIVER_NAME "mtk-spi-nor"
 
 #define MTK_NOR_REG_CMD			0x00
+#define MTK_NOR_CMD_AUTO_INCR		BIT(7)
 #define MTK_NOR_CMD_WRITE		BIT(4)
 #define MTK_NOR_CMD_PROGRAM		BIT(2)
 #define MTK_NOR_CMD_READ		BIT(0)
@@ -95,6 +96,22 @@
 
 #define CLK_TO_US(sp, clkcnt)		DIV_ROUND_UP(clkcnt, sp->spi_freq / 1000000)
 
+struct mtk_nor_caps {
+	u8 dma_bits;
+
+	/* extra_dummy_bit is adding for the IP of new SoCs.
+	 * Some new SoCs modify the timing of fetching registers' values
+	 * and IDs of nor flash, they need a extra_dummy_bit which can add
+	 * more clock cycles for fetching data.
+	 */
+	u8 extra_dummy_bit;
+
+	/* TODO(b/230280803): Remove this hack after we find out the right way
+	 * to fix this issue.
+	 */
+	bool dma_en;
+};
+
 struct mtk_nor {
 	struct spi_controller *ctlr;
 	struct device *dev;
@@ -104,11 +121,13 @@ struct mtk_nor {
 	struct clk *spi_clk;
 	struct clk *ctlr_clk;
 	struct clk *axi_clk;
+	struct clk *axi_s_clk;
 	unsigned int spi_freq;
 	bool wbuf_en;
 	bool has_irq;
 	bool high_dma;
 	struct completion op_done;
+	const struct mtk_nor_caps *caps;
 };
 
 static inline void mtk_nor_rmw(struct mtk_nor *sp, u32 reg, u32 set, u32 clr)
@@ -123,11 +142,16 @@ static inline void mtk_nor_rmw(struct mtk_nor *sp, u32 reg, u32 set, u32 clr)
 static inline int mtk_nor_cmd_exec(struct mtk_nor *sp, u32 cmd, ulong clk)
 {
 	ulong delay = CLK_TO_US(sp, clk);
-	u32 reg;
+	u32 reg, read_cmd;
 	int ret;
 
+	if (sp->caps->dma_en)
+		read_cmd = cmd;
+	else
+		read_cmd = cmd & 0x1f;
+
 	writel(cmd, sp->base + MTK_NOR_REG_CMD);
-	ret = readl_poll_timeout(sp->base + MTK_NOR_REG_CMD, reg, !(reg & cmd),
+	ret = readl_poll_timeout(sp->base + MTK_NOR_REG_CMD, reg, !(reg & read_cmd),
 				 delay / 3, (delay + 1) * 200);
 	if (ret < 0)
 		dev_err(sp->dev, "command %u timeout.\n", cmd);
@@ -422,12 +446,41 @@ static int mtk_nor_read_dma(struct mtk_nor *sp, const struct spi_mem_op *op)
 static int mtk_nor_read_pio(struct mtk_nor *sp, const struct spi_mem_op *op)
 {
 	u8 *buf = op->data.buf.in;
-	int ret;
+	int i, ret;
 
-	ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ, 6 * BITS_PER_BYTE);
-	if (!ret)
-		buf[0] = readb(sp->base + MTK_NOR_REG_RDATA);
-	return ret;
+	if (sp->caps->dma_en) {
+		ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ, 6 * BITS_PER_BYTE);
+		if (!ret)
+			buf[0] = readb(sp->base + MTK_NOR_REG_RDATA);
+		return ret;
+	}
+
+
+	for (i = 0; i < op->data.nbytes; i++) {
+		ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_READ |
+		      MTK_NOR_CMD_AUTO_INCR, 6 * BITS_PER_BYTE);
+		if (ret) {
+			dev_err(sp->dev, "cmd: 0x%x, %d.\n",
+				op->cmd.opcode, op->cmd.buswidth);
+
+			dev_err(sp->dev, "addr: 0x%x, %d %d.\n",
+				op->addr.buswidth, op->addr.nbytes,
+				op->addr.dtr);
+
+			dev_err(sp->dev, "dummy: 0x%x, %d %d.\n",
+				op->dummy.buswidth, op->dummy.nbytes,
+				op->dummy.dtr);
+
+			dev_err(sp->dev, "data: 0x%x, %d %d.\n",
+				op->data.buswidth, op->data.nbytes,
+				op->data.dtr);
+			return ret;
+		}
+
+		buf[i] = readb(sp->base + MTK_NOR_REG_RDATA);
+	}
+
+	return 0;
 }
 
 static int mtk_nor_write_buffer_enable(struct mtk_nor *sp)
@@ -554,7 +607,12 @@ static int mtk_nor_spi_mem_prg(struct mtk_nor *sp, const struct spi_mem_op *op)
 	}
 
 	// trigger op
-	writel(prg_len * BITS_PER_BYTE, sp->base + MTK_NOR_REG_PRG_CNT);
+	if (rx_len)
+		writel(prg_len * BITS_PER_BYTE + sp->caps->extra_dummy_bit,
+		       sp->base + MTK_NOR_REG_PRG_CNT);
+	else
+		writel(prg_len * BITS_PER_BYTE, sp->base + MTK_NOR_REG_PRG_CNT);
+
 	ret = mtk_nor_cmd_exec(sp, MTK_NOR_CMD_PROGRAM,
 			       prg_len * BITS_PER_BYTE);
 	if (ret)
@@ -594,7 +652,7 @@ static int mtk_nor_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		if (ret < 0)
 			return ret;
 		mtk_nor_setup_bus(sp, op);
-		if (op->data.nbytes == 1) {
+		if (op->data.nbytes == 1 || !sp->caps->dma_en) {
 			mtk_nor_set_addr(sp, op);
 			return mtk_nor_read_pio(sp, op);
 		} else {
@@ -674,6 +732,7 @@ static void mtk_nor_disable_clk(struct mtk_nor *sp)
 	clk_disable_unprepare(sp->spi_clk);
 	clk_disable_unprepare(sp->ctlr_clk);
 	clk_disable_unprepare(sp->axi_clk);
+	clk_disable_unprepare(sp->axi_s_clk);
 }
 
 static int mtk_nor_enable_clk(struct mtk_nor *sp)
@@ -694,6 +753,14 @@ static int mtk_nor_enable_clk(struct mtk_nor *sp)
 	if (ret) {
 		clk_disable_unprepare(sp->spi_clk);
 		clk_disable_unprepare(sp->ctlr_clk);
+		return ret;
+	}
+
+	ret = clk_prepare_enable(sp->axi_s_clk);
+	if (ret) {
+		clk_disable_unprepare(sp->spi_clk);
+		clk_disable_unprepare(sp->ctlr_clk);
+		clk_disable_unprepare(sp->axi_clk);
 		return ret;
 	}
 
@@ -743,9 +810,28 @@ static const struct spi_controller_mem_ops mtk_nor_mem_ops = {
 	.exec_op = mtk_nor_exec_op
 };
 
+static const struct mtk_nor_caps mtk_nor_caps_mt8173 = {
+	.dma_bits = 32,
+	.extra_dummy_bit = 0,
+	.dma_en = false,
+};
+
+static const struct mtk_nor_caps mtk_nor_caps_mt8186 = {
+	.dma_bits = 32,
+	.extra_dummy_bit = 1,
+	.dma_en = true,
+};
+
+static const struct mtk_nor_caps mtk_nor_caps_mt8192 = {
+	.dma_bits = 36,
+	.extra_dummy_bit = 0,
+	.dma_en = true,
+};
+
 static const struct of_device_id mtk_nor_match[] = {
-	{ .compatible = "mediatek,mt8192-nor", .data = (void *)36 },
-	{ .compatible = "mediatek,mt8173-nor", .data = (void *)32 },
+	{ .compatible = "mediatek,mt8173-nor", .data = &mtk_nor_caps_mt8173 },
+	{ .compatible = "mediatek,mt8186-nor", .data = &mtk_nor_caps_mt8186 },
+	{ .compatible = "mediatek,mt8192-nor", .data = &mtk_nor_caps_mt8192 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mtk_nor_match);
@@ -754,10 +840,10 @@ static int mtk_nor_probe(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr;
 	struct mtk_nor *sp;
+	struct mtk_nor_caps *caps;
 	void __iomem *base;
-	struct clk *spi_clk, *ctlr_clk, *axi_clk;
+	struct clk *spi_clk, *ctlr_clk, *axi_clk, *axi_s_clk;
 	int ret, irq;
-	unsigned long dma_bits;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -775,10 +861,16 @@ static int mtk_nor_probe(struct platform_device *pdev)
 	if (IS_ERR(axi_clk))
 		return PTR_ERR(axi_clk);
 
-	dma_bits = (unsigned long)of_device_get_match_data(&pdev->dev);
-	if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(dma_bits))) {
-		dev_err(&pdev->dev, "failed to set dma mask(%lu)\n", dma_bits);
-		return -EINVAL;
+	axi_s_clk = devm_clk_get_optional(&pdev->dev, "axi_s");
+	if (IS_ERR(axi_s_clk))
+		return PTR_ERR(axi_s_clk);
+
+	caps = (struct mtk_nor_caps *)of_device_get_match_data(&pdev->dev);
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(caps->dma_bits));
+	if (ret) {
+		dev_err(&pdev->dev, "failed to set dma mask(%u)\n", caps->dma_bits);
+		return ret;
 	}
 
 	ctlr = devm_spi_alloc_master(&pdev->dev, sizeof(*sp));
@@ -808,7 +900,9 @@ static int mtk_nor_probe(struct platform_device *pdev)
 	sp->spi_clk = spi_clk;
 	sp->ctlr_clk = ctlr_clk;
 	sp->axi_clk = axi_clk;
-	sp->high_dma = (dma_bits > 32);
+	sp->axi_s_clk = axi_s_clk;
+	sp->caps = caps;
+	sp->high_dma = caps->dma_bits > 32;
 	sp->buffer = dmam_alloc_coherent(&pdev->dev,
 				MTK_NOR_BOUNCE_BUF_SIZE + MTK_NOR_DMA_ALIGN,
 				&sp->buffer_dma, GFP_KERNEL);
@@ -909,7 +1003,17 @@ static int __maybe_unused mtk_nor_suspend(struct device *dev)
 
 static int __maybe_unused mtk_nor_resume(struct device *dev)
 {
-	return pm_runtime_force_resume(dev);
+	struct spi_controller *ctlr = dev_get_drvdata(dev);
+	struct mtk_nor *sp = spi_controller_get_devdata(ctlr);
+	int ret;
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret)
+		return ret;
+
+	mtk_nor_init(sp);
+
+	return 0;
 }
 
 static const struct dev_pm_ops mtk_nor_pm_ops = {

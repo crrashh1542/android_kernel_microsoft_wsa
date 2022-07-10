@@ -27,6 +27,8 @@
 #include "cam_cpas_api.h"
 #include "cam_debug_util.h"
 #include "cam_jpeg_enc_hw_info_ver_4_2_0.h"
+#include "cam_jpeg_dev.h"
+#include "cam_smmu_api.h"
 
 static int cam_jpeg_enc_register_cpas(struct cam_hw_soc_info *soc_info,
 	struct cam_jpeg_enc_device_core_info *core_info,
@@ -68,7 +70,7 @@ static int cam_jpeg_enc_unregister_cpas(
 static int cam_jpeg_enc_remove(struct platform_device *pdev)
 {
 	struct cam_hw_info *jpeg_enc_dev = NULL;
-	struct cam_hw_intf *jpeg_enc_dev_intf = NULL;
+	struct jpeg_encoder *jpeg_enc_dev_intf = NULL;
 	struct cam_jpeg_enc_device_core_info *core_info = NULL;
 	int rc;
 
@@ -77,6 +79,7 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 		CAM_ERR(CAM_JPEG, "error No data in pdev");
 		return -EINVAL;
 	}
+	put_device(jpeg_enc_dev_intf->smmu);
 
 	jpeg_enc_dev = jpeg_enc_dev_intf->hw_priv;
 	if (!jpeg_enc_dev) {
@@ -84,6 +87,8 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto free_jpeg_hw_intf;
 	}
+
+	jenc_v4l2_device_destroy(jpeg_enc_dev_intf);
 
 	core_info = (struct cam_jpeg_enc_device_core_info *)
 		jpeg_enc_dev->core_info;
@@ -96,6 +101,7 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 	if (rc)
 		CAM_ERR(CAM_JPEG, " unreg failed to reg cpas %d", rc);
 
+	mutex_destroy(&jpeg_enc_dev_intf->dev_mutex);
 	mutex_destroy(&core_info->core_mutex);
 	kfree(core_info);
 
@@ -115,15 +121,32 @@ free_jpeg_hw_intf:
 static int cam_jpeg_enc_probe(struct platform_device *pdev)
 {
 	struct cam_hw_info *jpeg_enc_dev = NULL;
-	struct cam_hw_intf *jpeg_enc_dev_intf = NULL;
+	struct jpeg_encoder *jpeg_enc_dev_intf = NULL;
 	const struct of_device_id *match_dev = NULL;
 	struct cam_jpeg_enc_device_core_info *core_info = NULL;
 	struct cam_jpeg_enc_device_hw_info *hw_info = NULL;
+	struct device_node *smmu_intf;
+	struct platform_device *smmu_pdev;
 	int rc;
 
-	jpeg_enc_dev_intf = kzalloc(sizeof(struct cam_hw_intf), GFP_KERNEL);
+	/* Get device to use for the default allocation context */
+	smmu_intf = of_parse_phandle(pdev->dev.of_node, "smmu_intf", 0);
+	if (!smmu_intf) {
+		CAM_ERR(CAM_JPEG, "The SMMU node isn't available");
+		return -ENODEV;
+	}
+	smmu_pdev = of_find_device_by_node(smmu_intf);
+	if (!smmu_pdev || !smmu_pdev->dev.driver) {
+		CAM_DBG(CAM_JPEG, "Probe deferred, until SMMU become ready");
+		put_device(&smmu_pdev->dev);
+		return -EPROBE_DEFER;
+	}
+
+	jpeg_enc_dev_intf = kzalloc(sizeof(*jpeg_enc_dev_intf), GFP_KERNEL);
 	if (!jpeg_enc_dev_intf)
 		return -ENOMEM;
+
+	mutex_init(&jpeg_enc_dev_intf->dev_mutex);
 
 	of_property_read_u32(pdev->dev.of_node,
 		"cell-index", &jpeg_enc_dev_intf->hw_idx);
@@ -133,9 +156,18 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto error_alloc_dev;
 	}
+
+	mutex_init(&jpeg_enc_dev->hw_mutex);
+	spin_lock_init(&jpeg_enc_dev->hw_lock);
+	init_completion(&jpeg_enc_dev->hw_complete);
+
+	mutex_lock(&jpeg_enc_dev->hw_mutex);
+
 	jpeg_enc_dev->soc_info.pdev = pdev;
 	jpeg_enc_dev->soc_info.dev = &pdev->dev;
 	jpeg_enc_dev->soc_info.dev_name = pdev->name;
+	jpeg_enc_dev_intf->dev = &pdev->dev;
+	jpeg_enc_dev_intf->smmu = &smmu_pdev->dev;
 	jpeg_enc_dev_intf->hw_priv = jpeg_enc_dev;
 	jpeg_enc_dev_intf->hw_ops.init = cam_jpeg_enc_init_hw;
 	jpeg_enc_dev_intf->hw_ops.deinit = cam_jpeg_enc_deinit_hw;
@@ -143,9 +175,9 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 	jpeg_enc_dev_intf->hw_ops.stop = cam_jpeg_enc_stop_hw;
 	jpeg_enc_dev_intf->hw_ops.reset = cam_jpeg_enc_reset_hw;
 	jpeg_enc_dev_intf->hw_ops.process_cmd = cam_jpeg_enc_process_cmd;
+	jpeg_enc_dev_intf->hw_ops.write = cam_jpeg_enc_write;
 	jpeg_enc_dev_intf->hw_type = CAM_JPEG_DEV_ENC;
 
-	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
 	jpeg_enc_dev->core_info =
 		kzalloc(sizeof(struct cam_jpeg_enc_device_core_info),
 			GFP_KERNEL);
@@ -155,6 +187,7 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 	}
 	core_info = (struct cam_jpeg_enc_device_core_info *)
 		jpeg_enc_dev->core_info;
+	mutex_init(&core_info->core_mutex);
 
 	match_dev = of_match_device(pdev->dev.driver->of_match_table,
 		&pdev->dev);
@@ -166,7 +199,6 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 	hw_info = (struct cam_jpeg_enc_device_hw_info *)match_dev->data;
 	core_info->jpeg_enc_hw_info = hw_info;
 	core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
-	mutex_init(&core_info->core_mutex);
 
 	rc = cam_jpeg_enc_init_soc_resources(&jpeg_enc_dev->soc_info,
 		cam_jpeg_enc_irq,
@@ -183,9 +215,12 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 		goto error_reg_cpas;
 	}
 	jpeg_enc_dev->hw_state = CAM_HW_STATE_POWER_DOWN;
-	mutex_init(&jpeg_enc_dev->hw_mutex);
-	spin_lock_init(&jpeg_enc_dev->hw_lock);
-	init_completion(&jpeg_enc_dev->hw_complete);
+
+	rc = jenc_v4l2_device_create(jpeg_enc_dev_intf);
+	if (rc)
+		goto error_reg_cpas;
+
+	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
 
 	return rc;
 
@@ -196,6 +231,8 @@ error_init_soc:
 error_match_dev:
 	kfree(jpeg_enc_dev->core_info);
 error_alloc_core:
+	mutex_unlock(&jpeg_enc_dev->hw_mutex);
+	mutex_destroy(&jpeg_enc_dev->hw_mutex);
 	kfree(jpeg_enc_dev);
 error_alloc_dev:
 	kfree(jpeg_enc_dev_intf);

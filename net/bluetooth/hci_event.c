@@ -1325,8 +1325,10 @@ static void hci_cc_le_set_ext_adv_enable(struct hci_dev *hdev,
 					   &conn->le_conn_timeout,
 					   conn->conn_timeout);
 	} else {
-		if (adv) {
-			adv->enabled = false;
+		if (cp->num_of_sets) {
+			if (adv)
+				adv->enabled = false;
+
 			/* If just one instance was disabled check if there are
 			 * any other instance enabled before clearing HCI_LE_ADV
 			 */
@@ -2842,10 +2844,12 @@ static void hci_conn_request_evt(struct hci_dev *hdev, struct sk_buff *skb)
 		return;
 	}
 
+	hci_dev_lock(hdev);
+
 	if (hci_bdaddr_list_lookup(&hdev->reject_list, &ev->bdaddr,
 				   BDADDR_BREDR)) {
 		hci_reject_conn(hdev, &ev->bdaddr);
-		return;
+		goto unlock;
 	}
 
 	/* Require HCI_CONNECTABLE or an accept list entry to accept the
@@ -2857,12 +2861,10 @@ static void hci_conn_request_evt(struct hci_dev *hdev, struct sk_buff *skb)
 	    !hci_bdaddr_list_lookup_with_flags(&hdev->accept_list, &ev->bdaddr,
 					       BDADDR_BREDR)) {
 		hci_reject_conn(hdev, &ev->bdaddr);
-		return;
+		goto unlock;
 	}
 
 	/* Connection accepted */
-
-	hci_dev_lock(hdev);
 
 	ie = hci_inquiry_cache_lookup(hdev, &ev->bdaddr);
 	if (ie)
@@ -2875,8 +2877,7 @@ static void hci_conn_request_evt(struct hci_dev *hdev, struct sk_buff *skb)
 				    HCI_ROLE_SLAVE);
 		if (!conn) {
 			bt_dev_err(hdev, "no memory for new connection");
-			hci_dev_unlock(hdev);
-			return;
+			goto unlock;
 		}
 	}
 
@@ -2916,6 +2917,10 @@ static void hci_conn_request_evt(struct hci_dev *hdev, struct sk_buff *skb)
 		conn->state = BT_CONNECT2;
 		hci_connect_cfm(conn, 0);
 	}
+
+	return;
+unlock:
+	hci_dev_unlock(hdev);
 }
 
 static u8 hci_to_mgmt_reason(u8 err)
@@ -2969,7 +2974,7 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 				reason, mgmt_connected);
 
 	if (conn->type == ACL_LINK) {
-		if (test_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
+		if (test_and_clear_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
 			hci_remove_link_key(hdev, &conn->dst);
 
 		hci_req_update_scan(hdev);
@@ -2997,14 +3002,6 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 
 	hci_disconn_cfm(conn, ev->reason);
 
-	/* The suspend notifier is waiting for all devices to disconnect so
-	 * clear the bit from pending tasks and inform the wait queue.
-	 */
-	if (list_empty(&hdev->conn_hash.list) &&
-	    test_and_clear_bit(SUSPEND_DISCONNECTING, hdev->suspend_tasks)) {
-		wake_up(&hdev->suspend_wait_q);
-	}
-
 	/* Re-enable advertising if necessary, since it might
 	 * have been disabled by the connection. From the
 	 * HCI_LE_Set_Advertise_Enable command description in
@@ -3021,6 +3018,14 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 	}
 
 	hci_conn_del(conn);
+
+	/* The suspend notifier is waiting for all devices to disconnect so
+	 * clear the bit from pending tasks and inform the wait queue.
+	 */
+	if (list_empty(&hdev->conn_hash.list) &&
+	    test_and_clear_bit(SUSPEND_DISCONNECTING, hdev->suspend_tasks)) {
+		wake_up(&hdev->suspend_wait_q);
+	}
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -4457,6 +4462,19 @@ static void hci_sync_conn_complete_evt(struct hci_dev *hdev,
 	struct hci_conn *conn;
 	unsigned int notify_evt;
 
+	switch (ev->link_type) {
+	case SCO_LINK:
+	case ESCO_LINK:
+		break;
+	default:
+		/* As per Core 5.3 Vol 4 Part E 7.7.35 (p.2219), Link_Type
+		 * for HCI_Synchronous_Connection_Complete is limited to
+		 * either SCO or eSCO
+		 */
+		bt_dev_err(hdev, "Ignoring connect complete event for invalid link type");
+		return;
+	}
+
 	BT_DBG("%s status 0x%2.2x", hdev->name, ev->status);
 
 	hci_dev_lock(hdev);
@@ -5216,8 +5234,9 @@ static void hci_disconn_phylink_complete_evt(struct hci_dev *hdev,
 	hci_dev_lock(hdev);
 
 	hcon = hci_conn_hash_lookup_handle(hdev, ev->phy_handle);
-	if (hcon) {
+	if (hcon && hcon->type == AMP_LINK) {
 		hcon->state = BT_CLOSED;
+		hci_disconn_cfm(hcon, ev->reason);
 		hci_conn_del(hcon);
 	}
 
@@ -5291,10 +5310,12 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 
 	hci_dev_lock(hdev);
 
-	/* All controllers implicitly stop advertising in the event of a
-	 * connection, so ensure that the state bit is cleared.
+	/* When entering a connection in the slave role, the controller will
+	 * disable advertising. To avoid a lapse in service, we restart any
+	 * previously active advertising instances.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	if (role == HCI_ROLE_SLAVE)
+		hci_req_enable_paused_adv(hdev);
 
 	conn = hci_lookup_le_connect(hdev);
 	if (!conn) {
@@ -5860,7 +5881,13 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, struct sk_buff *skb)
 		struct hci_ev_le_advertising_info *ev = ptr;
 		s8 rssi;
 
-		if (ev->length <= HCI_MAX_AD_LENGTH) {
+		if (ptr > (void *)skb_tail_pointer(skb) - sizeof(*ev)) {
+			bt_dev_err(hdev, "Malicious advertising data.");
+			break;
+		}
+
+		if (ev->length <= HCI_MAX_AD_LENGTH &&
+		    ev->data + ev->length <= skb_tail_pointer(skb)) {
 			rssi = ev->data[ev->length];
 			process_adv_report(hdev, ev->evt_type, &ev->bdaddr,
 					   ev->bdaddr_type, NULL, 0, rssi,
@@ -6340,6 +6367,72 @@ static void hci_store_wake_reason(struct hci_dev *hdev, u8 event,
 
 unlock:
 	hci_dev_unlock(hdev);
+}
+
+void hci_handle_userchannel_packet(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct hci_event_hdr *hdr = (void *)skb->data;
+	struct hci_ev_conn_complete *cc_ev;
+	struct hci_ev_sync_conn_complete *scc_ev;
+	struct hci_ev_disconn_complete *dcc_ev;
+
+	struct hci_conn *conn;
+	u8 event = hdr->evt;
+	int conn_type;
+
+	skb_pull(skb, HCI_EVENT_HDR_SIZE);
+
+	switch (event) {
+	case HCI_EV_CONN_COMPLETE:
+		cc_ev = (void *)skb->data;
+		if (!cc_ev->status) {
+			conn_type = (cc_ev->link_type == ACL_LINK) ? ACL_LINK :
+								     SCO_LINK;
+
+			conn = hci_conn_hash_lookup_ba(hdev, conn_type,
+						       &cc_ev->bdaddr);
+			if (!conn) {
+				conn = hci_conn_add(hdev, conn_type,
+						    &cc_ev->bdaddr, 0);
+			}
+
+			if (conn) {
+				conn->handle = __le16_to_cpu(cc_ev->handle);
+				conn->type = conn_type;
+				bt_dev_dbg(hdev, "%d handle(%d) type (%d)",
+					   event, conn->handle, conn->type);
+
+				if (conn->type == SCO_LINK && hdev->notify)
+					hdev->notify(hdev, HCI_NOTIFY_ENABLE_SCO_CVSD);
+			}
+		}
+		break;
+	case HCI_EV_SYNC_CONN_COMPLETE:
+		scc_ev = (void *)skb->data;
+		if (!scc_ev->status) {
+			conn = hci_conn_hash_lookup_ba(hdev, SCO_LINK,
+						       &scc_ev->bdaddr);
+			if (!conn) {
+				conn = hci_conn_add(hdev, SCO_LINK,
+						    &scc_ev->bdaddr, 0);
+			}
+
+			if (conn && hdev->notify)
+				hdev->notify(hdev, HCI_NOTIFY_ENABLE_SCO_CVSD);
+		}
+		break;
+	case HCI_EV_DISCONN_COMPLETE:
+		dcc_ev = (void *)skb->data;
+		conn = hci_conn_hash_lookup_handle(hdev,
+						   __le16_to_cpu(dcc_ev->handle));
+		if (conn)
+			hci_conn_del(conn);
+		break;
+	default:
+		break;
+	}
+
+	kfree_skb(skb);
 }
 
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
