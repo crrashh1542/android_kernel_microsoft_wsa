@@ -23,6 +23,7 @@
 #include <linux/err.h>
 #include <linux/genhd.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/notifier.h>
@@ -50,6 +51,10 @@ static int chromeos_invalidate_kernel_submit(struct bio *bio,
 					     struct page *page)
 {
 	DECLARE_COMPLETION_ONSTACK(wait);
+	unsigned int block_size = bdev_logical_block_size(bdev);
+
+	if (block_size > page_size(page))
+		panic("dm-verity failed to override signature");
 
 	bio->bi_private = &wait;
 	bio->bi_end_io = chromeos_invalidate_kernel_endio;
@@ -58,11 +63,11 @@ static int chromeos_invalidate_kernel_submit(struct bio *bio,
 	bio->bi_iter.bi_sector = 0;
 	bio->bi_vcnt = 1;
 	bio->bi_iter.bi_idx = 0;
-	bio->bi_iter.bi_size = 512;
+	bio->bi_iter.bi_size = block_size;
 	bio->bi_iter.bi_bvec_done = 0;
 	bio_set_op_attrs(bio, op, op_flags);
 	bio->bi_io_vec[0].bv_page = page;
-	bio->bi_io_vec[0].bv_len = 512;
+	bio->bi_io_vec[0].bv_len = block_size;
 	bio->bi_io_vec[0].bv_offset = 0;
 
 	submit_bio(bio);
