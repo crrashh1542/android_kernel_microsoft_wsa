@@ -134,16 +134,10 @@ void amdgpu_job_free_resources(struct amdgpu_job *job)
 {
 	struct amdgpu_ring *ring = to_amdgpu_ring(job->base.sched);
 	struct dma_fence *f;
-	struct dma_fence *hw_fence;
 	unsigned i;
 
-	if (job->hw_fence.ops == NULL)
-		hw_fence = job->external_hw_fence;
-	else
-		hw_fence = &job->hw_fence;
-
 	/* use sched fence if available */
-	f = job->base.s_fence ? &job->base.s_fence->finished : hw_fence;
+	f = job->base.s_fence ? &job->base.s_fence->finished :  &job->hw_fence;
 	for (i = 0; i < job->num_ibs; ++i)
 		amdgpu_ib_free(ring->adev, &job->ibs[i], f);
 }
@@ -157,11 +151,7 @@ static void amdgpu_job_free_cb(struct drm_sched_job *s_job)
 	amdgpu_sync_free(&job->sync);
 	amdgpu_sync_free(&job->sched_sync);
 
-    /* only put the hw fence if has embedded fence */
-	if (job->hw_fence.ops != NULL)
-		dma_fence_put(&job->hw_fence);
-	else
-		kfree(job);
+	dma_fence_put(&job->hw_fence);
 }
 
 void amdgpu_job_free(struct amdgpu_job *job)
@@ -170,11 +160,7 @@ void amdgpu_job_free(struct amdgpu_job *job)
 	amdgpu_sync_free(&job->sync);
 	amdgpu_sync_free(&job->sched_sync);
 
-	/* only put the hw fence if has embedded fence */
-	if (job->hw_fence.ops != NULL)
-		dma_fence_put(&job->hw_fence);
-	else
-		kfree(job);
+	dma_fence_put(&job->hw_fence);
 }
 
 int amdgpu_job_submit(struct amdgpu_job *job, struct drm_sched_entity *entity,
@@ -204,15 +190,12 @@ int amdgpu_job_submit_direct(struct amdgpu_job *job, struct amdgpu_ring *ring,
 	int r;
 
 	job->base.sched = &ring->sched;
-	r = amdgpu_ib_schedule(ring, job->num_ibs, job->ibs, NULL, fence);
-	/* record external_hw_fence for direct submit */
-	job->external_hw_fence = dma_fence_get(*fence);
+	r = amdgpu_ib_schedule(ring, job->num_ibs, job->ibs, job, fence);
+
 	if (r)
 		return r;
 
 	amdgpu_job_free(job);
-	dma_fence_put(*fence);
-
 	return 0;
 }
 
