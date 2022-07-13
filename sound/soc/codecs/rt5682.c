@@ -2931,10 +2931,7 @@ static int rt5682_probe(struct snd_soc_component *component)
 	} else {
 #ifdef CONFIG_COMMON_CLK
 		/* Check if MCLK provided */
-		if (rt5682->pdata.mclk_name)
-			rt5682->mclk = clk_get(NULL, rt5682->pdata.mclk_name);
-		if (!rt5682->mclk)
-			rt5682->mclk = devm_clk_get(component->dev, "mclk");
+		rt5682->mclk = devm_clk_get(component->dev, "mclk");
 		if (IS_ERR(rt5682->mclk)) {
 			if (PTR_ERR(rt5682->mclk) != -ENOENT) {
 				ret = PTR_ERR(rt5682->mclk);
@@ -3114,7 +3111,6 @@ int rt5682_parse_dt(struct rt5682_priv *rt5682, struct device *dev)
 
 	rt5682->pdata.dmic_clk_driving_high = device_property_read_bool(dev,
 		"realtek,dmic-clk-driving-high");
-	device_property_read_string(dev, "realtek,mclk-name", &rt5682->pdata.mclk_name);
 
 	return 0;
 }
