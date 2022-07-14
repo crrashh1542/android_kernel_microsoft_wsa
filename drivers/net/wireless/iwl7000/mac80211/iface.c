@@ -18,6 +18,7 @@
 #include <linux/kcov.h>
 #include <net/mac80211.h>
 #include <net/ieee80211_radiotap.h>
+#include <linux/module.h>
 #include "ieee80211_i.h"
 #include "sta_info.h"
 #include "debugfs_netdev.h"
@@ -42,6 +43,11 @@
  * As a consequence, reads (traversals) of the list can be protected
  * by either the RTNL, the iflist_mtx or RCU.
  */
+
+static int num_txqs = 1;
+module_param(num_txqs, int, 0644);
+MODULE_PARM_DESC(num_txqs,
+		 "Number of Tx queues exposed by the driver to upper layers");
 
 static void ieee80211_iface_work(struct work_struct *work);
 
@@ -886,6 +892,25 @@ static const struct net_device_ops ieee80211_dataif_ops = {
 
 };
 
+static const struct net_device_ops ieee80211_dataif_ops_itxq = {
+#if LINUX_VERSION_IS_LESS(4,10,0)
+	.ndo_change_mtu = __change_mtu,
+#endif
+
+	.ndo_open		= ieee80211_open,
+	.ndo_stop		= ieee80211_stop,
+	.ndo_uninit		= ieee80211_uninit,
+	.ndo_start_xmit		= ieee80211_subif_start_xmit,
+	.ndo_set_rx_mode	= ieee80211_set_multicast_list,
+	.ndo_set_mac_address	= ieee80211_change_mac,
+#if LINUX_VERSION_IS_GEQ(4,11,0)
+	.ndo_get_stats64	= ieee80211_get_stats64,
+#else
+	.ndo_get_stats64 = bp_ieee80211_get_stats64,
+#endif
+
+};
+
 #if LINUX_VERSION_IS_GEQ(5,2,0)
 static u16 ieee80211_monitor_select_queue(struct net_device *dev,
 					  struct sk_buff *skb,
@@ -1103,8 +1128,8 @@ static void ieee80211_set_vif_encap_ops(struct ieee80211_sub_if_data *sdata)
 	    !(bss->vif.offload_flags & IEEE80211_OFFLOAD_ENCAP_4ADDR))
 		enabled = false;
 
-	sdata->dev->netdev_ops = enabled ? &ieee80211_dataif_8023_ops :
-					   &ieee80211_dataif_ops;
+	if (enabled)
+		sdata->dev->netdev_ops = &ieee80211_dataif_8023_ops;
 }
 
 static void ieee80211_recalc_sdata_offload(struct ieee80211_sub_if_data *sdata)
@@ -1598,6 +1623,7 @@ static void ieee80211_if_setup(struct net_device *dev)
 static void ieee80211_if_setup_no_queue(struct net_device *dev)
 {
 	ieee80211_if_setup(dev);
+	dev->netdev_ops = &ieee80211_dataif_ops_itxq;
 	dev->priv_flags |= IFF_NO_QUEUE;
 }
 
@@ -1855,7 +1881,9 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 
 	/* only monitor/p2p-device differ */
 	if (sdata->dev) {
-		sdata->dev->netdev_ops = &ieee80211_dataif_ops;
+		sdata->dev->netdev_ops = sdata->local->ops->wake_tx_queue ?
+			&ieee80211_dataif_ops_itxq :
+			&ieee80211_dataif_ops;
 		sdata->dev->type = ARPHRD_ETHER;
 	}
 
@@ -2190,7 +2218,7 @@ struct vif_params *params)
 	struct txq_info *txqi;
 	void (*if_setup)(struct net_device *dev);
 	int ret, i;
-	int txqs = 1;
+	int txqs = num_txqs;
 
 	ASSERT_RTNL();
 
