@@ -13,7 +13,6 @@
 #include "t7xx_mhccif.h"
 #include "t7xx_modem_ops.h"
 #include "t7xx_monitor.h"
-#include "t7xx_netdev.h"
 #include "t7xx_pci.h"
 #include "t7xx_pcie_mac.h"
 #include "t7xx_port.h"
@@ -684,14 +683,9 @@ int mtk_md_init(struct mtk_pci_dev *mtk_dev)
 	if (ret)
 		goto err_alloc;
 
-	/* init the data path */
-	ret = ccmni_init(mtk_dev);
-	if (ret)
-		goto err_fsm_init;
-
 	ret = cldma_init(ID_CLDMA1);
 	if (ret)
-		goto err_ccmni_init;
+		goto err_fsm_init;
 
 	ret = port_proxy_init(mtk_dev->md);
 	if (ret)
@@ -707,8 +701,6 @@ int mtk_md_init(struct mtk_pci_dev *mtk_dev)
 
 err_cldma_init:
 	cldma_exit(ID_CLDMA1);
-err_ccmni_init:
-	ccmni_exit(mtk_dev);
 err_fsm_init:
 	ccci_fsm_uninit();
 err_alloc:
@@ -735,7 +727,6 @@ void mtk_md_exit(struct mtk_pci_dev *mtk_dev)
 	fsm_append_command(fsm_ctl, CCCI_COMMAND_PRE_STOP, 1);
 	port_proxy_uninit();
 	cldma_exit(ID_CLDMA1);
-	ccmni_exit(mtk_dev);
 	ccci_fsm_uninit();
 	destroy_workqueue(md->handshake_wq);
 }
