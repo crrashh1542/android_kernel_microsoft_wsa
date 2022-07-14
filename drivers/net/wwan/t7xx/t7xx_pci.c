@@ -95,9 +95,7 @@ static int mtk_pci_pm_init(struct mtk_pci_dev *mtk_dev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev, PM_AUTOSUSPEND_MS);
 	pm_runtime_use_autosuspend(&pdev->dev);
 
-	udelay(1000);
-	return 0;
-	//return mtk_wait_pm_config(mtk_dev);
+	return mtk_wait_pm_config(mtk_dev);
 }
 
 void mtk_pci_pm_init_late(struct mtk_pci_dev *mtk_dev)

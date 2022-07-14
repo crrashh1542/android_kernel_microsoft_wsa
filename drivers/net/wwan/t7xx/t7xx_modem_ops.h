@@ -15,7 +15,6 @@
 #include "t7xx_pci.h"
 
 #define RT_ID_MD_PORT_ENUM 0
-#define RT_ID_SAP_PORT_ENUM 1
 #define FEATURE_COUNT 64
 /* Modem feature query identification number */
 #define MD_FEATURE_QUERY_ID	0x49434343
@@ -62,13 +61,10 @@ struct mtk_modem {
 	struct md_sys_info *md_info;
 	struct mtk_pci_dev *mtk_dev;
 	struct core_sys_info core_md;
-	struct core_sys_info core_sap;
 	bool md_init_finish;
 	atomic_t rgu_irq_asserted;
 	struct workqueue_struct *handshake_wq;
 	struct work_struct handshake_work;
-	struct workqueue_struct *sap_handshake_wq;
-	struct work_struct sap_handshake_work;
 };
 
 struct md_sys_info {
