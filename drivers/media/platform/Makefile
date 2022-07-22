@@ -77,6 +77,8 @@ obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC)	+= mediatek/vcodec/
 
 obj-$(CONFIG_VIDEO_MEDIATEK_MDP)	+= mediatek/mdp/
 
+obj-$(CONFIG_VIDEO_MEDIATEK_MDP3)	+= mediatek/mdp3/
+
 obj-$(CONFIG_VIDEO_MEDIATEK_JPEG)	+= mediatek/jpeg/
 
 obj-$(CONFIG_VIDEO_QCOM_CAMSS)		+= qcom/camss/
