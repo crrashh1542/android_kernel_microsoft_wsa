@@ -2061,7 +2061,7 @@ void rtw_hw_scan_complete(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 	rtw_core_scan_complete(rtwdev, vif, true);
 
 	rtwvif = (struct rtw_vif *)vif->drv_priv;
-	if (rtwvif->net_type == RTW_NET_MGD_LINKED) {
+	if (chan) {
 		hal->current_channel = chan;
 		hal->current_band_type = chan > 14 ? RTW_BAND_5G : RTW_BAND_2G;
 	}
@@ -2105,6 +2105,7 @@ int rtw_hw_scan_offload(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 			bool enable)
 {
 	struct rtw_vif *rtwvif = vif ? (struct rtw_vif *)vif->drv_priv : NULL;
+	struct rtw_hw_scan_info *scan_info = &rtwdev->scan_info;
 	struct rtw_ch_switch_option cs_option = {0};
 	struct rtw_chan_list chan_list = {0};
 	int ret = 0;
@@ -2113,7 +2114,7 @@ int rtw_hw_scan_offload(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 		return -EINVAL;
 
 	cs_option.switch_en = enable;
-	cs_option.back_op_en = rtwvif->net_type == RTW_NET_MGD_LINKED;
+	cs_option.back_op_en = scan_info->op_chan != 0;
 	if (enable) {
 		ret = rtw_hw_scan_prehandle(rtwdev, rtwvif, &chan_list);
 		if (ret)
@@ -2160,6 +2161,15 @@ void rtw_store_op_chan(struct rtw_dev *rtwdev)
 	scan_info->op_chan = hal->current_channel;
 	scan_info->op_bw = hal->current_band_width;
 	scan_info->op_pri_ch_idx = hal->current_primary_channel_index;
+}
+
+void rtw_clear_op_chan(struct rtw_dev *rtwdev)
+{
+	struct rtw_hw_scan_info *scan_info = &rtwdev->scan_info;
+
+	scan_info->op_chan = 0;
+	scan_info->op_bw = 0;
+	scan_info->op_pri_ch_idx = 0;
 }
 
 static bool rtw_is_op_chan(struct rtw_dev *rtwdev, u8 channel)
