@@ -114,6 +114,8 @@ struct virtwl_info {
 
 	// Base value to use when deriving pfn values from vfd pfn offsets
 	u64 pfn_base;
+	// Pfn value sent by the device to indicate the vfd has no pfn.
+	u64 invalid_pfn;
 };
 
 static struct virtwl_vfd *virtwl_vfd_alloc(struct virtwl_info *vi);
@@ -213,6 +215,14 @@ clear_queue:
 	return ret;
 }
 
+static uint64_t decode_pfn(struct virtwl_info *vi,
+			   struct virtio_wl_ctrl_vfd_new *new)
+{
+	if (new->pfn == vi->invalid_pfn)
+		return 0;
+	return new->pfn + vi->pfn_base;
+}
+
 static bool vq_handle_new(struct virtwl_info *vi,
 			  struct virtio_wl_ctrl_vfd_new *new, unsigned int len)
 {
@@ -244,7 +254,7 @@ static bool vq_handle_new(struct virtwl_info *vi,
 
 	vfd->id = id;
 	vfd->size = new->size;
-	vfd->pfn = new->pfn + vi->pfn_base;
+	vfd->pfn = decode_pfn(vi, new);
 	vfd->flags = new->flags;
 
 	return true; /* return the inbuf to vq */
@@ -1219,7 +1229,7 @@ static struct virtwl_vfd *do_new(struct virtwl_info *vi,
 		goto remove_vfd;
 
 	vfd->size = ctrl_new->size;
-	vfd->pfn = ctrl_new->pfn + vi->pfn_base;
+	vfd->pfn = decode_pfn(vi, ctrl_new);
 	vfd->flags = ctrl_new->flags;
 
 	mutex_unlock(&vfd->lock);
@@ -1525,6 +1535,7 @@ static int probe_common(struct virtio_device *vdev)
 		}
 
 		vi->pfn_base = region.addr >> PAGE_SHIFT;
+		vi->invalid_pfn = region.len >> PAGE_SHIFT;
 	}
 
 	/* lock is unneeded as we have unique ownership */
