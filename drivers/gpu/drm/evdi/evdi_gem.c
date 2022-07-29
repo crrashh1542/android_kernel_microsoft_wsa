@@ -25,6 +25,7 @@
 #include "evdi_params.h"
 #include <linux/shmem_fs.h>
 #include <linux/dma-buf.h>
+#include <linux/vmalloc.h>
 #include <drm/drm_cache.h>
 
 #if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
