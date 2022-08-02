@@ -202,11 +202,11 @@ config DRM_TTM_HELPER
 
 source "drivers/gpu/drm/ttm/Kconfig"
 
-config DRM_GEM_CMA_HELPER
+config DRM_GEM_DMA_HELPER
 	tristate
 	depends on DRM
 	help
-	  Choose this if you need the GEM CMA helper functions
+	  Choose this if you need the GEM DMA helper functions
 
 config DRM_GEM_SHMEM_HELPER
 	tristate
