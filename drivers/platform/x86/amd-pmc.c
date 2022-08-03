@@ -47,7 +47,8 @@
 
 /* STB Spill to DRAM Parameters */
 #define S2D_TELEMETRY_BYTES_MAX		0x100000
-#define S2D_TELEMETRY_DRAMBYTES_MAX	0x1000000
+#define S2D_TELEMETRY_DRAMBYTES_MAX	0x300000
+#define S2D_CIRCULAR_DRAMBYTES_MAX	0x200000
 
 /* Base address of SMU for mapping physical address to virtual address */
 #define AMD_PMC_SMU_INDEX_ADDRESS	0xB8
@@ -257,11 +258,11 @@ static int amd_pmc_stb_debugfs_open_v2(struct inode *inode, struct file *filp)
 	struct amd_pmc_dev *dev = filp->f_inode->i_private;
 	u32 *buf;
 
-	buf = kzalloc(S2D_TELEMETRY_BYTES_MAX, GFP_KERNEL);
+	buf = kzalloc(S2D_CIRCULAR_DRAMBYTES_MAX, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	memcpy_fromio(buf, dev->stb_virt_addr, S2D_TELEMETRY_BYTES_MAX);
+	memcpy_fromio(buf, dev->stb_virt_addr, S2D_CIRCULAR_DRAMBYTES_MAX);
 	filp->private_data = buf;
 
 	return 0;
@@ -274,7 +275,7 @@ static ssize_t amd_pmc_stb_debugfs_read_v2(struct file *filp, char __user *buf, 
 		return -EINVAL;
 
 	return simple_read_from_buffer(buf, size, pos, filp->private_data,
-					S2D_TELEMETRY_BYTES_MAX);
+					S2D_CIRCULAR_DRAMBYTES_MAX);
 }
 
 static int amd_pmc_stb_debugfs_release_v2(struct inode *inode, struct file *filp)
@@ -650,7 +651,7 @@ static int amd_pmc_s2d_init(struct amd_pmc_dev *dev)
 	/* Clear msg_port for other SMU operation */
 	dev->msg_port = 0;
 
-	dev->stb_virt_addr = devm_ioremap(dev->dev, stb_phys_addr, S2D_TELEMETRY_DRAMBYTES_MAX);
+	dev->stb_virt_addr = devm_ioremap(dev->dev, stb_phys_addr, S2D_CIRCULAR_DRAMBYTES_MAX);
 	if (!dev->stb_virt_addr)
 		return -ENOMEM;
 
