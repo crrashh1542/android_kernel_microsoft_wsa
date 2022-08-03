@@ -168,4 +168,6 @@ struct cam_jpeg_hw_mgr {
 	struct cam_jpeg_hw_cfg_req req_list[CAM_JPEG_HW_CFG_Q_MAX];
 };
 
+int cam_jpeg_get_iommu_hd(void);
+
 #endif /* CAM_JPEG_HW_MGR_H */

@@ -297,9 +297,6 @@ config DM_VERITY_CHROMEOS
 	  it will modify the partition preceding the verified block device
 	  when non-transient error occurs (followed by a panic).
 
-	  This module relies on linux/chromeos_platform.h and will behave
-	  reasonably if it only supplies the stubs.
-
 	  If unsure, say N.
 
 config DM_SNAPSHOT

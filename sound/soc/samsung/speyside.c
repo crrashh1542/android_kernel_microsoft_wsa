@@ -156,10 +156,12 @@ static int speyside_wm8996_init(struct snd_soc_pcm_runtime *rtd)
 		pr_err("Failed to request HP_SEL GPIO: %d\n", ret);
 	gpio_direction_output(WM8996_HPSEL_GPIO, speyside_jack_polarity);
 
-	ret = snd_soc_card_jack_new(rtd->card, "Headset", SND_JACK_LINEOUT |
-				    SND_JACK_HEADSET | SND_JACK_BTN_0,
-				    &speyside_headset, speyside_headset_pins,
-				    ARRAY_SIZE(speyside_headset_pins));
+	ret = snd_soc_card_jack_new_pins(rtd->card, "Headset",
+					 SND_JACK_LINEOUT | SND_JACK_HEADSET |
+					 SND_JACK_BTN_0,
+					 &speyside_headset,
+					 speyside_headset_pins,
+					 ARRAY_SIZE(speyside_headset_pins));
 	if (ret)
 		return ret;
 
@@ -330,9 +332,8 @@ static int speyside_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
-	if (ret && ret != -EPROBE_DEFER)
-		dev_err(&pdev->dev, "snd_soc_register_card() failed: %d\n",
-			ret);
+	if (ret)
+		dev_err_probe(&pdev->dev, ret, "snd_soc_register_card() failed\n");
 
 	return ret;
 }

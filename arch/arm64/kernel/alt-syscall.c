@@ -15,7 +15,7 @@
 
 #include <asm/syscall.h>
 
-int arch_dup_sys_call_table(struct alt_sys_call_table *entry)
+int __init arch_dup_sys_call_table(struct alt_sys_call_table *entry)
 {
 	int err;
 

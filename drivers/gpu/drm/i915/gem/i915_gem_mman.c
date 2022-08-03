@@ -17,6 +17,7 @@
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
 #include "i915_gem_mman.h"
+#include "i915_mm.h"
 #include "i915_trace.h"
 #include "i915_user_extensions.h"
 #include "i915_gem_ttm.h"
@@ -66,13 +67,13 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	 * mmap ioctl is disallowed for all discrete platforms,
 	 * and for all platforms with GRAPHICS_VER > 12.
 	 */
-	if (IS_DGFX(i915) || GRAPHICS_VER(i915) > 12)
+	if (IS_DGFX(i915) || GRAPHICS_VER_FULL(i915) > IP_VER(12, 0))
 		return -EOPNOTSUPP;
 
 	if (args->flags & ~(I915_MMAP_WC))
 		return -EINVAL;
 
-	if (args->flags & I915_MMAP_WC && !boot_cpu_has(X86_FEATURE_PAT))
+	if (args->flags & I915_MMAP_WC && !pat_enabled())
 		return -ENODEV;
 
 	obj = i915_gem_object_lookup(file, args->handle);
@@ -395,7 +396,7 @@ retry:
 	/* Track the mmo associated with the fenced vma */
 	vma->mmo = mmo;
 
-	if (IS_ACTIVE(CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND))
+	if (CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND)
 		intel_wakeref_auto(&i915->ggtt.userfault_wakeref,
 				   msecs_to_jiffies_timeout(CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND));
 
@@ -438,7 +439,7 @@ vm_access(struct vm_area_struct *area, unsigned long addr,
 		return -EACCES;
 
 	addr -= area->vm_start;
-	if (addr >= obj->base.size)
+	if (range_overflows_t(u64, addr, len, obj->base.size))
 		return -EINVAL;
 
 	i915_gem_ww_ctx_init(&ww, true);
@@ -536,6 +537,9 @@ out:
 void i915_gem_object_release_mmap_offset(struct drm_i915_gem_object *obj)
 {
 	struct i915_mmap_offset *mmo, *mn;
+
+	if (obj->ops->unmap_virtual)
+		obj->ops->unmap_virtual(obj);
 
 	spin_lock(&obj->mmo.lock);
 	rbtree_postorder_for_each_entry_safe(mmo, mn,
@@ -645,7 +649,7 @@ mmap_offset_attach(struct drm_i915_gem_object *obj,
 		goto insert;
 
 	/* Attempt to reap some mmap space from dead objects */
-	err = intel_gt_retire_requests_timeout(&i915->gt, MAX_SCHEDULE_TIMEOUT,
+	err = intel_gt_retire_requests_timeout(to_gt(i915), MAX_SCHEDULE_TIMEOUT,
 					       NULL);
 	if (err)
 		goto err;
@@ -736,7 +740,7 @@ i915_gem_dumb_mmap_offset(struct drm_file *file,
 
 	if (HAS_LMEM(to_i915(dev)))
 		mmap_type = I915_MMAP_TYPE_FIXED;
-	else if (boot_cpu_has(X86_FEATURE_PAT))
+	else if (pat_enabled())
 		mmap_type = I915_MMAP_TYPE_WC;
 	else if (!i915_ggtt_has_aperture(&to_i915(dev)->ggtt))
 		return -ENODEV;
@@ -792,7 +796,7 @@ i915_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 		break;
 
 	case I915_MMAP_OFFSET_WC:
-		if (!boot_cpu_has(X86_FEATURE_PAT))
+		if (!pat_enabled())
 			return -ENODEV;
 		type = I915_MMAP_TYPE_WC;
 		break;
@@ -802,7 +806,7 @@ i915_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 		break;
 
 	case I915_MMAP_OFFSET_UC:
-		if (!boot_cpu_has(X86_FEATURE_PAT))
+		if (!pat_enabled())
 			return -ENODEV;
 		type = I915_MMAP_TYPE_UC;
 		break;

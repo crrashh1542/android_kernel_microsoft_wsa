@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/soc/mediatek/mtk-svs.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Mediatek Smart Voltage Scaling (SVS) Device Tree Bindings
+title: MediaTek Smart Voltage Scaling (SVS) Device Tree Bindings
 
 maintainers:
   - Roger Lu <roger.lu@mediatek.com>
@@ -22,6 +22,7 @@ properties:
   compatible:
     enum:
       - mediatek,mt8183-svs
+      - mediatek,mt8192-svs
 
   reg:
     maxItems: 1
@@ -39,7 +40,6 @@ properties:
 
   nvmem-cells:
     minItems: 1
-    maxItems: 2
     description:
       Phandle to the calibration data provided by a nvmem device.
     items:
@@ -50,6 +50,13 @@ properties:
     items:
       - const: svs-calibration-data
       - const: t-calibration-data
+
+  resets:
+    maxItems: 1
+
+  reset-names:
+    items:
+      - const: svs_rst
 
 required:
   - compatible

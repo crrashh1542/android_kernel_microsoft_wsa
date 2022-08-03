@@ -11,8 +11,13 @@
 #ifndef __SOF_AMD_ACP_H
 #define __SOF_AMD_ACP_H
 
+#include "../sof-priv.h"
+
+#define ACP_MAX_STREAM	8
+
 #define ACP_DSP_BAR	0
 
+#define ACP_HW_SEM_RETRY_COUNT			10000
 #define ACP_REG_POLL_INTERVAL                   500
 #define ACP_REG_POLL_TIMEOUT_US                 2000
 #define ACP_DMA_COMPLETE_TIMEOUT_US		5000
@@ -25,7 +30,8 @@
 #define ACP_SOFT_RESET_DONE_MASK		0x00010001
 
 #define ACP_DSP_INTR_EN_MASK			0x00000001
-#define ACP_SRAM_PTE_OFFSET			0x02050000
+#define ACP3X_SRAM_PTE_OFFSET			0x02050000
+#define ACP6X_SRAM_PTE_OFFSET			0x03800000
 #define PAGE_SIZE_4K_ENABLE			0x2
 #define ACP_PAGE_SIZE				0x1000
 #define ACP_DMA_CH_RUN				0x02
@@ -38,6 +44,30 @@
 #define ACP_ATU_CACHE_INVALID			0x01
 #define ACP_MAX_DESC				128
 #define ACPBUS_REG_BASE_OFFSET			ACP_DMA_CNTL_0
+
+#define ACP_DEFAULT_DRAM_LENGTH			0x00080000
+#define ACP3X_SCRATCH_MEMORY_ADDRESS		0x02050000
+#define ACP_SYSTEM_MEMORY_WINDOW		0x4000000
+#define ACP_IRAM_BASE_ADDRESS			0x000000
+#define ACP_DATA_RAM_BASE_ADDRESS		0x01000000
+#define ACP_DRAM_PAGE_COUNT			128
+
+#define ACP_DSP_TO_HOST_IRQ			0x04
+
+#define HOST_BRIDGE_CZN				0x1630
+#define HOST_BRIDGE_RMB				0x14B5
+#define ACP_SHA_STAT				0x8000
+#define ACP_PSP_TIMEOUT_COUNTER			5
+#define ACP_EXT_INTR_ERROR_STAT			0x20000000
+#define MP0_C2PMSG_114_REG			0x3810AC8
+#define MP0_C2PMSG_73_REG			0x3810A24
+#define MBOX_ACP_SHA_DMA_COMMAND		0x70000
+#define MBOX_DELAY				1000
+#define MBOX_READY_MASK				0x80000000
+#define MBOX_STATUS_MASK			0xFFFF
+
+#define BOX_SIZE_512				0x200
+#define BOX_SIZE_1024				0x400
 
 struct  acp_atu_grp_pte {
 	u32 low;
@@ -63,10 +93,6 @@ struct dma_descriptor {
 
 /* Scratch memory structure for communication b/w host and dsp */
 struct  scratch_ipc_conf {
-	/* DSP mailbox */
-	u8 sof_out_box[512];
-	/* Host mailbox */
-	u8 sof_in_box[512];
 	/* Debug memory */
 	u8 sof_debug_box[1024];
 	/* Exception memory*/
@@ -103,10 +129,58 @@ struct  scratch_reg_conf {
 	unsigned int    reserve[];
 };
 
+struct acp_dsp_stream {
+	struct list_head list;
+	struct snd_sof_dev *sdev;
+	struct snd_pcm_substream *substream;
+	struct snd_dma_buffer *dmab;
+	int num_pages;
+	int stream_tag;
+	int active;
+	unsigned int reg_offset;
+};
+
+struct sof_amd_acp_desc {
+	unsigned int rev;
+	unsigned int host_bridge_id;
+	unsigned int i2s_mode;
+	u32 pgfsm_base;
+	u32 ext_intr_stat;
+	u32 dsp_intr_base;
+	u32 sram_pte_offset;
+	u32 i2s_pin_config_offset;
+	u32 hw_semaphore_offset;
+	u32 acp_clkmux_sel;
+	u32 fusion_dsp_offset;
+};
+
 /* Common device data struct for ACP devices */
 struct acp_dev_data {
 	struct snd_sof_dev  *dev;
+	unsigned int fw_bin_size;
+	unsigned int fw_data_bin_size;
+	u32 fw_bin_page_count;
+	dma_addr_t sha_dma_addr;
+	u8 *bin_buf;
+	dma_addr_t dma_addr;
+	u8 *data_buf;
 	struct dma_descriptor dscr_info[ACP_MAX_DESC];
+	struct acp_dsp_stream stream_buf[ACP_MAX_STREAM];
+	struct acp_dsp_stream *dtrace_stream;
+	struct pci_dev *smn_dev;
+};
+
+enum acp_pcm_types {
+	I2S_BT = 0,
+	I2S_SP,
+	PDM_DMIC,
+	I2S_HS,
+	PCM_NONE,
+};
+
+struct acp_pcm_table {
+	u8 pcm_index;
+	char *pcm_name;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
@@ -123,5 +197,69 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 int amd_sof_acp_probe(struct snd_sof_dev *sdev);
 int amd_sof_acp_remove(struct snd_sof_dev *sdev);
 
-extern const struct snd_sof_dsp_ops sof_renoir_ops;
+/* DSP Loader callbacks */
+int acp_sof_dsp_run(struct snd_sof_dev *sdev);
+int acp_dsp_pre_fw_run(struct snd_sof_dev *sdev);
+int acp_get_bar_index(struct snd_sof_dev *sdev, u32 type);
+
+/* Block IO callbacks */
+int acp_dsp_block_write(struct snd_sof_dev *sdev, enum snd_sof_fw_blk_type blk_type,
+			u32 offset, void *src, size_t size);
+int acp_dsp_block_read(struct snd_sof_dev *sdev, enum snd_sof_fw_blk_type blk_type,
+		       u32 offset, void *dest, size_t size);
+
+/* IPC callbacks */
+irqreturn_t acp_sof_ipc_irq_thread(int irq, void *context);
+int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+			 void *p, size_t sz);
+int acp_sof_ipc_send_msg(struct snd_sof_dev *sdev,
+			 struct snd_sof_ipc_msg *msg);
+int acp_sof_ipc_get_mailbox_offset(struct snd_sof_dev *sdev);
+int acp_sof_ipc_get_window_offset(struct snd_sof_dev *sdev, u32 id);
+void acp_mailbox_write(struct snd_sof_dev *sdev, u32 offset, void *message, size_t bytes);
+void acp_mailbox_read(struct snd_sof_dev *sdev, u32 offset, void *message, size_t bytes);
+
+/* ACP - DSP  stream callbacks */
+int acp_dsp_stream_config(struct snd_sof_dev *sdev, struct acp_dsp_stream *stream);
+int acp_dsp_stream_init(struct snd_sof_dev *sdev);
+struct acp_dsp_stream *acp_dsp_stream_get(struct snd_sof_dev *sdev, int tag);
+int acp_dsp_stream_put(struct snd_sof_dev *sdev, struct acp_dsp_stream *acp_stream);
+
+/*
+ * DSP PCM Operations.
+ */
+int acp_pcm_open(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+int acp_pcm_close(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+		      struct snd_pcm_hw_params *params,
+		      struct snd_sof_platform_stream_params *platform_params);
+snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+
+extern struct snd_sof_dsp_ops sof_acp_common_ops;
+
+extern struct snd_sof_dsp_ops sof_renoir_ops;
+int sof_renoir_ops_init(struct snd_sof_dev *sdev);
+extern struct snd_sof_dsp_ops sof_rembrandt_ops;
+int sof_rembrandt_ops_init(struct snd_sof_dev *sdev);
+
+int acp_dai_probe(struct snd_soc_dai *dai);
+struct snd_soc_acpi_mach *amd_sof_machine_select(struct snd_sof_dev *sdev);
+/* Machine configuration */
+int snd_amd_acp_find_config(struct pci_dev *pci);
+
+/* Trace */
+int acp_sof_trace_init(struct snd_sof_dev *sdev,
+		       struct sof_ipc_dma_trace_params_ext *dtrace_params);
+int acp_sof_trace_release(struct snd_sof_dev *sdev);
+
+/* PM Callbacks */
+int amd_sof_acp_suspend(struct snd_sof_dev *sdev, u32 target_state);
+int amd_sof_acp_resume(struct snd_sof_dev *sdev);
+
+static inline const struct sof_amd_acp_desc *get_chip_info(struct snd_sof_pdata *pdata)
+{
+	const struct sof_dev_desc *desc = pdata->desc;
+
+	return desc->chip_info;
+}
 #endif

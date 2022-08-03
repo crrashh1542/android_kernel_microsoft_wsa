@@ -27,7 +27,7 @@
 
 #include "alt-syscall.h"
 
-static struct syscall_whitelist_entry complete_whitelist[] = {
+static const struct syscall_whitelist_entry complete_whitelist[] __initconst = {
 	/* Syscalls wired up on ARM32/ARM64 and x86_64. */
 	SYSCALL_ENTRY(accept),
 	SYSCALL_ENTRY(accept4),
@@ -367,7 +367,7 @@ static struct syscall_whitelist_entry complete_whitelist[] = {
  * block_syscall() (unless the permissive mode is used in which case the call
  * will be redirected to warn_compat_syscall()).
  */
-static struct syscall_whitelist_entry complete_compat_whitelist[] = {};
+static const struct syscall_whitelist_entry complete_compat_whitelist[] __initconst = {};
 #endif /* CONFIG_COMPAT */
 
 #endif /* COMPLETE_WHITELISTS_H */

@@ -25,6 +25,7 @@
 
 #include "mali_kbase.h"
 #include <device/mali_kbase_device.h>
+#include <backend/gpu/mali_kbase_irq_internal.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
 
 #include <kutf/kutf_suite.h>
@@ -63,12 +64,6 @@ struct kutf_irq_fixture_data {
 #define TEST_IRQ POWER_CHANGED_SINGLE
 
 #define IRQ_TIMEOUT HZ
-
-/* Kernel API for setting irq throttle hook callback and irq time in us*/
-extern int kbase_set_custom_irq_handler(struct kbase_device *kbdev,
-		irq_handler_t custom_handler,
-		int irq_type);
-extern irqreturn_t kbase_gpu_irq_test_handler(int irq, void *data, u32 val);
 
 static DECLARE_WAIT_QUEUE_HEAD(wait);
 static bool triggered;

@@ -49,9 +49,6 @@
 #ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
 #include <arbiter/mali_kbase_arbiter_pm.h>
 #endif /* CONFIG_MALI_BIFROST_ARBITER_SUPPORT */
-#if MALI_USE_CSF
-#include <csf/ipa_control/mali_kbase_csf_ipa_control.h>
-#endif
 
 #include <linux/of.h>
 

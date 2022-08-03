@@ -536,8 +536,10 @@ static void __cache_work_func(struct mlx5_cache_ent *ent)
 		spin_lock_irq(&ent->lock);
 		if (ent->disabled)
 			goto out;
-		if (need_delay)
+		if (need_delay) {
 			queue_delayed_work(cache->wq, &ent->dwork, 300 * HZ);
+			goto out;
+		}
 		remove_cache_mr_locked(ent);
 		queue_adjust_cache_locked(ent);
 	}
@@ -580,6 +582,8 @@ struct mlx5_ib_mr *mlx5_mr_cache_alloc(struct mlx5_ib_dev *dev,
 	ent = &cache->ent[entry];
 	spin_lock_irq(&ent->lock);
 	if (list_empty(&ent->head)) {
+		queue_adjust_cache_locked(ent);
+		ent->miss++;
 		spin_unlock_irq(&ent->lock);
 		mr = create_cache_mr(ent);
 		if (IS_ERR(mr))
@@ -631,6 +635,7 @@ static void mlx5_mr_cache_free(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr)
 {
 	struct mlx5_cache_ent *ent = mr->cache_ent;
 
+	WRITE_ONCE(dev->cache.last_add, jiffies);
 	spin_lock_irq(&ent->lock);
 	list_add_tail(&mr->list, &ent->head);
 	ent->available_mrs++;
@@ -1911,18 +1916,19 @@ err:
 	return ret;
 }
 
-static void mlx5_free_priv_descs(struct mlx5_ib_mr *mr)
+static void
+mlx5_free_priv_descs(struct mlx5_ib_mr *mr)
 {
-	struct mlx5_ib_dev *dev = to_mdev(mr->ibmr.device);
-	int size = mr->max_descs * mr->desc_size;
+	if (!mr->umem && mr->descs) {
+		struct ib_device *device = mr->ibmr.device;
+		int size = mr->max_descs * mr->desc_size;
+		struct mlx5_ib_dev *dev = to_mdev(device);
 
-	if (!mr->descs)
-		return;
-
-	dma_unmap_single(&dev->mdev->pdev->dev, mr->desc_map, size,
-			 DMA_TO_DEVICE);
-	kfree(mr->descs_alloc);
-	mr->descs = NULL;
+		dma_unmap_single(&dev->mdev->pdev->dev, mr->desc_map, size,
+				 DMA_TO_DEVICE);
+		kfree(mr->descs_alloc);
+		mr->descs = NULL;
+	}
 }
 
 int mlx5_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
@@ -1998,8 +2004,7 @@ int mlx5_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 	if (mr->cache_ent) {
 		mlx5_mr_cache_free(dev, mr);
 	} else {
-		if (!udata)
-			mlx5_free_priv_descs(mr);
+		mlx5_free_priv_descs(mr);
 		kfree(mr);
 	}
 	return 0;
@@ -2086,6 +2091,7 @@ static struct mlx5_ib_mr *mlx5_ib_alloc_pi_mr(struct ib_pd *pd,
 	if (err)
 		goto err_free_in;
 
+	mr->umem = NULL;
 	kfree(in);
 
 	return mr;
@@ -2212,6 +2218,7 @@ static struct ib_mr *__mlx5_ib_alloc_mr(struct ib_pd *pd,
 	}
 
 	mr->ibmr.device = pd->device;
+	mr->umem = NULL;
 
 	switch (mr_type) {
 	case IB_MR_TYPE_MEM_REG:

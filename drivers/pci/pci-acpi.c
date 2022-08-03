@@ -976,9 +976,11 @@ static bool acpi_pci_power_manageable(struct pci_dev *dev)
 
 static bool acpi_pci_bridge_d3(struct pci_dev *dev)
 {
-	const union acpi_object *obj;
-	struct acpi_device *adev;
 	struct pci_dev *rpdev;
+	struct acpi_device *adev;
+	acpi_status status;
+	unsigned long long state;
+	const union acpi_object *obj;
 
 	if (!dev->is_hotplug_bridge)
 		return false;
@@ -987,12 +989,6 @@ static bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	if (acpi_pci_power_manageable(dev))
 		return true;
 
-	/*
-	 * The ACPI firmware will provide the device-specific properties through
-	 * _DSD configuration object. Look for the 'HotPlugSupportInD3' property
-	 * for the root port and if it is set we know the hierarchy behind it
-	 * supports D3 just fine.
-	 */
 	rpdev = pcie_find_root_port(dev);
 	if (!rpdev)
 		return false;
@@ -1001,11 +997,34 @@ static bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	if (!adev)
 		return false;
 
-	if (acpi_dev_get_property(adev, "HotPlugSupportInD3",
-				   ACPI_TYPE_INTEGER, &obj) < 0)
+	/*
+	 * If the Root Port cannot signal wakeup signals at all, i.e., it
+	 * doesn't supply a wakeup GPE via _PRW, it cannot signal hotplug
+	 * events from low-power states including D3hot and D3cold.
+	 */
+	if (!adev->wakeup.flags.valid)
 		return false;
 
-	return obj->integer.value == 1;
+	/*
+	 * If the Root Port cannot wake itself from D3hot or D3cold, we
+	 * can't use D3.
+	 */
+	status = acpi_evaluate_integer(adev->handle, "_S0W", NULL, &state);
+	if (ACPI_SUCCESS(status) && state < ACPI_STATE_D3_HOT)
+		return false;
+
+	/*
+	 * The "HotPlugSupportInD3" property in a Root Port _DSD indicates
+	 * the Port can signal hotplug events while in D3.  We assume any
+	 * bridges *below* that Root Port can also signal hotplug events
+	 * while in D3.
+	 */
+	if (!acpi_dev_get_property(adev, "HotPlugSupportInD3",
+				   ACPI_TYPE_INTEGER, &obj) &&
+	    obj->integer.value == 1)
+		return true;
+
+	return false;
 }
 
 static int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state)
@@ -1356,6 +1375,21 @@ static void pci_acpi_set_external_facing(struct pci_dev *dev)
 		dev->external_facing = 1;
 }
 
+static void pci_acpi_check_for_dma_protection(struct pci_dev *dev)
+{
+	u8 val;
+
+	/*
+	 * Property also used by Microsoft Windows for same purpose,
+	 * (to implement DMA protection from a device, using the IOMMU).
+	 */
+	if (device_property_read_u8(&dev->dev, "DmaProperty", &val))
+		return;
+
+	if (val)
+		dev->untrusted = 1;
+}
+
 static void pci_acpi_setup(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
@@ -1366,6 +1400,7 @@ static void pci_acpi_setup(struct device *dev)
 
 	pci_acpi_optimize_delay(pci_dev, adev->handle);
 	pci_acpi_set_external_facing(pci_dev);
+	pci_acpi_check_for_dma_protection(pci_dev);
 	pci_acpi_add_edr_notifier(pci_dev);
 
 	pci_acpi_add_pm_notifier(adev, pci_dev);

@@ -953,6 +953,8 @@ struct kbase_device {
 	char devname[DEVNAME_SIZE];
 	u32  id;
 
+	struct kbase_platform_specific_conf *funcs;
+
 	struct kbase_pm_device_data pm;
 
 	struct kbase_mem_pool_group mem_pools;

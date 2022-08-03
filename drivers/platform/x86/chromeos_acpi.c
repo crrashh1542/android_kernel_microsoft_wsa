@@ -37,8 +37,6 @@
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
 
-#include "../chrome/chromeos.h"
-
 #define CHNV_DEBUG_RESET_FLAG	0x40	     /* flag for S3 reboot */
 #define CHNV_RECOVERY_FLAG	0x80	     /* flag for recovery reboot */
 
@@ -152,98 +150,6 @@ static bool chromeos_on_legacy_firmware(void)
 	 * firmware
 	 */
 	return chromeos_acpi_if_data.chnv.cad_is_set;
-}
-
-/*
- * This function operates on legacy BIOSes which do not export VBNV element
- * through ACPI. These BIOSes use a fixed location in NVRAM to contain a
- * bitmask of known flags.
- *
- * @flag - the bitmask to set, it is the responsibility of the caller to set
- *         the proper bits.
- *
- * returns 0 on success (is running in legacy mode and chnv is initialized) or
- *         -1 otherwise.
- */
-static int chromeos_set_nvram_flag(u8 flag)
-{
-	u8 cur;
-	unsigned index = chromeos_acpi_if_data.chnv.cad_value;
-
-	if (!chromeos_on_legacy_firmware())
-		return -ENODEV;
-
-	cur = nvram_read_byte(index);
-
-	if ((cur & flag) != flag)
-		nvram_write_byte(cur | flag, index);
-	return 0;
-}
-
-int chromeos_legacy_set_need_recovery(void)
-{
-	return chromeos_set_nvram_flag(CHNV_RECOVERY_FLAG);
-}
-
-/*
- * Read the nvram buffer contents into the user provided space.
- *
- * retrun number of bytes copied, or -1 on any error.
- */
-static ssize_t chromeos_vbc_nvram_read(void *buf, size_t count)
-{
-
-	int base, size, i;
-
-	if (!chromeos_acpi_if_data.nv_base.cad_is_set ||
-	    !chromeos_acpi_if_data.nv_size.cad_is_set) {
-		printk(MY_ERR "%s: NVRAM not configured!\n", __func__);
-		return -ENODEV;
-	}
-
-	base = chromeos_acpi_if_data.nv_base.cad_value;
-	size = chromeos_acpi_if_data.nv_size.cad_value;
-
-	if (count < size) {
-		pr_err("%s: not enough room to read nvram (%zd < %d)\n",
-		       __func__, count, size);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < size; i++)
-		((u8 *)buf)[i] = nvram_read_byte(base++);
-
-	return size;
-}
-
-static ssize_t chromeos_vbc_nvram_write(const void *buf, size_t count)
-{
-	unsigned base, size, i;
-
-	if (!chromeos_acpi_if_data.nv_base.cad_is_set ||
-	    !chromeos_acpi_if_data.nv_size.cad_is_set) {
-		printk(MY_ERR "%s: NVRAM not configured!\n", __func__);
-		return -ENODEV;
-	}
-
-	size = chromeos_acpi_if_data.nv_size.cad_value;
-	base = chromeos_acpi_if_data.nv_base.cad_value;
-
-	if (count != size) {
-		printk(MY_ERR "%s: wrong buffer size (%zd != %d)!\n", __func__,
-		       count, size);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < size; i++) {
-		u8 c;
-
-		c = nvram_read_byte(base + i);
-		if (c == ((u8 *)buf)[i])
-			continue;
-		nvram_write_byte(((u8 *)buf)[i], base + i);
-	}
-	return size;
 }
 
 /*
@@ -754,22 +660,12 @@ static int chromeos_device_remove(struct acpi_device *device)
 	return 0;
 }
 
-static struct chromeos_vbc chromeos_vbc_nvram = {
-	.name = "chromeos_vbc_nvram",
-	.read = chromeos_vbc_nvram_read,
-	.write = chromeos_vbc_nvram_write,
-};
-
 static int __init chromeos_acpi_init(void)
 {
 	int ret = 0;
 
 	if (acpi_disabled)
 		return -ENODEV;
-
-	ret = chromeos_vbc_register(&chromeos_vbc_nvram);
-	if (ret)
-		return ret;
 
 	chromeos_acpi.p_dev = platform_device_register_simple("chromeos_acpi",
 							      -1, NULL, 0);

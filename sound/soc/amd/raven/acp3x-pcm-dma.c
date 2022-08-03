@@ -4,14 +4,11 @@
 //
 //Copyright 2016 Advanced Micro Devices, Inc.
 
-#include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
-#include <linux/sysfs.h>
-#include <linux/workqueue.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
@@ -73,7 +70,6 @@ static irqreturn_t i2s_irq_handler(int irq, void *dev_id)
 	play_flag = 0;
 	cap_flag = 0;
 	val = rv_readl(rv_i2s_data->acp3x_base + mmACP_EXTERNAL_INTR_STAT);
-
 	if ((val & BIT(BT_TX_THRESHOLD)) && rv_i2s_data->play_stream) {
 		rv_writel(BIT(BT_TX_THRESHOLD), rv_i2s_data->acp3x_base +
 			  mmACP_EXTERNAL_INTR_STAT);
@@ -239,69 +235,11 @@ static int acp3x_dma_open(struct snd_soc_component *component,
 		return ret;
 	}
 
-	if (!adata->play_stream && !adata->capture_stream &&
-	    !adata->i2ssp_play_stream && !adata->i2ssp_capture_stream) {
-		rv_writel(1, adata->acp3x_base + mmACP_EXTERNAL_INTR_ENB);
-		schedule_work(&adata->work);
-	}
-
 	i2s_data->acp3x_base = adata->acp3x_base;
 	runtime->private_data = i2s_data;
 	return ret;
 }
 
-
-static void acp_intr_work(struct work_struct *work)
-{
-	u32 val;
-	struct i2s_dev_data *adata =
-		container_of(work, struct i2s_dev_data, work);
-
-	/* sleep and check status bits */
-	for (;;) {
-		val = rv_readl(adata->acp3x_base + mmACP_EXTERNAL_INTR_STAT);
-		if ((val & BIT(BT_TX_THRESHOLD)) &&
-		    (val & BIT(BT_RX_THRESHOLD))) {
-			rv_writel(BIT(BT_TX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->play_stream);
-			rv_writel(BIT(BT_RX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->capture_stream);
-		}
-		if ((val & BIT(I2S_TX_THRESHOLD)) &&
-		    (val & BIT(BT_RX_THRESHOLD))) {
-			rv_writel(BIT(I2S_TX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->i2ssp_play_stream);
-			rv_writel(BIT(BT_RX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->capture_stream);
-		}
-		if ((val & BIT(BT_TX_THRESHOLD)) &&
-		    (val & BIT(I2S_RX_THRESHOLD))) {
-			rv_writel(BIT(BT_TX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->play_stream);
-			rv_writel(BIT(I2S_RX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->i2ssp_capture_stream);
-		}
-		if ((val & BIT(I2S_TX_THRESHOLD)) &&
-		    (val & BIT(I2S_RX_THRESHOLD))) {
-			rv_writel(BIT(I2S_TX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->i2ssp_play_stream);
-			rv_writel(BIT(I2S_RX_THRESHOLD), adata->acp3x_base +
-				  mmACP_EXTERNAL_INTR_STAT);
-			snd_pcm_period_elapsed(adata->i2ssp_capture_stream);
-		}
-		val = rv_readl(adata->acp3x_base + mmACP_EXTERNAL_INTR_ENB);
-		if (!val)
-			break;
-		usleep_range(adata->sleep_us, adata->sleep_us + 10);
-	}
-}
 
 static int acp3x_dma_hw_params(struct snd_soc_component *component,
 			       struct snd_pcm_substream *substream,
@@ -351,9 +289,6 @@ static int acp3x_dma_hw_params(struct snd_soc_component *component,
 	rtd->dma_addr = substream->runtime->dma_addr;
 	rtd->num_pages = (PAGE_ALIGN(size) >> PAGE_SHIFT);
 	config_acp3x_dma(rtd, substream->stream);
-	adata->sleep_us = 1000000 / params_rate(params) *
-			   params_period_size(params);
-
 	return 0;
 }
 
@@ -419,15 +354,6 @@ static int acp3x_dma_close(struct snd_soc_component *component,
 		}
 	}
 
-	/* Disable ACP irq, when the current stream is being closed and
-	 * another stream is also not active.
-	 */
-	if (!adata->play_stream && !adata->capture_stream &&
-	    !adata->i2ssp_play_stream && !adata->i2ssp_capture_stream) {
-		rv_writel(0, adata->acp3x_base + mmACP_EXTERNAL_INTR_ENB);
-		cancel_work_sync(&adata->work);
-	}
-
 	return 0;
 }
 
@@ -468,13 +394,10 @@ static int acp3x_audio_probe(struct platform_device *pdev)
 	if (!adata->acp3x_base)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "IORESOURCE_IRQ FAILED\n");
-		return -ENODEV;
-	}
-
-	adata->i2s_irq = res->start;
+	status = platform_get_irq(pdev, 0);
+	if (status < 0)
+		return status;
+	adata->i2s_irq = status;
 
 	dev_set_drvdata(&pdev->dev, adata);
 	status = devm_snd_soc_register_component(&pdev->dev,
@@ -490,8 +413,6 @@ static int acp3x_audio_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "ACP3x I2S IRQ request failed\n");
 		return -ENODEV;
 	}
-
-	INIT_WORK(&adata->work, acp_intr_work);
 
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 2000);
 	pm_runtime_use_autosuspend(&pdev->dev);

@@ -380,6 +380,7 @@ struct tb_regs_port_header {
 #define DP_COMMON_CAP_1_LANE			0x0
 #define DP_COMMON_CAP_2_LANES			0x1
 #define DP_COMMON_CAP_4_LANES			0x2
+#define DP_COMMON_CAP_LTTPR_NS			BIT(27)
 #define DP_COMMON_CAP_DPRX_DONE			BIT(31)
 
 /* PCIe adapter registers */
@@ -437,6 +438,8 @@ struct tb_regs_hop {
 	u32 unknown3:3; /* set to zero */
 } __packed;
 
+#define TB_PLUG_EVENTS_USB_DISABLE		BIT(2)
+
 /* Common link controller registers */
 #define TB_LC_DESC			0x02
 #define TB_LC_DESC_NLC_MASK		GENMASK(3, 0)
@@ -454,6 +457,9 @@ struct tb_regs_hop {
 #define TB_LC_POWER			0x740
 
 /* Link controller registers */
+#define TB_LC_CS_42				0x2a
+#define TB_LC_CS_42_USB_PLUGGED			BIT(31)
+
 #define TB_LC_PORT_ATTR			0x8d
 #define TB_LC_PORT_ATTR_BE		BIT(12)
 
@@ -471,5 +477,8 @@ struct tb_regs_hop {
 #define TB_LC_SX_CTRL_SLI		BIT(29)
 #define TB_LC_SX_CTRL_UPSTREAM		BIT(30)
 #define TB_LC_SX_CTRL_SLP		BIT(31)
+
+#define TB_LC_LINK_REQ				0xad
+#define TB_LC_LINK_REQ_XHCI_CONNECT		BIT(31)
 
 #endif

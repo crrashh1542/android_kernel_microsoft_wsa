@@ -285,7 +285,7 @@ static int littlemill_late_probe(struct snd_soc_card *card)
 				    SND_JACK_BTN_0 | SND_JACK_BTN_1 |
 				    SND_JACK_BTN_2 | SND_JACK_BTN_3 |
 				    SND_JACK_BTN_4 | SND_JACK_BTN_5,
-				    &littlemill_headset, NULL, 0);
+				    &littlemill_headset);
 	if (ret)
 		return ret;
 
@@ -325,9 +325,8 @@ static int littlemill_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
-	if (ret && ret != -EPROBE_DEFER)
-		dev_err(&pdev->dev, "snd_soc_register_card() failed: %d\n",
-			ret);
+	if (ret)
+		dev_err_probe(&pdev->dev, ret, "snd_soc_register_card() failed\n");
 
 	return ret;
 }

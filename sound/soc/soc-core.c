@@ -229,31 +229,12 @@ static void snd_soc_debugfs_exit(void)
 
 #else
 
-static inline void soc_init_component_debugfs(
-	struct snd_soc_component *component)
-{
-}
-
-static inline void soc_cleanup_component_debugfs(
-	struct snd_soc_component *component)
-{
-}
-
-static inline void soc_init_card_debugfs(struct snd_soc_card *card)
-{
-}
-
-static inline void soc_cleanup_card_debugfs(struct snd_soc_card *card)
-{
-}
-
-static inline void snd_soc_debugfs_init(void)
-{
-}
-
-static inline void snd_soc_debugfs_exit(void)
-{
-}
+static inline void soc_init_component_debugfs(struct snd_soc_component *component) { }
+static inline void soc_cleanup_component_debugfs(struct snd_soc_component *component) { }
+static inline void soc_init_card_debugfs(struct snd_soc_card *card) { }
+static inline void soc_cleanup_card_debugfs(struct snd_soc_card *card) { }
+static inline void snd_soc_debugfs_init(void) { }
+static inline void snd_soc_debugfs_exit(void) { }
 
 #endif
 
@@ -739,9 +720,7 @@ static void soc_resume_init(struct snd_soc_card *card)
 #else
 #define snd_soc_suspend NULL
 #define snd_soc_resume NULL
-static inline void soc_resume_init(struct snd_soc_card *card)
-{
-}
+static inline void soc_resume_init(struct snd_soc_card *card) { }
 #endif
 
 static struct device_node
@@ -1235,9 +1214,11 @@ int snd_soc_runtime_set_dai_fmt(struct snd_soc_pcm_runtime *rtd,
 {
 	struct snd_soc_dai *cpu_dai;
 	struct snd_soc_dai *codec_dai;
-	unsigned int inv_dai_fmt;
 	unsigned int i;
 	int ret;
+
+	if (!dai_fmt)
+		return 0;
 
 	for_each_rtd_codec_dais(rtd, i, codec_dai) {
 		ret = snd_soc_dai_set_fmt(codec_dai, dai_fmt);
@@ -1245,19 +1226,11 @@ int snd_soc_runtime_set_dai_fmt(struct snd_soc_pcm_runtime *rtd,
 			return ret;
 	}
 
-	/*
-	 * Flip the polarity for the "CPU" end of a CODEC<->CODEC link
-	 * the component which has non_legacy_dai_naming is Codec
-	 */
-	inv_dai_fmt = snd_soc_daifmt_clock_provider_fliped(dai_fmt);
+	/* Flip the polarity for the "CPU" end of link */
+	dai_fmt = snd_soc_daifmt_clock_provider_flipped(dai_fmt);
 
 	for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
-		unsigned int fmt = dai_fmt;
-
-		if (cpu_dai->component->driver->non_legacy_dai_naming)
-			fmt = inv_dai_fmt;
-
-		ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+		ret = snd_soc_dai_set_fmt(cpu_dai, dai_fmt);
 		if (ret != 0 && ret != -ENOTSUPP)
 			return ret;
 	}
@@ -1283,11 +1256,9 @@ static int soc_init_pcm_runtime(struct snd_soc_card *card,
 		return ret;
 
 	snd_soc_runtime_get_dai_fmt(rtd);
-	if (dai_link->dai_fmt) {
-		ret = snd_soc_runtime_set_dai_fmt(rtd, dai_link->dai_fmt);
-		if (ret)
-			return ret;
-	}
+	ret = snd_soc_runtime_set_dai_fmt(rtd, dai_link->dai_fmt);
+	if (ret)
+		return ret;
 
 	/* add DPCM sysfs entries */
 	soc_dpcm_debugfs_add(rtd);
@@ -2521,7 +2492,7 @@ static int snd_soc_register_dais(struct snd_soc_component *component,
 
 	for (i = 0; i < count; i++) {
 		dai = snd_soc_register_dai(component, dai_drv + i, count == 1 &&
-				  !component->driver->non_legacy_dai_naming);
+					   !component->driver->non_legacy_dai_naming);
 		if (dai == NULL) {
 			ret = -ENOMEM;
 			goto err;
@@ -3004,7 +2975,7 @@ int snd_soc_of_parse_aux_devs(struct snd_soc_card *card, const char *propname)
 }
 EXPORT_SYMBOL_GPL(snd_soc_of_parse_aux_devs);
 
-unsigned int snd_soc_daifmt_clock_provider_fliped(unsigned int dai_fmt)
+unsigned int snd_soc_daifmt_clock_provider_flipped(unsigned int dai_fmt)
 {
 	unsigned int inv_dai_fmt = dai_fmt & ~SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK;
 
@@ -3025,7 +2996,7 @@ unsigned int snd_soc_daifmt_clock_provider_fliped(unsigned int dai_fmt)
 
 	return inv_dai_fmt;
 }
-EXPORT_SYMBOL_GPL(snd_soc_daifmt_clock_provider_fliped);
+EXPORT_SYMBOL_GPL(snd_soc_daifmt_clock_provider_flipped);
 
 unsigned int snd_soc_daifmt_clock_provider_from_bitmap(unsigned int bit_frame)
 {
@@ -3208,7 +3179,7 @@ int snd_soc_get_dai_name(const struct of_phandle_args *args,
 	for_each_component(pos) {
 		struct device_node *component_of_node = soc_component_to_node(pos);
 
-		if (component_of_node != args->np)
+		if (component_of_node != args->np || !pos->num_dai)
 			continue;
 
 		ret = snd_soc_component_of_xlate_dai_name(pos, args, dai_name);

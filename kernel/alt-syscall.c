@@ -28,8 +28,7 @@
 static LIST_HEAD(alt_sys_call_tables);
 static DEFINE_SPINLOCK(alt_sys_call_tables_lock);
 
-/* XXX: there is no "unregister" yet. */
-int register_alt_sys_call_table(struct alt_sys_call_table *entry)
+int __init register_alt_sys_call_table(struct alt_sys_call_table *entry)
 {
 	if (!entry)
 		return -EINVAL;

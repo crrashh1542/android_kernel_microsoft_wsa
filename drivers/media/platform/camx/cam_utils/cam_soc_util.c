@@ -1553,8 +1553,8 @@ int cam_soc_util_request_platform_resource(
 
 	if (soc_info->irq_line) {
 		rc = devm_request_irq(soc_info->dev, soc_info->irq_line->start,
-			handler, IRQF_TRIGGER_RISING,
-			soc_info->irq_name, irq_data);
+				      handler, 0, soc_info->irq_name,
+				      irq_data);
 		if (rc) {
 			CAM_ERR(CAM_UTIL, "irq request fail");
 			rc = -EBUSY;

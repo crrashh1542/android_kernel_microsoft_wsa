@@ -94,10 +94,10 @@ static void smu_cmn_read_arg(struct smu_context *smu,
 
 /**
  * __smu_cmn_poll_stat -- poll for a status from the SMU
- * smu: a pointer to SMU context
+ * @smu: a pointer to SMU context
  *
  * Returns the status of the SMU, which could be,
- *    0, the SMU is busy with your previous command;
+ *    0, the SMU is busy with your command;
  *    1, execution status: success, execution result: success;
  * 0xFF, execution status: success, execution result: failure;
  * 0xFE, unknown command;
@@ -139,9 +139,13 @@ static void __smu_cmn_reg_print_error(struct smu_context *smu,
 	const char *message = smu_get_message_name(smu, msg);
 
 	switch (reg_c2pmsg_90) {
-	case SMU_RESP_NONE:
+	case SMU_RESP_NONE: {
+		u32 msg_idx = RREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_66);
+		u32 prm     = RREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_82);
 		dev_err_ratelimited(adev->dev,
-				    "SMU: I'm not done with your previous command!");
+				    "SMU: I'm not done with your command: SMN_C2PMSG_66:0x%08X SMN_C2PMSG_82:0x%08X",
+				    msg_idx, prm);
+	}
 		break;
 	case SMU_RESP_OK:
 		/* The SMU executed the command. It completed with a
@@ -253,10 +257,11 @@ int smu_cmn_send_msg_without_waiting(struct smu_context *smu,
 				     uint16_t msg_index,
 				     uint32_t param)
 {
+	struct amdgpu_device *adev = smu->adev;
 	u32 reg;
 	int res;
 
-	if (smu->adev->no_hw_access)
+	if (adev->no_hw_access)
 		return 0;
 
 	reg = __smu_cmn_poll_stat(smu);
@@ -268,6 +273,12 @@ int smu_cmn_send_msg_without_waiting(struct smu_context *smu,
 	__smu_cmn_send_msg(smu, msg_index, param);
 	res = 0;
 Out:
+	if (unlikely(adev->pm.smu_debug_mask & SMU_DEBUG_HALT_ON_ERROR) &&
+	    res && (res != -ETIME)) {
+		amdgpu_device_halt(adev);
+		WARN_ON(1);
+	}
+
 	return res;
 }
 
@@ -284,9 +295,18 @@ Out:
 int smu_cmn_wait_for_response(struct smu_context *smu)
 {
 	u32 reg;
+	int res;
 
 	reg = __smu_cmn_poll_stat(smu);
-	return __smu_cmn_reg2errno(smu, reg);
+	res = __smu_cmn_reg2errno(smu, reg);
+
+	if (unlikely(smu->adev->pm.smu_debug_mask & SMU_DEBUG_HALT_ON_ERROR) &&
+	    res && (res != -ETIME)) {
+		amdgpu_device_halt(smu->adev);
+		WARN_ON(1);
+	}
+
+	return res;
 }
 
 /**
@@ -324,10 +344,11 @@ int smu_cmn_send_smc_msg_with_param(struct smu_context *smu,
 				    uint32_t param,
 				    uint32_t *read_arg)
 {
+	struct amdgpu_device *adev = smu->adev;
 	int res, index;
 	u32 reg;
 
-	if (smu->adev->no_hw_access)
+	if (adev->no_hw_access)
 		return 0;
 
 	index = smu_cmn_to_asic_specific_index(smu,
@@ -348,11 +369,16 @@ int smu_cmn_send_smc_msg_with_param(struct smu_context *smu,
 	__smu_cmn_send_msg(smu, (uint16_t) index, param);
 	reg = __smu_cmn_poll_stat(smu);
 	res = __smu_cmn_reg2errno(smu, reg);
-	if (res == -EREMOTEIO)
+	if (res != 0)
 		__smu_cmn_reg_print_error(smu, reg, index, param, msg);
 	if (read_arg)
 		smu_cmn_read_arg(smu, read_arg);
 Out:
+	if (unlikely(adev->pm.smu_debug_mask & SMU_DEBUG_HALT_ON_ERROR) && res) {
+		amdgpu_device_halt(adev);
+		WARN_ON(1);
+	}
+
 	mutex_unlock(&smu->message_lock);
 	return res;
 }
@@ -529,67 +555,60 @@ int smu_cmn_get_enabled_mask(struct smu_context *smu,
 			     uint32_t *feature_mask,
 			     uint32_t num)
 {
-	uint32_t feature_mask_high = 0, feature_mask_low = 0;
 	struct smu_feature *feature = &smu->smu_feature;
+	struct amdgpu_device *adev = smu->adev;
+	uint32_t *feature_mask_high;
+	uint32_t *feature_mask_low;
 	int ret = 0;
 
 	if (!feature_mask || num < 2)
 		return -EINVAL;
 
-	if (bitmap_empty(feature->enabled, feature->feature_num)) {
-		ret = smu_cmn_send_smc_msg(smu, SMU_MSG_GetEnabledSmuFeaturesHigh, &feature_mask_high);
-		if (ret)
-			return ret;
-
-		ret = smu_cmn_send_smc_msg(smu, SMU_MSG_GetEnabledSmuFeaturesLow, &feature_mask_low);
-		if (ret)
-			return ret;
-
-		feature_mask[0] = feature_mask_low;
-		feature_mask[1] = feature_mask_high;
-	} else {
-		bitmap_copy((unsigned long *)feature_mask, feature->enabled,
+	if (!bitmap_empty(feature->enabled, feature->feature_num)) {
+		bitmap_copy((unsigned long *)feature_mask,
+			     feature->enabled,
 			     feature->feature_num);
+		return 0;
 	}
 
-	return ret;
-}
+	feature_mask_low = &feature_mask[0];
+	feature_mask_high = &feature_mask[1];
 
-int smu_cmn_get_enabled_32_bits_mask(struct smu_context *smu,
-					uint32_t *feature_mask,
-					uint32_t num)
-{
-	uint32_t feature_mask_en_low = 0;
-	uint32_t feature_mask_en_high = 0;
-	struct smu_feature *feature = &smu->smu_feature;
-	int ret = 0;
-
-	if (!feature_mask || num < 2)
-		return -EINVAL;
-
-	if (bitmap_empty(feature->enabled, feature->feature_num)) {
-		ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_GetEnabledSmuFeatures, 0,
-										 &feature_mask_en_low);
-
+	switch (adev->ip_versions[MP1_HWIP][0]) {
+	case IP_VERSION(11, 0, 8):
+	case IP_VERSION(11, 5, 0):
+	case IP_VERSION(13, 0, 1):
+	case IP_VERSION(13, 0, 3):
+	case IP_VERSION(13, 0, 8):
+		ret = smu_cmn_send_smc_msg_with_param(smu,
+						      SMU_MSG_GetEnabledSmuFeatures,
+						      0,
+						      feature_mask_low);
 		if (ret)
 			return ret;
 
-		ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_GetEnabledSmuFeatures, 1,
-										 &feature_mask_en_high);
-
+		ret = smu_cmn_send_smc_msg_with_param(smu,
+						      SMU_MSG_GetEnabledSmuFeatures,
+						      1,
+						      feature_mask_high);
+		break;
+	case IP_VERSION(12, 0, 0):
+	case IP_VERSION(12, 0, 1):
+	/* other dGPU ASICs */
+	default:
+		ret = smu_cmn_send_smc_msg(smu,
+					   SMU_MSG_GetEnabledSmuFeaturesHigh,
+					   feature_mask_high);
 		if (ret)
 			return ret;
 
-		feature_mask[0] = feature_mask_en_low;
-		feature_mask[1] = feature_mask_en_high;
-
-	} else {
-		bitmap_copy((unsigned long *)feature_mask, feature->enabled,
-				 feature->feature_num);
+		ret = smu_cmn_send_smc_msg(smu,
+					   SMU_MSG_GetEnabledSmuFeaturesLow,
+					   feature_mask_low);
+		break;
 	}
 
 	return ret;
-
 }
 
 uint64_t smu_cmn_get_indep_throttler_status(
@@ -696,19 +715,11 @@ size_t smu_cmn_get_pp_feature_mask(struct smu_context *smu,
 	size_t size = 0;
 	int ret = 0, i;
 
-	if (!smu->is_apu) {
-		ret = smu_cmn_get_enabled_mask(smu,
-						feature_mask,
-						2);
-		if (ret)
-			return 0;
-	} else {
-		ret = smu_cmn_get_enabled_32_bits_mask(smu,
-					feature_mask,
-					2);
-		if (ret)
-			return 0;
-	}
+	ret = smu_cmn_get_enabled_mask(smu,
+				       feature_mask,
+				       2);
+	if (ret)
+		return 0;
 
 	size =  sysfs_emit_at(buf, size, "features high: 0x%08x low: 0x%08x\n",
 			feature_mask[1], feature_mask[0]);

@@ -22,6 +22,11 @@
 
 #include "cam_jpeg_hw_intf.h"
 
+struct cam_jpeg_rw_pair {
+	u32 off;
+	u32 val;
+};
+
 struct cam_jpeg_enc_reg_offsets {
 	uint32_t hw_version;
 	uint32_t int_status;
@@ -90,5 +95,7 @@ int cam_jpeg_enc_reset_hw(void *device_priv,
 int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
 	void *cmd_args, uint32_t arg_size);
 irqreturn_t cam_jpeg_enc_irq(int irq_num, void *data);
+
+int cam_jpeg_enc_write(void *hw_priv, void *write_args, uint32_t arg_size);
 
 #endif /* CAM_JPEG_ENC_CORE_H */

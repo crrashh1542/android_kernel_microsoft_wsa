@@ -843,8 +843,6 @@ static void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
 
 	drm_framebuffer_cleanup(framebuffer);
 	vmw_surface_unreference(&vfbs->surface);
-	if (vfbs->base.user_obj)
-		ttm_base_object_unref(&vfbs->base.user_obj);
 
 	kfree(vfbs);
 }
@@ -915,6 +913,15 @@ static int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	/*
 	 * Sanity checks.
 	 */
+
+	if (!drm_any_plane_has_format(&dev_priv->drm,
+				      mode_cmd->pixel_format,
+				      mode_cmd->modifier[0])) {
+		drm_dbg(&dev_priv->drm,
+			"unsupported pixel format %p4cc / modifier 0x%llx\n",
+			&mode_cmd->pixel_format, mode_cmd->modifier[0]);
+		return -EINVAL;
+	}
 
 	/* Surface must be marked as a scanout. */
 	if (unlikely(!surface->metadata.scanout))
@@ -989,6 +996,16 @@ out_err1:
  * Buffer-object framebuffer code
  */
 
+static int vmw_framebuffer_bo_create_handle(struct drm_framebuffer *fb,
+					    struct drm_file *file_priv,
+					    unsigned int *handle)
+{
+	struct vmw_framebuffer_bo *vfbd =
+			vmw_framebuffer_to_vfbd(fb);
+
+	return drm_gem_handle_create(file_priv, &vfbd->buffer->base.base, handle);
+}
+
 static void vmw_framebuffer_bo_destroy(struct drm_framebuffer *framebuffer)
 {
 	struct vmw_framebuffer_bo *vfbd =
@@ -996,8 +1013,6 @@ static void vmw_framebuffer_bo_destroy(struct drm_framebuffer *framebuffer)
 
 	drm_framebuffer_cleanup(framebuffer);
 	vmw_bo_unreference(&vfbd->buffer);
-	if (vfbd->base.user_obj)
-		ttm_base_object_unref(&vfbd->base.user_obj);
 
 	kfree(vfbd);
 }
@@ -1063,6 +1078,7 @@ static int vmw_framebuffer_bo_dirty_ext(struct drm_framebuffer *framebuffer,
 }
 
 static const struct drm_framebuffer_funcs vmw_framebuffer_bo_funcs = {
+	.create_handle = vmw_framebuffer_bo_create_handle,
 	.destroy = vmw_framebuffer_bo_destroy,
 	.dirty = vmw_framebuffer_bo_dirty_ext,
 };
@@ -1188,7 +1204,7 @@ static int vmw_create_bo_proxy(struct drm_device *dev,
 	metadata.base_size.depth = 1;
 	metadata.scanout = true;
 
-	ret = vmw_gb_surface_define(vmw_priv(dev), 0, &metadata, srf_out);
+	ret = vmw_gb_surface_define(vmw_priv(dev), &metadata, srf_out);
 	if (ret) {
 		DRM_ERROR("Failed to allocate proxy content buffer\n");
 		return ret;
@@ -1229,20 +1245,13 @@ static int vmw_kms_new_framebuffer_bo(struct vmw_private *dev_priv,
 		return -EINVAL;
 	}
 
-	/* Limited framebuffer color depth support for screen objects */
-	if (dev_priv->active_display_unit == vmw_du_screen_object) {
-		switch (mode_cmd->pixel_format) {
-		case DRM_FORMAT_XRGB8888:
-		case DRM_FORMAT_ARGB8888:
-			break;
-		case DRM_FORMAT_XRGB1555:
-		case DRM_FORMAT_RGB565:
-			break;
-		default:
-			DRM_ERROR("Invalid pixel format: %p4cc\n",
-				  &mode_cmd->pixel_format);
-			return -EINVAL;
-		}
+	if (!drm_any_plane_has_format(&dev_priv->drm,
+				      mode_cmd->pixel_format,
+				      mode_cmd->modifier[0])) {
+		drm_dbg(&dev_priv->drm,
+			"unsupported pixel format %p4cc / modifier 0x%llx\n",
+			&mode_cmd->pixel_format, mode_cmd->modifier[0]);
+		return -EINVAL;
 	}
 
 	vfbd = kzalloc(sizeof(*vfbd), GFP_KERNEL);
@@ -1251,6 +1260,7 @@ static int vmw_kms_new_framebuffer_bo(struct vmw_private *dev_priv,
 		goto out_err1;
 	}
 
+	vfbd->base.base.obj[0] = &bo->base.base;
 	drm_helper_mode_fill_fb_struct(dev, &vfbd->base.base, mode_cmd);
 	vfbd->base.bo = true;
 	vfbd->buffer = vmw_bo_reference(bo);
@@ -1336,7 +1346,6 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 		ret = vmw_kms_new_framebuffer_surface(dev_priv, surface, &vfb,
 						      mode_cmd,
 						      is_bo_proxy);
-
 		/*
 		 * vmw_create_bo_proxy() adds a reference that is no longer
 		 * needed
@@ -1368,43 +1377,25 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 						 const struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_framebuffer *vfb = NULL;
 	struct vmw_surface *surface = NULL;
 	struct vmw_buffer_object *bo = NULL;
-	struct ttm_base_object *user_obj;
 	int ret;
 
-	/*
-	 * Take a reference on the user object of the resource
-	 * backing the kms fb. This ensures that user-space handle
-	 * lookups on that resource will always work as long as
-	 * it's registered with a kms framebuffer. This is important,
-	 * since vmw_execbuf_process identifies resources in the
-	 * command stream using user-space handles.
-	 */
-
-	user_obj = ttm_base_object_lookup(tfile, mode_cmd->handles[0]);
-	if (unlikely(user_obj == NULL)) {
-		DRM_ERROR("Could not locate requested kms frame buffer.\n");
-		return ERR_PTR(-ENOENT);
-	}
-
-	/**
-	 * End conditioned code.
-	 */
-
 	/* returns either a bo or surface */
-	ret = vmw_user_lookup_handle(dev_priv, tfile,
+	ret = vmw_user_lookup_handle(dev_priv, file_priv,
 				     mode_cmd->handles[0],
 				     &surface, &bo);
-	if (ret)
+	if (ret) {
+		DRM_ERROR("Invalid buffer object handle %u (0x%x).\n",
+			  mode_cmd->handles[0], mode_cmd->handles[0]);
 		goto err_out;
+	}
 
 
 	if (!bo &&
 	    !vmw_kms_srf_ok(dev_priv, mode_cmd->width, mode_cmd->height)) {
-		DRM_ERROR("Surface size cannot exceed %dx%d",
+		DRM_ERROR("Surface size cannot exceed %dx%d\n",
 			dev_priv->texture_max_width,
 			dev_priv->texture_max_height);
 		goto err_out;
@@ -1428,10 +1419,8 @@ err_out:
 
 	if (ret) {
 		DRM_ERROR("failed to create vmw_framebuffer: %i\n", ret);
-		ttm_base_object_unref(&user_obj);
 		return ERR_PTR(ret);
-	} else
-		vfb->user_obj = user_obj;
+	}
 
 	return &vfb->base;
 }
@@ -2516,7 +2505,7 @@ void vmw_kms_helper_validation_finish(struct vmw_private *dev_priv,
 	if (file_priv)
 		vmw_execbuf_copy_fence_user(dev_priv, vmw_fpriv(file_priv),
 					    ret, user_fence_rep, fence,
-					    handle, -1, NULL);
+					    handle, -1);
 	if (out_fence)
 		*out_fence = fence;
 	else

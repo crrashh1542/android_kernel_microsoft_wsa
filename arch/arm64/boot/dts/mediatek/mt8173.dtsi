@@ -795,9 +795,12 @@
 		nor_flash: spi@1100d000 {
 			compatible = "mediatek,mt8173-nor";
 			reg = <0 0x1100d000 0 0xe0>;
+			assigned-clocks = <&topckgen CLK_TOP_SPI_SEL>;
+			assigned-clock-parents = <&clk26m>;
 			clocks = <&pericfg CLK_PERI_SPI>,
-				 <&topckgen CLK_TOP_SPINFI_IFR_SEL>;
-			clock-names = "spi", "sf";
+				 <&topckgen CLK_TOP_SPINFI_IFR_SEL>,
+				 <&pericfg CLK_PERI_NFI>;
+			clock-names = "spi", "sf", "axi";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -997,7 +1000,7 @@
 		gpu: mfgsys-gpu@13000000 {
 			compatible = "mediatek,mt8173-gpu";
 			reg = <0 0x13000000 0 0xffff>, <0 0x13fff000 0 0x1000>;
-			power-domains =	<&scpsys MT8173_POWER_DOMAIN_MFG>;
+			power-domains =	<&spm MT8173_POWER_DOMAIN_MFG>;
 			operating-points = <
 				253500 1000000
 				299000 1000000
@@ -1043,6 +1046,7 @@
 			assigned-clocks = <&topckgen CLK_TOP_MM_SEL>;
 			assigned-clock-rates = <400000000>;
 			#clock-cells = <1>;
+			#reset-cells = <1>;
 			mboxes = <&gce 0 CMDQ_THR_PRIO_HIGHEST>,
 				 <&gce 1 CMDQ_THR_PRIO_HIGHEST>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0 0x1000>;
@@ -1246,6 +1250,7 @@
 			interrupts = <GIC_SPI 191 IRQ_TYPE_LEVEL_LOW>;
 			power-domains = <&spm MT8173_POWER_DOMAIN_MM>;
 			clocks = <&mmsys CLK_MM_DISP_UFOE>;
+			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0xa000 0x1000>;
 		};
 
 		dsi0: dsi@1401b000 {
@@ -1257,6 +1262,7 @@
 				 <&mmsys CLK_MM_DSI0_DIGITAL>,
 				 <&mipi_tx0>;
 			clock-names = "engine", "digital", "hs";
+			resets = <&mmsys MT8173_MMSYS_SW0_RST_B_DISP_DSI0>;
 			phys = <&mipi_tx0>;
 			phy-names = "dphy";
 			status = "disabled";
@@ -1322,6 +1328,7 @@
 			interrupts = <GIC_SPI 169 IRQ_TYPE_LEVEL_LOW>;
 			power-domains = <&spm MT8173_POWER_DOMAIN_MM>;
 			clocks = <&mmsys CLK_MM_MUTEX_32K>;
+			mediatek,gce-client-reg = <&gce SUBSYS_1402XXXX 0 0x1000>;
 			mediatek,gce-events = <CMDQ_EVENT_MUTEX0_STREAM_EOF>,
                                               <CMDQ_EVENT_MUTEX1_STREAM_EOF>;
 		};
@@ -1349,6 +1356,7 @@
 			compatible = "mediatek,mt8173-disp-od";
 			reg = <0 0x14023000 0 0x1000>;
 			clocks = <&mmsys CLK_MM_DISP_OD>;
+			mediatek,gce-client-reg = <&gce SUBSYS_1402XXXX 0x3000 0x1000>;
 		};
 
 		hdmi0: hdmi@14025000 {

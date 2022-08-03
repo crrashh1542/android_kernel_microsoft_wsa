@@ -291,4 +291,11 @@ int cam_smmu_dealloc_qdss(int32_t smmu_hdl);
 int cam_smmu_get_io_region_info(int32_t smmu_hdl,
 	dma_addr_t *iova, size_t *len);
 
+int cam_smmu_map_ext_buff(struct sg_table *table, int handle,
+			  dma_addr_t *paddr_ptr, size_t *len_ptr,
+			  enum cam_smmu_region_id region_id);
+
+int cam_smmu_unmap_ext_buff(int handle,  dma_addr_t iova, size_t length,
+			    enum cam_smmu_region_id region_id);
+
 #endif /* _CAM_SMMU_API_H_ */

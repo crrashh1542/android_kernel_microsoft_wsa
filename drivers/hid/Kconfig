@@ -403,14 +403,25 @@ config HOLTEK_FF
 	  Say Y here if you have a Holtek On Line Grip based game controller
 	  and want to have force feedback support for it.
 
+config HID_VIVALDI_COMMON
+	tristate
+	help
+	  ChromeOS Vivaldi HID parsing support library. This is a hidden
+	  option so that drivers can use common code to parse the HID
+	  descriptors for vivaldi function row keymap.
+
 config HID_GOOGLE_HAMMER
 	tristate "Google Hammer Keyboard"
+	select HID_VIVALDI_COMMON
+	select INPUT_VIVALDIFMAP
 	depends on USB_HID && LEDS_CLASS && CROS_EC
 	help
 	Say Y here if you have a Google Hammer device.
 
 config HID_VIVALDI
 	tristate "Vivaldi Keyboard"
+	select HID_VIVALDI_COMMON
+	select INPUT_VIVALDIFMAP
 	depends on HID
 	help
 	  Say Y here if you want to enable support for Vivaldi keyboards.
@@ -734,6 +745,7 @@ config HID_MULTITOUCH
 config HID_NINTENDO
 	tristate "Nintendo Joy-Con and Pro Controller support"
 	depends on HID
+	select POWER_SUPPLY
 	help
 	Adds support for the Nintendo Switch Joy-Cons and Pro Controller.
 	All controllers support bluetooth, and the Pro Controller also supports
@@ -741,6 +753,16 @@ config HID_NINTENDO
 
 	To compile this driver as a module, choose M here: the
 	module will be called hid-nintendo.
+
+config NINTENDO_FF
+	bool "Nintendo Switch controller force feedback support"
+	depends on HID_NINTENDO
+	select INPUT_FF_MEMLESS
+	help
+	Say Y here if you have a Nintendo Switch controller and want to enable
+	force feedback support for it. This works for both joy-cons and the pro
+	controller. For the pro controller, both rumble motors can be controlled
+	individually.
 
 config HID_NTI
 	tristate "NTI keyboard adapters"

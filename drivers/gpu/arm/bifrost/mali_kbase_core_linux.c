@@ -412,6 +412,12 @@ int assign_irqs(struct kbase_device *kbdev)
 {
 	struct platform_device *pdev;
 	int i;
+	int irq;
+	static const char * const irq_names[] = {
+		[JOB_IRQ_TAG] = "job",
+		[MMU_IRQ_TAG] = "mmu",
+		[GPU_IRQ_TAG] = "gpu",
+	};
 
 	if (!kbdev)
 		return -ENODEV;
@@ -419,32 +425,19 @@ int assign_irqs(struct kbase_device *kbdev)
 	pdev = to_platform_device(kbdev->dev);
 	/* 3 IRQ resources */
 	for (i = 0; i < 3; i++) {
-		struct resource *irq_res;
-		int irqtag;
-
-		irq_res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
-		if (!irq_res) {
-			dev_err(kbdev->dev, "No IRQ resource at index %d\n", i);
-			return -ENOENT;
+		/*
+		 * b/236583122: Workaround for CrOS kernel CI. After upstream
+		 * commit a1a2b7125e10, people are expected to use
+		 * platform_get_irq*() to get IRQ resources instead of
+		 * platform_get_resource().
+		 */
+		irq = platform_get_irq_byname(pdev, irq_names[i]);
+		if (irq < 0) {
+			dev_err(kbdev->dev, "No IRQ with name %s\n", irq_names[i]);
+			return irq;
 		}
 
-#if IS_ENABLED(CONFIG_OF)
-		if (!strncasecmp(irq_res->name, "JOB", 4)) {
-			irqtag = JOB_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "MMU", 4)) {
-			irqtag = MMU_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "GPU", 4)) {
-			irqtag = GPU_IRQ_TAG;
-		} else {
-			dev_err(&pdev->dev, "Invalid irq res name: '%s'\n",
-				irq_res->name);
-			return -EINVAL;
-		}
-#else
-		irqtag = i;
-#endif /* CONFIG_OF */
-		kbdev->irqs[irqtag].irq = irq_res->start;
-		kbdev->irqs[irqtag].flags = irq_res->flags & IRQF_TRIGGER_MASK;
+		kbdev->irqs[i].irq = irq;
 	}
 
 	return 0;
@@ -5169,6 +5162,11 @@ int kbase_backend_devfreq_init(struct kbase_device *kbdev)
 	return 0;
 }
 
+static const struct kbase_platform_specific_conf default_conf = {
+	.pm_callbacks = POWER_MANAGEMENT_CALLBACKS,
+	.platform_funcs = PLATFORM_FUNCS,
+};
+
 static int kbase_platform_device_probe(struct platform_device *pdev)
 {
 	struct kbase_device *kbdev;
@@ -5184,6 +5182,13 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 
 	kbdev->dev = &pdev->dev;
 	dev_set_drvdata(kbdev->dev, kbdev);
+
+	kbdev->funcs = (struct kbase_platform_specific_conf *)
+			of_device_get_match_data(kbdev->dev);
+
+	if (!kbdev->funcs)
+		kbdev->funcs = (struct kbase_platform_specific_conf *)
+				&default_conf;
 
 	err = kbase_device_init(kbdev);
 
@@ -5270,13 +5275,8 @@ static int kbase_device_resume(struct device *dev)
 
 #ifdef CONFIG_MALI_BIFROST_DEVFREQ
 	dev_dbg(dev, "Callback %s\n", __func__);
-	if (kbdev->devfreq) {
-		mutex_lock(&kbdev->pm.lock);
-		if (kbdev->pm.active_count > 0)
-			kbase_devfreq_enqueue_work(kbdev, DEVFREQ_WORK_RESUME);
-		mutex_unlock(&kbdev->pm.lock);
-		flush_workqueue(kbdev->devfreq_queue.workq);
-	}
+	if (kbdev->devfreq)
+		kbase_devfreq_enqueue_work(kbdev, DEVFREQ_WORK_RESUME);
 #endif
 	return 0;
 }
@@ -5400,17 +5400,6 @@ static const struct dev_pm_ops kbase_pm_ops = {
 	.runtime_idle = kbase_device_runtime_idle,
 #endif /* KBASE_PM_RUNTIME */
 };
-
-#if IS_ENABLED(CONFIG_OF)
-static const struct of_device_id kbase_dt_ids[] = {
-	{ .compatible = "arm,malit6xx" },
-	{ .compatible = "arm,mali-bifrost" },
-	{ .compatible = "arm,mali-bifrost" },
-	{ .compatible = "arm,mali-valhall" },
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, kbase_dt_ids);
-#endif
 
 static struct platform_driver kbase_platform_driver = {
 	.probe = kbase_platform_device_probe,

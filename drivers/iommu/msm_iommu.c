@@ -615,16 +615,19 @@ static void insert_iommu_master(struct device *dev,
 static int qcom_iommu_of_xlate(struct device *dev,
 			       struct of_phandle_args *spec)
 {
-	struct msm_iommu_dev *iommu;
+	struct msm_iommu_dev *iommu = NULL, *iter;
 	unsigned long flags;
 	int ret = 0;
 
 	spin_lock_irqsave(&msm_iommu_lock, flags);
-	list_for_each_entry(iommu, &qcom_iommu_devices, dev_node)
-		if (iommu->dev->of_node == spec->np)
+	list_for_each_entry(iter, &qcom_iommu_devices, dev_node) {
+		if (iter->dev->of_node == spec->np) {
+			iommu = iter;
 			break;
+		}
+	}
 
-	if (!iommu || iommu->dev->of_node != spec->np) {
+	if (!iommu) {
 		ret = -ENODEV;
 		goto fail;
 	}
@@ -674,25 +677,27 @@ fail:
 static struct iommu_ops msm_iommu_ops = {
 	.capable = msm_iommu_capable,
 	.domain_alloc = msm_iommu_domain_alloc,
-	.domain_free = msm_iommu_domain_free,
-	.attach_dev = msm_iommu_attach_dev,
-	.detach_dev = msm_iommu_detach_dev,
-	.map = msm_iommu_map,
-	.unmap = msm_iommu_unmap,
-	/*
-	 * Nothing is needed here, the barrier to guarantee
-	 * completion of the tlb sync operation is implicitly
-	 * taken care when the iommu client does a writel before
-	 * kick starting the other master.
-	 */
-	.iotlb_sync = NULL,
-	.iotlb_sync_map = msm_iommu_sync_map,
-	.iova_to_phys = msm_iommu_iova_to_phys,
 	.probe_device = msm_iommu_probe_device,
 	.release_device = msm_iommu_release_device,
 	.device_group = generic_device_group,
 	.pgsize_bitmap = MSM_IOMMU_PGSIZES,
 	.of_xlate = qcom_iommu_of_xlate,
+	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.attach_dev	= msm_iommu_attach_dev,
+		.detach_dev	= msm_iommu_detach_dev,
+		.map		= msm_iommu_map,
+		.unmap		= msm_iommu_unmap,
+		/*
+		 * Nothing is needed here, the barrier to guarantee
+		 * completion of the tlb sync operation is implicitly
+		 * taken care when the iommu client does a writel before
+		 * kick starting the other master.
+		 */
+		.iotlb_sync	= NULL,
+		.iotlb_sync_map	= msm_iommu_sync_map,
+		.iova_to_phys	= msm_iommu_iova_to_phys,
+		.free		= msm_iommu_domain_free,
+	}
 };
 
 static int msm_iommu_probe(struct platform_device *pdev)

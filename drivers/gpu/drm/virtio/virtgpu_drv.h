@@ -26,6 +26,7 @@
 #ifndef VIRTIO_DRV_H
 #define VIRTIO_DRV_H
 
+#include <linux/dma-direction.h>
 #include <linux/virtio.h>
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
@@ -55,6 +56,7 @@
 #define STATE_ERR 2
 
 #define MAX_CAPSET_ID 63
+#define MAX_RINGS 64
 
 struct virtio_gpu_object_params {
 	unsigned long size;
@@ -144,9 +146,17 @@ struct virtio_gpu_fence_driver {
 	spinlock_t       lock;
 };
 
+struct virtio_gpu_fence_event {
+	struct drm_pending_event base;
+	struct drm_event event;
+};
+
 struct virtio_gpu_fence {
 	struct dma_fence f;
+	uint32_t ring_idx;
 	uint64_t fence_id;
+	bool emit_fence_info;
+	struct virtio_gpu_fence_event *e;
 	struct virtio_gpu_fence_driver *drv;
 	struct list_head node;
 };
@@ -268,6 +278,9 @@ struct virtio_gpu_fpriv {
 	uint32_t ctx_id;
 	uint32_t context_init;
 	bool context_created;
+	uint32_t num_rings;
+	uint64_t base_fence_ctx;
+	uint64_t ring_idx_mask;
 	struct mutex context_lock;
 };
 
@@ -431,8 +444,9 @@ struct drm_plane *virtio_gpu_plane_init(struct virtio_gpu_device *vgdev,
 					int index);
 
 /* virtgpu_fence.c */
-struct virtio_gpu_fence *virtio_gpu_fence_alloc(
-	struct virtio_gpu_device *vgdev);
+struct virtio_gpu_fence *virtio_gpu_fence_alloc(struct virtio_gpu_device *vgdev,
+						uint64_t base_fence_ctx,
+						uint32_t ring_idx);
 void virtio_gpu_fence_emit(struct virtio_gpu_device *vgdev,
 			  struct virtio_gpu_ctrl_hdr *cmd_hdr,
 			  struct virtio_gpu_fence *fence);
@@ -473,4 +487,11 @@ bool virtio_gpu_is_vram(struct virtio_gpu_object *bo);
 int virtio_gpu_vram_create(struct virtio_gpu_device *vgdev,
 			   struct virtio_gpu_object_params *params,
 			   struct virtio_gpu_object **bo_ptr);
+struct sg_table *virtio_gpu_vram_map_dma_buf(struct virtio_gpu_object *bo,
+					     struct device *dev,
+					     enum dma_data_direction dir);
+void virtio_gpu_vram_unmap_dma_buf(struct device *dev,
+				   struct sg_table *sgt,
+				   enum dma_data_direction dir);
+
 #endif

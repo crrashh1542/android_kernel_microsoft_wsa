@@ -130,6 +130,9 @@ struct guc_doorbell_info {
 #define GUC_WD_VECS_IER			_MMIO(0xC558)
 #define GUC_PM_P24C_IER			_MMIO(0xC55C)
 
+#define GUC_GPM_WGBOXPERF_INTR_ENABLE	_MMIO(0xc63c)
+#define   GUC_GPM_ARAT			BIT(25)
+
 /* GuC Interrupt Vector */
 #define GUC_INTR_GUC2HOST		BIT(15)
 #define GUC_INTR_EXEC_ERROR		BIT(14)

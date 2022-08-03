@@ -5,6 +5,7 @@ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_core
 ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_smmu
 ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/
 ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/include
+ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw
 ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_cpas/include/
 
 obj-$(CONFIG_SPECTRA_CAMERA) += jpeg_hw/
