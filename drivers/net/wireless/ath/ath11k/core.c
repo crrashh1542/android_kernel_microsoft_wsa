@@ -106,8 +106,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = true,
 		.static_window_map = false,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 0,
-		.ce_window_idx = 0,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -181,8 +179,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = true,
 		.static_window_map = false,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 0,
-		.ce_window_idx = 0,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -255,8 +251,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = false,
 		.static_window_map = false,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 0,
-		.ce_window_idx = 0,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -329,8 +323,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = false,
 		.static_window_map = true,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 3,
-		.ce_window_idx = 2,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -403,8 +395,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = false,
 		.static_window_map = false,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 0,
-		.ce_window_idx = 0,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -476,8 +466,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = false,
 		.static_window_map = false,
 		.hybrid_bus_type = false,
-		.dp_window_idx = 0,
-		.ce_window_idx = 0,
 		.fixed_fw_mem = false,
 	},
 	{
@@ -549,8 +537,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_mem_region = false,
 		.static_window_map = true,
 		.hybrid_bus_type = true,
-		.dp_window_idx = 1,
-		.ce_window_idx = 2,
 		.fixed_fw_mem = true,
 	},
 };
