@@ -934,8 +934,6 @@ ap_spi_fp: &spi10 {
 
 &usb_1_dwc3 {
 	dr_mode = "host";
-	#address-cells = <1>;
-	#size-cells = <0>;
 };
 
 &usb_1_hsphy {
