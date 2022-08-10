@@ -36,7 +36,6 @@
 #include <linux/phy/phy.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
-#include <linux/usb/onboard_hub.h>
 #include <linux/usb/otg.h>
 
 #include "usb.h"
@@ -2999,9 +2998,6 @@ int usb_add_hcd(struct usb_hcd *hcd,
 			usb_hcd_poll_rh_status(hcd);
 	}
 
-	if (usb_hcd_is_primary_hcd(hcd))
-		onboard_hub_create_pdevs(hcd->self.root_hub, &hcd->onboard_hub_devs);
-
 	return retval;
 
 err_register_root_hub:
@@ -3083,8 +3079,6 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 	if (usb_hcd_is_primary_hcd(hcd)) {
 		if (hcd->irq > 0)
 			free_irq(hcd->irq, hcd);
-
-		onboard_hub_destroy_pdevs(&hcd->onboard_hub_devs);
 	}
 
 	usb_deregister_bus(&hcd->self);
