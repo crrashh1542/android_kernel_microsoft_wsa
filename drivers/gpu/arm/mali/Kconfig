@@ -50,7 +50,7 @@ config MALI_BIFROST_REAL_HW
 	def_bool !MALI_BIFROST_NO_MALI
 
 menu "Platform specific options"
-source "drivers/gpu/arm/bifrost/platform/Kconfig"
+source "drivers/gpu/arm/mali/platform/Kconfig"
 endmenu
 
 config MALI_BIFROST_CSF_SUPPORT
@@ -382,7 +382,7 @@ config MALI_BIFROST_ARBITRATION
 	  If unsure, say N.
 
 if MALI_BIFROST_ARBITRATION
-source "drivers/gpu/arm/bifrost/arbitration/Kconfig"
+source "drivers/gpu/arm/mali/arbitration/Kconfig"
 endif
 
 endif

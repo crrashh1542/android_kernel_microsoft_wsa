@@ -36,4 +36,4 @@ config MALI_BIFROST_KUTF_ARBITRATION_TEST
 	  virtualization setup for Mali
 	  If unsure, say N.
 
-source "drivers/gpu/arm/bifrost/arbitration/ptm/Kconfig"
+source "drivers/gpu/arm/mali/arbitration/ptm/Kconfig"
