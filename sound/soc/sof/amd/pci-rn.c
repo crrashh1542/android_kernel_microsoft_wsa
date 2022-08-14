@@ -73,9 +73,7 @@ static const struct sof_dev_desc renoir_desc = {
 	.default_tplg_path = {
 		[SOF_IPC] = "amd/sof-tplg",
 	},
-	.default_fw_filename	= {
-		[SOF_IPC] = "sof-rn.ri",
-	},
+	.default_fw_filename	= "sof-rn.ri",
 	.nocodec_tplg_filename	= "sof-acp.tplg",
 	.ops			= &sof_renoir_ops,
 	.ops_init		= sof_renoir_ops_init,

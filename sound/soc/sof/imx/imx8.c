@@ -617,9 +617,7 @@ static struct sof_dev_desc sof_of_imx8qxp_desc = {
 	.default_tplg_path = {
 		[SOF_IPC] = "imx/sof-tplg",
 	},
-	.default_fw_filename = {
-		[SOF_IPC] = "sof-imx8x.ri",
-	},
+	.default_fw_filename = "sof-imx8x.ri",
 	.nocodec_tplg_filename = "sof-imx8-nocodec.tplg",
 	.ops = &sof_imx8x_ops,
 };
@@ -633,9 +631,7 @@ static struct sof_dev_desc sof_of_imx8qm_desc = {
 	.default_tplg_path = {
 		[SOF_IPC] = "imx/sof-tplg",
 	},
-	.default_fw_filename = {
-		[SOF_IPC] = "sof-imx8.ri",
-	},
+	.default_fw_filename = "sof-imx8.ri",
 	.nocodec_tplg_filename = "sof-imx8-nocodec.tplg",
 	.ops = &sof_imx8_ops,
 };

@@ -225,9 +225,7 @@ static const struct sof_dev_desc tng_desc = {
 	.default_tplg_path = {
 		[SOF_IPC] = "intel/sof-tplg",
 	},
-	.default_fw_filename = {
-		[SOF_IPC] = "sof-byt.ri",
-	},
+	.default_fw_filename = "sof-byt.ri",
 	.nocodec_tplg_filename = "sof-byt.tplg",
 	.ops = &sof_tng_ops,
 };
