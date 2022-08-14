@@ -364,7 +364,7 @@ static int mt8183_da7219_max98357_hdmi_init(struct snd_soc_pcm_runtime *rtd)
 	int ret;
 
 	ret = snd_soc_card_jack_new(rtd->card, "HDMI Jack", SND_JACK_LINEOUT,
-				    &priv->hdmi_jack);
+				    &priv->hdmi_jack, NULL, 0);
 	if (ret)
 		return ret;
 
@@ -546,7 +546,8 @@ mt8183_da7219_max98357_headset_init(struct snd_soc_component *component)
 				    SND_JACK_BTN_0 | SND_JACK_BTN_1 |
 				    SND_JACK_BTN_2 | SND_JACK_BTN_3 |
 				    SND_JACK_LINEOUT,
-				    &priv->headset_jack);
+				    &priv->headset_jack,
+				    NULL, 0);
 	if (ret)
 		return ret;
 
