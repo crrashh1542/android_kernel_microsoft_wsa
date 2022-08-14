@@ -21,6 +21,8 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_hda_machines[] = {
 
 		/* .fw_filename is dynamically set in skylake driver */
 
+		/* .sof_fw_filename is dynamically set in sof/intel driver */
+
 		.sof_tplg_filename = "sof-hda-generic.tplg",
 
 		/*
