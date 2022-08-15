@@ -688,6 +688,7 @@ void rtw_update_channel(struct rtw_dev *rtwdev, u8 center_channel,
 
 	switch (bandwidth) {
 	case RTW_CHANNEL_WIDTH_20:
+	default:
 		primary_channel_idx = RTW_SC_DONT_CARE;
 		break;
 	case RTW_CHANNEL_WIDTH_40:
@@ -718,8 +719,6 @@ void rtw_update_channel(struct rtw_dev *rtwdev, u8 center_channel,
 			 */
 			cch_by_bw[RTW_CHANNEL_WIDTH_40] = center_channel - 4;
 		}
-		break;
-	default:
 		break;
 	}
 
