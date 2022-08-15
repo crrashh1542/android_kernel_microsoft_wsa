@@ -1022,7 +1022,7 @@ int kbase_mem_do_sync_imported(struct kbase_context *kctx,
 		struct kbase_va_region *reg, enum kbase_sync_type sync_fn)
 {
 	int ret = -EINVAL;
-	struct dma_buf *dma_buf;
+	struct dma_buf __maybe_unused *dma_buf;
 	enum dma_data_direction dir = DMA_BIDIRECTIONAL;
 
 	lockdep_assert_held(&kctx->reg_lock);

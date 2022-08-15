@@ -985,11 +985,9 @@ void kbase_job_slot_hardstop(struct kbase_context *kctx, int js,
 				struct kbase_jd_atom *target_katom)
 {
 	struct kbase_device *kbdev = kctx->kbdev;
-	bool stopped;
 
-	stopped = kbase_backend_soft_hard_stop_slot(kbdev, kctx, js,
-							target_katom,
-							JS_COMMAND_HARD_STOP);
+	kbase_backend_soft_hard_stop_slot(kbdev, kctx, js, target_katom,
+						JS_COMMAND_HARD_STOP);
 }
 
 /**
