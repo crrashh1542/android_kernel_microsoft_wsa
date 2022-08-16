@@ -515,15 +515,15 @@ coretemp_add_core(struct platform_device *pdev, unsigned int cpu, int pkg_flag)
 		dev_err(&pdev->dev, "Adding Core %u failed\n", cpu);
 }
 
-static void coretemp_remove_core(struct platform_data *pdata, int indx)
+static void coretemp_remove_core(struct platform_data *pdata, int index)
 {
-	struct temp_data *tdata = pdata->core_data[indx];
+	struct temp_data *tdata = pdata->core_data[index];
 
 	/* Remove the sysfs attributes */
 	sysfs_remove_group(&pdata->hwmon_dev->kobj, &tdata->attr_group);
 
-	kfree(pdata->core_data[indx]);
-	pdata->core_data[indx] = NULL;
+	kfree(pdata->core_data[index]);
+	pdata->core_data[index] = NULL;
 }
 
 static int coretemp_probe(struct platform_device *pdev)
@@ -647,7 +647,7 @@ static int coretemp_cpu_offline(unsigned int cpu)
 	struct platform_device *pdev = coretemp_get_pdev(cpu);
 	struct platform_data *pd;
 	struct temp_data *tdata;
-	int indx, target;
+	int index, target;
 
 	/*
 	 * Don't execute this on suspend as the device remove locks
@@ -661,12 +661,12 @@ static int coretemp_cpu_offline(unsigned int cpu)
 		return 0;
 
 	/* The core id is too big, just return */
-	indx = TO_ATTR_NO(cpu);
-	if (indx > MAX_CORE_DATA - 1)
+	index = TO_ATTR_NO(cpu);
+	if (index > MAX_CORE_DATA - 1)
 		return 0;
 
 	pd = platform_get_drvdata(pdev);
-	tdata = pd->core_data[indx];
+	tdata = pd->core_data[index];
 
 	cpumask_clear_cpu(cpu, &pd->cpumask);
 
@@ -677,7 +677,7 @@ static int coretemp_cpu_offline(unsigned int cpu)
 	 */
 	target = cpumask_any_and(&pd->cpumask, topology_sibling_cpumask(cpu));
 	if (target >= nr_cpu_ids) {
-		coretemp_remove_core(pd, indx);
+		coretemp_remove_core(pd, index);
 	} else if (tdata && tdata->cpu == cpu) {
 		mutex_lock(&tdata->update_lock);
 		tdata->cpu = target;
