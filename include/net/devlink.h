@@ -55,8 +55,7 @@ struct devlink {
 	struct mutex lock; /* Serializes access to devlink instance specific objects such as
 			    * port, sb, dpipe, resource, params, region, traps and more.
 			    */
-	u8 reload_failed:1,
-	   reload_enabled:1;
+	u8 reload_failed:1;
 	refcount_t refcount;
 	struct completion comp;
 	char priv[0] __aligned(NETDEV_ALIGN);
@@ -1575,8 +1574,6 @@ static inline struct devlink *devlink_alloc(const struct devlink_ops *ops,
 void devlink_set_features(struct devlink *devlink, u64 features);
 int devlink_register(struct devlink *devlink);
 void devlink_unregister(struct devlink *devlink);
-void devlink_reload_enable(struct devlink *devlink);
-void devlink_reload_disable(struct devlink *devlink);
 void devlink_free(struct devlink *devlink);
 int devlink_port_register(struct devlink *devlink,
 			  struct devlink_port *devlink_port,

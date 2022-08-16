@@ -127,7 +127,6 @@ int hclge_devlink_init(struct hclge_dev *hdev)
 			ret);
 		goto out_reg_fail;
 	}
-	devlink_reload_enable(devlink);
 
 	return 0;
 
@@ -139,8 +138,6 @@ out_reg_fail:
 void hclge_devlink_uninit(struct hclge_dev *hdev)
 {
 	struct devlink *devlink = hdev->devlink;
-
-	devlink_reload_disable(devlink);
 
 	devlink_unregister(devlink);
 
