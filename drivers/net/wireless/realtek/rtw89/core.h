@@ -1931,6 +1931,7 @@ struct rtw89_ra_report {
 DECLARE_EWMA(rssi, 10, 16);
 
 struct rtw89_ba_cam_entry {
+	struct list_head list;
 	u8 tid;
 };
 
@@ -1993,6 +1994,7 @@ struct rtw89_sta {
 	__le32 htc_template;
 	struct rtw89_addr_cam_entry addr_cam; /* AP mode or TDLS peer only */
 	struct rtw89_bssid_cam_entry bssid_cam; /* TDLS peer only */
+	struct list_head ba_cam_list;
 
 	bool use_cfg_mask;
 	struct cfg80211_bitrate_mask mask;
@@ -2001,9 +2003,6 @@ struct rtw89_sta {
 	u32 ampdu_max_time:4;
 	bool cctl_tx_retry_limit;
 	u32 data_tx_cnt_lmt:6;
-
-	DECLARE_BITMAP(ba_cam_map, RTW89_MAX_BA_CAM_NUM);
-	struct rtw89_ba_cam_entry ba_cam_entry[RTW89_MAX_BA_CAM_NUM];
 };
 
 struct rtw89_efuse {
@@ -2597,6 +2596,8 @@ struct rtw89_cam_info {
 	DECLARE_BITMAP(addr_cam_map, RTW89_MAX_ADDR_CAM_NUM);
 	DECLARE_BITMAP(bssid_cam_map, RTW89_MAX_BSSID_CAM_NUM);
 	DECLARE_BITMAP(sec_cam_map, RTW89_MAX_SEC_CAM_NUM);
+	DECLARE_BITMAP(ba_cam_map, RTW89_MAX_BA_CAM_NUM);
+	struct rtw89_ba_cam_entry ba_cam_entry[RTW89_MAX_BA_CAM_NUM];
 };
 
 enum rtw89_sar_sources {
