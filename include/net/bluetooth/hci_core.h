@@ -1932,6 +1932,7 @@ void mgmt_adv_monitor_device_lost(struct hci_dev *hdev, u16 handle,
 int mgmt_quality_report(struct hci_dev *hdev, struct sk_buff *skb,
 			u8 quality_spec);
 
+int hci_abort_conn(struct hci_conn *conn, u8 reason);
 u8 hci_le_conn_update(struct hci_conn *conn, u16 min, u16 max, u16 latency,
 		      u16 to_multiplier);
 void hci_le_start_enc(struct hci_conn *conn, __le16 ediv, __le64 rand,
