@@ -2422,6 +2422,8 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		/* KingCome 720p HD Camera */
 		{ { USB_DEVICE(0x2b7e, 0x0157) }, 21 },
 		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
+		{ { USB_DEVICE(0x0bda, 0x5520) }, 21 },
+		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
 		{ { USB_DEVICE(0x0bda, 0x5539) }, 21 },
 		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
 		{ { USB_DEVICE(0x0bda, 0x565c) }, 21 },
