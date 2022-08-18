@@ -241,10 +241,9 @@ kbase_dma_fence_add_reservation_callback(struct kbase_jd_atom *katom,
 	struct fence *excl_fence = NULL;
 	struct fence **shared_fences = NULL;
 #else
-	struct dma_fence *excl_fence = NULL;
-	struct dma_fence **shared_fences = NULL;
+	struct dma_fence **fences = NULL;
 #endif
-	unsigned int shared_count = 0;
+	unsigned int fence_count = 0;
 	int err, i;
 
 #if (KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE)
@@ -255,47 +254,29 @@ kbase_dma_fence_add_reservation_callback(struct kbase_jd_atom *katom,
 	err = dma_resv_get_fences(
 #endif
 						resv,
-						&excl_fence,
-						&shared_count,
-						&shared_fences);
+						exclusive,
+						&fence_count,
+						&fences);
 	if (err)
 		return err;
 
-	if (excl_fence) {
+	for (i = 0; i < fence_count; i++) {
 		err = kbase_fence_add_callback(katom,
-						excl_fence,
+						fences[i],
 						kbase_dma_fence_cb);
-
-		/* Release our reference, taken by reservation_object_get_fences_rcu(),
-		 * to the fence. We have set up our callback (if that was possible),
-		 * and it's the fence's owner is responsible for singling the fence
-		 * before allowing it to disappear.
-		 */
-		dma_fence_put(excl_fence);
-
 		if (err)
 			goto out;
 	}
 
-	if (exclusive) {
-		for (i = 0; i < shared_count; i++) {
-			err = kbase_fence_add_callback(katom,
-							shared_fences[i],
-							kbase_dma_fence_cb);
-			if (err)
-				goto out;
-		}
-	}
-
-	/* Release all our references to the shared fences, taken by
+	/* Release all our references to the fences, taken by
 	 * reservation_object_get_fences_rcu(). We have set up our callback (if
 	 * that was possible), and it's the fence's owner is responsible for
 	 * signaling the fence before allowing it to disappear.
 	 */
 out:
-	for (i = 0; i < shared_count; i++)
-		dma_fence_put(shared_fences[i]);
-	kfree(shared_fences);
+	for (i = 0; i < fence_count; i++)
+		dma_fence_put(fences[i]);
+	kfree(fences);
 
 	if (err) {
 		/*

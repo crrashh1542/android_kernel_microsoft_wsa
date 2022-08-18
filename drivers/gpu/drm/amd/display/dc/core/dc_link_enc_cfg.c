@@ -272,6 +272,13 @@ void link_enc_cfg_init(
 	state->res_ctx.link_enc_cfg_ctx.mode = LINK_ENC_CFG_STEADY;
 }
 
+void link_enc_cfg_copy(const struct dc_state *src_ctx, struct dc_state *dst_ctx)
+{
+	memcpy(&dst_ctx->res_ctx.link_enc_cfg_ctx,
+	       &src_ctx->res_ctx.link_enc_cfg_ctx,
+	       sizeof(dst_ctx->res_ctx.link_enc_cfg_ctx));
+}
+
 void link_enc_cfg_link_encs_assign(
 		struct dc *dc,
 		struct dc_state *state,
@@ -487,7 +494,8 @@ struct link_encoder *link_enc_cfg_get_next_avail_link_enc(struct dc *dc)
 	}
 
 	for (i = 0; i < dc->res_pool->res_cap->num_dig_link_enc; i++) {
-		if (encs_assigned[i] == ENGINE_ID_UNKNOWN) {
+		if (encs_assigned[i] == ENGINE_ID_UNKNOWN &&
+				dc->res_pool->link_encoders[i] != NULL) {
 			link_enc = dc->res_pool->link_encoders[i];
 			break;
 		}
@@ -503,6 +511,26 @@ struct link_encoder *link_enc_cfg_get_link_enc_used_by_stream(
 	struct link_encoder *link_enc;
 
 	link_enc = link_enc_cfg_get_link_enc_used_by_link(dc, stream->link);
+
+	return link_enc;
+}
+
+struct link_encoder *link_enc_cfg_get_link_enc(
+		const struct dc_link *link)
+{
+	struct link_encoder *link_enc = NULL;
+
+	/* Links supporting dynamically assigned link encoder will be assigned next
+	 * available encoder if one not already assigned.
+	 */
+	if (link->is_dig_mapping_flexible &&
+	    link->dc->res_pool->funcs->link_encs_assign) {
+		link_enc = link_enc_cfg_get_link_enc_used_by_link(link->ctx->dc, link);
+		if (link_enc == NULL)
+			link_enc = link_enc_cfg_get_next_avail_link_enc(
+				link->ctx->dc);
+	} else
+		link_enc = link->link_enc;
 
 	return link_enc;
 }

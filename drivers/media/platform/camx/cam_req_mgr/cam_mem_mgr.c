@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <asm/cacheflush.h>
 #include <linux/dma-buf.h>
+#include <linux/iosys-map.h>
 
 #include "cam_buf_mgr.h"
 #include "cam_req_mgr_util.h"
@@ -47,7 +48,7 @@ static int cam_mem_util_map_cpu_va(struct dma_buf *dmabuf,
 	uintptr_t *vaddr,
 	size_t *len)
 {
-	struct dma_buf_map map;
+	struct iosys_map map;
 	void *addr;
 	int rc;
 
@@ -82,7 +83,7 @@ static int cam_mem_util_unmap_cpu_va(struct dma_buf *dmabuf,
 	uint64_t vaddr)
 {
 	int rc;
-	struct dma_buf_map map = DMA_BUF_MAP_INIT_VADDR((void *)vaddr);
+	struct iosys_map map = IOSYS_MAP_INIT_VADDR((void *)vaddr);
 
 	dma_buf_vunmap(dmabuf, &map);
 

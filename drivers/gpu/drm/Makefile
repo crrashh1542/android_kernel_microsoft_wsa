@@ -40,6 +40,8 @@ obj-$(CONFIG_DRM_GEM_CMA_HELPER) += drm_cma_helper.o
 drm_shmem_helper-y := drm_gem_shmem_helper.o
 obj-$(CONFIG_DRM_GEM_SHMEM_HELPER) += drm_shmem_helper.o
 
+obj-$(CONFIG_DRM_BUDDY) += drm_buddy.o
+
 drm_vram_helper-y := drm_gem_vram_helper.o
 obj-$(CONFIG_DRM_VRAM_HELPER) += drm_vram_helper.o
 
@@ -132,4 +134,5 @@ obj-$(CONFIG_DRM_TIDSS) += tidss/
 obj-y			+= xlnx/
 obj-y			+= gud/
 obj-$(CONFIG_DRM_HYPERV) += hyperv/
+obj-y			+= solomon/
 obj-$(CONFIG_DRM_SPRD) += sprd/

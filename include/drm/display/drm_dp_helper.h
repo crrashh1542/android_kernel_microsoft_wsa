@@ -560,6 +560,7 @@ struct drm_panel;
 # define DP_TRAINING_PATTERN_DISABLE	    0
 # define DP_TRAINING_PATTERN_1		    1
 # define DP_TRAINING_PATTERN_2		    2
+# define DP_TRAINING_PATTERN_2_CDS	    3	    /* 2.0 E11 */
 # define DP_TRAINING_PATTERN_3		    3	    /* 1.2 */
 # define DP_TRAINING_PATTERN_4              7       /* 1.4 */
 # define DP_TRAINING_PATTERN_MASK	    0x3
@@ -738,11 +739,13 @@ struct drm_panel;
 			    DP_LANE_CHANNEL_EQ_DONE |	\
 			    DP_LANE_SYMBOL_LOCKED)
 
-#define DP_LANE_ALIGN_STATUS_UPDATED	    0x204
-
-#define DP_INTERLANE_ALIGN_DONE		    (1 << 0)
-#define DP_DOWNSTREAM_PORT_STATUS_CHANGED   (1 << 6)
-#define DP_LINK_STATUS_UPDATED		    (1 << 7)
+#define DP_LANE_ALIGN_STATUS_UPDATED                    0x204
+#define  DP_INTERLANE_ALIGN_DONE                        (1 << 0)
+#define  DP_128B132B_DPRX_EQ_INTERLANE_ALIGN_DONE       (1 << 2) /* 2.0 E11 */
+#define  DP_128B132B_DPRX_CDS_INTERLANE_ALIGN_DONE      (1 << 3) /* 2.0 E11 */
+#define  DP_128B132B_LT_FAILED                          (1 << 4) /* 2.0 E11 */
+#define  DP_DOWNSTREAM_PORT_STATUS_CHANGED              (1 << 6)
+#define  DP_LINK_STATUS_UPDATED                         (1 << 7)
 
 #define DP_SINK_STATUS			    0x205
 # define DP_RECEIVE_PORT_0_STATUS	    (1 << 0)
@@ -1038,11 +1041,8 @@ struct drm_panel;
 #define DP_SIDEBAND_MSG_UP_REQ_BASE	    0x1600   /* 1.2 MST */
 
 /* DPRX Event Status Indicator */
-#define DP_SINK_COUNT_ESI		    0x2002   /* 1.2 */
-/* 0-5 sink count */
-# define DP_SINK_COUNT_CP_READY             (1 << 6)
-
-#define DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0   0x2003   /* 1.2 */
+#define DP_SINK_COUNT_ESI                   0x2002   /* same as 0x200 */
+#define DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0   0x2003   /* same as 0x201 */
 
 #define DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1   0x2004   /* 1.2 */
 # define DP_RX_GTC_MSTR_REQ_STATUS_CHANGE    (1 << 0)
@@ -1115,6 +1115,7 @@ struct drm_panel;
 # define DP_UHBR13_5                           (1 << 2)
 
 #define DP_128B132B_TRAINING_AUX_RD_INTERVAL                    0x2216 /* 2.0 */
+# define DP_128B132B_TRAINING_AUX_RD_INTERVAL_1MS_UNIT          (1 << 7)
 # define DP_128B132B_TRAINING_AUX_RD_INTERVAL_MASK              0x7f
 # define DP_128B132B_TRAINING_AUX_RD_INTERVAL_400_US            0x00
 # define DP_128B132B_TRAINING_AUX_RD_INTERVAL_4_MS              0x01
@@ -1350,6 +1351,7 @@ struct drm_panel;
 # define DP_PHY_REPEATER_128B132B_SUPPORTED		    (1 << 0)
 /* See DP_128B132B_SUPPORTED_LINK_RATES for values */
 #define DP_PHY_REPEATER_128B132B_RATES			    0xf0007 /* 2.0 */
+#define DP_PHY_REPEATER_EQ_DONE                             0xf0008 /* 2.0 E11 */
 
 enum drm_dp_phy {
 	DP_PHY_DPRX,
@@ -1528,8 +1530,6 @@ u8 drm_dp_get_adjust_request_pre_emphasis(const u8 link_status[DP_LINK_STATUS_SI
 					  int lane);
 u8 drm_dp_get_adjust_tx_ffe_preset(const u8 link_status[DP_LINK_STATUS_SIZE],
 				   int lane);
-u8 drm_dp_get_adjust_request_post_cursor(const u8 link_status[DP_LINK_STATUS_SIZE],
-					 unsigned int lane);
 
 #define DP_BRANCH_OUI_HEADER_SIZE	0xc
 #define DP_RECEIVER_CAP_SIZE		0xf
@@ -1551,6 +1551,15 @@ void drm_dp_link_train_channel_eq_delay(const struct drm_dp_aux *aux,
 					const u8 dpcd[DP_RECEIVER_CAP_SIZE]);
 void drm_dp_lttpr_link_train_channel_eq_delay(const struct drm_dp_aux *aux,
 					      const u8 caps[DP_LTTPR_PHY_CAP_SIZE]);
+
+int drm_dp_128b132b_read_aux_rd_interval(struct drm_dp_aux *aux);
+bool drm_dp_128b132b_lane_channel_eq_done(const u8 link_status[DP_LINK_STATUS_SIZE],
+					  int lane_count);
+bool drm_dp_128b132b_lane_symbol_locked(const u8 link_status[DP_LINK_STATUS_SIZE],
+					int lane_count);
+bool drm_dp_128b132b_eq_interlane_align_done(const u8 link_status[DP_LINK_STATUS_SIZE]);
+bool drm_dp_128b132b_cds_interlane_align_done(const u8 link_status[DP_LINK_STATUS_SIZE]);
+bool drm_dp_128b132b_link_training_failed(const u8 link_status[DP_LINK_STATUS_SIZE]);
 
 u8 drm_dp_link_rate_to_bw_code(int link_rate);
 int drm_dp_bw_code_to_link_rate(u8 link_bw);
