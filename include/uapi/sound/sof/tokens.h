@@ -145,8 +145,4 @@
 #define SOF_TKN_MEDIATEK_AFE_CH			1601
 #define SOF_TKN_MEDIATEK_AFE_FORMAT		1602
 
-/* ACPDMIC */
-#define SOF_TKN_AMD_ACPDMIC_RATE               1800
-#define SOF_TKN_AMD_ACPDMIC_CH                 1801
-
 #endif
