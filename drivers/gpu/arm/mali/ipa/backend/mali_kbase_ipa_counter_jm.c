@@ -56,7 +56,8 @@
 #define SC_BEATS_WR_TIB            (KBASE_IPA_NR_BYTES_PER_CNT * 62)
 
 /**
- * get_jm_counter() - get performance counter offset inside the Job Manager block
+ * kbase_g7x_power_model_get_jm_counter() - get performance counter offset inside the Job Manager
+ * block
  * @model_data:            pointer to GPU model data.
  * @counter_block_offset:  offset in bytes of the performance counter inside the Job Manager block.
  *
@@ -69,9 +70,11 @@ static u32 kbase_g7x_power_model_get_jm_counter(struct kbase_ipa_model_vinstr_da
 }
 
 /**
- * get_memsys_counter() - get performance counter offset inside the Memory System block
+ * kbase_g7x_power_model_get_memsys_counter() - get performance counter offset inside the
+ * Memory System block
  * @model_data:            pointer to GPU model data.
- * @counter_block_offset:  offset in bytes of the performance counter inside the (first) Memory System block.
+ * @counter_block_offset:  offset in bytes of the performance counter inside the (first)
+ * Memory System block.
  *
  * Return: Block offset in bytes of the required performance counter.
  */
@@ -85,7 +88,8 @@ static u32 kbase_g7x_power_model_get_memsys_counter(struct kbase_ipa_model_vinst
 }
 
 /**
- * get_sc_counter() - get performance counter offset inside the Shader Cores block
+ * kbase_g7x_power_model_get_sc_counter() - get performance counter offset inside the Shader Cores
+ * block
  * @model_data:            pointer to GPU model data.
  * @counter_block_offset:  offset in bytes of the performance counter inside the (first) Shader Cores block.
  *
@@ -101,7 +105,8 @@ static u32 kbase_g7x_power_model_get_sc_counter(struct kbase_ipa_model_vinstr_da
 }
 
 /**
- * memsys_single_counter() - calculate energy for a single Memory System performance counter.
+ * kbase_g7x_sum_all_memsys_blocks() - calculate energy for a single Memory System
+ * performance counter.
  * @model_data:   pointer to GPU model data.
  * @coeff:        default value of coefficient for IPA group.
  * @offset:       offset in bytes of the counter inside the block it belongs to.
@@ -120,7 +125,8 @@ static s64 kbase_g7x_sum_all_memsys_blocks(
 }
 
 /**
- * sum_all_shader_cores() - calculate energy for a Shader Cores performance counter for all cores.
+ * kbase_g7x_sum_all_shader_cores() - calculate energy for a Shader Cores performance counter
+ * for all cores.
  * @model_data:            pointer to GPU model data.
  * @coeff:                 default value of coefficient for IPA group.
  * @counter_block_offset:  offset in bytes of the counter inside the block it belongs to.
@@ -140,7 +146,7 @@ static s64 kbase_g7x_sum_all_shader_cores(
 }
 
 /**
- * jm_single_counter() - calculate energy for a single Job Manager performance counter.
+ * kbase_g7x_jm_single_counter() - calculate energy for a single Job Manager performance counter.
  * @model_data:            pointer to GPU model data.
  * @coeff:                 default value of coefficient for IPA group.
  * @counter_block_offset:  offset in bytes of the counter inside the block it belongs to.
@@ -160,7 +166,7 @@ static s64 kbase_g7x_jm_single_counter(
 }
 
 /**
- * get_active_cycles() - return the GPU_ACTIVE counter
+ * kbase_g7x_get_active_cycles() - return the GPU_ACTIVE counter
  * @model_data:            pointer to GPU model data.
  *
  * Return: the number of cycles the GPU was active during the counter sampling

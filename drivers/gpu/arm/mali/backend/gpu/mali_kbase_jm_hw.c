@@ -1032,7 +1032,7 @@ void kbase_job_check_enter_disjoint(struct kbase_device *kbdev, u32 action,
 }
 
 /**
- * kbase_job_check_enter_disjoint - potentially leave disjoint state
+ * kbase_job_check_leave_disjoint - potentially leave disjoint state
  * @kbdev: kbase device
  * @target_katom: atom which is finishing
  *

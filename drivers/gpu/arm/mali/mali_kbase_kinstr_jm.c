@@ -667,7 +667,7 @@ static const struct file_operations file_operations = {
 static const size_t kbase_kinstr_jm_readers_max = 16;
 
 /**
- * kbasep_kinstr_jm_release() - Invoked when the reference count is dropped
+ * kbase_kinstr_jm_release() - Invoked when the reference count is dropped
  * @ref: the context reference count
  */
 static void kbase_kinstr_jm_release(struct kref *const ref)
@@ -738,7 +738,7 @@ static int kbase_kinstr_jm_readers_add(struct kbase_kinstr_jm *const ctx,
 }
 
 /**
- * readers_del() - Deletes a reader from the list of readers
+ * kbase_kinstr_jm_readers_del() - Deletes a reader from the list of readers
  * @ctx: the instrumentation context
  * @reader: the reader to delete
  */

@@ -19,7 +19,7 @@
  *
  */
 
-/**
+/*
  * Base kernel memory APIs
  */
 #include <linux/dma-buf.h>
@@ -350,7 +350,7 @@ static struct kbase_va_region *kbase_region_tracker_find_region_meeting_reqs(
 }
 
 /**
- * Remove a region object from the global list.
+ * kbase_remove_va_region() - Remove a region object from the global list.
  * @reg: Region object to remove
  *
  * The region reg is removed, possibly by merging with other free and
@@ -563,16 +563,15 @@ KBASE_EXPORT_TEST_API(kbase_add_va_region);
 
 /**
  * kbase_add_va_region_rbtree - Insert a region into its corresponding rbtree
- *
- * Insert a region into the rbtree that was specified when the region was
- * created. If addr is 0 a free area in the rbtree is used, otherwise the
- * specified address is used.
- *
  * @kbdev: The kbase device
  * @reg: The region to add
  * @addr: The address to add the region at, or 0 to map at any available address
  * @nr_pages: The size of the region in pages
  * @align: The minimum alignment in pages
+ *
+ * Insert a region into the rbtree that was specified when the region was
+ * created. If addr is 0 a free area in the rbtree is used, otherwise the
+ * specified address is used.
  */
 int kbase_add_va_region_rbtree(struct kbase_device *kbdev,
 		struct kbase_va_region *reg,
@@ -834,7 +833,8 @@ bool kbase_has_exec_va_zone(struct kbase_context *kctx)
 }
 
 /**
- * Determine if any allocations have been made on a context's region tracker
+ * kbase_region_tracker_has_allocs() - Determine if any allocations have been
+ * made on a context's region tracker
  * @kctx: KBase context
  *
  * Check the context to determine if any allocations have been made yet from
@@ -1288,7 +1288,7 @@ void kbase_mem_term(struct kbase_device *kbdev)
 KBASE_EXPORT_TEST_API(kbase_mem_term);
 
 /**
- * Allocate a free region object.
+ * kbase_alloc_free_region() - Allocate a free region object.
  * @rbtree:    Backlink to the red-black tree of memory regions.
  * @start_pfn: The Page Frame Number in GPU virtual address space.
  * @nr_pages:  The size of the region in pages.
@@ -1365,7 +1365,7 @@ static struct kbase_context *kbase_reg_flags_to_kctx(
 }
 
 /**
- * Free a region object.
+ * kbase_free_alloced_region() - Free a region object.
  * @reg: Region
  *
  * The described region must be freed of any mapping.
@@ -1963,7 +1963,7 @@ int kbase_mem_free_region(struct kbase_context *kctx, struct kbase_va_region *re
 KBASE_EXPORT_TEST_API(kbase_mem_free_region);
 
 /**
- * Free the region from the GPU and unregister it.
+ * kbase_mem_free() - Free the region from the GPU and unregister it.
  * @kctx:  KBase context
  * @gpu_addr: GPU address to free
  *
@@ -3141,7 +3141,7 @@ int kbase_check_alloc_sizes(struct kbase_context *kctx, unsigned long flags,
 }
 
 /**
- * Acquire the per-context region list lock
+ * kbase_gpu_vm_lock() - Acquire the per-context region list lock
  * @kctx:  KBase context
  */
 void kbase_gpu_vm_lock(struct kbase_context *kctx)
@@ -3153,7 +3153,7 @@ void kbase_gpu_vm_lock(struct kbase_context *kctx)
 KBASE_EXPORT_TEST_API(kbase_gpu_vm_lock);
 
 /**
- * Release the per-context region list lock
+ * kbase_gpu_vm_unlock() - Release the per-context region list lock
  * @kctx:  KBase context
  */
 void kbase_gpu_vm_unlock(struct kbase_context *kctx)

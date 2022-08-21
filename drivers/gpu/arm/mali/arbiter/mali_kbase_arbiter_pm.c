@@ -1023,8 +1023,8 @@ int kbase_arbiter_pm_ctx_active_handle_suspend(struct kbase_device *kbdev,
 /**
  * kbase_arbiter_pm_update_gpu_freq() - Updates GPU clock frequency received
  * from arbiter.
- * @arb_freq - Pointer to struchture holding GPU clock frequenecy data
- * @freq - New frequency value in KHz
+ * @arb_freq: Pointer to structure holding GPU clock frequenecy data
+ * @freq: New frequency value in KHz
  */
 void kbase_arbiter_pm_update_gpu_freq(struct kbase_arbiter_freq *arb_freq,
 	uint32_t freq)
@@ -1048,8 +1048,8 @@ void kbase_arbiter_pm_update_gpu_freq(struct kbase_arbiter_freq *arb_freq,
 
 /**
  * enumerate_arb_gpu_clk() - Enumerate a GPU clock on the given index
- * @kbdev - kbase_device pointer
- * @index - GPU clock index
+ * @kbdev: kbase_device pointer
+ * @index: GPU clock index
  *
  * Returns pointer to structure holding GPU clock frequency data reported from
  * arbiter, only index 0 is valid.
@@ -1064,8 +1064,8 @@ static void *enumerate_arb_gpu_clk(struct kbase_device *kbdev,
 
 /**
  * get_arb_gpu_clk_rate() - Get the current rate of GPU clock frequency value
- * @kbdev - kbase_device pointer
- * @index - GPU clock index
+ * @kbdev: kbase_device pointer
+ * @gpu_clk_handle: Handle unique to the enumerated GPU clock
  *
  * Returns the GPU clock frequency value saved when gpu is granted from arbiter
  */
@@ -1085,9 +1085,9 @@ static unsigned long get_arb_gpu_clk_rate(struct kbase_device *kbdev,
 
 /**
  * arb_gpu_clk_notifier_register() - Register a clock rate change notifier.
- * @kbdev          - kbase_device pointer
- * @gpu_clk_handle - Handle unique to the enumerated GPU clock
- * @nb             - notifier block containing the callback function pointer
+ * @kbdev:          kbase_device pointer
+ * @gpu_clk_handle: Handle unique to the enumerated GPU clock
+ * @nb:             notifier block containing the callback function pointer
  *
  * Returns 0 on success, negative error code otherwise.
  *
@@ -1110,10 +1110,10 @@ static int arb_gpu_clk_notifier_register(struct kbase_device *kbdev,
 }
 
 /**
- * gpu_clk_notifier_unregister() - Unregister clock rate change notifier
- * @kbdev          - kbase_device pointer
- * @gpu_clk_handle - Handle unique to the enumerated GPU clock
- * @nb             - notifier block containing the callback function pointer
+ * arb_gpu_clk_notifier_unregister() - Unregister clock rate change notifier
+ * @kbdev:          kbase_device pointer
+ * @gpu_clk_handle: Handle unique to the enumerated GPU clock
+ * @nb:             notifier block containing the callback function pointer
  *
  * This function pointer is used to unregister a callback function that
  * was previously registered to get notified of a frequency change of the

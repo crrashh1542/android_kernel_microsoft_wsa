@@ -140,7 +140,7 @@ static inline int copy_stream_header(char __user *buffer, size_t size,
 }
 
 /**
- * kbasep_timeline_copy_header - copy timeline headers to the user
+ * kbasep_timeline_copy_headers() - copy timeline headers to the user
  *
  * @timeline:    Timeline instance
  * @buffer:      Pointer to the buffer provided by user
@@ -320,7 +320,7 @@ static unsigned int kbasep_timeline_io_poll(struct file *filp, poll_table *wait)
  * @inode: Pointer to inode structure
  * @filp:  Pointer to file structure
  *
- * Return always return zero
+ * Return: always return zero
  */
 static int kbasep_timeline_io_release(struct inode *inode, struct file *filp)
 {

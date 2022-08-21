@@ -930,12 +930,13 @@ static long kbasep_vinstr_hwcnt_reader_ioctl_get_hwver(
 }
 
 /**
- * The hwcnt reader's ioctl command - get API version.
+ * kbasep_vinstr_hwcnt_reader_ioctl_get_api_version() - The hwcnt reader's ioctl
+ * command - get API version.
  * @cli:    The non-NULL pointer to the client
  * @arg:    Command's argument.
  * @size:   Size of arg.
  *
- * @return 0 on success, else error code.
+ * Return: 0 on success, else error code.
  */
 static long kbasep_vinstr_hwcnt_reader_ioctl_get_api_version(
 	struct kbase_vinstr_client *cli, unsigned long arg, size_t size)

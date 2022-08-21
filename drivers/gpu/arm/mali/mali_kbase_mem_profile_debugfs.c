@@ -24,13 +24,12 @@
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 
 /**
- * Show callback for the @c mem_profile debugfs file.
+ * kbasep_mem_profile_seq_show() - Show callback for the @c mem_profile debugfs file.
+ * @sfile: The debugfs entry
+ * @data:  Data associated with the entry
  *
  * This function is called to get the contents of the @c mem_profile debugfs
  * file. This is a report of current memory usage and distribution in userspace.
- *
- * @sfile: The debugfs entry
- * @data:  Data associated with the entry
  *
  * Return: 0 if it successfully prints data in debugfs entry file, non-zero
  * otherwise

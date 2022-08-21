@@ -31,7 +31,7 @@
 #define DEFAULT_MIN_SAMPLE_CYCLES 10000
 
 /**
- * read_hwcnt() - read a counter value
+ * kbase_ipa_read_hwcnt() - read a counter value
  * @model_data:		pointer to model data
  * @offset:		offset, in bytes, into vinstr buffer
  *
