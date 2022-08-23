@@ -85,6 +85,7 @@ properties:
 patternProperties:
   "^usb3-phy@[0-9a-f]+$":
     type: object
+    additionalProperties: false
     description:
       The USB3 PHY.
 
@@ -125,6 +126,7 @@ patternProperties:
 
   "^dp-phy@[0-9a-f]+$":
     type: object
+    additionalProperties: false
     description:
       The DP PHY.
 
