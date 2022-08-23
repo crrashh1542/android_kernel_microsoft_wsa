@@ -53,7 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/dma-buf.h>
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 #include <linux/iosys-map.h>
 #endif
 #include <linux/scatterlist.h>
@@ -169,7 +169,7 @@ typedef struct _PMR_DMA_BUF_DATA_
 	IMG_BOOL bPoisonOnFree;
 
 	/* Mapping information. */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	struct iosys_map sMap;
 #else
 	struct dma_buf_map sMap;
@@ -199,7 +199,7 @@ static IMG_UINT32 g_ui32HashRefCount;
 static int
 DmaBufSetValue(struct dma_buf *psDmaBuf, int iValue, const char *szFunc)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	struct iosys_map sMap;
 #else
 	struct dma_buf_map sMap;

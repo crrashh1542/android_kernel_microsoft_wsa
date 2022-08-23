@@ -174,7 +174,7 @@ pvr_buffer_sync_pmrs_unlock(struct pvr_buffer_sync_context *ctx,
 	mutex_unlock(&ctx->ctx_lock);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 
 static void
 dma_resv_count_fences(struct dma_resv *resv, u32 *read_fence_count_out, u32 *write_fence_count_out)
@@ -662,14 +662,14 @@ pvr_buffer_sync_kick_succeeded(struct pvr_buffer_sync_append_data *data)
 		if (WARN_ON_ONCE(!resv))
 			continue;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		dma_resv_reserve_fences(resv, 1);
 #endif
 		if (data->pmr_flags[i] & PVR_BUFFER_FLAG_WRITE) {
 			PVR_FENCE_TRACE(&data->update_fence->base,
 					"added exclusive fence (%s) to resv %p\n",
 					data->update_fence->name, resv);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			dma_resv_add_fence(resv,
 					   &data->update_fence->base,
 					   DMA_RESV_USAGE_WRITE);
@@ -681,7 +681,7 @@ pvr_buffer_sync_kick_succeeded(struct pvr_buffer_sync_append_data *data)
 			PVR_FENCE_TRACE(&data->update_fence->base,
 					"added non-exclusive fence (%s) to resv %p\n",
 					data->update_fence->name, resv);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 			dma_resv_add_fence(resv,
 					   &data->update_fence->base,
 					   DMA_RESV_USAGE_READ);
