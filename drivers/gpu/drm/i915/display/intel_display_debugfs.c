@@ -1427,9 +1427,9 @@ static int pri_wm_latency_show(struct seq_file *m, void *data)
 	const u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.pri_latency;
+		latencies = dev_priv->display.wm.pri_latency;
 
 	wm_latency_show(m, latencies);
 
@@ -1442,9 +1442,9 @@ static int spr_wm_latency_show(struct seq_file *m, void *data)
 	const u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.spr_latency;
+		latencies = dev_priv->display.wm.spr_latency;
 
 	wm_latency_show(m, latencies);
 
@@ -1457,9 +1457,9 @@ static int cur_wm_latency_show(struct seq_file *m, void *data)
 	const u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.cur_latency;
+		latencies = dev_priv->display.wm.cur_latency;
 
 	wm_latency_show(m, latencies);
 
@@ -1550,9 +1550,9 @@ static ssize_t pri_wm_latency_write(struct file *file, const char __user *ubuf,
 	u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.pri_latency;
+		latencies = dev_priv->display.wm.pri_latency;
 
 	return wm_latency_write(file, ubuf, len, offp, latencies);
 }
@@ -1565,9 +1565,9 @@ static ssize_t spr_wm_latency_write(struct file *file, const char __user *ubuf,
 	u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.spr_latency;
+		latencies = dev_priv->display.wm.spr_latency;
 
 	return wm_latency_write(file, ubuf, len, offp, latencies);
 }
@@ -1580,9 +1580,9 @@ static ssize_t cur_wm_latency_write(struct file *file, const char __user *ubuf,
 	u16 *latencies;
 
 	if (DISPLAY_VER(dev_priv) >= 9)
-		latencies = dev_priv->wm.skl_latency;
+		latencies = dev_priv->display.wm.skl_latency;
 	else
-		latencies = dev_priv->wm.cur_latency;
+		latencies = dev_priv->display.wm.cur_latency;
 
 	return wm_latency_write(file, ubuf, len, offp, latencies);
 }
