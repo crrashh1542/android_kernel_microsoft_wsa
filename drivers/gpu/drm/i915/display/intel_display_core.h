@@ -7,6 +7,7 @@
 #define __INTEL_DISPLAY_CORE_H__
 
 #include <linux/types.h>
+#include "intel_dpll_mgr.h"
 
 struct drm_i915_private;
 struct intel_atomic_state;
@@ -15,6 +16,7 @@ struct intel_color_funcs;
 struct intel_crtc;
 struct intel_crtc_state;
 struct intel_dpll_funcs;
+struct intel_dpll_mgr;
 struct intel_fdi_funcs;
 struct intel_hotplug_funcs;
 struct intel_initial_plane_config;
@@ -52,6 +54,24 @@ struct intel_wm_funcs {
 	int (*compute_global_watermarks)(struct intel_atomic_state *state);
 };
 
+/*
+ * dpll and cdclk state is protected by connection_mutex dpll.lock serializes
+ * intel_{prepare,enable,disable}_shared_dpll.  Must be global rather than per
+ * dpll, because on some platforms plls share registers.
+ */
+struct intel_dpll {
+	struct mutex lock;
+
+	int num_shared_dpll;
+	struct intel_shared_dpll shared_dplls[I915_NUM_PLLS];
+	const struct intel_dpll_mgr *mgr;
+
+	struct {
+		int nssc;
+		int ssc;
+	} ref_clks;
+};
+
 struct intel_display {
 	/* Display functions */
 	struct {
@@ -76,6 +96,7 @@ struct intel_display {
 		/* Display internal color functions */
 		const struct intel_color_funcs *color;
 	} funcs;
+	struct intel_dpll dpll;
 };
 
 #endif /* __INTEL_DISPLAY_CORE_H__ */
