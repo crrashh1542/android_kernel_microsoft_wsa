@@ -86,7 +86,6 @@ struct intel_audio_funcs;
 struct intel_cdclk_config;
 struct intel_cdclk_state;
 struct intel_cdclk_vals;
-struct intel_color_funcs;
 struct intel_connector;
 struct intel_dp;
 struct intel_encoder;
@@ -485,9 +484,6 @@ struct drm_i915_private {
 
 	/* pm private clock gating functions */
 	const struct drm_i915_clock_gating_funcs *clock_gating_funcs;
-
-	/* Display internal color functions */
-	const struct intel_color_funcs *color_funcs;
 
 	/* PCH chipset type */
 	enum intel_pch pch_type;
