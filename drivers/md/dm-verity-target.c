@@ -1186,8 +1186,10 @@ static int verity_get_device(struct dm_target *ti, const char *devname,
 		if (!dev_wait)
 			break;
 
-		/* No need to be too aggressive since this is a slow path. */
-		msleep(500);
+		/* This delay directly affects boot time if code reaches here.
+		 * So keep it small.
+		 */
+		msleep(5);
 	} while (dev_wait && (driver_probe_done() != 0 || *dm_dev == NULL));
 	return -1;
 }
