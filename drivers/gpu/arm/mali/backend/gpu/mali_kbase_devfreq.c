@@ -502,7 +502,7 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 					table_mapping, table_count);
 
 	if (err)
-		goto skip_volt_bin;
+		goto free_buf;
 
 	for (idx = 0; idx < table_count; idx++) {
 		if (*buf == table_mapping[idx]) {
@@ -511,14 +511,14 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 
 			if (err < 0) {
 				dev_err(kbdev->dev, "Invalid opp microvolt name\n");
-				goto skip_volt_bin;
+				goto free_buf;
 			}
 		}
 	}
 
-skip_volt_bin:
+free_buf:
 	kfree(buf);
-
+skip_volt_bin:
 	if (!opp_node)
 		return 0;
 	if (!of_device_is_compatible(opp_node, "operating-points-v2-mali"))
