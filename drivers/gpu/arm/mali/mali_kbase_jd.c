@@ -1592,7 +1592,7 @@ static void jd_cancel_worker(struct work_struct *data)
 	struct kbase_jd_context *jctx;
 	struct kbase_context *kctx;
 	struct kbasep_js_kctx_info *js_kctx_info;
-	bool need_to_try_schedule_context;
+	bool __maybe_unused need_to_try_schedule_context;
 	bool attr_state_changed;
 	struct kbase_device *kbdev;
 
