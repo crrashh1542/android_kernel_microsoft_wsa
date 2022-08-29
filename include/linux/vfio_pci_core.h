@@ -124,6 +124,7 @@ struct vfio_pci_core_device {
 	bool			needs_reset;
 	bool			nointx;
 	bool			needs_pm_restore;
+	bool			pm_intx_masked;
 	struct pci_saved_state	*pci_saved_state;
 	struct pci_saved_state	*pm_save;
 	int			ioeventfds_nr;
@@ -147,7 +148,7 @@ struct vfio_pci_core_device {
 #define is_irq_none(vdev) (!(is_intx(vdev) || is_msi(vdev) || is_msix(vdev)))
 #define irq_is(vdev, type) (vdev->irq_type == type)
 
-extern void vfio_pci_intx_mask(struct vfio_pci_core_device *vdev);
+extern bool vfio_pci_intx_mask(struct vfio_pci_core_device *vdev);
 extern void vfio_pci_intx_unmask(struct vfio_pci_core_device *vdev);
 
 extern int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev,
