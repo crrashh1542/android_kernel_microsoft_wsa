@@ -28,6 +28,7 @@
 		bluetooth0 = &bluetooth;
 		serial0 = &uart5;
 		serial1 = &uart7;
+		wifi0 = &wifi;
 	};
 
 	wcd9385: audio-codec-1 {
