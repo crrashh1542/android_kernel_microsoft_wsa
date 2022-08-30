@@ -27,6 +27,10 @@
 #include "../../codecs/nau8825.h"
 #include "acp-mach.h"
 
+static int tdm_mode = 1;
+module_param_named(tdm_mode, tdm_mode, int, 0444);
+MODULE_PARM_DESC(tdm_mode, "Set 1 for tdm mode, set 0 for i2s mode");
+
 #define PCO_PLAT_CLK 48000000
 #define RT5682_PLL_FREQ (48000 * 512)
 #define DUAL_CHANNEL	2
@@ -80,13 +84,19 @@ static int acp_card_rt5682_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
 	struct snd_soc_component *component = codec_dai->component;
 	int ret;
+	unsigned int fmt;
 
 	dev_info(rtd->dev, "codec dai name = %s\n", codec_dai->name);
 
 	if (drvdata->hs_codec_id != RT5682)
 		return -EINVAL;
 
-	ret =  snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
+	else
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	ret =  snd_soc_dai_set_fmt(codec_dai, fmt | SND_SOC_DAIFMT_NB_NF
 				   | SND_SOC_DAIFMT_CBP_CFP);
 	if (ret < 0) {
 		dev_err(rtd->card->dev, "Failed to set dai fmt: %d\n", ret);
@@ -151,10 +161,15 @@ static int acp_card_hs_startup(struct snd_pcm_substream *substream)
 	int ret;
 	unsigned int fmt;
 
-	if (drvdata->soc_mclk)
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
 	else
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	if (drvdata->soc_mclk)
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	else
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
 
 	ret =  snd_soc_dai_set_fmt(codec_dai, fmt);
 	if (ret < 0) {
@@ -191,9 +206,57 @@ static void acp_card_shutdown(struct snd_pcm_substream *substream)
 		clk_disable_unprepare(drvdata->wclk);
 }
 
+static int acp_card_rt5682x_hw_params(struct snd_pcm_substream *substream,
+				      struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+		struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	int ret;
+	unsigned int fmt;
+
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
+	else
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBP_CFP);
+	if (ret && ret != -ENOTSUPP) {
+		dev_err(rtd->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0x3, 0x3, 8, 16);
+		if (ret && ret != -ENOTSUPP) {
+			dev_err(rtd->dev, "set TDM slot err: %d\n", ret);
+			return ret;
+		}
+	}
+
+	ret =  snd_soc_dai_set_fmt(codec_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBC_CFC);
+	if (ret < 0) {
+		dev_err(rtd->card->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(codec_dai, 0x3, 0x3, 8, 16);
+		if (ret < 0) {
+			dev_warn(rtd->dev, "set TDM slot err:%d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static const struct snd_soc_ops acp_card_rt5682_ops = {
 	.startup = acp_card_hs_startup,
 	.shutdown = acp_card_shutdown,
+	.hw_params = acp_card_rt5682x_hw_params,
 };
 
 /* Define RT5682S CODEC component*/
@@ -220,10 +283,15 @@ static int acp_card_rt5682s_init(struct snd_soc_pcm_runtime *rtd)
 	if (drvdata->hs_codec_id != RT5682S)
 		return -EINVAL;
 
-	if (drvdata->soc_mclk)
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
 	else
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	if (drvdata->soc_mclk)
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	else
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
 
 	ret =  snd_soc_dai_set_fmt(codec_dai, fmt);
 	if (ret < 0) {
@@ -283,6 +351,7 @@ static int acp_card_rt5682s_init(struct snd_soc_pcm_runtime *rtd)
 
 static const struct snd_soc_ops acp_card_rt5682s_ops = {
 	.startup = acp_card_hs_startup,
+	.hw_params = acp_card_rt5682x_hw_params,
 };
 
 static const unsigned int dmic_channels[] = {
@@ -351,19 +420,45 @@ static int acp_card_rt1019_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_card *card = rtd->card;
 	struct acp_card_drvdata *drvdata = card->drvdata;
 	struct snd_soc_dai *codec_dai;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
 	int srate, i, ret = 0;
+	unsigned int fmt;
 
 	srate = params_rate(params);
 
 	if (drvdata->amp_codec_id != RT1019)
 		return -EINVAL;
 
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
+	else
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBP_CFP);
+	if (ret && ret != -ENOTSUPP) {
+		dev_err(rtd->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0xC, 0, 8, 16);
+		if (ret && ret != -ENOTSUPP) {
+			dev_err(rtd->dev, "set TDM slot err: %d\n", ret);
+			return ret;
+		}
+	}
 	for_each_rtd_codec_dais(rtd, i, codec_dai) {
 		if (strcmp(codec_dai->name, "rt1019-aif"))
 			continue;
 
-		ret = snd_soc_dai_set_pll(codec_dai, 0, RT1019_PLL_S_BCLK,
-					  64 * srate, 256 * srate);
+		if (tdm_mode)
+			ret = snd_soc_dai_set_pll(codec_dai, 0, RT1019_PLL_S_BCLK,
+						  128 * srate, 256 * srate);
+		else
+			ret = snd_soc_dai_set_pll(codec_dai, 0, RT1019_PLL_S_BCLK,
+						  64 * srate, 256 * srate);
+
 		if (ret < 0)
 			return ret;
 
@@ -371,8 +466,28 @@ static int acp_card_rt1019_hw_params(struct snd_pcm_substream *substream,
 					     256 * srate, SND_SOC_CLOCK_IN);
 		if (ret < 0)
 			return ret;
-	}
 
+		if (tdm_mode) {
+			ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_DSP_A
+							| SND_SOC_DAIFMT_NB_NF);
+			if (ret < 0) {
+				dev_err(rtd->card->dev, "Failed to set dai fmt: %d\n", ret);
+				return ret;
+			}
+
+			if (!strcmp(codec_dai->component->name, "i2c-10EC1019:00")) {
+				ret = snd_soc_dai_set_tdm_slot(codec_dai, 0x4, 0x4, 8, 16);
+				if (ret < 0)
+					break;
+			}
+
+			if (!strcmp(codec_dai->component->name, "i2c-10EC1019:01")) {
+				ret = snd_soc_dai_set_tdm_slot(codec_dai, 0x8, 0x8, 8, 16);
+				if (ret < 0)
+					break;
+			}
+		}
+	}
 	return 0;
 }
 
@@ -426,9 +541,40 @@ static int acp_card_maxim_init(struct snd_soc_pcm_runtime *rtd)
 				       ARRAY_SIZE(max98360a_map));
 }
 
+static int acp_card_maxim_hw_params(struct snd_pcm_substream *substream,
+				    struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	unsigned int fmt;
+	int ret;
+
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
+	else
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBP_CFP);
+	if (ret && ret != -ENOTSUPP) {
+		dev_err(rtd->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0xC, 0, 8, 16);
+		if (ret && ret != -ENOTSUPP) {
+			dev_err(rtd->dev, "set TDM slot err: %d\n", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
 static const struct snd_soc_ops acp_card_maxim_ops = {
 	.startup = acp_card_amp_startup,
 	.shutdown = acp_card_shutdown,
+	.hw_params = acp_card_maxim_hw_params,
 };
 
 /* Declare nau8825 codec components */
@@ -454,10 +600,15 @@ static int acp_card_nau8825_init(struct snd_soc_pcm_runtime *rtd)
 	if (drvdata->hs_codec_id != NAU8825)
 		return -EINVAL;
 
-	if (drvdata->soc_mclk)
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
 	else
-		fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	if (drvdata->soc_mclk)
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC;
+	else
+		fmt = fmt | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBP_CFP;
 
 	ret =  snd_soc_dai_set_fmt(codec_dai, fmt);
 	if (ret < 0) {
@@ -493,8 +644,29 @@ static int acp_nau8825_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
 	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
 	int ret;
+	unsigned int fmt;
 
+	if (tdm_mode)
+		fmt = SND_SOC_DAIFMT_DSP_A;
+	else
+		fmt = SND_SOC_DAIFMT_I2S;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBP_CFP);
+	if (ret && ret != -ENOTSUPP) {
+		dev_err(rtd->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0x30, 0xc0, 8, 16);
+		if (ret && ret != -ENOTSUPP) {
+			dev_err(rtd->dev, "set TDM slot err: %d\n", ret);
+			return ret;
+		}
+	}
 	ret = snd_soc_dai_set_sysclk(codec_dai, NAU8825_CLK_FLL_FS,
 				     (48000 * 256), SND_SOC_CLOCK_IN);
 	if (ret < 0)
@@ -505,6 +677,21 @@ static int acp_nau8825_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0) {
 		dev_err(rtd->dev, "can't set FLL: %d\n", ret);
 		return ret;
+	}
+
+	ret =  snd_soc_dai_set_fmt(codec_dai, fmt | SND_SOC_DAIFMT_NB_NF
+				   | SND_SOC_DAIFMT_CBC_CFC);
+	if (ret < 0) {
+		dev_err(rtd->card->dev, "Failed to set dai fmt: %d\n", ret);
+		return ret;
+	}
+
+	if (tdm_mode) {
+		ret = snd_soc_dai_set_tdm_slot(codec_dai, 0x40, 0x30, 8, 16);
+		if (ret < 0) {
+			dev_warn(rtd->dev, "set TDM slot err:%d\n", ret);
+			return ret;
+		}
 	}
 
 	return ret;
@@ -559,6 +746,8 @@ SND_SOC_DAILINK_DEF(sof_sp,
 	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-sp")));
 SND_SOC_DAILINK_DEF(sof_hs,
 		    DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-hs")));
+SND_SOC_DAILINK_DEF(sof_hs_virtual,
+		    DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-hs-virtual")));
 SND_SOC_DAILINK_DEF(sof_dmic,
 	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-dmic")));
 SND_SOC_DAILINK_DEF(pdm_dmic,
@@ -725,8 +914,13 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 	if (drv_data->amp_cpu_id == I2S_HS) {
 		links[i].name = "acp-amp-codec";
 		links[i].id = AMP_BE_ID;
-		links[i].cpus = sof_hs;
-		links[i].num_cpus = ARRAY_SIZE(sof_hs);
+		if (tdm_mode) {
+			links[i].cpus = sof_hs_virtual;
+			links[i].num_cpus = ARRAY_SIZE(sof_hs_virtual);
+		} else {
+			links[i].cpus = sof_hs;
+			links[i].num_cpus = ARRAY_SIZE(sof_hs);
+		}
 		links[i].platforms = sof_component;
 		links[i].num_platforms = ARRAY_SIZE(sof_component);
 		links[i].dpcm_playback = 1;
