@@ -1455,6 +1455,10 @@ static int dpcm_add_paths(struct snd_soc_pcm_runtime *fe, int stream,
 	struct snd_soc_dapm_widget *widget;
 	int i, new = 0, err;
 
+	/* don't connect if FE is not running */
+	if (!fe->dpcm[stream].runtime && !fe->fe_compr)
+		return new;
+
 	/* Create any new FE <--> BE connections */
 	for_each_dapm_widgets(list, i, widget) {
 
@@ -1478,10 +1482,6 @@ static int dpcm_add_paths(struct snd_soc_pcm_runtime *fe, int stream,
 				widget->name);
 			continue;
 		}
-
-		/* don't connect if FE is not running */
-		if (!fe->dpcm[stream].runtime && !fe->fe_compr)
-			continue;
 
 		/*
 		 * Filter for systems with 'component_chaining' enabled.
