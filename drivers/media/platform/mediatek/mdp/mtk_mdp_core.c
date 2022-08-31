@@ -43,6 +43,12 @@ static const struct of_device_id mtk_mdp_comp_dt_ids[] = {
 	{ },
 };
 
+static const struct of_device_id mtk_mdp_of_ids[] = {
+	{ .compatible = "mediatek,mt8173-mdp", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, mtk_mdp_of_ids);
+
 static void mtk_mdp_clock_on(struct mtk_mdp_dev *mdp)
 {
 	struct mtk_mdp_comp *comp_node;
