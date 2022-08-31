@@ -144,45 +144,8 @@ static int mtk_mdp_comp_bind(struct device *dev, struct device *master, void *da
 {
 	struct mtk_mdp_comp *comp = dev_get_drvdata(dev);
 	struct mtk_mdp_dev *mdp = data;
-	struct device_node *vpu_node;
 
 	mtk_mdp_register_component(mdp, comp);
-
-	/*
-	 * If this component has a "mediatek-vpu" property, it is responsible for
-	 * notifying the mdp master driver about it so it can be further initialized
-	 * later.
-	 */
-	vpu_node = of_parse_phandle(dev->of_node, "mediatek,vpu", 0);
-	if (vpu_node) {
-		int ret;
-
-		mdp->vpu_dev = of_find_device_by_node(vpu_node);
-		if (WARN_ON(!mdp->vpu_dev)) {
-			dev_err(dev, "vpu pdev failed\n");
-			of_node_put(vpu_node);
-		}
-
-		ret = v4l2_device_register(dev, &mdp->v4l2_dev);
-		if (ret) {
-			dev_err(dev, "Failed to register v4l2 device\n");
-			return -EINVAL;
-		}
-
-		ret = vb2_dma_contig_set_max_seg_size(dev, DMA_BIT_MASK(32));
-		if (ret) {
-			dev_err(dev, "Failed to set vb2 dma mag seg size\n");
-			return -EINVAL;
-		}
-
-		/*
-		 * presence of the "mediatek,vpu" property in a device node
-		 * indicates that it is the primary MDP rdma device and MDP DMA
-		 * ops should be handled by its DMA callbacks.
-		 */
-		mdp->rdma_dev = dev;
-	}
-
 	pm_runtime_enable(dev);
 
 	return 0;
@@ -237,8 +200,22 @@ err:
 static int mtk_mdp_comp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *vpu_node;
 	int status;
 	struct mtk_mdp_comp *comp;
+
+	vpu_node = of_parse_phandle(dev->of_node, "mediatek,vpu", 0);
+	if (vpu_node) {
+		of_node_put(vpu_node);
+		/*
+		 * The device tree node with a mediatek,vpu property is deemed
+		 * the MDP "master" device, we don't want to add a component
+		 * for it in this function because the initialization for the
+		 * master is done elsewhere.
+		 */
+		dev_info(dev, "vpu node found, not probing\n");
+		return -ENODEV;
+	}
 
 	comp = devm_kzalloc(dev, sizeof(*comp), GFP_KERNEL);
 	if (!comp)
