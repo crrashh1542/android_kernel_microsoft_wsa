@@ -146,9 +146,8 @@ static void release_of(struct device *dev, void *data)
 
 static int mtk_mdp_master_bind(struct device *dev)
 {
-	struct mtk_mdp_dev *mdp = dev_get_drvdata(dev);
-	struct device_node *vpu_node;
 	int status;
+	struct mtk_mdp_dev *mdp = dev_get_drvdata(dev);
 
 	status = component_bind_all(dev, mdp);
 	if (status) {
@@ -156,30 +155,15 @@ static int mtk_mdp_master_bind(struct device *dev)
 		goto err_component_bind_all;
 	}
 
-	if (mdp->rdma_dev == NULL) {
-		dev_err(dev, "Primary MDP device not found");
-		status = -ENODEV;
-		goto err_component_bind_all;
-	}
-
-	vpu_node = of_find_node_by_name(NULL, "vpu");
-	if (!vpu_node) {
-		dev_err(dev, "unable to find vpu node");
-		status = -ENODEV;
-		goto err_wdt_reg;
-	}
-
-	mdp->vpu_dev = of_find_device_by_node(vpu_node);
-	if (!mdp->vpu_dev) {
-		dev_err(dev, "unable to find vpu device");
-		status = -ENODEV;
-		goto err_wdt_reg;
-	}
-
-	status = vpu_wdt_reg_handler(mdp->vpu_dev, mtk_mdp_reset_handler, mdp, VPU_RST_MDP);
-	if (status) {
-		dev_err(dev, "Failed to register reset handler\n");
-		goto err_wdt_reg;
+	if (mdp->vpu_dev) {
+		int ret = vpu_wdt_reg_handler(mdp->vpu_dev, mtk_mdp_reset_handler, mdp,
+					  VPU_RST_MDP);
+		if (ret) {
+			dev_err(dev, "Failed to register reset handler\n");
+			goto err_wdt_reg;
+		}
+	} else {
+		dev_err(dev, "no vpu_dev found\n");
 	}
 
 	status = mtk_mdp_register_m2m_device(mdp);
