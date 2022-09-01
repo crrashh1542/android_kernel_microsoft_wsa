@@ -249,6 +249,7 @@ static void iwl_mvm_rx_agg_session_expired(struct timer_list *t)
 	struct ieee80211_sta *sta;
 	struct iwl_mvm_sta *mvm_sta;
 	unsigned long timeout;
+	unsigned int sta_id;
 
 	rcu_read_lock();
 
@@ -267,7 +268,8 @@ static void iwl_mvm_rx_agg_session_expired(struct timer_list *t)
 	}
 
 	/* Timer expired */
-	sta = rcu_dereference(ba_data->mvm->fw_id_to_mac_id[ba_data->sta_id]);
+	sta_id = ffs(ba_data->sta_mask) - 1; /* don't care which one */
+	sta = rcu_dereference(ba_data->mvm->fw_id_to_mac_id[sta_id]);
 
 	/*
 	 * sta should be valid unless the following happens:
@@ -2711,10 +2713,11 @@ static void iwl_mvm_init_reorder_buffer(struct iwl_mvm *mvm,
 }
 
 static int iwl_mvm_fw_baid_op_sta(struct iwl_mvm *mvm,
-				  struct iwl_mvm_sta *mvm_sta,
+				  struct ieee80211_sta *sta,
 				  bool start, int tid, u16 ssn,
 				  u16 buf_size)
 {
+	struct iwl_mvm_sta *mvm_sta = iwl_mvm_sta_from_mac80211(sta);
 	struct iwl_mvm_add_sta_cmd cmd = {
 		.mac_id_n_color = cpu_to_le32(mvm_sta->mac_id_n_color),
 		.sta_id = mvm_sta->deflink.sta_id,
@@ -2759,7 +2762,7 @@ static int iwl_mvm_fw_baid_op_sta(struct iwl_mvm *mvm,
 }
 
 static int iwl_mvm_fw_baid_op_cmd(struct iwl_mvm *mvm,
-				  struct iwl_mvm_sta *mvm_sta,
+				  struct ieee80211_sta *sta,
 				  bool start, int tid, u16 ssn,
 				  u16 buf_size, int baid)
 {
@@ -2773,7 +2776,8 @@ static int iwl_mvm_fw_baid_op_cmd(struct iwl_mvm *mvm,
 	BUILD_BUG_ON(sizeof(struct iwl_rx_baid_cfg_resp) != sizeof(baid));
 
 	if (start) {
-		cmd.alloc.sta_id_mask = cpu_to_le32(BIT(mvm_sta->deflink.sta_id));
+		cmd.alloc.sta_id_mask =
+			cpu_to_le32(iwl_mvm_sta_fw_id_mask(mvm, sta, -1));
 		cmd.alloc.tid = tid;
 		cmd.alloc.ssn = cpu_to_le16(ssn);
 		cmd.alloc.win_size = cpu_to_le16(buf_size);
@@ -2782,7 +2786,8 @@ static int iwl_mvm_fw_baid_op_cmd(struct iwl_mvm *mvm,
 		cmd.remove_v1.baid = cpu_to_le32(baid);
 		BUILD_BUG_ON(sizeof(cmd.remove_v1) > sizeof(cmd.remove));
 	} else {
-		cmd.remove.sta_id_mask = cpu_to_le32(BIT(mvm_sta->deflink.sta_id));
+		cmd.remove.sta_id_mask =
+			cpu_to_le32(iwl_mvm_sta_fw_id_mask(mvm, sta, -1));
 		cmd.remove.tid = cpu_to_le32(tid);
 	}
 
@@ -2805,16 +2810,16 @@ static int iwl_mvm_fw_baid_op_cmd(struct iwl_mvm *mvm,
 	return baid;
 }
 
-static int iwl_mvm_fw_baid_op(struct iwl_mvm *mvm, struct iwl_mvm_sta *mvm_sta,
+static int iwl_mvm_fw_baid_op(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 			      bool start, int tid, u16 ssn, u16 buf_size,
 			      int baid)
 {
 	if (fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_BAID_ML_SUPPORT))
-		return iwl_mvm_fw_baid_op_cmd(mvm, mvm_sta, start,
+		return iwl_mvm_fw_baid_op_cmd(mvm, sta, start,
 					      tid, ssn, buf_size, baid);
 
-	return iwl_mvm_fw_baid_op_sta(mvm, mvm_sta, start,
+	return iwl_mvm_fw_baid_op_sta(mvm, sta, start,
 				      tid, ssn, buf_size);
 }
 
@@ -2884,7 +2889,7 @@ int iwl_mvm_sta_rx_agg(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 
 	/* Don't send command to remove (start=0) BAID during restart */
 	if (start || !test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
-		baid = iwl_mvm_fw_baid_op(mvm, mvm_sta, start, tid, ssn, buf_size,
+		baid = iwl_mvm_fw_baid_op(mvm, sta, start, tid, ssn, buf_size,
 					  baid);
 
 	if (baid < 0) {
@@ -2906,7 +2911,7 @@ int iwl_mvm_sta_rx_agg(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 			    iwl_mvm_rx_agg_session_expired, 0);
 		baid_data->mvm = mvm;
 		baid_data->tid = tid;
-		baid_data->sta_id = mvm_sta->deflink.sta_id;
+		baid_data->sta_mask = iwl_mvm_sta_fw_id_mask(mvm, sta, -1);
 
 		mvm_sta->tid_to_baid[tid] = baid;
 		if (timeout)
