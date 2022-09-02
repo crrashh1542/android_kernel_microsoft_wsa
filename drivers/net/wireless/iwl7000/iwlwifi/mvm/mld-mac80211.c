@@ -898,7 +898,7 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 		int r;
 
-		if (!(new_links & BIT(i)))
+		if (!(added & BIT(i)))
 			continue;
 		new_link[i] = kzalloc(sizeof(*new_link[i]), GFP_KERNEL);
 		if (!new_link[i]) {
