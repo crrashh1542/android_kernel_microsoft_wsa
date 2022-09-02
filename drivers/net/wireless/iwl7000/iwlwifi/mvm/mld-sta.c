@@ -506,6 +506,19 @@ static int iwl_mvm_mld_cfg_sta(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 	return iwl_mvm_mld_send_sta_cmd(mvm, &cmd);
 }
 
+static void iwl_mvm_mld_free_sta_link(struct iwl_mvm *mvm,
+				      struct iwl_mvm_sta *mvm_sta,
+				      struct iwl_mvm_link_sta *mvm_sta_link,
+				      unsigned int link_id)
+{
+	RCU_INIT_POINTER(mvm->fw_id_to_mac_id[mvm_sta_link->sta_id], NULL);
+	RCU_INIT_POINTER(mvm->fw_id_to_link_sta[mvm_sta_link->sta_id], NULL);
+	RCU_INIT_POINTER(mvm_sta->link[link_id], NULL);
+
+	if (mvm_sta_link != &mvm_sta->deflink)
+		kfree_rcu(mvm_sta_link, rcu_head);
+}
+
 static void iwl_mvm_mld_sta_rm_all_sta_links(struct iwl_mvm *mvm,
 					     struct iwl_mvm_sta *mvm_sta)
 {
@@ -519,26 +532,8 @@ static void iwl_mvm_mld_sta_rm_all_sta_links(struct iwl_mvm *mvm,
 		if (!link)
 			continue;
 
-		RCU_INIT_POINTER(mvm->fw_id_to_mac_id[link->sta_id], NULL);
-		RCU_INIT_POINTER(mvm->fw_id_to_link_sta[link->sta_id], NULL);
-		RCU_INIT_POINTER(mvm_sta->link[link_id], NULL);
-
-		if (link != &mvm_sta->deflink)
-			kfree_rcu(link, rcu_head);
+		iwl_mvm_mld_free_sta_link(mvm, mvm_sta, link, link_id);
 	}
-}
-
-static void iwl_mvm_mld_free_sta_link(struct iwl_mvm *mvm,
-				      struct iwl_mvm_sta *mvm_sta,
-				      struct iwl_mvm_link_sta *mvm_sta_link,
-				      unsigned int link_id)
-{
-	RCU_INIT_POINTER(mvm->fw_id_to_mac_id[mvm_sta_link->sta_id], NULL);
-	RCU_INIT_POINTER(mvm->fw_id_to_link_sta[mvm_sta_link->sta_id], NULL);
-	RCU_INIT_POINTER(mvm_sta->link[link_id], NULL);
-
-	if (mvm_sta_link != &mvm_sta->deflink)
-		kfree_rcu(mvm_sta_link, rcu_head);
 }
 
 static int iwl_mvm_mld_alloc_sta_link(struct iwl_mvm *mvm,
