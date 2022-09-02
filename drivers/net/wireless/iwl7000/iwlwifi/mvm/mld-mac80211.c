@@ -884,8 +884,7 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 		for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 			struct ieee80211_bss_conf *link_conf;
 
-			/* FIXME: allow use of sdata_dereference()? */
-			link_conf = rcu_dereference_protected(vif->link_conf[i], 1);
+			link_conf = link_conf_dereference_protected(vif, i);
 			if (link_conf &&
 			    rcu_access_pointer(link_conf->chanctx_conf))
 				n_active++;
