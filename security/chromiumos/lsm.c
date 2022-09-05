@@ -254,7 +254,7 @@ int chromiumos_sb_eat_lsm_opts(char *options, void **mnt_opts)
 	return 0;
 }
 
-int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
+static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
 {
 	struct file *file = bprm->file;
 
