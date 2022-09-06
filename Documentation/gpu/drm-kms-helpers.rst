@@ -226,7 +226,7 @@ Panel Self Refresh Helper Reference
 HDCP Helper Functions Reference
 ===============================
 
-.. kernel-doc:: drivers/gpu/drm/drm_hdcp.c
+.. kernel-doc:: drivers/gpu/drm/display/drm_hdcp_helper.c
    :export:
 
 Display Port Helper Functions Reference
@@ -234,6 +234,9 @@ Display Port Helper Functions Reference
 
 .. kernel-doc:: drivers/gpu/drm/display/drm_dp_helper.c
    :doc: dp helpers
+
+.. kernel-doc:: include/drm/display/drm_dp.h
+   :internal:
 
 .. kernel-doc:: include/drm/display/drm_dp_helper.h
    :internal:
@@ -323,13 +326,13 @@ MIPI DSI Helper Functions Reference
 Display Stream Compression Helper Functions Reference
 =====================================================
 
-.. kernel-doc:: drivers/gpu/drm/drm_dsc.c
+.. kernel-doc:: drivers/gpu/drm/display/drm_dsc_helper.c
    :doc: dsc helpers
 
-.. kernel-doc:: include/drm/drm_dsc.h
+.. kernel-doc:: include/drm/display/drm_dsc.h
    :internal:
 
-.. kernel-doc:: drivers/gpu/drm/drm_dsc.c
+.. kernel-doc:: drivers/gpu/drm/display/drm_dsc_helper.c
    :export:
 
 Output Probing Helper Functions Reference
@@ -353,13 +356,13 @@ EDID Helper Functions Reference
 SCDC Helper Functions Reference
 ===============================
 
-.. kernel-doc:: drivers/gpu/drm/drm_scdc_helper.c
+.. kernel-doc:: drivers/gpu/drm/display/drm_scdc_helper.c
    :doc: scdc helpers
 
-.. kernel-doc:: include/drm/drm_scdc_helper.h
+.. kernel-doc:: include/drm/display/drm_scdc_helper.h
    :internal:
 
-.. kernel-doc:: drivers/gpu/drm/drm_scdc_helper.c
+.. kernel-doc:: drivers/gpu/drm/display/drm_scdc_helper.c
    :export:
 
 HDMI Infoframes Helper Reference
