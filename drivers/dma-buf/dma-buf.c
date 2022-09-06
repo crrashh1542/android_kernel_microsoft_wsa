@@ -220,7 +220,8 @@ static bool dma_buf_poll_add_cb(struct dma_resv *resv, bool write,
 	struct dma_fence *fence;
 	int r;
 
-	dma_resv_for_each_fence(&cursor, resv, write, fence) {
+	dma_resv_for_each_fence(&cursor, resv, dma_resv_usage_rw(write),
+				fence) {
 		dma_fence_get(fence);
 		r = dma_fence_add_callback(fence, &dcb->cb, dma_buf_poll_cb);
 		if (!r)
@@ -334,6 +335,7 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 				     void __user *user_data)
 {
 	struct dma_buf_export_sync_file arg;
+	enum dma_resv_usage usage;
 	struct dma_fence *fence = NULL;
 	struct sync_file *sync_file;
 	int fd, ret;
@@ -351,15 +353,10 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 	if (fd < 0)
 		return fd;
 
-	if (arg.flags & DMA_BUF_SYNC_WRITE) {
-		fence = dma_resv_get_singleton(dmabuf->resv);
-		if (IS_ERR(fence)) {
-			ret = PTR_ERR(fence);
-			goto err_put_fd;
-		}
-	} else if (arg.flags & DMA_BUF_SYNC_READ) {
-		fence = dma_fence_get(dma_resv_excl_fence(dmabuf->resv));
-	}
+	usage = dma_resv_usage_rw(arg.flags & DMA_BUF_SYNC_WRITE);
+	ret = dma_resv_get_singleton(dmabuf->resv, usage, &fence);
+	if (ret)
+		goto err_put_fd;
 
 	if (!fence)
 		fence = dma_fence_get_stub();
@@ -373,14 +370,18 @@ static long dma_buf_export_sync_file(struct dma_buf *dmabuf,
 		goto err_put_fd;
 	}
 
-	fd_install(fd, sync_file->file);
-
 	arg.fd = fd;
-	if (copy_to_user(user_data, &arg, sizeof(arg)))
-		return -EFAULT;
+	if (copy_to_user(user_data, &arg, sizeof(arg))) {
+		ret = -EFAULT;
+		goto err_put_file;
+	}
+
+	fd_install(fd, sync_file->file);
 
 	return 0;
 
+err_put_file:
+	fput(sync_file->file);
 err_put_fd:
 	put_unused_fd(fd);
 	return ret;
@@ -518,7 +519,7 @@ err_alloc_file:
  *    as a file descriptor by calling dma_buf_fd().
  *
  * 2. Userspace passes this file-descriptors to all drivers it wants this buffer
- *    to share with: First the filedescriptor is converted to a &dma_buf using
+ *    to share with: First the file descriptor is converted to a &dma_buf using
  *    dma_buf_get(). Then the buffer is attached to the device using
  *    dma_buf_attach().
  *
@@ -735,12 +736,24 @@ static struct sg_table * __map_dma_buf(struct dma_buf_attachment *attach,
 				       enum dma_data_direction direction)
 {
 	struct sg_table *sg_table;
+	signed long ret;
 
 	sg_table = attach->dmabuf->ops->map_dma_buf(attach, direction);
+	if (IS_ERR_OR_NULL(sg_table))
+		return sg_table;
 
-	if (!IS_ERR_OR_NULL(sg_table))
-		mangle_sg_table(sg_table);
+	if (!dma_buf_attachment_is_dynamic(attach)) {
+		ret = dma_resv_wait_timeout(attach->dmabuf->resv,
+					    DMA_RESV_USAGE_KERNEL, true,
+					    MAX_SCHEDULE_TIMEOUT);
+		if (ret < 0) {
+			attach->dmabuf->ops->unmap_dma_buf(attach, sg_table,
+							   direction);
+			return ERR_PTR(ret);
+		}
+	}
 
+	mangle_sg_table(sg_table);
 	return sg_table;
 }
 
@@ -1199,7 +1212,8 @@ static int __dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 	long ret;
 
 	/* Wait on any implicit rendering fences */
-	ret = dma_resv_wait_timeout(resv, write, true, MAX_SCHEDULE_TIMEOUT);
+	ret = dma_resv_wait_timeout(resv, dma_resv_usage_rw(write),
+				    true, MAX_SCHEDULE_TIMEOUT);
 	if (ret < 0)
 		return ret;
 
