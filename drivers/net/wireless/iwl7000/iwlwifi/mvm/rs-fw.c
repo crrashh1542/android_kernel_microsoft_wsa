@@ -470,7 +470,7 @@ void iwl_mvm_tlc_update_notif(struct iwl_mvm *mvm,
 		IWL_DEBUG_RATE(mvm, "new rate: %s\n", pretty_rate);
 	}
 
-	if (flags & IWL_TLC_NOTIF_FLAG_AMSDU && !mvmsta->orig_amsdu_len) {
+	if (flags & IWL_TLC_NOTIF_FLAG_AMSDU && !mvm_link_sta->orig_amsdu_len) {
 		u16 size = le32_to_cpu(notif->amsdu_size);
 		int i;
 
@@ -480,7 +480,7 @@ void iwl_mvm_tlc_update_notif(struct iwl_mvm *mvm,
 			 * so also check with orig_amsdu_len which holds the
 			 * original data before debugfs changed the value
 			 */
-			WARN_ON(mvmsta->orig_amsdu_len < size);
+			WARN_ON(mvm_link_sta->orig_amsdu_len < size);
 			goto out;
 		}
 
