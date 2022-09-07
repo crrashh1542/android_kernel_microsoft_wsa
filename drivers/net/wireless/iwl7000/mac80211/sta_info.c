@@ -2202,7 +2202,7 @@ void ieee80211_sta_recalc_aggregates(struct ieee80211_sta *pubsta)
 {
 	struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
 
-	__ieee80211_sta_recalc_aggregates(sta, sta->sdata->vif.valid_links);
+	__ieee80211_sta_recalc_aggregates(sta, sta->sdata->vif.active_links);
 }
 EXPORT_SYMBOL(ieee80211_sta_recalc_aggregates);
 
