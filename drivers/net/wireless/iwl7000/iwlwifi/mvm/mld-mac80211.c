@@ -680,8 +680,12 @@ iwl_mvm_mld_link_info_changed_ap_ibss(struct iwl_mvm *mvm,
 	if (!mvmvif->ap_ibss_active)
 		return;
 
+	if (link_conf->he_support)
+		link_changes |= LINK_CONTEXT_MODIFY_HE_PARAMS;
+
 	if (changes & (BSS_CHANGED_ERP_CTS_PROT | BSS_CHANGED_HT |
-		       BSS_CHANGED_BANDWIDTH | BSS_CHANGED_QOS) &&
+		       BSS_CHANGED_BANDWIDTH | BSS_CHANGED_QOS |
+		       BSS_CHANGED_HE_BSS_COLOR) &&
 		       iwl_mvm_link_changed(mvm, vif, link_conf,
 					    link_changes, true))
 		IWL_ERR(mvm, "failed to update MAC %pM\n", vif->addr);
