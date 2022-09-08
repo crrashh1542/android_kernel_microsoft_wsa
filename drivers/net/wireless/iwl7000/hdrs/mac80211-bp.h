@@ -2247,6 +2247,7 @@ struct iwl7000_cfg80211_rx_assoc_resp {
 	struct {
 		const u8 *addr;
 		struct cfg80211_bss *bss;
+		u16 status;
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
 };
 
