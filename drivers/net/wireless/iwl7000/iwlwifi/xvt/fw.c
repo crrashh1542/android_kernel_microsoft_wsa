@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2021 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
 #include "iwl-trans.h"
@@ -221,7 +221,8 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	/* fresh firmware was loaded */
 	xvt->fw_error = false;
 
-	ret = iwl_pnvm_load(xvt->trans, &xvt->notif_wait);
+	ret = iwl_pnvm_load(xvt->trans, &xvt->notif_wait,
+			    &xvt->fw->ucode_capa);
 	if (ret) {
 		IWL_ERR(xvt, "Timeout waiting for PNVM load!\n");
 		iwl_fw_set_current_image(&xvt->fwrt, old_type);
