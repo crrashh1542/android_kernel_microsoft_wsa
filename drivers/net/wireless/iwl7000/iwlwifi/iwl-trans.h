@@ -487,6 +487,7 @@ struct iwl_pnvm_image {
 		u32 len;
 	} chunks[IPC_DRAM_MAP_ENTRY_NUM_MAX];
 	u32 n_chunks;
+	u32 version;
 };
 
 /**
@@ -1091,6 +1092,7 @@ struct iwl_trans {
 	bool pm_support;
 	bool ltr_enabled;
 	u8 pnvm_loaded:1;
+	u8 fail_to_parse_pnvm_image:1;
 	u8 reduce_power_loaded:1;
 
 	const struct iwl_hcmd_arr *command_groups;
