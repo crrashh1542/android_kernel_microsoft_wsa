@@ -1001,6 +1001,10 @@ struct ieee80211_link_data {
 	struct ieee80211_tx_queue_params tx_conf[IEEE80211_NUM_ACS];
 
 	struct ieee80211_bss_conf *conf;
+
+#ifdef CPTCFG_MAC80211_DEBUGFS
+	struct dentry *debugfs_dir;
+#endif
 };
 
 struct ieee80211_sub_if_data {
