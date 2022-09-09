@@ -3055,7 +3055,7 @@ static int ath11k_mac_config_obss_pd(struct ath11k *ar,
 		return ret;
 	}
 
-	/* Enable all patial BSSID mask for SRG */
+	/* Enable all partial BSSID mask for SRG */
 	ret = ath11k_wmi_pdev_srg_obss_bssid_enable_bitmap(ar, bitmap);
 	if (ret) {
 		ath11k_warn(ar->ab,
@@ -3073,7 +3073,7 @@ static int ath11k_mac_config_obss_pd(struct ath11k *ar,
 		return ret;
 	}
 
-	/* Enable all patial BSSID mask for non-SRG */
+	/* Enable all partial BSSID mask for non-SRG */
 	ret = ath11k_wmi_pdev_non_srg_obss_bssid_enable_bitmap(ar, bitmap);
 	if (ret) {
 		ath11k_warn(ar->ab,
