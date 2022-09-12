@@ -1511,7 +1511,7 @@ enum mt8186_lvts_sensor_enum {
 	MT8186_NUM_TS
 };
 
-void mt8186_device_enable_and_init(struct lvts_data *lvts_data)
+static void mt8186_device_enable_and_init(struct lvts_data *lvts_data)
 {
 	unsigned int i;
 
