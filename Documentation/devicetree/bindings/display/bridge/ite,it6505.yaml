@@ -52,6 +52,14 @@ properties:
     maxItems: 1
     description: extcon specifier for the Power Delivery
 
+  data-lanes:
+    maxItems: 1
+    description: restrict the dp output data-lanes with value of 1-4
+
+  max-pixel-clock-khz:
+    maxItems: 1
+    description: restrict max pixel clock
+
   port:
     $ref: /schemas/graph.yaml#/properties/port
     description: A port node pointing to DPI host port node
@@ -84,6 +92,8 @@ examples:
             pwr18-supply = <&it6505_pp18_reg>;
             reset-gpios = <&pio 179 1>;
             extcon = <&usbc_extcon>;
+            data-lanes = <2>;
+            max-pixel-clock-khz = <150000>;
 
             port {
                 it6505_in: endpoint {
