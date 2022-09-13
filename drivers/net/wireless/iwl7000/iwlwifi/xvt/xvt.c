@@ -792,19 +792,25 @@ void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
 	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
 
 	xvt->tx_meta_data[lmac_id].queue = -1;
+	xvt->tx_meta_data[lmac_id].sta_msk = 0;
 }
 
 int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
 			      u8 lmac_id)
 {
-	int ret, size = max_t(u32, IWL_DEFAULT_QUEUE_SIZE,
-			      xvt->trans->cfg->min_ba_txq_size);
+	int ret = 0;
+	int size = max_t(u32, IWL_DEFAULT_QUEUE_SIZE,
+			 xvt->trans->cfg->min_ba_txq_size);
+
+	if (xvt->tx_meta_data[lmac_id].sta_msk & BIT(sta_id))
+		return ret;
 
 	ret = iwl_trans_txq_alloc(xvt->trans, 0,
 				  BIT(sta_id), TX_QUEUE_CFG_TID, size, 0);
 	/* ret is positive when func returns the allocated the queue number */
 	if (ret > 0) {
 		xvt->tx_meta_data[lmac_id].queue = ret;
+		xvt->tx_meta_data[lmac_id].sta_msk |= BIT(sta_id);
 		ret = 0;
 	} else {
 		IWL_ERR(xvt, "failed to allocate queue\n");

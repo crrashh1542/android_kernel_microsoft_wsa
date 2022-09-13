@@ -47,6 +47,7 @@ enum iwl_xvt_state {
  * @mod_tx_done_wq: queue to wait on until all packets are sent and received
  * @txq_full: set to true when mod_tx_wq is full
  * @seq_num: sequence number of qos frames (per-tid)
+ * @sta_msk: station id mask
  */
 struct tx_meta_data {
 	struct task_struct *tx_mod_thread;
@@ -59,6 +60,7 @@ struct tx_meta_data {
 	wait_queue_head_t mod_tx_done_wq;
 	bool txq_full;
 	u16 seq_num[IWL_MAX_TID_COUNT];
+	u32 sta_msk;
 };
 
 /*
