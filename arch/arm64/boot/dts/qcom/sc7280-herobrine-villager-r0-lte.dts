@@ -5,10 +5,10 @@
  * Copyright 2022 Google LLC.
  */
 
-#include "sc7280-herobrine-villager-r1.dts"
+#include "sc7280-herobrine-villager-r0.dts"
 #include "sc7280-herobrine-lte-sku.dtsi"
 
 / {
-	model = "Google Villager (rev1+) with LTE";
-	compatible = "google,villager-sku0", "qcom,sc7280";
+	model = "Google Villager (rev0) with LTE";
+	compatible = "google,villager-rev0-sku0", "qcom,sc7280";
 };
