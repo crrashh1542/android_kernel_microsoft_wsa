@@ -22,7 +22,6 @@
 #include "clk-regmap-mux.h"
 #include "common.h"
 #include "gdsc.h"
-#include "reset.h"
 
 enum {
 	P_BI_TCXO,
@@ -222,7 +221,7 @@ static struct clk_rcg2 lpass_aon_cc_main_rcg_clk_src = {
 		.parent_data = lpass_aon_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(lpass_aon_cc_parent_data_0),
 		.flags = CLK_OPS_PARENT_ENABLE,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
 	},
 };
 
@@ -666,18 +665,6 @@ static const struct qcom_cc_desc lpass_audio_cc_sc7280_desc = {
 	.num_clks = ARRAY_SIZE(lpass_audio_cc_sc7280_clocks),
 };
 
-static const struct qcom_reset_map lpass_audio_cc_sc7280_resets[] = {
-	[LPASS_AUDIO_SWR_RX_CGCR] =  { 0xa0, 1 },
-	[LPASS_AUDIO_SWR_TX_CGCR] =  { 0xa8, 1 },
-	[LPASS_AUDIO_SWR_WSA_CGCR] = { 0xb0, 1 },
-};
-
-static const struct qcom_cc_desc lpass_audio_cc_reset_sc7280_desc = {
-	.config = &lpass_audio_cc_sc7280_regmap_config,
-	.resets = lpass_audio_cc_sc7280_resets,
-	.num_resets = ARRAY_SIZE(lpass_audio_cc_sc7280_resets),
-};
-
 static const struct of_device_id lpass_audio_cc_sc7280_match_table[] = {
 	{ .compatible = "qcom,sc7280-lpassaudiocc" },
 	{ }
@@ -753,8 +740,6 @@ static int lpass_audio_cc_sc7280_probe(struct platform_device *pdev)
 		pm_runtime_disable(&pdev->dev);
 		return ret;
 	}
-
-	ret = qcom_cc_probe_by_index(pdev, 1, &lpass_audio_cc_reset_sc7280_desc);
 
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
