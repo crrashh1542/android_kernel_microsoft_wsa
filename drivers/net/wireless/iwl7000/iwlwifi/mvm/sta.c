@@ -111,7 +111,7 @@ u8 iwl_mvm_get_sta_uapsd_acs(struct ieee80211_sta *sta)
 	if (sta->uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_VO)
 		uapsd_acs |= BIT(AC_VO);
 
-	return uapsd_acs << 4;
+	return uapsd_acs | uapsd_acs << 4;
 }
 
 /* send station add/update command to firmware */
