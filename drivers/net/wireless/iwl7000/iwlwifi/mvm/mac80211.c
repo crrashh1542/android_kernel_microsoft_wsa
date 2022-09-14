@@ -507,6 +507,8 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 
 	wiphy_ext_feature_set(hw->wiphy,
 			      NL80211_EXT_FEATURE_BEACON_RATE_LEGACY);
+	wiphy_ext_feature_set(hw->wiphy,
+			      NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT);
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,0,0)
 	if (fw_has_capa(&mvm->fw->ucode_capa,
