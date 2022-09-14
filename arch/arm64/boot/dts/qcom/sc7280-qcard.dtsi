@@ -31,37 +31,6 @@
 		wifi0 = &wifi;
 	};
 
-	wcd9385: audio-codec-1 {
-		compatible = "qcom,wcd9385-codec";
-		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&wcd_reset_n>, <&us_euro_hs_sel>;
-		pinctrl-1 = <&wcd_reset_n_sleep>, <&us_euro_hs_sel>;
-
-		reset-gpios = <&tlmm 83 GPIO_ACTIVE_HIGH>;
-		us-euro-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
-
-		qcom,rx-device = <&wcd_rx>;
-		qcom,tx-device = <&wcd_tx>;
-
-		vdd-rxtx-supply = <&vreg_l18b_1p8>;
-		vdd-io-supply = <&vreg_l18b_1p8>;
-		vdd-buck-supply = <&vreg_l17b_1p8>;
-		vdd-mic-bias-supply = <&vreg_bob>;
-
-		qcom,micbias1-microvolt = <1800000>;
-		qcom,micbias2-microvolt = <1800000>;
-		qcom,micbias3-microvolt = <1800000>;
-		qcom,micbias4-microvolt = <1800000>;
-
-		qcom,mbhc-buttons-vthreshold-microvolt = <75000 150000 237000 500000 500000
-							  500000 500000 500000>;
-		qcom,mbhc-headset-vthreshold-microvolt = <1700000>;
-		qcom,mbhc-headphone-vthreshold-microvolt = <50000>;
-		#sound-dai-cells = <1>;
-
-		status = "disabled";
-	};
-
 	pm8350c_pwm_backlight: backlight {
 		compatible = "pwm-backlight";
 		status = "disabled";
@@ -341,10 +310,6 @@
 	modem-init;
 };
 
-&lpass_va_macro {
-	vdd-micb-supply = <&vreg_bob>;
-};
-
 /* NOTE: Not all Qcards have eDP connector stuffed */
 &mdss_edp {
 	aux-bus {
@@ -412,24 +377,6 @@
 	non-removable;
 	no-sd;
 	no-sdio;
-};
-
-&swr0 {
-	wcd_rx: codec@0,4 {
-		compatible = "sdw20217010d00";
-		reg = <0 4>;
-		#sound-dai-cells = <1>;
-		qcom,rx-port-mapping = <1 2 3 4 5>;
-	};
-};
-
-&swr1 {
-	wcd_tx: codec@0,3 {
-		compatible = "sdw20217010d00";
-		reg = <0 3>;
-		#sound-dai-cells = <1>;
-		qcom,tx-port-mapping = <1 2 3 4>;
-	};
 };
 
 uart_dbg: &uart5 {
@@ -662,26 +609,5 @@ mos_bt_uart: &uart7 {
 		pins = "gpio54";
 		function = "gpio";
 		drive-strength = <2>;
-	};
-
-	us_euro_hs_sel: us-euro-hs-sel {
-		pins = "gpio81";
-		function = "gpio";
-		bias-pull-down;
-		drive-strength = <2>;
-	};
-
-	wcd_reset_n: wcd-reset-n {
-		pins = "gpio83";
-		function = "gpio";
-		drive-strength = <8>;
-		output-high;
-	};
-
-	wcd_reset_n_sleep: wcd-reset-n-sleep {
-		pins = "gpio83";
-		function = "gpio";
-		drive-strength = <8>;
-		bias-disable;
 	};
 };
