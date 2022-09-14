@@ -2055,6 +2055,7 @@
 			clocks = <&gcc GCC_CFG_NOC_LPASS_CLK>;
 			clock-names = "iface";
 			#clock-cells = <1>;
+			status = "disabled";
 		};
 
 		lpass_rx_macro: codec@3200000 {
@@ -2167,7 +2168,8 @@
 
 		lpass_audiocc: clock-controller@3300000 {
 			compatible = "qcom,sc7280-lpassaudiocc";
-			reg = <0 0x03300000 0 0x30000>;
+			reg = <0 0x03300000 0 0x30000>,
+			      <0 0x032a9000 0 0x1000>;
 			clocks = <&rpmhcc RPMH_CXO_CLK>,
 			       <&lpass_aon LPASS_AON_CC_MAIN_RCG_CLK_SRC>;
 			clock-names = "bi_tcxo", "lpass_aon_cc_main_rcg_clk_src";
@@ -2253,7 +2255,7 @@
 				 <&lpass_audiocc LPASS_AUDIO_CC_CODEC_MEM2_CLK>,
 				 <&lpass_aon LPASS_AON_CC_VA_MEM0_CLK>;
 			clock-names = "aon_cc_audio_hm_h",
-				      "audio_cc_ext_mclk0",
+				      "core_cc_ext_mclk0",
 				      "core_cc_sysnoc_mport_core",
 				      "core_cc_ext_if0_ibit",
 				      "core_cc_ext_if1_ibit",
