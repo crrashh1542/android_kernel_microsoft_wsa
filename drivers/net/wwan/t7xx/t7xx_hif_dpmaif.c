@@ -1,42 +1,54 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, MediaTek Inc.
- * Copyright (c) 2021, Intel Corporation.
+ * Copyright (c) 2021-2022, Intel Corporation.
+ *
+ * Authors:
+ *  Amir Hanania <amir.hanania@intel.com>
+ *  Haijun Liu <haijun.liu@mediatek.com>
+ *  Moises Veleta <moises.veleta@intel.com>
+ *  Ricardo Martinez <ricardo.martinez@linux.intel.com>
+ *
+ * Contributors:
+ *  Chiranjeevi Rapolu <chiranjeevi.rapolu@intel.com>
+ *  Eliot Lee <eliot.lee@intel.com>
+ *  Sreehari Kancharla <sreehari.kancharla@intel.com>
  */
 
+#include <linux/device.h>
+#include <linux/gfp.h>
+#include <linux/irqreturn.h>
 #include <linux/kernel.h>
-#include <linux/kthread.h>
 #include <linux/list.h>
-#include <linux/module.h>
-#include <linux/netdevice.h>
-#include <linux/sched.h>
-#include <linux/skbuff.h>
-#include <linux/spinlock.h>
+#include <linux/string.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 
-#include "t7xx_common.h"
 #include "t7xx_dpmaif.h"
 #include "t7xx_hif_dpmaif.h"
 #include "t7xx_hif_dpmaif_rx.h"
 #include "t7xx_hif_dpmaif_tx.h"
+#include "t7xx_netdev.h"
+#include "t7xx_pci.h"
 #include "t7xx_pcie_mac.h"
+#include "t7xx_state_monitor.h"
 
-unsigned int ring_buf_get_next_wrdx(unsigned int buf_len, unsigned int buf_idx)
+unsigned int t7xx_ring_buf_get_next_wr_idx(unsigned int buf_len, unsigned int buf_idx)
 {
 	buf_idx++;
 
 	return buf_idx < buf_len ? buf_idx : 0;
 }
 
-unsigned int ring_buf_read_write_count(unsigned int total_cnt, unsigned int rd_idx,
-				       unsigned int wrt_idx, bool rd_wrt)
+unsigned int t7xx_ring_buf_rd_wr_count(unsigned int total_cnt, unsigned int rd_idx,
+				       unsigned int wr_idx, enum dpmaif_rdwr rd_wr)
 {
 	int pkt_cnt;
 
-	if (rd_wrt)
-		pkt_cnt = wrt_idx - rd_idx;
+	if (rd_wr == DPMAIF_READ)
+		pkt_cnt = wr_idx - rd_idx;
 	else
-		pkt_cnt = rd_idx - wrt_idx - 1;
+		pkt_cnt = rd_idx - wr_idx - 1;
 
 	if (pkt_cnt < 0)
 		pkt_cnt += total_cnt;
@@ -44,129 +56,116 @@ unsigned int ring_buf_read_write_count(unsigned int total_cnt, unsigned int rd_i
 	return (unsigned int)pkt_cnt;
 }
 
-static void dpmaif_enable_irq(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_enable_irq(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_isr_para *isr_para;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(dpmaif_ctrl->isr_para); i++) {
 		isr_para = &dpmaif_ctrl->isr_para[i];
-		mtk_pcie_mac_set_int(dpmaif_ctrl->mtk_dev, isr_para->pcie_int);
+		t7xx_pcie_mac_set_int(dpmaif_ctrl->t7xx_dev, isr_para->pcie_int);
 	}
 }
 
-static void dpmaif_disable_irq(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_disable_irq(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_isr_para *isr_para;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(dpmaif_ctrl->isr_para); i++) {
 		isr_para = &dpmaif_ctrl->isr_para[i];
-		mtk_pcie_mac_clear_int(dpmaif_ctrl->mtk_dev, isr_para->pcie_int);
+		t7xx_pcie_mac_clear_int(dpmaif_ctrl->t7xx_dev, isr_para->pcie_int);
 	}
 }
 
-static void dpmaif_irq_cb(struct dpmaif_isr_para *isr_para)
+static void t7xx_dpmaif_irq_cb(struct dpmaif_isr_para *isr_para)
 {
+	struct dpmaif_ctrl *dpmaif_ctrl = isr_para->dpmaif_ctrl;
 	struct dpmaif_hw_intr_st_para intr_status;
-	struct dpmaif_ctrl *dpmaif_ctrl;
-	struct device *dev;
+	struct device *dev = dpmaif_ctrl->dev;
+	struct dpmaif_hw_info *hw_info;
 	int i;
 
-	dpmaif_ctrl = isr_para->dpmaif_ctrl;
-	dev = dpmaif_ctrl->dev;
 	memset(&intr_status, 0, sizeof(intr_status));
+	hw_info = &dpmaif_ctrl->hw_info;
 
-	/* gets HW interrupt types */
-	if (dpmaif_hw_get_interrupt_status(dpmaif_ctrl, &intr_status, isr_para->dlq_id) < 0) {
-		dev_err(dev, "Get HW interrupt status failed!\n");
+	if (t7xx_dpmaif_hw_get_intr_cnt(hw_info, &intr_status, isr_para->dlq_id) < 0) {
+		dev_err(dev, "Failed to get HW interrupt count\n");
 		return;
 	}
 
-	/* Clear level 1 interrupt status */
-	/* Clear level 2 DPMAIF interrupt status first,
-	 * then clear level 1 PCIe interrupt status
-	 * to avoid an empty interrupt.
-	 */
-	mtk_pcie_mac_clear_int_status(dpmaif_ctrl->mtk_dev, isr_para->pcie_int);
+	t7xx_pcie_mac_clear_int_status(dpmaif_ctrl->t7xx_dev, isr_para->pcie_int);
 
-	/* handles interrupts */
 	for (i = 0; i < intr_status.intr_cnt; i++) {
 		switch (intr_status.intr_types[i]) {
 		case DPF_INTR_UL_DONE:
-			dpmaif_irq_tx_done(dpmaif_ctrl, intr_status.intr_queues[i]);
+			t7xx_dpmaif_irq_tx_done(dpmaif_ctrl, intr_status.intr_queues[i]);
 			break;
 
 		case DPF_INTR_UL_DRB_EMPTY:
 		case DPF_INTR_UL_MD_NOTREADY:
 		case DPF_INTR_UL_MD_PWR_NOTREADY:
-			/* no need to log an error for these cases. */
+			/* No need to log an error for these */
 			break;
 
 		case DPF_INTR_DL_BATCNT_LEN_ERR:
-			dev_err_ratelimited(dev, "DL interrupt: packet BAT count length error!\n");
-			dpmaif_unmask_dl_batcnt_len_err_interrupt(&dpmaif_ctrl->hif_hw_info);
+			dev_err_ratelimited(dev, "DL interrupt: packet BAT count length error\n");
+			t7xx_dpmaif_dl_unmask_batcnt_len_err_intr(hw_info);
 			break;
 
 		case DPF_INTR_DL_PITCNT_LEN_ERR:
-			dev_err_ratelimited(dev, "DL interrupt: PIT count length error!\n");
-			dpmaif_unmask_dl_pitcnt_len_err_interrupt(&dpmaif_ctrl->hif_hw_info);
+			dev_err_ratelimited(dev, "DL interrupt: PIT count length error\n");
+			t7xx_dpmaif_dl_unmask_pitcnt_len_err_intr(hw_info);
 			break;
 
-		case DPF_DL_INT_DLQ0_PITCNT_LEN_ERR:
-			dev_err_ratelimited(dev, "DL interrupt: DLQ0 PIT count length error!\n");
-			dpmaif_dlq_unmask_rx_pitcnt_len_err_intr(&dpmaif_ctrl->hif_hw_info,
-								 DPF_RX_QNO_DFT);
+		case DPF_INTR_DL_Q0_PITCNT_LEN_ERR:
+			dev_err_ratelimited(dev, "DL interrupt: DLQ0 PIT count length error\n");
+			t7xx_dpmaif_dlq_unmask_pitcnt_len_err_intr(hw_info, DPF_RX_QNO_DFT);
 			break;
 
-		case DPF_DL_INT_DLQ1_PITCNT_LEN_ERR:
-			dev_err_ratelimited(dev, "DL interrupt: DLQ1 PIT count length error!\n");
-			dpmaif_dlq_unmask_rx_pitcnt_len_err_intr(&dpmaif_ctrl->hif_hw_info,
-								 DPF_RX_QNO1);
+		case DPF_INTR_DL_Q1_PITCNT_LEN_ERR:
+			dev_err_ratelimited(dev, "DL interrupt: DLQ1 PIT count length error\n");
+			t7xx_dpmaif_dlq_unmask_pitcnt_len_err_intr(hw_info, DPF_RX_QNO1);
 			break;
 
 		case DPF_INTR_DL_DONE:
-		case DPF_INTR_DL_DLQ0_DONE:
-		case DPF_INTR_DL_DLQ1_DONE:
-			dpmaif_irq_rx_done(dpmaif_ctrl, intr_status.intr_queues[i]);
+		case DPF_INTR_DL_Q0_DONE:
+		case DPF_INTR_DL_Q1_DONE:
+			t7xx_dpmaif_irq_rx_done(dpmaif_ctrl, intr_status.intr_queues[i]);
 			break;
 
 		default:
-			dev_err_ratelimited(dev, "DL interrupt error: type : %d\n",
+			dev_err_ratelimited(dev, "DL interrupt error: unknown type : %d\n",
 					    intr_status.intr_types[i]);
 		}
 	}
 }
 
-static irqreturn_t dpmaif_isr_handler(int irq, void *data)
+static irqreturn_t t7xx_dpmaif_isr_handler(int irq, void *data)
 {
+	struct dpmaif_isr_para *isr_para = data;
 	struct dpmaif_ctrl *dpmaif_ctrl;
-	struct dpmaif_isr_para *isr_para;
 
-	isr_para = data;
 	dpmaif_ctrl = isr_para->dpmaif_ctrl;
-
 	if (dpmaif_ctrl->state != DPMAIF_STATE_PWRON) {
-		dev_err(dpmaif_ctrl->dev, "interrupt received before initializing DPMAIF\n");
+		dev_err(dpmaif_ctrl->dev, "Interrupt received before initializing DPMAIF\n");
 		return IRQ_HANDLED;
 	}
 
-	mtk_pcie_mac_clear_int(dpmaif_ctrl->mtk_dev, isr_para->pcie_int);
-	dpmaif_irq_cb(isr_para);
-	mtk_pcie_mac_set_int(dpmaif_ctrl->mtk_dev, isr_para->pcie_int);
+	t7xx_pcie_mac_clear_int(dpmaif_ctrl->t7xx_dev, isr_para->pcie_int);
+	t7xx_dpmaif_irq_cb(isr_para);
+	t7xx_pcie_mac_set_int(dpmaif_ctrl->t7xx_dev, isr_para->pcie_int);
 	return IRQ_HANDLED;
 }
 
-static void dpmaif_isr_parameter_init(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_isr_parameter_init(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_isr_para *isr_para;
 	unsigned char i;
 
-	/* set up the RXQ and isr relation */
 	dpmaif_ctrl->rxq_int_mapping[DPF_RX_QNO0] = DPMAIF_INT;
 	dpmaif_ctrl->rxq_int_mapping[DPF_RX_QNO1] = DPMAIF2_INT;
 
-	/* init the isr parameter */
 	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
 		isr_para = &dpmaif_ctrl->isr_para[i];
 		isr_para->dpmaif_ctrl = dpmaif_ctrl;
@@ -175,161 +174,123 @@ static void dpmaif_isr_parameter_init(struct dpmaif_ctrl *dpmaif_ctrl)
 	}
 }
 
-static void dpmaif_platform_irq_init(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_register_pcie_irq(struct dpmaif_ctrl *dpmaif_ctrl)
 {
+	struct t7xx_pci_dev *t7xx_dev = dpmaif_ctrl->t7xx_dev;
 	struct dpmaif_isr_para *isr_para;
-	struct mtk_pci_dev *mtk_dev;
-	enum pcie_int int_type;
+	enum t7xx_int int_type;
 	int i;
 
-	mtk_dev = dpmaif_ctrl->mtk_dev;
-	/* PCIe isr parameter init */
-	dpmaif_isr_parameter_init(dpmaif_ctrl);
+	t7xx_dpmaif_isr_parameter_init(dpmaif_ctrl);
 
-	/* register isr */
 	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
 		isr_para = &dpmaif_ctrl->isr_para[i];
 		int_type = isr_para->pcie_int;
-		mtk_pcie_mac_clear_int(mtk_dev, int_type);
+		t7xx_pcie_mac_clear_int(t7xx_dev, int_type);
 
-		mtk_dev->intr_handler[int_type] = dpmaif_isr_handler;
-		mtk_dev->intr_thread[int_type] = NULL;
-		mtk_dev->callback_param[int_type] = isr_para;
+		t7xx_dev->intr_handler[int_type] = t7xx_dpmaif_isr_handler;
+		t7xx_dev->intr_thread[int_type] = NULL;
+		t7xx_dev->callback_param[int_type] = isr_para;
 
-		mtk_pcie_mac_clear_int_status(mtk_dev, int_type);
-		mtk_pcie_mac_set_int(mtk_dev, int_type);
+		t7xx_pcie_mac_clear_int_status(t7xx_dev, int_type);
+		t7xx_pcie_mac_set_int(t7xx_dev, int_type);
 	}
 }
 
-static void dpmaif_skb_pool_free(struct dpmaif_ctrl *dpmaif_ctrl)
-{
-	struct dpmaif_skb_pool *pool;
-	unsigned int i;
-
-	pool = &dpmaif_ctrl->skb_pool;
-	flush_work(&pool->reload_work);
-
-	if (pool->reload_work_queue) {
-		destroy_workqueue(pool->reload_work_queue);
-		pool->reload_work_queue = NULL;
-	}
-
-	for (i = 0; i < DPMA_SKB_QUEUE_CNT; i++)
-		dpmaif_skb_queue_free(dpmaif_ctrl, i);
-}
-
-/* we put initializations which takes too much time here: SW init only */
-static int dpmaif_sw_init(struct dpmaif_ctrl *dpmaif_ctrl)
+static int t7xx_dpmaif_rxtx_sw_allocs(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_rx_queue *rx_q;
 	struct dpmaif_tx_queue *tx_q;
-	int ret, i, j;
+	int ret, rx_idx, tx_idx, i;
 
-	/* RX normal BAT table init */
-	ret = dpmaif_bat_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_req, BAT_TYPE_NORMAL);
+	ret = t7xx_dpmaif_bat_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_req, BAT_TYPE_NORMAL);
 	if (ret) {
-		dev_err(dpmaif_ctrl->dev, "normal BAT table init fail, %d!\n", ret);
+		dev_err(dpmaif_ctrl->dev, "Failed to allocate normal BAT table: %d\n", ret);
 		return ret;
 	}
 
-	/* RX frag BAT table init */
-	ret = dpmaif_bat_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_frag, BAT_TYPE_FRAG);
+	ret = t7xx_dpmaif_bat_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_frag, BAT_TYPE_FRAG);
 	if (ret) {
-		dev_err(dpmaif_ctrl->dev, "frag BAT table init fail, %d!\n", ret);
-		goto bat_frag_err;
+		dev_err(dpmaif_ctrl->dev, "Failed to allocate frag BAT table: %d\n", ret);
+		goto err_free_normal_bat;
 	}
 
-	/* dpmaif RXQ resource init */
-	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
-		rx_q = &dpmaif_ctrl->rxq[i];
-		rx_q->index = i;
+	for (rx_idx = 0; rx_idx < DPMAIF_RXQ_NUM; rx_idx++) {
+		rx_q = &dpmaif_ctrl->rxq[rx_idx];
+		rx_q->index = rx_idx;
 		rx_q->dpmaif_ctrl = dpmaif_ctrl;
-		ret = dpmaif_rxq_alloc(rx_q);
+		ret = t7xx_dpmaif_rxq_init(rx_q);
 		if (ret)
-			goto rxq_init_err;
+			goto err_free_rxq;
 	}
 
-	/* dpmaif TXQ resource init */
-	for (i = 0; i < DPMAIF_TXQ_NUM; i++) {
-		tx_q = &dpmaif_ctrl->txq[i];
-		tx_q->index = i;
+	for (tx_idx = 0; tx_idx < DPMAIF_TXQ_NUM; tx_idx++) {
+		tx_q = &dpmaif_ctrl->txq[tx_idx];
+		tx_q->index = tx_idx;
 		tx_q->dpmaif_ctrl = dpmaif_ctrl;
-		ret = dpmaif_txq_init(tx_q);
+		ret = t7xx_dpmaif_txq_init(tx_q);
 		if (ret)
-			goto txq_init_err;
+			goto err_free_txq;
 	}
 
-	/* Init TX thread: send skb data to dpmaif HW */
-	ret = dpmaif_tx_thread_init(dpmaif_ctrl);
-	if (ret)
-		goto tx_thread_err;
+	ret = t7xx_dpmaif_tx_thread_init(dpmaif_ctrl);
+	if (ret) {
+		dev_err(dpmaif_ctrl->dev, "Failed to start TX thread\n");
+		goto err_free_txq;
+	}
 
-	/* Init the RX skb pool */
-	ret = dpmaif_skb_pool_init(dpmaif_ctrl);
+	ret = t7xx_dpmaif_bat_rel_wq_alloc(dpmaif_ctrl);
 	if (ret)
-		goto pool_init_err;
-
-	/* Init BAT rel workqueue */
-	ret = dpmaif_bat_release_work_alloc(dpmaif_ctrl);
-	if (ret)
-		goto bat_work_init_err;
+		goto err_thread_rel;
 
 	return 0;
 
-bat_work_init_err:
-	dpmaif_skb_pool_free(dpmaif_ctrl);
-pool_init_err:
-	dpmaif_tx_thread_release(dpmaif_ctrl);
-tx_thread_err:
-	i = DPMAIF_TXQ_NUM;
-txq_init_err:
-	for (j = 0; j < i; j++) {
-		tx_q = &dpmaif_ctrl->txq[j];
-		dpmaif_txq_free(tx_q);
+err_thread_rel:
+	t7xx_dpmaif_tx_thread_rel(dpmaif_ctrl);
+
+err_free_txq:
+	for (i = 0; i < tx_idx; i++) {
+		tx_q = &dpmaif_ctrl->txq[i];
+		t7xx_dpmaif_txq_free(tx_q);
 	}
 
-	i = DPMAIF_RXQ_NUM;
-rxq_init_err:
-	for (j = 0; j < i; j++) {
-		rx_q = &dpmaif_ctrl->rxq[j];
-		dpmaif_rxq_free(rx_q);
+err_free_rxq:
+	for (i = 0; i < rx_idx; i++) {
+		rx_q = &dpmaif_ctrl->rxq[i];
+		t7xx_dpmaif_rxq_free(rx_q);
 	}
 
-	dpmaif_bat_free(dpmaif_ctrl, &dpmaif_ctrl->bat_frag);
-bat_frag_err:
-	dpmaif_bat_free(dpmaif_ctrl, &dpmaif_ctrl->bat_req);
+	t7xx_dpmaif_bat_free(dpmaif_ctrl, &dpmaif_ctrl->bat_frag);
+
+err_free_normal_bat:
+	t7xx_dpmaif_bat_free(dpmaif_ctrl, &dpmaif_ctrl->bat_req);
 
 	return ret;
 }
 
-static void dpmaif_sw_release(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_sw_release(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_rx_queue *rx_q;
 	struct dpmaif_tx_queue *tx_q;
 	int i;
 
-	/* release the tx thread */
-	dpmaif_tx_thread_release(dpmaif_ctrl);
-
-	/* release the BAT release workqueue */
-	dpmaif_bat_release_work_free(dpmaif_ctrl);
+	t7xx_dpmaif_tx_thread_rel(dpmaif_ctrl);
+	t7xx_dpmaif_bat_wq_rel(dpmaif_ctrl);
 
 	for (i = 0; i < DPMAIF_TXQ_NUM; i++) {
 		tx_q = &dpmaif_ctrl->txq[i];
-		dpmaif_txq_free(tx_q);
+		t7xx_dpmaif_txq_free(tx_q);
 	}
 
 	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
 		rx_q = &dpmaif_ctrl->rxq[i];
-		dpmaif_rxq_free(rx_q);
+		t7xx_dpmaif_rxq_free(rx_q);
 	}
-
-	/* release the skb pool */
-	dpmaif_skb_pool_free(dpmaif_ctrl);
 }
 
-static int dpmaif_start(struct dpmaif_ctrl *dpmaif_ctrl)
+static int t7xx_dpmaif_start(struct dpmaif_ctrl *dpmaif_ctrl)
 {
+	struct dpmaif_hw_info *hw_info = &dpmaif_ctrl->hw_info;
 	struct dpmaif_hw_params hw_init_para;
 	struct dpmaif_rx_queue *rxq;
 	struct dpmaif_tx_queue *txq;
@@ -341,14 +302,12 @@ static int dpmaif_start(struct dpmaif_ctrl *dpmaif_ctrl)
 
 	memset(&hw_init_para, 0, sizeof(hw_init_para));
 
-	/* rx */
 	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
 		rxq = &dpmaif_ctrl->rxq[i];
 		rxq->que_started = true;
 		rxq->index = i;
 		rxq->budget = rxq->bat_req->bat_size_cnt - 1;
 
-		/* DPMAIF HW RX queue init parameter */
 		hw_init_para.pkt_bat_base_addr[i] = rxq->bat_req->bat_bus_addr;
 		hw_init_para.pkt_bat_size_cnt[i] = rxq->bat_req->bat_size_cnt;
 		hw_init_para.pit_base_addr[i] = rxq->pit_bus_addr;
@@ -357,79 +316,72 @@ static int dpmaif_start(struct dpmaif_ctrl *dpmaif_ctrl)
 		hw_init_para.frg_bat_size_cnt[i] = rxq->bat_frag->bat_size_cnt;
 	}
 
-	/* rx normal BAT mask init */
-	memset(dpmaif_ctrl->bat_req.bat_mask, 0,
-	       dpmaif_ctrl->bat_req.bat_size_cnt * sizeof(unsigned char));
-	/* normal BAT - skb buffer and submit BAT */
+	bitmap_zero(dpmaif_ctrl->bat_req.bat_bitmap, dpmaif_ctrl->bat_req.bat_size_cnt);
 	buf_cnt = dpmaif_ctrl->bat_req.bat_size_cnt - 1;
-	ret = dpmaif_rx_buf_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_req, 0, buf_cnt, true);
+	ret = t7xx_dpmaif_rx_buf_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_req, 0, buf_cnt, true);
 	if (ret) {
-		dev_err(dpmaif_ctrl->dev, "dpmaif_rx_buf_alloc fail, ret:%d\n", ret);
+		dev_err(dpmaif_ctrl->dev, "Failed to allocate RX buffer: %d\n", ret);
 		return ret;
 	}
 
-	/* frag BAT - page buffer init */
 	buf_cnt = dpmaif_ctrl->bat_frag.bat_size_cnt - 1;
-	ret = dpmaif_rx_frag_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_frag, 0, buf_cnt, true);
+	ret = t7xx_dpmaif_rx_frag_alloc(dpmaif_ctrl, &dpmaif_ctrl->bat_frag, buf_cnt, true);
 	if (ret) {
-		dev_err(dpmaif_ctrl->dev, "dpmaif_rx_frag_alloc fail, ret:%d\n", ret);
-		goto err_bat;
+		dev_err(dpmaif_ctrl->dev, "Failed to allocate frag RX buffer: %d\n", ret);
+		goto err_free_normal_bat;
 	}
 
-	/* tx */
 	for (i = 0; i < DPMAIF_TXQ_NUM; i++) {
 		txq = &dpmaif_ctrl->txq[i];
 		txq->que_started = true;
 
-		/* DPMAIF HW TX queue init parameter */
 		hw_init_para.drb_base_addr[i] = txq->drb_bus_addr;
 		hw_init_para.drb_size_cnt[i] = txq->drb_size_cnt;
 	}
 
-	ret = dpmaif_hw_init(dpmaif_ctrl, &hw_init_para);
+	ret = t7xx_dpmaif_hw_init(hw_info, &hw_init_para);
 	if (ret) {
-		dev_err(dpmaif_ctrl->dev, "dpmaif_hw_init fail, ret:%d\n", ret);
-		goto err_frag;
+		dev_err(dpmaif_ctrl->dev, "Failed to initialize DPMAIF HW: %d\n", ret);
+		goto err_free_frag_bat;
 	}
 
-	/* notifies DPMAIF HW for available BAT count */
-	ret = dpmaif_dl_add_bat_cnt(dpmaif_ctrl, 0, rxq->bat_req->bat_size_cnt - 1);
+	ret = t7xx_dpmaif_dl_snd_hw_bat_cnt(hw_info, rxq->bat_req->bat_size_cnt - 1);
 	if (ret)
-		goto err_frag;
+		goto err_free_frag_bat;
 
-	ret = dpmaif_dl_add_frg_cnt(dpmaif_ctrl, 0, rxq->bat_frag->bat_size_cnt - 1);
+	ret = t7xx_dpmaif_dl_snd_hw_frg_cnt(hw_info, rxq->bat_frag->bat_size_cnt - 1);
 	if (ret)
-		goto err_frag;
+		goto err_free_frag_bat;
 
-	dpmaif_clr_ul_all_interrupt(&dpmaif_ctrl->hif_hw_info);
-	dpmaif_clr_dl_all_interrupt(&dpmaif_ctrl->hif_hw_info);
-
+	t7xx_dpmaif_ul_clr_all_intr(hw_info);
+	t7xx_dpmaif_dl_clr_all_intr(hw_info);
 	dpmaif_ctrl->state = DPMAIF_STATE_PWRON;
-	dpmaif_enable_irq(dpmaif_ctrl);
-
-	/* wake up the dpmaif tx thread */
+	t7xx_dpmaif_enable_irq(dpmaif_ctrl);
 	wake_up(&dpmaif_ctrl->tx_wq);
 	return 0;
-err_frag:
-	dpmaif_bat_free(rxq->dpmaif_ctrl, rxq->bat_frag);
-err_bat:
-	dpmaif_bat_free(rxq->dpmaif_ctrl, rxq->bat_req);
+
+err_free_frag_bat:
+	t7xx_dpmaif_bat_free(rxq->dpmaif_ctrl, rxq->bat_frag);
+
+err_free_normal_bat:
+	t7xx_dpmaif_bat_free(rxq->dpmaif_ctrl, rxq->bat_req);
+
 	return ret;
 }
 
-static void dpmaif_pos_stop_hw(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_stop_sw(struct dpmaif_ctrl *dpmaif_ctrl)
 {
-	dpmaif_suspend_tx_sw_stop(dpmaif_ctrl);
-	dpmaif_suspend_rx_sw_stop(dpmaif_ctrl);
+	t7xx_dpmaif_tx_stop(dpmaif_ctrl);
+	t7xx_dpmaif_rx_stop(dpmaif_ctrl);
 }
 
-static void dpmaif_stop_hw(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_stop_hw(struct dpmaif_ctrl *dpmaif_ctrl)
 {
-	dpmaif_hw_stop_tx_queue(dpmaif_ctrl);
-	dpmaif_hw_stop_rx_queue(dpmaif_ctrl);
+	t7xx_dpmaif_hw_stop_all_txq(&dpmaif_ctrl->hw_info);
+	t7xx_dpmaif_hw_stop_all_rxq(&dpmaif_ctrl->hw_info);
 }
 
-static int dpmaif_stop(struct dpmaif_ctrl *dpmaif_ctrl)
+static int t7xx_dpmaif_stop(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	if (!dpmaif_ctrl->dpmaif_sw_init_done) {
 		dev_err(dpmaif_ctrl->dev, "dpmaif SW init fail\n");
@@ -439,126 +391,117 @@ static int dpmaif_stop(struct dpmaif_ctrl *dpmaif_ctrl)
 	if (dpmaif_ctrl->state == DPMAIF_STATE_PWROFF)
 		return -EFAULT;
 
-	dpmaif_disable_irq(dpmaif_ctrl);
+	t7xx_dpmaif_disable_irq(dpmaif_ctrl);
 	dpmaif_ctrl->state = DPMAIF_STATE_PWROFF;
-	dpmaif_pos_stop_hw(dpmaif_ctrl);
-	flush_work(&dpmaif_ctrl->skb_pool.reload_work);
-	dpmaif_stop_tx_sw(dpmaif_ctrl);
-	dpmaif_stop_rx_sw(dpmaif_ctrl);
+	t7xx_dpmaif_stop_sw(dpmaif_ctrl);
+	t7xx_dpmaif_tx_clear(dpmaif_ctrl);
+	t7xx_dpmaif_rx_clear(dpmaif_ctrl);
 	return 0;
 }
 
-static int dpmaif_suspend(struct mtk_pci_dev *mtk_dev, void *param)
+static int t7xx_dpmaif_suspend(struct t7xx_pci_dev *t7xx_dev, void *param)
 {
-	struct dpmaif_ctrl *dpmaif_ctrl;
+	struct dpmaif_ctrl *dpmaif_ctrl = param;
 
-	dpmaif_ctrl = param;
-	dpmaif_suspend_tx_sw_stop(dpmaif_ctrl);
-	dpmaif_hw_stop_tx_queue(dpmaif_ctrl);
-	dpmaif_hw_stop_rx_queue(dpmaif_ctrl);
-	dpmaif_disable_irq(dpmaif_ctrl);
-	dpmaif_suspend_rx_sw_stop(dpmaif_ctrl);
+	t7xx_dpmaif_tx_stop(dpmaif_ctrl);
+	t7xx_dpmaif_hw_stop_all_txq(&dpmaif_ctrl->hw_info);
+	t7xx_dpmaif_hw_stop_all_rxq(&dpmaif_ctrl->hw_info);
+	t7xx_dpmaif_disable_irq(dpmaif_ctrl);
+	t7xx_dpmaif_rx_stop(dpmaif_ctrl);
 	return 0;
 }
 
-static void dpmaif_unmask_dlq_interrupt(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_unmask_dlq_intr(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	int qno;
 
 	for (qno = 0; qno < DPMAIF_RXQ_NUM; qno++)
-		dpmaif_hw_dlq_unmask_rx_done(&dpmaif_ctrl->hif_hw_info, qno);
+		t7xx_dpmaif_dlq_unmask_rx_done(&dpmaif_ctrl->hw_info, qno);
 }
 
-static void dpmaif_pre_start_hw(struct dpmaif_ctrl *dpmaif_ctrl)
+static void t7xx_dpmaif_start_txrx_qs(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	struct dpmaif_rx_queue *rxq;
 	struct dpmaif_tx_queue *txq;
 	unsigned int que_cnt;
 
-	/* Enable UL SW active */
 	for (que_cnt = 0; que_cnt < DPMAIF_TXQ_NUM; que_cnt++) {
 		txq = &dpmaif_ctrl->txq[que_cnt];
 		txq->que_started = true;
 	}
 
-	/* Enable DL/RX SW active */
 	for (que_cnt = 0; que_cnt < DPMAIF_RXQ_NUM; que_cnt++) {
 		rxq = &dpmaif_ctrl->rxq[que_cnt];
 		rxq->que_started = true;
 	}
 }
 
-static int dpmaif_resume(struct mtk_pci_dev *mtk_dev, void *param)
+static int t7xx_dpmaif_resume(struct t7xx_pci_dev *t7xx_dev, void *param)
 {
-	struct dpmaif_ctrl *dpmaif_ctrl;
+	struct dpmaif_ctrl *dpmaif_ctrl = param;
 
-	dpmaif_ctrl = param;
 	if (!dpmaif_ctrl)
 		return 0;
 
-	/* start dpmaif tx/rx queue SW */
-	dpmaif_pre_start_hw(dpmaif_ctrl);
-	/* unmask PCIe DPMAIF interrupt */
-	dpmaif_enable_irq(dpmaif_ctrl);
-	dpmaif_unmask_dlq_interrupt(dpmaif_ctrl);
-	dpmaif_start_hw(dpmaif_ctrl);
+	t7xx_dpmaif_start_txrx_qs(dpmaif_ctrl);
+	t7xx_dpmaif_enable_irq(dpmaif_ctrl);
+	t7xx_dpmaif_unmask_dlq_intr(dpmaif_ctrl);
+	t7xx_dpmaif_start_hw(&dpmaif_ctrl->hw_info);
 	wake_up(&dpmaif_ctrl->tx_wq);
 	return 0;
 }
 
-static int dpmaif_pm_entity_init(struct dpmaif_ctrl *dpmaif_ctrl)
+static int t7xx_dpmaif_pm_entity_init(struct dpmaif_ctrl *dpmaif_ctrl)
 {
-	struct md_pm_entity *dpmaif_pm_entity;
+	struct md_pm_entity *dpmaif_pm_entity = &dpmaif_ctrl->dpmaif_pm_entity;
 	int ret;
 
-	dpmaif_pm_entity = &dpmaif_ctrl->dpmaif_pm_entity;
 	INIT_LIST_HEAD(&dpmaif_pm_entity->entity);
-	dpmaif_pm_entity->suspend = &dpmaif_suspend;
+	dpmaif_pm_entity->suspend = &t7xx_dpmaif_suspend;
 	dpmaif_pm_entity->suspend_late = NULL;
 	dpmaif_pm_entity->resume_early = NULL;
-	dpmaif_pm_entity->resume = &dpmaif_resume;
+	dpmaif_pm_entity->resume = &t7xx_dpmaif_resume;
 	dpmaif_pm_entity->id = PM_ENTITY_ID_DATA;
 	dpmaif_pm_entity->entity_param = dpmaif_ctrl;
 
-	ret = mtk_pci_pm_entity_register(dpmaif_ctrl->mtk_dev, dpmaif_pm_entity);
+	ret = t7xx_pci_pm_entity_register(dpmaif_ctrl->t7xx_dev, dpmaif_pm_entity);
 	if (ret)
 		dev_err(dpmaif_ctrl->dev, "dpmaif register pm_entity fail\n");
 
 	return ret;
 }
 
-static int dpmaif_pm_entity_release(struct dpmaif_ctrl *dpmaif_ctrl)
+static int t7xx_dpmaif_pm_entity_release(struct dpmaif_ctrl *dpmaif_ctrl)
 {
-	struct md_pm_entity *dpmaif_pm_entity;
+	struct md_pm_entity *dpmaif_pm_entity = &dpmaif_ctrl->dpmaif_pm_entity;
 	int ret;
 
-	dpmaif_pm_entity = &dpmaif_ctrl->dpmaif_pm_entity;
-	ret = mtk_pci_pm_entity_unregister(dpmaif_ctrl->mtk_dev, dpmaif_pm_entity);
+	ret = t7xx_pci_pm_entity_unregister(dpmaif_ctrl->t7xx_dev, dpmaif_pm_entity);
 	if (ret < 0)
 		dev_err(dpmaif_ctrl->dev, "dpmaif register pm_entity fail\n");
 
 	return ret;
 }
 
-int dpmaif_md_state_callback(struct dpmaif_ctrl *dpmaif_ctrl, unsigned char state)
+int t7xx_dpmaif_md_state_callback(struct dpmaif_ctrl *dpmaif_ctrl, enum md_state state)
 {
 	int ret = 0;
 
 	switch (state) {
 	case MD_STATE_WAITING_FOR_HS1:
-		ret = dpmaif_start(dpmaif_ctrl);
+		ret = t7xx_dpmaif_start(dpmaif_ctrl);
 		break;
 
 	case MD_STATE_EXCEPTION:
-		ret = dpmaif_stop(dpmaif_ctrl);
+		ret = t7xx_dpmaif_stop(dpmaif_ctrl);
 		break;
 
 	case MD_STATE_STOPPED:
-		ret = dpmaif_stop(dpmaif_ctrl);
+		ret = t7xx_dpmaif_stop(dpmaif_ctrl);
 		break;
 
 	case MD_STATE_WAITING_TO_STOP:
-		dpmaif_stop_hw(dpmaif_ctrl);
+		t7xx_dpmaif_stop_hw(dpmaif_ctrl);
 		break;
 
 	default:
@@ -569,49 +512,51 @@ int dpmaif_md_state_callback(struct dpmaif_ctrl *dpmaif_ctrl, unsigned char stat
 }
 
 /**
- * dpmaif_hif_init() - Initialize data path
- * @mtk_dev: MTK context structure
+ * t7xx_dpmaif_hif_init() - Initialize data path.
+ * @t7xx_dev: MTK context structure.
  * @callbacks: Callbacks implemented by the network layer to handle RX skb and
- *	       event notifications
+ *	       event notifications.
  *
- * Allocate and initialize datapath control block
- * Register datapath ISR, TX and RX resources
+ * Allocate and initialize datapath control block.
+ * Register datapath ISR, TX and RX resources.
  *
- * Return: pointer to DPMAIF context structure or NULL in case of error
+ * Return:
+ * * dpmaif_ctrl pointer - Pointer to DPMAIF context structure.
+ * * NULL		 - In case of error.
  */
-struct dpmaif_ctrl *dpmaif_hif_init(struct mtk_pci_dev *mtk_dev,
-				    struct dpmaif_callbacks *callbacks)
+struct dpmaif_ctrl *t7xx_dpmaif_hif_init(struct t7xx_pci_dev *t7xx_dev,
+					 struct dpmaif_callbacks *callbacks)
 {
+	struct device *dev = &t7xx_dev->pdev->dev;
 	struct dpmaif_ctrl *dpmaif_ctrl;
 	int ret;
 
 	if (!callbacks)
 		return NULL;
 
-	dpmaif_ctrl = devm_kzalloc(&mtk_dev->pdev->dev, sizeof(*dpmaif_ctrl), GFP_KERNEL);
+	dpmaif_ctrl = devm_kzalloc(dev, sizeof(*dpmaif_ctrl), GFP_KERNEL);
 	if (!dpmaif_ctrl)
 		return NULL;
 
-	dpmaif_ctrl->mtk_dev = mtk_dev;
+	dpmaif_ctrl->t7xx_dev = t7xx_dev;
 	dpmaif_ctrl->callbacks = callbacks;
-	dpmaif_ctrl->dev = &mtk_dev->pdev->dev;
+	dpmaif_ctrl->dev = dev;
 	dpmaif_ctrl->dpmaif_sw_init_done = false;
-	dpmaif_ctrl->hif_hw_info.pcie_base = mtk_dev->base_addr.pcie_ext_reg_base -
-					     mtk_dev->base_addr.pcie_dev_reg_trsl_addr;
+	dpmaif_ctrl->hw_info.dev = dev;
+	dpmaif_ctrl->hw_info.pcie_base = t7xx_dev->base_addr.pcie_ext_reg_base -
+					 t7xx_dev->base_addr.pcie_dev_reg_trsl_addr;
 
-	ret = dpmaif_pm_entity_init(dpmaif_ctrl);
+	ret = t7xx_dpmaif_pm_entity_init(dpmaif_ctrl);
 	if (ret)
 		return NULL;
 
-	/* registers dpmaif irq by PCIe driver API */
-	dpmaif_platform_irq_init(dpmaif_ctrl);
-	dpmaif_disable_irq(dpmaif_ctrl);
+	t7xx_dpmaif_register_pcie_irq(dpmaif_ctrl);
+	t7xx_dpmaif_disable_irq(dpmaif_ctrl);
 
-	/* Alloc TX/RX resource */
-	ret = dpmaif_sw_init(dpmaif_ctrl);
+	ret = t7xx_dpmaif_rxtx_sw_allocs(dpmaif_ctrl);
 	if (ret) {
-		dev_err(&mtk_dev->pdev->dev, "DPMAIF SW initialization fail! %d\n", ret);
-		dpmaif_pm_entity_release(dpmaif_ctrl);
+		t7xx_dpmaif_pm_entity_release(dpmaif_ctrl);
+		dev_err(dev, "Failed to allocate RX/TX SW resources: %d\n", ret);
 		return NULL;
 	}
 
@@ -619,12 +564,12 @@ struct dpmaif_ctrl *dpmaif_hif_init(struct mtk_pci_dev *mtk_dev,
 	return dpmaif_ctrl;
 }
 
-void dpmaif_hif_exit(struct dpmaif_ctrl *dpmaif_ctrl)
+void t7xx_dpmaif_hif_exit(struct dpmaif_ctrl *dpmaif_ctrl)
 {
 	if (dpmaif_ctrl->dpmaif_sw_init_done) {
-		dpmaif_stop(dpmaif_ctrl);
-		dpmaif_pm_entity_release(dpmaif_ctrl);
-		dpmaif_sw_release(dpmaif_ctrl);
+		t7xx_dpmaif_stop(dpmaif_ctrl);
+		t7xx_dpmaif_pm_entity_release(dpmaif_ctrl);
+		t7xx_dpmaif_sw_release(dpmaif_ctrl);
 		dpmaif_ctrl->dpmaif_sw_init_done = false;
 	}
 }

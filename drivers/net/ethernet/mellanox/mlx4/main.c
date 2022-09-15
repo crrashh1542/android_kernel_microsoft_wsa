@@ -4015,6 +4015,7 @@ static int mlx4_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	mutex_init(&dev->persist->interface_state_mutex);
 	mutex_init(&dev->persist->pci_status_mutex);
 
+	devlink_set_features(devlink, DEVLINK_F_RELOAD);
 	ret = devlink_register(devlink);
 	if (ret)
 		goto err_persist_free;
@@ -4028,7 +4029,6 @@ static int mlx4_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_params_unregister;
 
 	devlink_params_publish(devlink);
-	devlink_reload_enable(devlink);
 	pci_save_state(pdev);
 	return 0;
 
@@ -4139,8 +4139,6 @@ static void mlx4_remove_one(struct pci_dev *pdev)
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	struct devlink *devlink = priv_to_devlink(priv);
 	int active_vfs = 0;
-
-	devlink_reload_disable(devlink);
 
 	if (mlx4_is_slave(dev))
 		persist->interface_state |= MLX4_INTERFACE_STATE_NOWAIT;

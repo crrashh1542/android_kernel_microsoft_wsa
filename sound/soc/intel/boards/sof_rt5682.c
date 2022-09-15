@@ -20,7 +20,6 @@
 #include <sound/rt5682.h>
 #include <sound/rt5682s.h>
 #include <sound/soc-acpi.h>
-#include "../../codecs/rt1015.h"
 #include "../../codecs/rt5682.h"
 #include "../../codecs/rt5682s.h"
 #include "../../codecs/hdac_hdmi.h"
@@ -61,6 +60,7 @@
 #define SOF_RT5682S_HEADPHONE_CODEC_PRESENT	BIT(23)
 #define SOF_MAX98390_SPEAKER_AMP_PRESENT	BIT(24)
 #define SOF_MAX98390_TWEETER_SPEAKER_PRESENT	BIT(25)
+#define SOF_RT1019_SPEAKER_AMP_PRESENT	BIT(26)
 
 
 /* Default: MCLK on, MCLK 19.2M, SSP0  */
@@ -212,6 +212,19 @@ static const struct dmi_system_id sof_rt5682_quirk_table[] = {
 					SOF_SSP_BT_OFFLOAD_PRESENT),
 
 	},
+	{
+		.callback = sof_rt5682_quirk_cb,
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brya"),
+			DMI_MATCH(DMI_OEM_STRING, "AUDIO-MAX98360_ALC5682I_I2S_AMP_SSP2"),
+		},
+		.driver_data = (void *)(SOF_RT5682_MCLK_EN |
+					SOF_RT5682_SSP_CODEC(0) |
+					SOF_SPEAKER_AMP_PRESENT |
+					SOF_MAX98360A_SPEAKER_AMP_PRESENT |
+					SOF_RT5682_SSP_AMP(2) |
+					SOF_RT5682_NUM_HDMIDEV(4)),
+	},
 	{}
 };
 
@@ -285,7 +298,7 @@ static int sof_rt5682_codec_init(struct snd_soc_pcm_runtime *rtd)
 				    SND_JACK_HEADSET | SND_JACK_BTN_0 |
 				    SND_JACK_BTN_1 | SND_JACK_BTN_2 |
 				    SND_JACK_BTN_3,
-				    &ctx->sof_headset, NULL, 0);
+				    &ctx->sof_headset);
 	if (ret) {
 		dev_err(rtd->dev, "Headset Jack creation failed: %d\n", ret);
 		return ret;
@@ -400,67 +413,6 @@ static struct snd_soc_ops sof_rt5682_ops = {
 	.hw_params = sof_rt5682_hw_params,
 };
 
-static int sof_rt1015_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_card *card = rtd->card;
-	struct snd_soc_dai *codec_dai;
-	int i, fs, ret;
-
-	if (!snd_soc_card_get_codec_dai(card, "rt1015-aif"))
-		return 0;
-
-	if (sof_rt5682_quirk & SOF_RT1015_SPEAKER_AMP_100FS)
-		fs = 100;
-	else
-		fs = 64;
-
-	for_each_rtd_codec_dais(rtd, i, codec_dai) {
-		ret = snd_soc_dai_set_pll(codec_dai, 0, RT1015_PLL_S_BCLK,
-					  params_rate(params) * fs,
-					  params_rate(params) * 256);
-		if (ret < 0) {
-			dev_err(card->dev, "failed to set pll\n");
-			return ret;
-		}
-		/* Configure sysclk for codec */
-		ret = snd_soc_dai_set_sysclk(codec_dai, RT1015_SCLK_S_PLL,
-					     params_rate(params) * 256,
-					     SND_SOC_CLOCK_IN);
-		if (ret < 0) {
-			dev_err(card->dev, "failed to set sysclk\n");
-			return ret;
-		}
-
-		if (sof_rt5682_quirk & SOF_RT1015_SPEAKER_AMP_100FS) {
-			if (!strcmp(codec_dai->component->name, "i2c-10EC1015:00")) {
-				ret = snd_soc_dai_set_tdm_slot(codec_dai,
-							       0x0, 0x1, 4, 24);
-				if (ret < 0) {
-					dev_err(card->dev, "failed to set tdm slot\n");
-					return ret;
-				}
-			}
-
-			if (!strcmp(codec_dai->component->name, "i2c-10EC1015:01")) {
-				ret = snd_soc_dai_set_tdm_slot(codec_dai,
-							       0x0, 0x2, 4, 24);
-				if (ret < 0) {
-					dev_err(card->dev, "failed to set tdm slot\n");
-					return ret;
-				}
-			}
-		}
-	}
-
-	return 0;
-}
-
-static struct snd_soc_ops sof_rt1015_ops = {
-	.hw_params = sof_rt1015_hw_params,
-};
-
 static struct snd_soc_dai_link_component platform_component[] = {
 	{
 		/* name might be overridden during probe */
@@ -497,8 +449,7 @@ static int sof_card_late_probe(struct snd_soc_card *card)
 		snprintf(jack_name, sizeof(jack_name),
 			 "HDMI/DP, pcm=%d Jack", pcm->device);
 		err = snd_soc_card_jack_new(card, jack_name,
-					    SND_JACK_AVOUT, &sof_hdmi[i],
-					    NULL, 0);
+					    SND_JACK_AVOUT, &sof_hdmi[i]);
 
 		if (err)
 			return err;
@@ -551,21 +502,10 @@ static const struct snd_soc_dapm_route sof_map[] = {
 	{ "IN1P", NULL, "Headset Mic" },
 };
 
-static const struct snd_soc_dapm_route speaker_map_lr[] = {
-	{ "Left Spk", NULL, "Left SPO" },
-	{ "Right Spk", NULL, "Right SPO" },
-};
-
 static const struct snd_soc_dapm_route dmic_map[] = {
 	/* digital mics */
 	{"DMic", NULL, "SoC DMIC"},
 };
-
-static int speaker_codec_init_lr(struct snd_soc_pcm_runtime *rtd)
-{
-	return snd_soc_dapm_add_routes(&rtd->card->dapm, speaker_map_lr,
-				       ARRAY_SIZE(speaker_map_lr));
-}
 
 static int dmic_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -588,17 +528,6 @@ static int dmic_init(struct snd_soc_pcm_runtime *rtd)
 
 	return ret;
 }
-
-static struct snd_soc_codec_conf rt1015_amp_conf[] = {
-	{
-		.dlc = COMP_CODEC_CONF("i2c-10EC1015:00"),
-		.name_prefix = "Left",
-	},
-	{
-		.dlc = COMP_CODEC_CONF("i2c-10EC1015:01"),
-		.name_prefix = "Right",
-	},
-};
 
 /* sof audio machine driver for rt5682 codec */
 static struct snd_soc_card sof_audio_card_rt5682 = {
@@ -633,17 +562,6 @@ static struct snd_soc_dai_link_component dmic_component[] = {
 		.name = "dmic-codec",
 		.dai_name = "dmic-hifi",
 	}
-};
-
-static struct snd_soc_dai_link_component rt1015_components[] = {
-	{
-		.name = "i2c-10EC1015:00",
-		.dai_name = "rt1015-aif",
-	},
-	{
-		.name = "i2c-10EC1015:01",
-		.dai_name = "rt1015-aif",
-	},
 };
 
 static struct snd_soc_dai_link_component dummy_component[] = {
@@ -798,12 +716,12 @@ static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
 
 		links[id].id = id;
 		if (sof_rt5682_quirk & SOF_RT1015_SPEAKER_AMP_PRESENT) {
-			links[id].codecs = rt1015_components;
-			links[id].num_codecs = ARRAY_SIZE(rt1015_components);
-			links[id].init = speaker_codec_init_lr;
-			links[id].ops = &sof_rt1015_ops;
+			sof_rt1015_dai_link(&links[id], (sof_rt5682_quirk &
+					SOF_RT1015_SPEAKER_AMP_100FS) ? 100 : 64);
 		} else if (sof_rt5682_quirk & SOF_RT1015P_SPEAKER_AMP_PRESENT) {
 			sof_rt1015p_dai_link(&links[id]);
+		} else if (sof_rt5682_quirk & SOF_RT1019_SPEAKER_AMP_PRESENT) {
+			sof_rt1019_dai_link(&links[id]);
 		} else if (sof_rt5682_quirk &
 				SOF_MAX98373_SPEAKER_AMP_PRESENT) {
 			links[id].codecs = max_98373_components;
@@ -991,10 +909,8 @@ static int sof_audio_probe(struct platform_device *pdev)
 
 	sof_audio_card_rt5682.dai_link = dai_links;
 
-	if (sof_rt5682_quirk & SOF_RT1015_SPEAKER_AMP_PRESENT) {
-		sof_audio_card_rt5682.codec_conf = rt1015_amp_conf;
-		sof_audio_card_rt5682.num_configs = ARRAY_SIZE(rt1015_amp_conf);
-	}
+	if (sof_rt5682_quirk & SOF_RT1015_SPEAKER_AMP_PRESENT)
+		sof_rt1015_codec_conf(&sof_audio_card_rt5682);
 
 	INIT_LIST_HEAD(&ctx->hdmi_pcm_list);
 
@@ -1140,6 +1056,16 @@ static const struct platform_device_id board_ids[] = {
 					SOF_BT_OFFLOAD_SSP(2) |
 					SOF_SSP_BT_OFFLOAD_PRESENT),
 	},
+	{
+		.name = "adl_rt1019_rt5682s",
+		.driver_data = (kernel_ulong_t)(SOF_RT5682_MCLK_EN |
+					SOF_RT5682_SSP_CODEC(0) |
+					SOF_RT5682S_HEADPHONE_CODEC_PRESENT |
+					SOF_SPEAKER_AMP_PRESENT |
+					SOF_RT1019_SPEAKER_AMP_PRESENT |
+					SOF_RT5682_SSP_AMP(1) |
+					SOF_RT5682_NUM_HDMIDEV(4)),
+	},
 	{ }
 };
 MODULE_DEVICE_TABLE(platform, board_ids);
@@ -1163,3 +1089,4 @@ MODULE_AUTHOR("Mac Chiang <mac.chiang@intel.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(SND_SOC_INTEL_HDA_DSP_COMMON);
 MODULE_IMPORT_NS(SND_SOC_INTEL_SOF_MAXIM_COMMON);
+MODULE_IMPORT_NS(SND_SOC_INTEL_SOF_REALTEK_COMMON);

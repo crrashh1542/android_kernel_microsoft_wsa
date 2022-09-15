@@ -1470,6 +1470,7 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 	if (err)
 		goto err_devlink_free;
 
+	devlink_set_features(devlink, DEVLINK_F_RELOAD);
 	err = devlink_register(devlink);
 	if (err)
 		goto err_resources_unregister;
@@ -1515,7 +1516,6 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 		goto err_psample_exit;
 
 	devlink_params_publish(devlink);
-	devlink_reload_enable(devlink);
 	nsim_dev->esw_mode = DEVLINK_ESWITCH_MODE_LEGACY;
 	return 0;
 
@@ -1572,10 +1572,7 @@ void nsim_dev_remove(struct nsim_bus_dev *nsim_bus_dev)
 	struct nsim_dev *nsim_dev = dev_get_drvdata(&nsim_bus_dev->dev);
 	struct devlink *devlink = priv_to_devlink(nsim_dev);
 
-	devlink_reload_disable(devlink);
-
 	nsim_dev_reload_destroy(nsim_dev);
-
 	nsim_bpf_dev_exit(nsim_dev);
 	nsim_dev_debugfs_exit(nsim_dev);
 	devlink_params_unregister(devlink, nsim_devlink_params,

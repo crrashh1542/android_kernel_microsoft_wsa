@@ -71,15 +71,15 @@ obj-$(CONFIG_VIDEO_ATMEL_XISC)		+= atmel/
 
 obj-$(CONFIG_VIDEO_STM32_DCMI)		+= stm32/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_VPU)	+= mtk-vpu/
+obj-$(CONFIG_VIDEO_MEDIATEK_VPU)	+= mediatek/vpu/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC)	+= mtk-vcodec/
+obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC)	+= mediatek/vcodec/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_MDP)	+= mtk-mdp/
+obj-$(CONFIG_VIDEO_MEDIATEK_MDP)	+= mediatek/mdp/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_MDP3)	+= mtk-mdp3/
+obj-$(CONFIG_VIDEO_MEDIATEK_MDP3)	+= mediatek/mdp3/
 
-obj-$(CONFIG_VIDEO_MEDIATEK_JPEG)	+= mtk-jpeg/
+obj-$(CONFIG_VIDEO_MEDIATEK_JPEG)	+= mediatek/jpeg/
 
 obj-$(CONFIG_VIDEO_QCOM_CAMSS)		+= qcom/camss/
 

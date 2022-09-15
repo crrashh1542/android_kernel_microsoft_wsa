@@ -28,6 +28,8 @@
 #include "dc.h"
 #include "dcn_calc_math.h"
 
+#include "dml/dcn30/dcn30_fpu.h"
+
 #define REG(reg)\
 	optc1->tg_regs->reg
 
@@ -73,16 +75,23 @@ void optc3_lock_doublebuffer_enable(struct timing_generator *optc)
 		OTG_H_BLANK_END, &h_blank_end);
 
 	REG_UPDATE_2(OTG_GLOBAL_CONTROL1,
-		MASTER_UPDATE_LOCK_DB_START_Y, v_blank_start,
-		MASTER_UPDATE_LOCK_DB_END_Y, v_blank_end);
+		MASTER_UPDATE_LOCK_DB_START_Y, v_blank_start - 1,
+		MASTER_UPDATE_LOCK_DB_END_Y, v_blank_start);
 	REG_UPDATE_2(OTG_GLOBAL_CONTROL4,
-		DIG_UPDATE_POSITION_X, 20,
-		DIG_UPDATE_POSITION_Y, v_blank_start);
+		DIG_UPDATE_POSITION_X, h_blank_start - 180 - 1,
+		DIG_UPDATE_POSITION_Y, v_blank_start - 1);
+	// there is a DIG_UPDATE_VCOUNT_MODE and it is 0.
+
 	REG_UPDATE_3(OTG_GLOBAL_CONTROL0,
 		MASTER_UPDATE_LOCK_DB_START_X, h_blank_start - 200 - 1,
-		MASTER_UPDATE_LOCK_DB_END_X, h_blank_end,
+		MASTER_UPDATE_LOCK_DB_END_X, h_blank_start - 180,
 		MASTER_UPDATE_LOCK_DB_EN, 1);
 	REG_UPDATE(OTG_GLOBAL_CONTROL2, GLOBAL_UPDATE_LOCK_EN, 1);
+
+	REG_SET_3(OTG_VUPDATE_KEEPOUT, 0,
+		MASTER_UPDATE_LOCK_VUPDATE_KEEPOUT_START_OFFSET, 0,
+		MASTER_UPDATE_LOCK_VUPDATE_KEEPOUT_END_OFFSET, 100,
+		OTG_MASTER_UPDATE_LOCK_VUPDATE_KEEPOUT_EN, 1);
 }
 
 void optc3_lock_doublebuffer_disable(struct timing_generator *optc)
@@ -175,6 +184,14 @@ void optc3_set_dsc_config(struct timing_generator *optc,
 
 		REG_UPDATE(OTG_V_SYNC_A_CNTL, OTG_V_SYNC_MODE, 0);
 
+}
+
+void optc3_set_vrr_m_const(struct timing_generator *optc,
+		double vtotal_avg)
+{
+	DC_FP_START();
+	optc3_fpu_set_vrr_m_const(optc, vtotal_avg);
+	DC_FP_END();
 }
 
 void optc3_set_odm_bypass(struct timing_generator *optc,
@@ -325,6 +342,7 @@ static struct timing_generator_funcs dcn30_tg_funcs = {
 		.get_crc = optc1_get_crc,
 		.configure_crc = optc2_configure_crc,
 		.set_dsc_config = optc3_set_dsc_config,
+		.get_dsc_status = optc2_get_dsc_status,
 		.set_dwb_source = NULL,
 		.set_odm_bypass = optc3_set_odm_bypass,
 		.set_odm_combine = optc3_set_odm_combine,

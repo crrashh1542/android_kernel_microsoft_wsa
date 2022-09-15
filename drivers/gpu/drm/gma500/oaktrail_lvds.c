@@ -37,7 +37,7 @@ static void oaktrail_lvds_set_power(struct drm_device *dev,
 				bool on)
 {
 	u32 pp_status;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 
 	if (!gma_power_begin(dev, true))
 		return;
@@ -83,9 +83,9 @@ static void oaktrail_lvds_mode_set(struct drm_encoder *encoder,
 			       struct drm_display_mode *adjusted_mode)
 {
 	struct drm_device *dev = encoder->dev;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct psb_intel_mode_device *mode_dev = &dev_priv->mode_dev;
-	struct drm_mode_config *mode_config = &dev->mode_config;
+	struct drm_connector_list_iter conn_iter;
 	struct drm_connector *connector = NULL;
 	struct drm_crtc *crtc = encoder->crtc;
 	u32 lvds_port;
@@ -112,21 +112,22 @@ static void oaktrail_lvds_mode_set(struct drm_encoder *encoder,
 	REG_WRITE(LVDS, lvds_port);
 
 	/* Find the connector we're trying to set up */
-	list_for_each_entry(connector, &mode_config->connector_list, head) {
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
 		if (connector->encoder && connector->encoder->crtc == crtc)
 			break;
 	}
 
-	if (list_entry_is_head(connector, &mode_config->connector_list, head)) {
+	if (!connector) {
+		drm_connector_list_iter_end(&conn_iter);
 		DRM_ERROR("Couldn't find connector when setting mode");
 		gma_power_end(dev);
 		return;
 	}
 
-	drm_object_property_get_value(
-		&connector->base,
-		dev->mode_config.scaling_mode_property,
-		&v);
+	drm_object_property_get_value( &connector->base,
+		dev->mode_config.scaling_mode_property, &v);
+	drm_connector_list_iter_end(&conn_iter);
 
 	if (v == DRM_MODE_SCALE_NO_SCALE)
 		REG_WRITE(PFIT_CONTROL, 0);
@@ -155,7 +156,7 @@ static void oaktrail_lvds_mode_set(struct drm_encoder *encoder,
 static void oaktrail_lvds_prepare(struct drm_encoder *encoder)
 {
 	struct drm_device *dev = encoder->dev;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct gma_encoder *gma_encoder = to_gma_encoder(encoder);
 	struct psb_intel_mode_device *mode_dev = &dev_priv->mode_dev;
 
@@ -171,7 +172,7 @@ static void oaktrail_lvds_prepare(struct drm_encoder *encoder)
 
 static u32 oaktrail_lvds_get_max_backlight(struct drm_device *dev)
 {
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	u32 ret;
 
 	if (gma_power_begin(dev, false)) {
@@ -191,7 +192,7 @@ static u32 oaktrail_lvds_get_max_backlight(struct drm_device *dev)
 static void oaktrail_lvds_commit(struct drm_encoder *encoder)
 {
 	struct drm_device *dev = encoder->dev;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct gma_encoder *gma_encoder = to_gma_encoder(encoder);
 	struct psb_intel_mode_device *mode_dev = &dev_priv->mode_dev;
 
@@ -215,7 +216,7 @@ static void oaktrail_lvds_get_configuration_mode(struct drm_device *dev,
 					struct psb_intel_mode_device *mode_dev)
 {
 	struct drm_display_mode *mode = NULL;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct oaktrail_timing_info *ti = &dev_priv->gct_data.DTD;
 
 	mode_dev->panel_fixed_mode = NULL;
@@ -294,7 +295,7 @@ void oaktrail_lvds_init(struct drm_device *dev,
 	struct gma_connector *gma_connector;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
-	struct drm_psb_private *dev_priv = dev->dev_private;
+	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct edid *edid;
 	struct i2c_adapter *i2c_adap;
 	struct drm_display_mode *scan;	/* *modes, *bios_mode; */
@@ -400,7 +401,6 @@ void oaktrail_lvds_init(struct drm_device *dev,
 out:
 	mutex_unlock(&dev->mode_config.mutex);
 
-	drm_connector_register(connector);
 	return;
 
 failed_find:

@@ -41,6 +41,12 @@
 #include "set_mode_types.h"
 #include "virtual/virtual_stream_encoder.h"
 #include "dpcd_defs.h"
+#include "link_enc_cfg.h"
+#include "dc_link_dp.h"
+#include "virtual/virtual_link_hwss.h"
+#include "link/link_hwss_dio.h"
+#include "link/link_hwss_dpia.h"
+#include "link/link_hwss_hpo_dp.h"
 
 #if defined(CONFIG_DRM_AMD_DC_SI)
 #include "dce60/dce60_resource.h"
@@ -50,16 +56,17 @@
 #include "dce110/dce110_resource.h"
 #include "dce112/dce112_resource.h"
 #include "dce120/dce120_resource.h"
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 #include "dcn10/dcn10_resource.h"
 #include "dcn20/dcn20_resource.h"
 #include "dcn21/dcn21_resource.h"
+#include "dcn201/dcn201_resource.h"
 #include "dcn30/dcn30_resource.h"
 #include "dcn301/dcn301_resource.h"
 #include "dcn302/dcn302_resource.h"
 #include "dcn303/dcn303_resource.h"
 #include "dcn31/dcn31_resource.h"
-#endif
+#include "dcn315/dcn315_resource.h"
+#include "dcn316/dcn316_resource.h"
 
 #define DC_LOGGER_INIT(logger)
 
@@ -115,7 +122,6 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 		else
 			dc_version = DCE_VERSION_12_0;
 		break;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 	case FAMILY_RV:
 		dc_version = DCN_VERSION_1_0;
 		if (ASICREV_IS_RAVEN2(asic_id.hw_internal_rev))
@@ -128,6 +134,10 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 
 	case FAMILY_NV:
 		dc_version = DCN_VERSION_2_0;
+		if (asic_id.chip_id == DEVICE_ID_NV_13FE || asic_id.chip_id == DEVICE_ID_NV_143F) {
+			dc_version = DCN_VERSION_2_01;
+			break;
+		}
 		if (ASICREV_IS_SIENNA_CICHLID_P(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_3_0;
 		if (ASICREV_IS_DIMGREY_CAVEFISH_P(asic_id.hw_internal_rev))
@@ -144,7 +154,14 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 		if (ASICREV_IS_YELLOW_CARP(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_3_1;
 		break;
-#endif
+	case AMDGPU_FAMILY_GC_10_3_6:
+		if (ASICREV_IS_GC_10_3_6(asic_id.hw_internal_rev))
+			dc_version = DCN_VERSION_3_15;
+		break;
+	case AMDGPU_FAMILY_GC_10_3_7:
+		if (ASICREV_IS_GC_10_3_7(asic_id.hw_internal_rev))
+			dc_version = DCN_VERSION_3_16;
+		break;
 
 	default:
 		dc_version = DCE_VERSION_UNKNOWN;
@@ -217,6 +234,9 @@ struct resource_pool *dc_create_resource_pool(struct dc  *dc,
 	case DCN_VERSION_2_1:
 		res_pool = dcn21_create_resource_pool(init_data, dc);
 		break;
+	case DCN_VERSION_2_01:
+		res_pool = dcn201_create_resource_pool(init_data, dc);
+		break;
 	case DCN_VERSION_3_0:
 		res_pool = dcn30_create_resource_pool(init_data, dc);
 		break;
@@ -231,6 +251,12 @@ struct resource_pool *dc_create_resource_pool(struct dc  *dc,
 		break;
 	case DCN_VERSION_3_1:
 		res_pool = dcn31_create_resource_pool(init_data, dc);
+		break;
+	case DCN_VERSION_3_15:
+		res_pool = dcn315_create_resource_pool(init_data, dc);
+		break;
+	case DCN_VERSION_3_16:
+		res_pool = dcn316_create_resource_pool(init_data, dc);
 		break;
 #endif
 	default:
@@ -346,7 +372,27 @@ bool resource_construct(
 		}
 	}
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
+	pool->hpo_dp_stream_enc_count = 0;
+	if (create_funcs->create_hpo_dp_stream_encoder) {
+		for (i = 0; i < caps->num_hpo_dp_stream_encoder; i++) {
+			pool->hpo_dp_stream_enc[i] = create_funcs->create_hpo_dp_stream_encoder(i+ENGINE_ID_HPO_DP_0, ctx);
+			if (pool->hpo_dp_stream_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO DP stream encoder!\n");
+			pool->hpo_dp_stream_enc_count++;
+
+		}
+	}
+
+	pool->hpo_dp_link_enc_count = 0;
+	if (create_funcs->create_hpo_dp_link_encoder) {
+		for (i = 0; i < caps->num_hpo_dp_link_encoder; i++) {
+			pool->hpo_dp_link_enc[i] = create_funcs->create_hpo_dp_link_encoder(i, ctx);
+			if (pool->hpo_dp_link_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO DP link encoder!\n");
+			pool->hpo_dp_link_enc_count++;
+		}
+	}
+
 	for (i = 0; i < caps->num_mpc_3dlut; i++) {
 		pool->mpc_lut[i] = dc_create_3dlut_func();
 		if (pool->mpc_lut[i] == NULL)
@@ -355,7 +401,7 @@ bool resource_construct(
 		if (pool->mpc_shaper[i] == NULL)
 			DC_ERR("DC: failed to create MPC shaper!\n");
 	}
-#endif
+
 	dc->caps.dynamic_audio = false;
 	if (pool->audio_count < pool->stream_enc_count) {
 		dc->caps.dynamic_audio = true;
@@ -1025,6 +1071,15 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	bool res = false;
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
+	/* Invalid input */
+	if (!plane_state->dst_rect.width ||
+			!plane_state->dst_rect.height ||
+			!plane_state->src_rect.width ||
+			!plane_state->src_rect.height) {
+		ASSERT(0);
+		return false;
+	}
+
 	pipe_ctx->plane_res.scl_data.format = convert_pixel_format_to_dalsurface(
 			pipe_ctx->plane_state->format);
 
@@ -1062,12 +1117,13 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	 * on certain displays, such as the Sharp 4k. 36bpp is needed
 	 * to support SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616 and
 	 * SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616 with actual > 10 bpc
-	 * precision on at least DCN display engines. However, at least
-	 * Carrizo with DCE_VERSION_11_0 does not like 36 bpp lb depth,
-	 * so use only 30 bpp on DCE_VERSION_11_0. Testing with DCE 11.2 and 8.3
-	 * did not show such problems, so this seems to be the exception.
+	 * precision on DCN display engines, but apparently not for DCE, as
+	 * far as testing on DCE-11.2 and DCE-8 showed. Various DCE parts have
+	 * problems: Carrizo with DCE_VERSION_11_0 does not like 36 bpp lb depth,
+	 * neither do DCE-8 at 4k resolution, or DCE-11.2 (broken identify pixel
+	 * passthrough). Therefore only use 36 bpp on DCN where it is actually needed.
 	 */
-	if (plane_state->ctx->dce_version > DCE_VERSION_11_0)
+	if (plane_state->ctx->dce_version > DCE_VERSION_MAX)
 		pipe_ctx->plane_res.scl_data.lb_params.depth = LB_PIXEL_DEPTH_36BPP;
 	else
 		pipe_ctx->plane_res.scl_data.lb_params.depth = LB_PIXEL_DEPTH_30BPP;
@@ -1122,9 +1178,17 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->plane_res.scl_data.recout.x += pipe_ctx->plane_res.scl_data.recout.width;
 	}
 
-	if (pipe_ctx->plane_res.scl_data.viewport.height < MIN_VIEWPORT_SIZE ||
-			pipe_ctx->plane_res.scl_data.viewport.width < MIN_VIEWPORT_SIZE)
-		res = false;
+	if (!pipe_ctx->stream->ctx->dc->config.enable_windowed_mpo_odm) {
+		if (pipe_ctx->plane_res.scl_data.viewport.height < MIN_VIEWPORT_SIZE ||
+				pipe_ctx->plane_res.scl_data.viewport.width < MIN_VIEWPORT_SIZE)
+			res = false;
+	} else {
+		/* Clamp minimum viewport size */
+		if (pipe_ctx->plane_res.scl_data.viewport.height < MIN_VIEWPORT_SIZE)
+			pipe_ctx->plane_res.scl_data.viewport.height = MIN_VIEWPORT_SIZE;
+		if (pipe_ctx->plane_res.scl_data.viewport.width < MIN_VIEWPORT_SIZE)
+			pipe_ctx->plane_res.scl_data.viewport.width = MIN_VIEWPORT_SIZE;
+	}
 
 	DC_LOG_SCALER("%s pipe %d:\nViewport: height:%d width:%d x:%d y:%d  Recout: height:%d width:%d x:%d y:%d  HACTIVE:%d VACTIVE:%d\n"
 			"src_rect: height:%d width:%d x:%d y:%d  dst_rect: height:%d width:%d x:%d y:%d  clip_rect: height:%d width:%d x:%d y:%d\n",
@@ -1301,7 +1365,6 @@ static struct pipe_ctx *acquire_free_pipe_for_head(
 	return pool->funcs->acquire_idle_pipe_for_layer(context, pool, head_pipe->stream);
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 static int acquire_first_split_pipe(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
@@ -1336,7 +1399,6 @@ static int acquire_first_split_pipe(
 	}
 	return -1;
 }
-#endif
 
 bool dc_add_plane_to_context(
 		const struct dc *dc,
@@ -1379,13 +1441,12 @@ bool dc_add_plane_to_context(
 	while (head_pipe) {
 		free_pipe = acquire_free_pipe_for_head(context, pool, head_pipe);
 
-	#if defined(CONFIG_DRM_AMD_DC_DCN)
 		if (!free_pipe) {
 			int pipe_idx = acquire_first_split_pipe(&context->res_ctx, pool, stream);
 			if (pipe_idx >= 0)
 				free_pipe = &context->res_ctx.pipe_ctx[pipe_idx];
 		}
-	#endif
+
 		if (!free_pipe) {
 			dc_plane_state_release(plane_state);
 			return false;
@@ -1571,8 +1632,8 @@ bool dc_add_all_planes_for_stream(
 	return add_all_planes_for_stream(dc, stream, &set, 1, context);
 }
 
-static bool is_timing_changed(struct dc_stream_state *cur_stream,
-		struct dc_stream_state *new_stream)
+bool is_timing_changed(struct dc_stream_state *cur_stream,
+		       struct dc_stream_state *new_stream)
 {
 	if (cur_stream == NULL)
 		return true;
@@ -1599,6 +1660,9 @@ static bool are_stream_backends_same(
 	if (is_timing_changed(stream_a, stream_b))
 		return false;
 
+	if (stream_a->signal != stream_b->signal)
+		return false;
+
 	if (stream_a->dpms_off != stream_b->dpms_off)
 		return false;
 
@@ -1623,8 +1687,8 @@ bool dc_is_stream_unchanged(
 	if (old_stream->ignore_msa_timing_param != stream->ignore_msa_timing_param)
 		return false;
 
-	// Only Have Audio left to check whether it is same or not. This is a corner case for Tiled sinks
-	if (old_stream->audio_info.mode_count != stream->audio_info.mode_count)
+	/*compare audio info*/
+	if (memcmp(&old_stream->audio_info, &stream->audio_info, sizeof(stream->audio_info)) != 0)
 		return false;
 
 	return true;
@@ -1633,8 +1697,8 @@ bool dc_is_stream_unchanged(
 /*
  * dc_is_stream_scaling_unchanged() - Compare scaling rectangles of two streams.
  */
-bool dc_is_stream_scaling_unchanged(
-	struct dc_stream_state *old_stream, struct dc_stream_state *stream)
+bool dc_is_stream_scaling_unchanged(struct dc_stream_state *old_stream,
+				    struct dc_stream_state *stream)
 {
 	if (old_stream == stream)
 		return true;
@@ -1666,6 +1730,108 @@ static void update_stream_engine_usage(
 	for (i = 0; i < pool->stream_enc_count; i++) {
 		if (pool->stream_enc[i] == stream_enc)
 			res_ctx->is_stream_enc_acquired[i] = acquired;
+	}
+}
+
+static void update_hpo_dp_stream_engine_usage(
+		struct resource_context *res_ctx,
+		const struct resource_pool *pool,
+		struct hpo_dp_stream_encoder *hpo_dp_stream_enc,
+		bool acquired)
+{
+	int i;
+
+	for (i = 0; i < pool->hpo_dp_stream_enc_count; i++) {
+		if (pool->hpo_dp_stream_enc[i] == hpo_dp_stream_enc)
+			res_ctx->is_hpo_dp_stream_enc_acquired[i] = acquired;
+	}
+}
+
+static inline int find_acquired_hpo_dp_link_enc_for_link(
+		const struct resource_context *res_ctx,
+		const struct dc_link *link)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(res_ctx->hpo_dp_link_enc_to_link_idx); i++)
+		if (res_ctx->hpo_dp_link_enc_ref_cnts[i] > 0 &&
+				res_ctx->hpo_dp_link_enc_to_link_idx[i] == link->link_index)
+			return i;
+
+	return -1;
+}
+
+static inline int find_free_hpo_dp_link_enc(const struct resource_context *res_ctx,
+		const struct resource_pool *pool)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(res_ctx->hpo_dp_link_enc_ref_cnts); i++)
+		if (res_ctx->hpo_dp_link_enc_ref_cnts[i] == 0)
+			break;
+
+	return (i < ARRAY_SIZE(res_ctx->hpo_dp_link_enc_ref_cnts) &&
+			i < pool->hpo_dp_link_enc_count) ? i : -1;
+}
+
+static inline void acquire_hpo_dp_link_enc(
+		struct resource_context *res_ctx,
+		unsigned int link_index,
+		int enc_index)
+{
+	res_ctx->hpo_dp_link_enc_to_link_idx[enc_index] = link_index;
+	res_ctx->hpo_dp_link_enc_ref_cnts[enc_index] = 1;
+}
+
+static inline void retain_hpo_dp_link_enc(
+		struct resource_context *res_ctx,
+		int enc_index)
+{
+	res_ctx->hpo_dp_link_enc_ref_cnts[enc_index]++;
+}
+
+static inline void release_hpo_dp_link_enc(
+		struct resource_context *res_ctx,
+		int enc_index)
+{
+	ASSERT(res_ctx->hpo_dp_link_enc_ref_cnts[enc_index] > 0);
+	res_ctx->hpo_dp_link_enc_ref_cnts[enc_index]--;
+}
+
+static bool add_hpo_dp_link_enc_to_ctx(struct resource_context *res_ctx,
+		const struct resource_pool *pool,
+		struct pipe_ctx *pipe_ctx,
+		struct dc_stream_state *stream)
+{
+	int enc_index;
+
+	enc_index = find_acquired_hpo_dp_link_enc_for_link(res_ctx, stream->link);
+
+	if (enc_index >= 0) {
+		retain_hpo_dp_link_enc(res_ctx, enc_index);
+	} else {
+		enc_index = find_free_hpo_dp_link_enc(res_ctx, pool);
+		if (enc_index >= 0)
+			acquire_hpo_dp_link_enc(res_ctx, stream->link->link_index, enc_index);
+	}
+
+	if (enc_index >= 0)
+		pipe_ctx->link_res.hpo_dp_link_enc = pool->hpo_dp_link_enc[enc_index];
+
+	return pipe_ctx->link_res.hpo_dp_link_enc != NULL;
+}
+
+static void remove_hpo_dp_link_enc_from_ctx(struct resource_context *res_ctx,
+		struct pipe_ctx *pipe_ctx,
+		struct dc_stream_state *stream)
+{
+	int enc_index;
+
+	enc_index = find_acquired_hpo_dp_link_enc_for_link(res_ctx, stream->link);
+
+	if (enc_index >= 0) {
+		release_hpo_dp_link_enc(res_ctx, enc_index);
+		pipe_ctx->link_res.hpo_dp_link_enc = NULL;
 	}
 }
 
@@ -1713,6 +1879,24 @@ static int acquire_first_free_pipe(
 	return -1;
 }
 
+static struct hpo_dp_stream_encoder *find_first_free_match_hpo_dp_stream_enc_for_link(
+		struct resource_context *res_ctx,
+		const struct resource_pool *pool,
+		struct dc_stream_state *stream)
+{
+	int i;
+
+	for (i = 0; i < pool->hpo_dp_stream_enc_count; i++) {
+		if (!res_ctx->is_hpo_dp_stream_enc_acquired[i] &&
+				pool->hpo_dp_stream_enc[i]) {
+
+			return pool->hpo_dp_stream_enc[i];
+		}
+	}
+
+	return NULL;
+}
+
 static struct audio *find_first_free_audio(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
@@ -1742,7 +1926,7 @@ static struct audio *find_first_free_audio(
 			return pool->audios[i];
 		}
 	}
-	return 0;
+	return NULL;
 }
 
 /*
@@ -1799,9 +1983,14 @@ enum dc_status dc_remove_stream_from_ctx(
 				dc->res_pool,
 			del_pipe->stream_res.stream_enc,
 			false);
-	/* Release link encoder from stream in new dc_state. */
-	if (dc->res_pool->funcs->link_enc_unassign)
-		dc->res_pool->funcs->link_enc_unassign(new_ctx, del_pipe->stream);
+
+	if (is_dp_128b_132b_signal(del_pipe)) {
+		update_hpo_dp_stream_engine_usage(
+			&new_ctx->res_ctx, dc->res_pool,
+			del_pipe->stream_res.hpo_dp_stream_enc,
+			false);
+		remove_hpo_dp_link_enc_from_ctx(&new_ctx->res_ctx, del_pipe, del_pipe->stream);
+	}
 
 	if (del_pipe->stream_res.audio)
 		update_audio_usage(
@@ -1925,6 +2114,8 @@ static int acquire_resource_from_hw_enabled_state(
 {
 	struct dc_link *link = stream->link;
 	unsigned int i, inst, tg_inst = 0;
+	uint32_t numPipes = 1;
+	uint32_t id_src[4] = {0};
 
 	/* Check for enabled DIG to identify enabled display */
 	if (!link->link_enc->funcs->is_dig_enabled(link->link_enc))
@@ -1954,37 +2145,67 @@ static int acquire_resource_from_hw_enabled_state(
 		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[tg_inst];
 
 		pipe_ctx->stream_res.tg = pool->timing_generators[tg_inst];
-		pipe_ctx->plane_res.mi = pool->mis[tg_inst];
-		pipe_ctx->plane_res.hubp = pool->hubps[tg_inst];
-		pipe_ctx->plane_res.ipp = pool->ipps[tg_inst];
-		pipe_ctx->plane_res.xfm = pool->transforms[tg_inst];
-		pipe_ctx->plane_res.dpp = pool->dpps[tg_inst];
-		pipe_ctx->stream_res.opp = pool->opps[tg_inst];
+		id_src[0] = tg_inst;
 
-		if (pool->dpps[tg_inst]) {
-			pipe_ctx->plane_res.mpcc_inst = pool->dpps[tg_inst]->inst;
+		if (pipe_ctx->stream_res.tg->funcs->get_optc_source)
+			pipe_ctx->stream_res.tg->funcs->get_optc_source(pipe_ctx->stream_res.tg,
+					&numPipes, &id_src[0], &id_src[1]);
 
-			// Read DPP->MPCC->OPP Pipe from HW State
-			if (pool->mpc->funcs->read_mpcc_state) {
-				struct mpcc_state s = {0};
-
-				pool->mpc->funcs->read_mpcc_state(pool->mpc, pipe_ctx->plane_res.mpcc_inst, &s);
-
-				if (s.dpp_id < MAX_MPCC)
-					pool->mpc->mpcc_array[pipe_ctx->plane_res.mpcc_inst].dpp_id = s.dpp_id;
-
-				if (s.bot_mpcc_id < MAX_MPCC)
-					pool->mpc->mpcc_array[pipe_ctx->plane_res.mpcc_inst].mpcc_bot =
-							&pool->mpc->mpcc_array[s.bot_mpcc_id];
-
-				if (s.opp_id < MAX_OPP)
-					pipe_ctx->stream_res.opp->mpc_tree_params.opp_id = s.opp_id;
-			}
+		if (id_src[0] == 0xf && id_src[1] == 0xf) {
+			id_src[0] = tg_inst;
+			numPipes = 1;
 		}
-		pipe_ctx->pipe_idx = tg_inst;
 
-		pipe_ctx->stream = stream;
-		return tg_inst;
+		for (i = 0; i < numPipes; i++) {
+			//Check if src id invalid
+			if (id_src[i] == 0xf)
+				return -1;
+
+			pipe_ctx->stream_res.tg = pool->timing_generators[tg_inst];
+			pipe_ctx->plane_res.mi = pool->mis[id_src[i]];
+			pipe_ctx->plane_res.hubp = pool->hubps[id_src[i]];
+			pipe_ctx->plane_res.ipp = pool->ipps[id_src[i]];
+			pipe_ctx->plane_res.xfm = pool->transforms[id_src[i]];
+			pipe_ctx->plane_res.dpp = pool->dpps[id_src[i]];
+			pipe_ctx->stream_res.opp = pool->opps[id_src[i]];
+
+			if (pool->dpps[id_src[i]]) {
+				pipe_ctx->plane_res.mpcc_inst = pool->dpps[id_src[i]]->inst;
+
+				if (pool->mpc->funcs->read_mpcc_state) {
+					struct mpcc_state s = {0};
+					pool->mpc->funcs->read_mpcc_state(pool->mpc, pipe_ctx->plane_res.mpcc_inst, &s);
+					if (s.dpp_id < MAX_MPCC)
+						pool->mpc->mpcc_array[pipe_ctx->plane_res.mpcc_inst].dpp_id =
+								s.dpp_id;
+					if (s.bot_mpcc_id < MAX_MPCC)
+						pool->mpc->mpcc_array[pipe_ctx->plane_res.mpcc_inst].mpcc_bot =
+								&pool->mpc->mpcc_array[s.bot_mpcc_id];
+					if (s.opp_id < MAX_OPP)
+						pipe_ctx->stream_res.opp->mpc_tree_params.opp_id = s.opp_id;
+				}
+			}
+			pipe_ctx->pipe_idx = id_src[i];
+
+			if (id_src[i] >= pool->timing_generator_count) {
+				id_src[i] = pool->timing_generator_count - 1;
+				pipe_ctx->stream_res.tg = pool->timing_generators[id_src[i]];
+				pipe_ctx->stream_res.opp = pool->opps[id_src[i]];
+			}
+
+			pipe_ctx->stream = stream;
+		}
+
+		if (numPipes == 2) {
+			stream->apply_boot_odm_mode = dm_odm_combine_policy_2to1;
+			res_ctx->pipe_ctx[id_src[0]].next_odm_pipe = &res_ctx->pipe_ctx[id_src[1]];
+			res_ctx->pipe_ctx[id_src[0]].prev_odm_pipe = NULL;
+			res_ctx->pipe_ctx[id_src[1]].next_odm_pipe = NULL;
+			res_ctx->pipe_ctx[id_src[1]].prev_odm_pipe = &res_ctx->pipe_ctx[id_src[0]];
+		} else
+			stream->apply_boot_odm_mode = dm_odm_combine_mode_disabled;
+
+		return id_src[0];
 	}
 
 	return -1;
@@ -1996,10 +2217,9 @@ static void mark_seamless_boot_stream(
 {
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 
-	/* TODO: Check Linux */
 	if (dc->config.allow_seamless_boot_optimization &&
 			!dcb->funcs->is_accelerated_mode(dcb)) {
-		if (dc_validate_seamless_boot_timing(dc, stream->sink, &stream->timing))
+		if (dc_validate_boot_timing(dc, stream->sink, &stream->timing))
 			stream->apply_seamless_boot_optimization = true;
 	}
 }
@@ -2033,10 +2253,8 @@ enum dc_status resource_map_pool_resources(
 		/* acquire new resources */
 		pipe_idx = acquire_first_free_pipe(&context->res_ctx, pool, stream);
 
-#ifdef CONFIG_DRM_AMD_DC_DCN
 	if (pipe_idx < 0)
 		pipe_idx = acquire_first_split_pipe(&context->res_ctx, pool, stream);
-#endif
 
 	if (pipe_idx < 0 || context->res_ctx.pipe_ctx[pipe_idx].stream_res.tg == NULL)
 		return DC_NO_CONTROLLER_RESOURCE;
@@ -2054,6 +2272,31 @@ enum dc_status resource_map_pool_resources(
 		&context->res_ctx, pool,
 		pipe_ctx->stream_res.stream_enc,
 		true);
+
+	/* Allocate DP HPO Stream Encoder based on signal, hw capabilities
+	 * and link settings
+	 */
+	if (dc_is_dp_signal(stream->signal) &&
+			dc->caps.dp_hpo) {
+		struct dc_link_settings link_settings = {0};
+
+		decide_link_settings(stream, &link_settings);
+		if (dp_get_link_encoding_format(&link_settings) == DP_128b_132b_ENCODING) {
+			pipe_ctx->stream_res.hpo_dp_stream_enc =
+					find_first_free_match_hpo_dp_stream_enc_for_link(
+							&context->res_ctx, pool, stream);
+
+			if (!pipe_ctx->stream_res.hpo_dp_stream_enc)
+				return DC_NO_STREAM_ENC_RESOURCE;
+
+			update_hpo_dp_stream_engine_usage(
+					&context->res_ctx, pool,
+					pipe_ctx->stream_res.hpo_dp_stream_enc,
+					true);
+			if (!add_hpo_dp_link_enc_to_ctx(&context->res_ctx, pool, pipe_ctx, stream))
+				return DC_NO_LINK_ENC_RESOURCE;
+		}
+	}
 
 	/* TODO: Add check if ASIC support and EDID audio */
 	if (!stream->converter_disable_audio &&
@@ -2074,14 +2317,10 @@ enum dc_status resource_map_pool_resources(
 
 	/* Add ABM to the resource if on EDP */
 	if (pipe_ctx->stream && dc_is_embedded_signal(pipe_ctx->stream->signal)) {
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 		if (pool->abm)
 			pipe_ctx->stream_res.abm = pool->abm;
 		else
 			pipe_ctx->stream_res.abm = pool->multiple_abms[pipe_ctx->stream_res.tg->inst];
-#else
-		pipe_ctx->stream_res.abm = pool->abm;
-#endif
 	}
 
 	for (i = 0; i < context->stream_count; i++)
@@ -2117,11 +2356,17 @@ void dc_resource_state_construct(
 		struct dc_state *dst_ctx)
 {
 	dst_ctx->clk_mgr = dc->clk_mgr;
+
+	/* Initialise DIG link encoder resource tracking variables. */
+	link_enc_cfg_init(dc, dst_ctx);
 }
 
 
 bool dc_resource_is_dsc_encoding_supported(const struct dc *dc)
 {
+	if (dc->res_pool == NULL)
+		return false;
+
 	return dc->res_pool->res_cap->num_dsc > 0;
 }
 
@@ -2145,16 +2390,6 @@ enum dc_status dc_validate_global_state(
 
 	if (!new_ctx)
 		return DC_ERROR_UNEXPECTED;
-#if defined(CONFIG_DRM_AMD_DC_DCN)
-
-	/*
-	 * Update link encoder to stream assignment.
-	 * TODO: Split out reason allocation from validation.
-	 */
-	if (dc->res_pool->funcs->link_encs_assign)
-		dc->res_pool->funcs->link_encs_assign(
-			dc, new_ctx, new_ctx->streams, new_ctx->stream_count);
-#endif
 
 	if (dc->res_pool->funcs->validate_global) {
 		result = dc->res_pool->funcs->validate_global(dc, new_ctx);
@@ -2205,6 +2440,14 @@ enum dc_status dc_validate_global_state(
 	if (result == DC_OK)
 		if (!dc->res_pool->funcs->validate_bandwidth(dc, new_ctx, fast_validate))
 			result = DC_FAIL_BANDWIDTH_VALIDATE;
+
+	/*
+	 * Only update link encoder to stream assignment after bandwidth validation passed.
+	 * TODO: Split out assignment and validation.
+	 */
+	if (result == DC_OK && dc->res_pool->funcs->link_encs_assign && fast_validate == false)
+		dc->res_pool->funcs->link_encs_assign(
+			dc, new_ctx, new_ctx->streams, new_ctx->stream_count);
 
 	return result;
 }
@@ -2399,19 +2642,11 @@ static void set_avi_info_frame(
 
 	/* TODO : We should handle YCC quantization */
 	/* but we do not have matrix calculation */
-	if (stream->qy_bit == 1) {
-		if (color_space == COLOR_SPACE_SRGB ||
-			color_space == COLOR_SPACE_2020_RGB_FULLRANGE)
-			hdmi_info.bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
-		else if (color_space == COLOR_SPACE_SRGB_LIMITED ||
-					color_space == COLOR_SPACE_2020_RGB_LIMITEDRANGE)
-			hdmi_info.bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
-		else
-			hdmi_info.bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
-	} else
-		hdmi_info.bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
+	hdmi_info.bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
 
 	///VIC
+	if (pipe_ctx->stream->timing.hdmi_vic != 0)
+		vic = 0;
 	format = stream->timing.timing_3d_format;
 	/*todo, add 3DStereo support*/
 	if (format != TIMING_3D_FORMAT_NONE) {
@@ -2730,9 +2965,24 @@ bool pipe_need_reprogram(
 	if (pipe_ctx_old->stream_res.dsc != pipe_ctx->stream_res.dsc)
 		return true;
 
-	/* DIG link encoder resource assignment for stream changed. */
-	if (pipe_ctx_old->stream->link_enc != pipe_ctx->stream->link_enc)
+	if (pipe_ctx_old->stream_res.hpo_dp_stream_enc != pipe_ctx->stream_res.hpo_dp_stream_enc)
 		return true;
+	if (pipe_ctx_old->link_res.hpo_dp_link_enc != pipe_ctx->link_res.hpo_dp_link_enc)
+		return true;
+
+	/* DIG link encoder resource assignment for stream changed. */
+	if (pipe_ctx_old->stream->ctx->dc->res_pool->funcs->link_encs_assign) {
+		bool need_reprogram = false;
+		struct dc *dc = pipe_ctx_old->stream->ctx->dc;
+		enum link_enc_cfg_mode mode = dc->current_state->res_ctx.link_enc_cfg_ctx.mode;
+
+		dc->current_state->res_ctx.link_enc_cfg_ctx.mode = LINK_ENC_CFG_STEADY;
+		if (link_enc_cfg_get_link_enc_used_by_stream(dc, pipe_ctx_old->stream) != pipe_ctx->stream->link_enc)
+			need_reprogram = true;
+		dc->current_state->res_ctx.link_enc_cfg_ctx.mode = mode;
+
+		return need_reprogram;
+	}
 
 	return false;
 }
@@ -2875,7 +3125,8 @@ enum dc_status dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 		res = DC_FAIL_CONTROLLER_VALIDATE;
 
 	if (res == DC_OK) {
-		if (!link->link_enc->funcs->validate_output_with_stream(
+		if (link->ep_type == DISPLAY_ENDPOINT_PHY &&
+				!link->link_enc->funcs->validate_output_with_stream(
 						link->link_enc, stream))
 			res = DC_FAIL_ENC_VALIDATE;
 	}
@@ -2893,6 +3144,11 @@ enum dc_status dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 enum dc_status dc_validate_plane(struct dc *dc, const struct dc_plane_state *plane_state)
 {
 	enum dc_status res = DC_OK;
+
+	/* check if surface has invalid dimensions */
+	if (plane_state->src_rect.width == 0 || plane_state->src_rect.height == 0 ||
+		plane_state->dst_rect.width == 0 || plane_state->dst_rect.height == 0)
+		return DC_FAIL_SURFACE_VALIDATE;
 
 	/* TODO For now validates pixel format only */
 	if (dc->res_pool->funcs->validate_plane)
@@ -2919,10 +3175,8 @@ unsigned int resource_pixel_format_to_bpp(enum surface_pixel_format format)
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010_XR_BIAS:
-#if defined(CONFIG_DRM_AMD_DC_DCN)
 	case SURFACE_PIXEL_FORMAT_GRPH_RGBE:
 	case SURFACE_PIXEL_FORMAT_GRPH_RGBE_ALPHA:
-#endif
 		return 32;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
@@ -2979,3 +3233,158 @@ void get_audio_check(struct audio_info *aud_modes,
 	}
 }
 
+static struct hpo_dp_link_encoder *get_temp_hpo_dp_link_enc(
+		const struct resource_context *res_ctx,
+		const struct resource_pool *const pool,
+		const struct dc_link *link)
+{
+	struct hpo_dp_link_encoder *hpo_dp_link_enc = NULL;
+	int enc_index;
+
+	enc_index = find_acquired_hpo_dp_link_enc_for_link(res_ctx, link);
+
+	if (enc_index < 0)
+		enc_index = find_free_hpo_dp_link_enc(res_ctx, pool);
+
+	if (enc_index >= 0)
+		hpo_dp_link_enc = pool->hpo_dp_link_enc[enc_index];
+
+	return hpo_dp_link_enc;
+}
+
+bool get_temp_dp_link_res(struct dc_link *link,
+		struct link_resource *link_res,
+		struct dc_link_settings *link_settings)
+{
+	const struct dc *dc  = link->dc;
+	const struct resource_context *res_ctx = &dc->current_state->res_ctx;
+
+	memset(link_res, 0, sizeof(*link_res));
+
+	if (dp_get_link_encoding_format(link_settings) == DP_128b_132b_ENCODING) {
+		link_res->hpo_dp_link_enc = get_temp_hpo_dp_link_enc(res_ctx,
+				dc->res_pool, link);
+		if (!link_res->hpo_dp_link_enc)
+			return false;
+	}
+	return true;
+}
+
+void reset_syncd_pipes_from_disabled_pipes(struct dc *dc,
+		struct dc_state *context)
+{
+	int i, j;
+	struct pipe_ctx *pipe_ctx_old, *pipe_ctx, *pipe_ctx_syncd;
+
+	/* If pipe backend is reset, need to reset pipe syncd status */
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		pipe_ctx_old =	&dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		if (!pipe_ctx_old->stream)
+			continue;
+
+		if (pipe_ctx_old->top_pipe || pipe_ctx_old->prev_odm_pipe)
+			continue;
+
+		if (!pipe_ctx->stream ||
+				pipe_need_reprogram(pipe_ctx_old, pipe_ctx)) {
+
+			/* Reset all the syncd pipes from the disabled pipe */
+			for (j = 0; j < dc->res_pool->pipe_count; j++) {
+				pipe_ctx_syncd = &context->res_ctx.pipe_ctx[j];
+				if ((GET_PIPE_SYNCD_FROM_PIPE(pipe_ctx_syncd) == pipe_ctx_old->pipe_idx) ||
+					!IS_PIPE_SYNCD_VALID(pipe_ctx_syncd))
+					SET_PIPE_SYNCD_TO_PIPE(pipe_ctx_syncd, j);
+			}
+		}
+	}
+}
+
+void check_syncd_pipes_for_disabled_master_pipe(struct dc *dc,
+	struct dc_state *context,
+	uint8_t disabled_master_pipe_idx)
+{
+	int i;
+	struct pipe_ctx *pipe_ctx, *pipe_ctx_check;
+
+	pipe_ctx = &context->res_ctx.pipe_ctx[disabled_master_pipe_idx];
+	if ((GET_PIPE_SYNCD_FROM_PIPE(pipe_ctx) != disabled_master_pipe_idx) ||
+		!IS_PIPE_SYNCD_VALID(pipe_ctx))
+		SET_PIPE_SYNCD_TO_PIPE(pipe_ctx, disabled_master_pipe_idx);
+
+	/* for the pipe disabled, check if any slave pipe exists and assert */
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		pipe_ctx_check = &context->res_ctx.pipe_ctx[i];
+
+		if ((GET_PIPE_SYNCD_FROM_PIPE(pipe_ctx_check) == disabled_master_pipe_idx) &&
+			IS_PIPE_SYNCD_VALID(pipe_ctx_check) && (i != disabled_master_pipe_idx))
+			DC_ERR("DC: Failure: pipe_idx[%d] syncd with disabled master pipe_idx[%d]\n",
+				i, disabled_master_pipe_idx);
+	}
+}
+
+uint8_t resource_transmitter_to_phy_idx(const struct dc *dc, enum transmitter transmitter)
+{
+	/* TODO - get transmitter to phy idx mapping from DMUB */
+	uint8_t phy_idx = transmitter - TRANSMITTER_UNIPHY_A;
+
+	if (dc->ctx->dce_version == DCN_VERSION_3_1 &&
+			dc->ctx->asic_id.hw_internal_rev == YELLOW_CARP_B0) {
+		switch (transmitter) {
+		case TRANSMITTER_UNIPHY_A:
+			phy_idx = 0;
+			break;
+		case TRANSMITTER_UNIPHY_B:
+			phy_idx = 1;
+			break;
+		case TRANSMITTER_UNIPHY_C:
+			phy_idx = 5;
+			break;
+		case TRANSMITTER_UNIPHY_D:
+			phy_idx = 6;
+			break;
+		case TRANSMITTER_UNIPHY_E:
+			phy_idx = 4;
+			break;
+		default:
+			phy_idx = 0;
+			break;
+		}
+	}
+
+	return phy_idx;
+}
+
+const struct link_hwss *get_link_hwss(const struct dc_link *link,
+		const struct link_resource *link_res)
+{
+	/* Link_hwss is only accessible by getter function instead of accessing
+	 * by pointers in dc with the intent to protect against breaking polymorphism.
+	 */
+	if (can_use_hpo_dp_link_hwss(link, link_res))
+		/* TODO: some assumes that if decided link settings is 128b/132b
+		 * channel coding format hpo_dp_link_enc should be used.
+		 * Others believe that if hpo_dp_link_enc is available in link
+		 * resource then hpo_dp_link_enc must be used. This bound between
+		 * hpo_dp_link_enc != NULL and decided link settings is loosely coupled
+		 * with a premise that both hpo_dp_link_enc pointer and decided link
+		 * settings are determined based on single policy function like
+		 * "decide_link_settings" from upper layer. This "convention"
+		 * cannot be maintained and enforced at current level.
+		 * Therefore a refactor is due so we can enforce a strong bound
+		 * between those two parameters at this level.
+		 *
+		 * To put it simple, we want to make enforcement at low level so that
+		 * we will not return link hwss if caller plans to do 8b/10b
+		 * with an hpo encoder. Or we can return a very dummy one that doesn't
+		 * do work for all functions
+		 */
+		return get_hpo_dp_link_hwss();
+	else if (can_use_dpia_link_hwss(link, link_res))
+		return get_dpia_link_hwss();
+	else if (can_use_dio_link_hwss(link, link_res))
+		return get_dio_link_hwss();
+	else
+		return get_virtual_link_hwss();
+}

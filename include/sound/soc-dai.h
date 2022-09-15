@@ -124,6 +124,12 @@ struct snd_compr_stream;
 #define SND_SOC_DAIFMT_CBM_CFS		SND_SOC_DAIFMT_CBP_CFC
 #define SND_SOC_DAIFMT_CBS_CFS		SND_SOC_DAIFMT_CBC_CFC
 
+/* when passed to set_fmt directly indicate if the device is provider or consumer */
+#define SND_SOC_DAIFMT_BP_FP		SND_SOC_DAIFMT_CBP_CFP
+#define SND_SOC_DAIFMT_BC_FP		SND_SOC_DAIFMT_CBC_CFP
+#define SND_SOC_DAIFMT_BP_FC		SND_SOC_DAIFMT_CBP_CFC
+#define SND_SOC_DAIFMT_BC_FC		SND_SOC_DAIFMT_CBC_CFC
+
 /* Describes the possible PCM format */
 #define SND_SOC_POSSIBLE_DAIFMT_CLOCK_PROVIDER_SHIFT	48
 #define SND_SOC_POSSIBLE_DAIFMT_CLOCK_PROVIDER_MASK	(0xFFFFULL << SND_SOC_POSSIBLE_DAIFMT_CLOCK_PROVIDER_SHIFT)
@@ -282,6 +288,7 @@ struct snd_soc_dai_ops {
 	 * Called by soc_card drivers, normally in their hw_params.
 	 */
 	int (*set_fmt)(struct snd_soc_dai *dai, unsigned int fmt);
+	int (*set_fmt_new)(struct snd_soc_dai *dai, unsigned int fmt);
 	int (*xlate_tdm_slot_mask)(unsigned int slots,
 		unsigned int *tx_mask, unsigned int *rx_mask);
 	int (*set_tdm_slot)(struct snd_soc_dai *dai,
@@ -295,9 +302,9 @@ struct snd_soc_dai_ops {
 			unsigned int *rx_num, unsigned int *rx_slot);
 	int (*set_tristate)(struct snd_soc_dai *dai, int tristate);
 
-	int (*set_sdw_stream)(struct snd_soc_dai *dai,
-			void *stream, int direction);
-	void *(*get_sdw_stream)(struct snd_soc_dai *dai, int direction);
+	int (*set_stream)(struct snd_soc_dai *dai,
+			  void *stream, int direction);
+	void *(*get_stream)(struct snd_soc_dai *dai, int direction);
 
 	/*
 	 * DAI digital mute - optional.
@@ -515,42 +522,42 @@ static inline void *snd_soc_dai_get_drvdata(struct snd_soc_dai *dai)
 }
 
 /**
- * snd_soc_dai_set_sdw_stream() - Configures a DAI for SDW stream operation
+ * snd_soc_dai_set_stream() - Configures a DAI for stream operation
  * @dai: DAI
- * @stream: STREAM
+ * @stream: STREAM (opaque structure depending on DAI type)
  * @direction: Stream direction(Playback/Capture)
- * SoundWire subsystem doesn't have a notion of direction and we reuse
+ * Some subsystems, such as SoundWire, don't have a notion of direction and we reuse
  * the ASoC stream direction to configure sink/source ports.
  * Playback maps to source ports and Capture for sink ports.
  *
  * This should be invoked with NULL to clear the stream set previously.
  * Returns 0 on success, a negative error code otherwise.
  */
-static inline int snd_soc_dai_set_sdw_stream(struct snd_soc_dai *dai,
-				void *stream, int direction)
+static inline int snd_soc_dai_set_stream(struct snd_soc_dai *dai,
+					 void *stream, int direction)
 {
-	if (dai->driver->ops->set_sdw_stream)
-		return dai->driver->ops->set_sdw_stream(dai, stream, direction);
+	if (dai->driver->ops->set_stream)
+		return dai->driver->ops->set_stream(dai, stream, direction);
 	else
 		return -ENOTSUPP;
 }
 
 /**
- * snd_soc_dai_get_sdw_stream() - Retrieves SDW stream from DAI
+ * snd_soc_dai_get_stream() - Retrieves stream from DAI
  * @dai: DAI
  * @direction: Stream direction(Playback/Capture)
  *
  * This routine only retrieves that was previously configured
- * with snd_soc_dai_get_sdw_stream()
+ * with snd_soc_dai_get_stream()
  *
  * Returns pointer to stream or an ERR_PTR value, e.g.
  * ERR_PTR(-ENOTSUPP) if callback is not supported;
  */
-static inline void *snd_soc_dai_get_sdw_stream(struct snd_soc_dai *dai,
-					       int direction)
+static inline void *snd_soc_dai_get_stream(struct snd_soc_dai *dai,
+					   int direction)
 {
-	if (dai->driver->ops->get_sdw_stream)
-		return dai->driver->ops->get_sdw_stream(dai, direction);
+	if (dai->driver->ops->get_stream)
+		return dai->driver->ops->get_stream(dai, direction);
 	else
 		return ERR_PTR(-ENOTSUPP);
 }

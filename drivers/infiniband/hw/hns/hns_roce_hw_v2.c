@@ -1273,6 +1273,16 @@ static int hns_roce_cmq_csq_done(struct hns_roce_dev *hr_dev)
 	return tail == priv->cmq.csq.head;
 }
 
+static void update_cmdq_status(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_v2_priv *priv = hr_dev->priv;
+	struct hnae3_handle *handle = priv->handle;
+
+	if (handle->rinfo.reset_state == HNS_ROCE_STATE_RST_INIT ||
+	    handle->rinfo.instance_state == HNS_ROCE_STATE_INIT)
+		hr_dev->cmd.state = HNS_ROCE_CMDQ_STATE_FATAL_ERR;
+}
+
 static int __hns_roce_cmq_send(struct hns_roce_dev *hr_dev,
 			       struct hns_roce_cmq_desc *desc, int num)
 {
@@ -1326,6 +1336,8 @@ static int __hns_roce_cmq_send(struct hns_roce_dev *hr_dev,
 			 csq->head, tail);
 		csq->head = tail;
 
+		update_cmdq_status(hr_dev);
+
 		ret = -EAGAIN;
 	}
 
@@ -1339,6 +1351,9 @@ static int hns_roce_cmq_send(struct hns_roce_dev *hr_dev,
 {
 	bool busy;
 	int ret;
+
+	if (hr_dev->cmd.state == HNS_ROCE_CMDQ_STATE_FATAL_ERR)
+		return -EIO;
 
 	if (!v2_chk_mbox_is_avail(hr_dev, &busy))
 		return busy ? -EBUSY : 0;
@@ -1536,6 +1551,9 @@ static void hns_roce_function_clear(struct hns_roce_dev *hr_dev)
 {
 	int i;
 
+	if (hr_dev->cmd.state == HNS_ROCE_CMDQ_STATE_FATAL_ERR)
+		return;
+
 	for (i = hr_dev->func_num - 1; i >= 0; i--) {
 		__hns_roce_function_clear(hr_dev, i);
 		if (i != 0)
@@ -1604,11 +1622,17 @@ static int hns_roce_config_global_param(struct hns_roce_dev *hr_dev)
 {
 	struct hns_roce_cmq_desc desc;
 	struct hns_roce_cmq_req *req = (struct hns_roce_cmq_req *)desc.data;
+	u32 clock_cycles_of_1us;
 
 	hns_roce_cmq_setup_basic_desc(&desc, HNS_ROCE_OPC_CFG_GLOBAL_PARAM,
 				      false);
 
-	hr_reg_write(req, CFG_GLOBAL_PARAM_1US_CYCLES, 0x3e8);
+	if (hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP08)
+		clock_cycles_of_1us = HNS_ROCE_1NS_CFG;
+	else
+		clock_cycles_of_1us = HNS_ROCE_1US_CFG;
+
+	hr_reg_write(req, CFG_GLOBAL_PARAM_1US_CYCLES, clock_cycles_of_1us);
 	hr_reg_write(req, CFG_GLOBAL_PARAM_UDP_PORT, ROCE_V2_UDP_DPORT);
 
 	return hns_roce_cmq_send(hr_dev, &desc, 1);
@@ -1949,7 +1973,7 @@ static void set_default_caps(struct hns_roce_dev *hr_dev)
 	caps->num_mtpts		= HNS_ROCE_V2_MAX_MTPT_NUM;
 	caps->num_pds		= HNS_ROCE_V2_MAX_PD_NUM;
 	caps->num_qpc_timer	= HNS_ROCE_V2_MAX_QPC_TIMER_NUM;
-	caps->num_cqc_timer	= HNS_ROCE_V2_MAX_CQC_TIMER_NUM;
+	caps->cqc_timer_bt_num	= HNS_ROCE_V2_MAX_CQC_TIMER_BT_NUM;
 
 	caps->max_qp_init_rdma	= HNS_ROCE_V2_MAX_QP_INIT_RDMA;
 	caps->max_qp_dest_rdma	= HNS_ROCE_V2_MAX_QP_DEST_RDMA;
@@ -2243,7 +2267,6 @@ static int hns_roce_query_pf_caps(struct hns_roce_dev *hr_dev)
 	caps->max_rq_sg = roundup_pow_of_two(caps->max_rq_sg);
 	caps->max_extend_sg	     = le32_to_cpu(resp_a->max_extend_sg);
 	caps->num_qpc_timer	     = le16_to_cpu(resp_a->num_qpc_timer);
-	caps->num_cqc_timer	     = le16_to_cpu(resp_a->num_cqc_timer);
 	caps->max_srq_sges	     = le16_to_cpu(resp_a->max_srq_sges);
 	caps->max_srq_sges = roundup_pow_of_two(caps->max_srq_sges);
 	caps->num_aeq_vectors	     = resp_a->num_aeq_vectors;
@@ -2812,6 +2835,9 @@ static int v2_wait_mbox_complete(struct hns_roce_dev *hr_dev, u32 timeout,
 	mb_st = (struct hns_roce_mbox_status *)desc.data;
 	end = msecs_to_jiffies(timeout) + jiffies;
 	while (v2_chk_mbox_is_avail(hr_dev, &busy)) {
+		if (hr_dev->cmd.state == HNS_ROCE_CMDQ_STATE_FATAL_ERR)
+			return -EIO;
+
 		status = 0;
 		hns_roce_cmq_setup_basic_desc(&desc, HNS_ROCE_OPC_QUERY_MB_ST,
 					      true);
@@ -4812,6 +4838,30 @@ static int hns_roce_v2_set_abs_fields(struct ib_qp *ibqp,
 	return ret;
 }
 
+static bool check_qp_timeout_cfg_range(struct hns_roce_dev *hr_dev, u8 *timeout)
+{
+#define QP_ACK_TIMEOUT_MAX_HIP08 20
+#define QP_ACK_TIMEOUT_OFFSET 10
+#define QP_ACK_TIMEOUT_MAX 31
+
+	if (hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP08) {
+		if (*timeout > QP_ACK_TIMEOUT_MAX_HIP08) {
+			ibdev_warn(&hr_dev->ib_dev,
+				   "Local ACK timeout shall be 0 to 20.\n");
+			return false;
+		}
+		*timeout += QP_ACK_TIMEOUT_OFFSET;
+	} else if (hr_dev->pci_dev->revision > PCI_REVISION_ID_HIP08) {
+		if (*timeout > QP_ACK_TIMEOUT_MAX) {
+			ibdev_warn(&hr_dev->ib_dev,
+				   "Local ACK timeout shall be 0 to 31.\n");
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static int hns_roce_v2_set_opt_fields(struct ib_qp *ibqp,
 				      const struct ib_qp_attr *attr,
 				      int attr_mask,
@@ -4821,6 +4871,7 @@ static int hns_roce_v2_set_opt_fields(struct ib_qp *ibqp,
 	struct hns_roce_dev *hr_dev = to_hr_dev(ibqp->device);
 	struct hns_roce_qp *hr_qp = to_hr_qp(ibqp);
 	int ret = 0;
+	u8 timeout;
 
 	if (attr_mask & IB_QP_AV) {
 		ret = hns_roce_v2_set_path(ibqp, attr, attr_mask, context,
@@ -4830,12 +4881,10 @@ static int hns_roce_v2_set_opt_fields(struct ib_qp *ibqp,
 	}
 
 	if (attr_mask & IB_QP_TIMEOUT) {
-		if (attr->timeout < 31) {
-			hr_reg_write(context, QPC_AT, attr->timeout);
+		timeout = attr->timeout;
+		if (check_qp_timeout_cfg_range(hr_dev, &timeout)) {
+			hr_reg_write(context, QPC_AT, timeout);
 			hr_reg_clear(qpc_mask, QPC_AT);
-		} else {
-			ibdev_warn(&hr_dev->ib_dev,
-				   "Local ACK timeout shall be 0 to 30.\n");
 		}
 	}
 
@@ -4892,7 +4941,9 @@ static int hns_roce_v2_set_opt_fields(struct ib_qp *ibqp,
 		set_access_flags(hr_qp, context, qpc_mask, attr, attr_mask);
 
 	if (attr_mask & IB_QP_MIN_RNR_TIMER) {
-		hr_reg_write(context, QPC_MIN_RNR_TIME, attr->min_rnr_timer);
+		hr_reg_write(context, QPC_MIN_RNR_TIME,
+			    hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP08 ?
+			    HNS_ROCE_RNR_TIMER_10NS : attr->min_rnr_timer);
 		hr_reg_clear(qpc_mask, QPC_MIN_RNR_TIME);
 	}
 
@@ -5509,6 +5560,16 @@ static int hns_roce_v2_modify_cq(struct ib_cq *cq, u16 cq_count, u16 cq_period)
 
 	hr_reg_write(cq_context, CQC_CQ_MAX_CNT, cq_count);
 	hr_reg_clear(cqc_mask, CQC_CQ_MAX_CNT);
+
+	if (hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP08) {
+		if (cq_period * HNS_ROCE_CLOCK_ADJUST > USHRT_MAX) {
+			dev_info(hr_dev->dev,
+				 "cq_period(%u) reached the upper limit, adjusted to 65.\n",
+				 cq_period);
+			cq_period = HNS_ROCE_MAX_CQ_PERIOD;
+		}
+		cq_period *= HNS_ROCE_CLOCK_ADJUST;
+	}
 	hr_reg_write(cq_context, CQC_CQ_PERIOD, cq_period);
 	hr_reg_clear(cqc_mask, CQC_CQ_PERIOD);
 
@@ -5793,8 +5854,8 @@ static irqreturn_t hns_roce_v2_msix_interrupt_abn(int irq, void *dev_id)
 
 		dev_err(dev, "AEQ overflow!\n");
 
-		int_st |= 1 << HNS_ROCE_V2_VF_INT_ST_AEQ_OVERFLOW_S;
-		roce_write(hr_dev, ROCEE_VF_ABN_INT_ST_REG, int_st);
+		roce_write(hr_dev, ROCEE_VF_ABN_INT_ST_REG,
+			   1 << HNS_ROCE_V2_VF_INT_ST_AEQ_OVERFLOW_S);
 
 		/* Set reset level for reset_event() */
 		if (ops->set_default_reset_request)
@@ -5903,6 +5964,15 @@ static int config_eqc(struct hns_roce_dev *hr_dev, struct hns_roce_eq *eq,
 		     to_hr_hw_page_shift(eq->mtr.hem_cfg.buf_pg_shift));
 	hr_reg_write(eqc, EQC_EQ_PROD_INDX, HNS_ROCE_EQ_INIT_PROD_IDX);
 	hr_reg_write(eqc, EQC_EQ_MAX_CNT, eq->eq_max_cnt);
+
+	if (hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP08) {
+		if (eq->eq_period * HNS_ROCE_CLOCK_ADJUST > USHRT_MAX) {
+			dev_info(hr_dev->dev, "eq_period(%u) reached the upper limit, adjusted to 65.\n",
+				 eq->eq_period);
+			eq->eq_period = HNS_ROCE_MAX_EQ_PERIOD;
+		}
+		eq->eq_period *= HNS_ROCE_CLOCK_ADJUST;
+	}
 
 	hr_reg_write(eqc, EQC_EQ_PERIOD, eq->eq_period);
 	hr_reg_write(eqc, EQC_EQE_REPORT_TIMER, HNS_ROCE_EQ_INIT_REPORT_TIMER);

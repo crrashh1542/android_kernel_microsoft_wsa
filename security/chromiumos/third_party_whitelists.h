@@ -27,7 +27,7 @@
 
 #include "alt-syscall.h"
 
-static struct syscall_whitelist_entry third_party_whitelist[] = {
+static const struct syscall_whitelist_entry third_party_whitelist[] __initconst = {
 	SYSCALL_ENTRY(accept),
 	SYSCALL_ENTRY(bind),
 	SYSCALL_ENTRY(brk),
@@ -142,7 +142,7 @@ static struct syscall_whitelist_entry third_party_whitelist[] = {
 }; /* end third_party_whitelist */
 
 #ifdef CONFIG_COMPAT
-static struct syscall_whitelist_entry third_party_compat_whitelist[] = {
+static const struct syscall_whitelist_entry third_party_compat_whitelist[] __initconst = {
 	COMPAT_SYSCALL_ENTRY(access),
 	COMPAT_SYSCALL_ENTRY(brk),
 	COMPAT_SYSCALL_ENTRY(chdir),

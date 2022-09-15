@@ -14,8 +14,8 @@
 #define EVDI_DRV_H
 
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/version.h>
+#include <linux/mutex.h>
 #include <linux/device.h>
 #if KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
 #include <drm/drm_drv.h>
@@ -24,6 +24,11 @@
 #include <drm/drm_vblank.h>
 #else
 #include <drm/drmP.h>
+#endif
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+#include <drm/drm_legacy.h>
+#else
+#include <drm/drm_irq.h>
 #endif
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
@@ -61,7 +66,7 @@ struct evdi_gem_object {
 	unsigned int pages_pin_count;
 	struct mutex pages_lock;
 	void *vmapping;
-#if KERNEL_VERSION(5, 11, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 11, 0) <= LINUX_VERSION_CODE || defined(EL8)
 	bool vmap_is_iomem;
 #endif
 	struct sg_table *sg;
@@ -72,6 +77,7 @@ struct evdi_gem_object {
 	struct reservation_object *resv;
 	struct reservation_object _resv;
 #endif
+	bool allow_sw_cursor_rect_updates;
 };
 
 #define to_evdi_bo(x) container_of(x, struct evdi_gem_object, base)
@@ -91,11 +97,15 @@ int evdi_connector_init(struct drm_device *dev, struct drm_encoder *encoder);
 
 struct drm_encoder *evdi_encoder_init(struct drm_device *dev);
 
-int evdi_driver_load(struct drm_device *dev, unsigned long flags);
-void evdi_driver_unload(struct drm_device *dev);
+void evdi_drm_device_unload(struct drm_device *dev);
 int evdi_driver_open(struct drm_device *drm_dev, struct drm_file *file);
 void evdi_driver_preclose(struct drm_device *dev, struct drm_file *file_priv);
 void evdi_driver_postclose(struct drm_device *dev, struct drm_file *file_priv);
+
+#ifdef CONFIG_COMPAT
+long evdi_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+#endif
+
 
 #ifdef CONFIG_FB
 int evdi_fbdev_init(struct drm_device *dev);

@@ -25,7 +25,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_atomic.h>
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE || defined(EL8)
 #include <drm/drm_damage_helper.h>
 #endif
 #include "evdi_drm_drv.h"
@@ -63,22 +63,22 @@ struct drm_clip_rect evdi_framebuffer_sanitize_rect(
 
 
 	if (rect.x1 > fb->base.width) {
-		EVDI_WARN("Wrong clip rect: x1 > fb.width\n");
+		EVDI_DEBUG("Wrong clip rect: x1 > fb.width\n");
 		rect.x1 = fb->base.width;
 	}
 
 	if (rect.y1 > fb->base.height) {
-		EVDI_WARN("Wrong clip rect: y1 > fb.height\n");
+		EVDI_DEBUG("Wrong clip rect: y1 > fb.height\n");
 		rect.y1 = fb->base.height;
 	}
 
 	if (rect.x2 > fb->base.width) {
-		EVDI_WARN("Wrong clip rect: x2 > fb.width\n");
+		EVDI_DEBUG("Wrong clip rect: x2 > fb.width\n");
 		rect.x2 = fb->base.width;
 	}
 
 	if (rect.y2 > fb->base.height) {
-		EVDI_WARN("Wrong clip rect: y2 > fb.height\n");
+		EVDI_DEBUG("Wrong clip rect: y2 > fb.height\n");
 		rect.y2 = fb->base.height;
 	}
 
@@ -221,7 +221,7 @@ static struct fb_ops evdifb_ops = {
 };
 #endif /* CONFIG_FB */
 
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE || defined(EL8)
 #else
 /*
  * Function taken from
@@ -243,7 +243,7 @@ static int evdi_user_framebuffer_dirty(
 	struct drm_atomic_state *state;
 	struct drm_plane *plane;
 	int ret = 0;
-	int i;
+	unsigned int i;
 
 	EVDI_CHECKPT();
 
@@ -331,7 +331,7 @@ static void evdi_user_framebuffer_destroy(struct drm_framebuffer *fb)
 static const struct drm_framebuffer_funcs evdifb_funcs = {
 	.create_handle = evdi_user_framebuffer_create_handle,
 	.destroy = evdi_user_framebuffer_destroy,
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE || defined(EL8)
 	.dirty = drm_atomic_helper_dirtyfb,
 #else
 	.dirty = evdi_user_framebuffer_dirty,
@@ -541,7 +541,7 @@ void evdi_fbdev_unplug(struct drm_device *dev)
 		struct fb_info *info;
 
 		info = efbdev->helper.fbdev;
-#if KERNEL_VERSION(5, 6, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 6, 0) <= LINUX_VERSION_CODE || defined(EL8)
 		unregister_framebuffer(info);
 #else
 		unlink_framebuffer(info);

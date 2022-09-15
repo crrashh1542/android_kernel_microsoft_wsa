@@ -1852,6 +1852,14 @@ int ima_policy_show(struct seq_file *m, void *v)
 
 	rcu_read_lock();
 
+	/* Do not print rules with inactive LSM labels */
+	for (i = 0; i < MAX_LSM_RULES; i++) {
+		if (entry->lsm[i].args_p && !entry->lsm[i].rule) {
+			rcu_read_unlock();
+			return 0;
+		}
+	}
+
 	if (entry->action & MEASURE)
 		seq_puts(m, pt(Opt_measure));
 	if (entry->action & DONT_MEASURE)
@@ -2024,6 +2032,10 @@ bool ima_appraise_signature(enum kernel_read_file_id id)
 	struct list_head *ima_rules_tmp;
 
 	if (id >= READING_MAX_ID)
+		return false;
+
+	if (id == READING_KEXEC_IMAGE && !(ima_appraise & IMA_APPRAISE_ENFORCE)
+	    && security_locked_down(LOCKDOWN_KEXEC))
 		return false;
 
 	func = read_idmap[id] ?: FILE_CHECK;

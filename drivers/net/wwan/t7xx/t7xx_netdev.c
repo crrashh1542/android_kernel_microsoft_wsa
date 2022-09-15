@@ -1,216 +1,167 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, MediaTek Inc.
- * Copyright (c) 2021, Intel Corporation.
+ * Copyright (c) 2021-2022, Intel Corporation.
+ *
+ * Authors:
+ *  Chandrashekar Devegowda <chandrashekar.devegowda@intel.com>
+ *  Haijun Liu <haijun.liu@mediatek.com>
+ *  Ricardo Martinez <ricardo.martinez@linux.intel.com>
+ *
+ * Contributors:
+ *  Amir Hanania <amir.hanania@intel.com>
+ *  Andy Shevchenko <andriy.shevchenko@linux.intel.com>
+ *  Chiranjeevi Rapolu <chiranjeevi.rapolu@intel.com>
+ *  Eliot Lee <eliot.lee@intel.com>
+ *  Moises Veleta <moises.veleta@intel.com>
+ *  Sreehari Kancharla <sreehari.kancharla@intel.com>
  */
 
-#include <linux/bitfield.h>
+#include <linux/atomic.h>
+#include <linux/device.h>
+#include <linux/gfp.h>
+#include <linux/if_arp.h>
+#include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/kernel.h>
+#include <linux/list.h>
+#include <linux/netdev_features.h>
 #include <linux/netdevice.h>
+#include <linux/skbuff.h>
+#include <linux/types.h>
 #include <linux/wwan.h>
-
+#include <net/pkt_sched.h>
 #include <net/ipv6.h>
 
 #include "t7xx_hif_dpmaif_rx.h"
 #include "t7xx_hif_dpmaif_tx.h"
 #include "t7xx_netdev.h"
+#include "t7xx_pci.h"
+#include "t7xx_port_proxy.h"
+#include "t7xx_state_monitor.h"
 
 #define IP_MUX_SESSION_DEFAULT	0
 #define SBD_PACKET_TYPE_MASK	GENMASK(7, 4)
 
-static void ccmni_make_etherframe(struct net_device *dev, void *skb_eth_hdr,
-				  u8 *mac_addr, unsigned int packet_type)
+static void t7xx_ccmni_enable_napi(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ethhdr *eth_hdr;
+	int i;
 
-	eth_hdr = skb_eth_hdr;
-	memcpy(eth_hdr->h_dest, mac_addr, sizeof(eth_hdr->h_dest));
-	memset(eth_hdr->h_source, 0, sizeof(eth_hdr->h_source));
+	if (ctlb->is_napi_en)
+		return;
 
-	if (packet_type == IPV6_VERSION)
-		eth_hdr->h_proto = cpu_to_be16(ETH_P_IPV6);
-	else
-		eth_hdr->h_proto = cpu_to_be16(ETH_P_IP);
-}
-
-static enum txq_type get_txq_type(struct sk_buff *skb)
-{
-	u32 total_len, payload_len, l4_off;
-	bool tcp_syn_fin_rst, is_tcp;
-	struct ipv6hdr *ip6h;
-	struct tcphdr *tcph;
-	struct iphdr *ip4h;
-	u32 packet_type;
-	__be16 frag_off;
-
-	packet_type = skb->data[0] & SBD_PACKET_TYPE_MASK;
-	if (packet_type == IPV6_VERSION) {
-		ip6h = (struct ipv6hdr *)skb->data;
-		total_len = sizeof(struct ipv6hdr) + ntohs(ip6h->payload_len);
-		l4_off = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6h->nexthdr, &frag_off);
-		tcph = (struct tcphdr *)(skb->data + l4_off);
-		is_tcp = ip6h->nexthdr == IPPROTO_TCP;
-		payload_len = total_len - l4_off - (tcph->doff << 2);
-	} else if (packet_type == IPV4_VERSION) {
-		ip4h = (struct iphdr *)skb->data;
-		tcph = (struct tcphdr *)(skb->data + (ip4h->ihl << 2));
-		is_tcp = ip4h->protocol == IPPROTO_TCP;
-		payload_len = ntohs(ip4h->tot_len) - (ip4h->ihl << 2) - (tcph->doff << 2);
-	} else {
-		return TXQ_NORMAL;
+	for (i = 0; i < RXQ_NUM; i++) {
+		napi_enable(ctlb->napi[i]);
+		napi_schedule(ctlb->napi[i]);
 	}
 
-	tcp_syn_fin_rst = tcph->syn || tcph->fin || tcph->rst;
-	if (is_tcp && !payload_len && !tcp_syn_fin_rst)
-		return TXQ_FAST;
-
-	return TXQ_NORMAL;
+	ctlb->is_napi_en = true;
 }
 
-static u16 ccmni_select_queue(struct net_device *dev, struct sk_buff *skb,
-			      struct net_device *sb_dev)
+static void t7xx_ccmni_disable_napi(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_instance *ccmni;
+	int i;
 
-	ccmni = netdev_priv(dev);
+	if (!ctlb->is_napi_en)
+		return;
 
-	if (ccmni->ctlb->capability & NIC_CAP_DATA_ACK_DVD)
-		return get_txq_type(skb);
+	for (i = 0; i < RXQ_NUM; i++) {
+		napi_synchronize(ctlb->napi[i]);
+		napi_disable(ctlb->napi[i]);
+	}
 
-	return TXQ_NORMAL;
+	ctlb->is_napi_en = false;
 }
 
-static int ccmni_open(struct net_device *dev)
+static int t7xx_ccmni_open(struct net_device *dev)
 {
-	struct ccmni_instance *ccmni;
+	struct t7xx_ccmni *ccmni = wwan_netdev_drvpriv(dev);
+	struct t7xx_ccmni_ctrl *ccmni_ctl = ccmni->ctlb;
 
-	ccmni = wwan_netdev_drvpriv(dev);
 	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
+	if (!atomic_read(&ccmni_ctl->napi_usr_refcnt)) {
+		t7xx_ccmni_enable_napi(ccmni_ctl);
+		atomic_set(&ccmni_ctl->napi_usr_refcnt, 1);
+	} else {
+		atomic_inc(&ccmni_ctl->napi_usr_refcnt);
+	}
+
 	atomic_inc(&ccmni->usage);
 	return 0;
 }
 
-static int ccmni_close(struct net_device *dev)
+static int t7xx_ccmni_close(struct net_device *dev)
 {
-	struct ccmni_instance *ccmni;
+	struct t7xx_ccmni *ccmni = wwan_netdev_drvpriv(dev);
+	struct t7xx_ccmni_ctrl *ccmni_ctl = ccmni->ctlb;
 
-	ccmni = wwan_netdev_drvpriv(dev);
-
-	if (atomic_dec_return(&ccmni->usage) < 0)
-		return -EINVAL;
+	atomic_dec(&ccmni->usage);
+	if (atomic_dec_and_test(&ccmni_ctl->napi_usr_refcnt))
+		t7xx_ccmni_disable_napi(ccmni_ctl);
 
 	netif_carrier_off(dev);
 	netif_tx_disable(dev);
 	return 0;
 }
 
-static int ccmni_send_packet(struct ccmni_instance *ccmni, struct sk_buff *skb, enum txq_type txqt)
+static int t7xx_ccmni_send_packet(struct t7xx_ccmni *ccmni, struct sk_buff *skb,
+				  unsigned int txq_number)
 {
-	struct ccmni_ctl_block *ctlb;
-	struct ccci_header *ccci_h;
-	unsigned int ccmni_idx;
+	struct t7xx_ccmni_ctrl *ctlb = ccmni->ctlb;
+	struct t7xx_skb_cb *skb_cb = T7XX_SKB_CB(skb);
 
-	skb_push(skb, sizeof(struct ccci_header));
-	ccci_h = (struct ccci_header *)skb->data;
-	ccci_h->status &= ~HDR_FLD_CHN;
+	skb_cb->netif_idx = ccmni->index;
 
-	ccmni_idx = ccmni->index;
-	ccci_h->data[0] = ccmni_idx;
-	ccci_h->data[1] = skb->len;
-	ccci_h->reserved = 0;
-
-	ctlb = ccmni->ctlb;
-	if (dpmaif_tx_send_skb(ctlb->hif_ctrl, txqt, skb)) {
-		skb_pull(skb, sizeof(struct ccci_header));
-		/* we will reserve header again in the next retry */
+	if (t7xx_dpmaif_tx_send_skb(ctlb->hif_ctrl, txq_number, skb))
 		return NETDEV_TX_BUSY;
-	}
 
 	return 0;
 }
 
-static int ccmni_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static int t7xx_ccmni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct ccmni_instance *ccmni;
-	struct ccmni_ctl_block *ctlb;
-	enum txq_type txqt;
-	int skb_len;
+	struct t7xx_ccmni *ccmni = wwan_netdev_drvpriv(dev);
+	int skb_len = skb->len;
 
-	ccmni = wwan_netdev_drvpriv(dev);
-	ctlb = ccmni->ctlb;
-	txqt = TXQ_NORMAL;
-	skb_len = skb->len;
-
-	/* If MTU changed or there is no headroom, drop the packet */
+	/* If MTU is changed or there is no headroom, drop the packet */
 	if (skb->len > dev->mtu || skb_headroom(skb) < sizeof(struct ccci_header)) {
 		dev_kfree_skb(skb);
 		dev->stats.tx_dropped++;
 		return NETDEV_TX_OK;
 	}
 
-	if (ctlb->capability & NIC_CAP_DATA_ACK_DVD)
-		txqt = get_txq_type(skb);
-
-	if (ccmni_send_packet(ccmni, skb, txqt)) {
-		if (!(ctlb->capability & NIC_CAP_TXBUSY_STOP)) {
-			if ((ccmni->tx_busy_cnt[txqt]++) % 100 == 0)
-				netdev_notice(dev, "[TX]CCMNI:%d busy:pkt=%ld(ack=%d) cnt=%ld\n",
-					      ccmni->index, dev->stats.tx_packets,
-					      txqt, ccmni->tx_busy_cnt[txqt]);
-		} else {
-			ccmni->tx_busy_cnt[txqt]++;
-		}
-
+	if (t7xx_ccmni_send_packet(ccmni, skb, DPMAIF_TX_DEFAULT_QUEUE))
 		return NETDEV_TX_BUSY;
-	}
 
 	dev->stats.tx_packets++;
 	dev->stats.tx_bytes += skb_len;
-	if (ccmni->tx_busy_cnt[txqt] > 10) {
-		netdev_notice(dev, "[TX]CCMNI:%d TX busy:tx_pkt=%ld(ack=%d) retries=%ld\n",
-			      ccmni->index, dev->stats.tx_packets,
-			      txqt, ccmni->tx_busy_cnt[txqt]);
-	}
-	ccmni->tx_busy_cnt[txqt] = 0;
 
 	return NETDEV_TX_OK;
 }
 
-static int ccmni_change_mtu(struct net_device *dev, int new_mtu)
+static void t7xx_ccmni_tx_timeout(struct net_device *dev, unsigned int __always_unused txqueue)
 {
-	if (new_mtu > CCMNI_MTU_MAX)
-		return -EINVAL;
+	struct t7xx_ccmni *ccmni = netdev_priv(dev);
 
-	dev->mtu = new_mtu;
-	return 0;
-}
-
-static void ccmni_tx_timeout(struct net_device *dev, unsigned int __always_unused txqueue)
-{
-	struct ccmni_instance *ccmni;
-
-	ccmni = (struct ccmni_instance *)netdev_priv(dev);
 	dev->stats.tx_errors++;
+
 	if (atomic_read(&ccmni->usage) > 0)
 		netif_tx_wake_all_queues(dev);
 }
 
 static const struct net_device_ops ccmni_netdev_ops = {
-	.ndo_open	  = ccmni_open,
-	.ndo_stop	  = ccmni_close,
-	.ndo_start_xmit   = ccmni_start_xmit,
-	.ndo_tx_timeout   = ccmni_tx_timeout,
-	.ndo_change_mtu   = ccmni_change_mtu,
-	.ndo_select_queue = ccmni_select_queue,
+	.ndo_open	  = t7xx_ccmni_open,
+	.ndo_stop	  = t7xx_ccmni_close,
+	.ndo_start_xmit   = t7xx_ccmni_start_xmit,
+	.ndo_tx_timeout   = t7xx_ccmni_tx_timeout,
 };
 
-static void ccmni_start(struct ccmni_ctl_block *ctlb)
+static void t7xx_ccmni_start(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_instance *ccmni;
+	struct t7xx_ccmni *ccmni;
 	int i;
 
-	/* carry on the net link */
 	for (i = 0; i < ctlb->nic_dev_num; i++) {
 		ccmni = ctlb->ccmni_inst[i];
 		if (!ccmni)
@@ -220,15 +171,17 @@ static void ccmni_start(struct ccmni_ctl_block *ctlb)
 			netif_tx_start_all_queues(ccmni->dev);
 			netif_carrier_on(ccmni->dev);
 		}
+
+		if (atomic_read(&ctlb->napi_usr_refcnt))
+			t7xx_ccmni_enable_napi(ctlb);
 	}
 }
 
-static void ccmni_pre_stop(struct ccmni_ctl_block *ctlb)
+static void t7xx_ccmni_pre_stop(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_instance *ccmni;
+	struct t7xx_ccmni *ccmni;
 	int i;
 
-	/* stop tx */
 	for (i = 0; i < ctlb->nic_dev_num; i++) {
 		ccmni = ctlb->ccmni_inst[i];
 		if (!ccmni)
@@ -239,12 +192,11 @@ static void ccmni_pre_stop(struct ccmni_ctl_block *ctlb)
 	}
 }
 
-static void ccmni_pos_stop(struct ccmni_ctl_block *ctlb)
+static void t7xx_ccmni_post_stop(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_instance *ccmni;
+	struct t7xx_ccmni *ccmni;
 	int i;
 
-	/* carry off the net link */
 	for (i = 0; i < ctlb->nic_dev_num; i++) {
 		ccmni = ctlb->ccmni_inst[i];
 		if (!ccmni)
@@ -255,59 +207,78 @@ static void ccmni_pos_stop(struct ccmni_ctl_block *ctlb)
 	}
 }
 
-static void ccmni_wwan_setup(struct net_device *dev)
+static void t7xx_ccmni_wwan_setup(struct net_device *dev)
 {
-	dev->header_ops = NULL;
-	dev->hard_header_len += sizeof(struct ccci_header);
+	dev->needed_headroom += sizeof(struct ccci_header);
 
-	dev->mtu = 1500;
+	dev->mtu = ETH_DATA_LEN;
 	dev->max_mtu = CCMNI_MTU_MAX;
-	dev->tx_queue_len = CCMNI_TX_QUEUE;
-	dev->watchdog_timeo = CCMNI_NETDEV_WDT_TO;
-	/* ccmni is a pure IP device */
-	dev->flags = (IFF_POINTOPOINT | IFF_NOARP)
-		     & ~(IFF_BROADCAST | IFF_MULTICAST);
+	BUILD_BUG_ON(CCMNI_MTU_MAX > DPMAIF_HW_MTU_SIZE);
 
-	/* not supporting VLAN */
+	dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
+	dev->watchdog_timeo = CCMNI_NETDEV_WDT_TO;
+
+	dev->flags = IFF_POINTOPOINT | IFF_NOARP;
+
 	dev->features = NETIF_F_VLAN_CHALLENGED;
 
 	dev->features |= NETIF_F_SG;
 	dev->hw_features |= NETIF_F_SG;
 
-	/* uplink checksum offload */
 	dev->features |= NETIF_F_HW_CSUM;
 	dev->hw_features |= NETIF_F_HW_CSUM;
 
-	/* downlink checksum offload */
 	dev->features |= NETIF_F_RXCSUM;
 	dev->hw_features |= NETIF_F_RXCSUM;
 
-	dev->addr_len = ETH_ALEN;
+	dev->features |= NETIF_F_GRO;
+	dev->hw_features |= NETIF_F_GRO;
 
-	/* use kernel default free_netdev() function */
 	dev->needs_free_netdev = true;
 
-	/* no need to free again because of free_netdev() */
-	dev->priv_destructor = NULL;
-	dev->type = ARPHRD_PPP;
+	dev->type = ARPHRD_NONE;
 
 	dev->netdev_ops = &ccmni_netdev_ops;
-	random_ether_addr((u8 *)dev->dev_addr);
 }
 
-static int ccmni_wwan_newlink(void *ctxt, struct net_device *dev, u32 if_id,
-			      struct netlink_ext_ack *extack)
+static void t7xx_init_netdev_napi(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_ctl_block *ctlb;
-	struct ccmni_instance *ccmni;
-	int ret;
+	int i;
 
-	ctlb = ctxt;
+	/* one HW, but shared with multiple net devices,
+	 * so add a dummy device for NAPI.
+	 */
+	init_dummy_netdev(&ctlb->dummy_dev);
+	atomic_set(&ctlb->napi_usr_refcnt, 0);
+	ctlb->is_napi_en = false;
+
+	for (i = 0; i < RXQ_NUM; i++) {
+		ctlb->napi[i] = &ctlb->hif_ctrl->rxq[i].napi;
+		netif_napi_add(&ctlb->dummy_dev, ctlb->napi[i], t7xx_dpmaif_napi_rx_poll,
+			       NIC_NAPI_POLL_BUDGET);
+	}
+}
+
+static void t7xx_uninit_netdev_napi(struct t7xx_ccmni_ctrl *ctlb)
+{
+	int i;
+
+	for (i = 0; i < RXQ_NUM; i++) {
+		netif_napi_del(ctlb->napi[i]);
+		ctlb->napi[i] = NULL;
+	}
+}
+
+static int t7xx_ccmni_wwan_newlink(void *ctxt, struct net_device *dev, u32 if_id,
+				   struct netlink_ext_ack *extack)
+{
+	struct t7xx_ccmni_ctrl *ctlb = ctxt;
+	struct t7xx_ccmni *ccmni;
+	int ret;
 
 	if (if_id >= ARRAY_SIZE(ctlb->ccmni_inst))
 		return -EINVAL;
 
-	/* initialize private structure of netdev */
 	ccmni = wwan_netdev_drvpriv(dev);
 	ccmni->index = if_id;
 	ccmni->ctlb = ctlb;
@@ -323,15 +294,11 @@ static int ccmni_wwan_newlink(void *ctxt, struct net_device *dev, u32 if_id,
 	return 0;
 }
 
-static void ccmni_wwan_dellink(void *ctxt, struct net_device *dev, struct list_head *head)
+static void t7xx_ccmni_wwan_dellink(void *ctxt, struct net_device *dev, struct list_head *head)
 {
-	struct ccmni_instance *ccmni;
-	struct ccmni_ctl_block *ctlb;
-	int if_id;
-
-	ccmni = wwan_netdev_drvpriv(dev);
-	ctlb = ctxt;
-	if_id = ccmni->index;
+	struct t7xx_ccmni *ccmni = wwan_netdev_drvpriv(dev);
+	struct t7xx_ccmni_ctrl *ctlb = ctxt;
+	u8 if_id = ccmni->index;
 
 	if (if_id >= ARRAY_SIZE(ctlb->ccmni_inst))
 		return;
@@ -343,42 +310,64 @@ static void ccmni_wwan_dellink(void *ctxt, struct net_device *dev, struct list_h
 }
 
 static const struct wwan_ops ccmni_wwan_ops = {
-	.priv_size = sizeof(struct ccmni_instance),
-	.setup     = ccmni_wwan_setup,
-	.newlink   = ccmni_wwan_newlink,
-	.dellink   = ccmni_wwan_dellink,
+	.priv_size = sizeof(struct t7xx_ccmni),
+	.setup     = t7xx_ccmni_wwan_setup,
+	.newlink   = t7xx_ccmni_wwan_newlink,
+	.dellink   = t7xx_ccmni_wwan_dellink,
 };
 
-static int ccmni_md_state_callback(enum md_state state, void *para)
+static int t7xx_ccmni_register_wwan(struct t7xx_ccmni_ctrl *ctlb)
 {
-	struct ccmni_ctl_block *ctlb;
+	struct device *dev = ctlb->hif_ctrl->dev;
+	int ret;
+
+	if (ctlb->wwan_is_registered)
+		return 0;
+
+	/* WWAN core will create a netdev for the default IP MUX channel */
+	ret = wwan_register_ops(dev, &ccmni_wwan_ops, ctlb, IP_MUX_SESSION_DEFAULT);
+	if (ret < 0) {
+		dev_err(dev, "Unable to register WWAN ops, %d\n", ret);
+		return ret;
+	}
+
+	ctlb->wwan_is_registered = true;
+	return 0;
+}
+
+static int t7xx_ccmni_md_state_callback(enum md_state state, void *para)
+{
+	struct t7xx_ccmni_ctrl *ctlb = para;
+	struct device *dev;
 	int ret = 0;
 
-	ctlb = para;
+	dev = ctlb->hif_ctrl->dev;
 	ctlb->md_sta = state;
 
 	switch (state) {
 	case MD_STATE_READY:
-		ccmni_start(ctlb);
+		ret = t7xx_ccmni_register_wwan(ctlb);
+		if (!ret)
+			t7xx_ccmni_start(ctlb);
 		break;
 
 	case MD_STATE_EXCEPTION:
 	case MD_STATE_STOPPED:
-		ccmni_pre_stop(ctlb);
-		ret = dpmaif_md_state_callback(ctlb->hif_ctrl, state);
-		if (ret < 0)
-			dev_err(ctlb->hif_ctrl->dev,
-				"dpmaif md state callback err, md_sta=%d\n", state);
+		t7xx_ccmni_pre_stop(ctlb);
 
-		ccmni_pos_stop(ctlb);
+		ret = t7xx_dpmaif_md_state_callback(ctlb->hif_ctrl, state);
+		if (ret < 0)
+			dev_err(dev, "DPMAIF md state callback err, state=%d\n", state);
+
+		t7xx_ccmni_post_stop(ctlb);
 		break;
 
 	case MD_STATE_WAITING_FOR_HS1:
 	case MD_STATE_WAITING_TO_STOP:
-		ret = dpmaif_md_state_callback(ctlb->hif_ctrl, state);
+		ret = t7xx_dpmaif_md_state_callback(ctlb->hif_ctrl, state);
 		if (ret < 0)
-			dev_err(ctlb->hif_ctrl->dev,
-				"dpmaif md state callback err, md_sta=%d\n", state);
+			dev_err(dev, "DPMAIF md state callback err, state=%d\n", state);
+
 		break;
 
 	default:
@@ -388,148 +377,128 @@ static int ccmni_md_state_callback(enum md_state state, void *para)
 	return ret;
 }
 
-static void init_md_status_notifier(struct ccmni_ctl_block *ctlb)
+static void init_md_status_notifier(struct t7xx_pci_dev *t7xx_dev)
 {
-	struct fsm_notifier_block *md_status_notifier;
+	struct t7xx_ccmni_ctrl	*ctlb = t7xx_dev->ccmni_ctlb;
+	struct t7xx_fsm_notifier *md_status_notifier;
 
 	md_status_notifier = &ctlb->md_status_notify;
 	INIT_LIST_HEAD(&md_status_notifier->entry);
-	md_status_notifier->notifier_fn = ccmni_md_state_callback;
+	md_status_notifier->notifier_fn = t7xx_ccmni_md_state_callback;
 	md_status_notifier->data = ctlb;
 
-	fsm_notifier_register(md_status_notifier);
+	t7xx_fsm_notifier_register(t7xx_dev->md, md_status_notifier);
 }
 
-static void ccmni_recv_skb(struct mtk_pci_dev *mtk_dev, int netif_id, struct sk_buff *skb)
+static void t7xx_ccmni_recv_skb(struct t7xx_ccmni_ctrl *ccmni_ctlb, struct sk_buff *skb,
+				struct napi_struct *napi)
 {
-	struct ccmni_instance *ccmni;
-	struct net_device *dev;
+	struct t7xx_skb_cb *skb_cb;
+	struct net_device *net_dev;
+	struct t7xx_ccmni *ccmni;
 	int pkt_type, skb_len;
+	u8 netif_id;
 
-	ccmni = mtk_dev->ccmni_ctlb->ccmni_inst[netif_id];
+	skb_cb = T7XX_SKB_CB(skb);
+	netif_id = skb_cb->netif_idx;
+	ccmni = ccmni_ctlb->ccmni_inst[netif_id];
 	if (!ccmni) {
 		dev_kfree_skb(skb);
 		return;
 	}
 
-	dev = ccmni->dev;
-
-	pkt_type = skb->data[0] & SBD_PACKET_TYPE_MASK;
-	ccmni_make_etherframe(dev, skb->data - ETH_HLEN, dev->dev_addr, pkt_type);
-	skb_set_mac_header(skb, -ETH_HLEN);
-	skb_reset_network_header(skb);
-	skb->dev = dev;
-	if (pkt_type == IPV6_VERSION)
+	net_dev = ccmni->dev;
+	pkt_type = skb_cb->rx_pkt_type;
+	skb->dev = net_dev;
+	if (pkt_type == PKT_TYPE_IP6)
 		skb->protocol = htons(ETH_P_IPV6);
 	else
 		skb->protocol = htons(ETH_P_IP);
 
 	skb_len = skb->len;
-
-	netif_rx_any_context(skb);
-	dev->stats.rx_packets++;
-	dev->stats.rx_bytes += skb_len;
+	napi_gro_receive(napi, skb);
+	net_dev->stats.rx_packets++;
+	net_dev->stats.rx_bytes += skb_len;
 }
 
-static void ccmni_queue_tx_irq_notify(struct ccmni_ctl_block *ctlb, int qno)
+static void t7xx_ccmni_queue_tx_irq_notify(struct t7xx_ccmni_ctrl *ctlb, int qno)
 {
+	struct t7xx_ccmni *ccmni = ctlb->ccmni_inst[0];
 	struct netdev_queue *net_queue;
-	struct ccmni_instance *ccmni;
-
-	ccmni = ctlb->ccmni_inst[0];
 
 	if (netif_running(ccmni->dev) && atomic_read(&ccmni->usage) > 0) {
-		if (ctlb->capability & NIC_CAP_CCMNI_MQ) {
-			net_queue = netdev_get_tx_queue(ccmni->dev, qno);
-			if (netif_tx_queue_stopped(net_queue))
-				netif_tx_wake_queue(net_queue);
-		} else if (netif_queue_stopped(ccmni->dev)) {
-			netif_wake_queue(ccmni->dev);
-		}
+		net_queue = netdev_get_tx_queue(ccmni->dev, qno);
+		if (netif_tx_queue_stopped(net_queue))
+			netif_tx_wake_queue(net_queue);
 	}
 }
 
-static void ccmni_queue_tx_full_notify(struct ccmni_ctl_block *ctlb, int qno)
+static void t7xx_ccmni_queue_tx_full_notify(struct t7xx_ccmni_ctrl *ctlb, int qno)
 {
+	struct t7xx_ccmni *ccmni = ctlb->ccmni_inst[0];
 	struct netdev_queue *net_queue;
-	struct ccmni_instance *ccmni;
-
-	ccmni = ctlb->ccmni_inst[0];
 
 	if (atomic_read(&ccmni->usage) > 0) {
-		dev_err(&ctlb->mtk_dev->pdev->dev, "TX queue %d is full\n", qno);
-		if (ctlb->capability & NIC_CAP_CCMNI_MQ) {
-			net_queue = netdev_get_tx_queue(ccmni->dev, qno);
-			netif_tx_stop_queue(net_queue);
-		} else {
-			netif_stop_queue(ccmni->dev);
-		}
+		netdev_err(ccmni->dev, "TX queue %d is full\n", qno);
+		net_queue = netdev_get_tx_queue(ccmni->dev, qno);
+		netif_tx_stop_queue(net_queue);
 	}
 }
 
-static void ccmni_queue_state_notify(struct mtk_pci_dev *mtk_dev,
-				     enum dpmaif_txq_state state, int qno)
+static void t7xx_ccmni_queue_state_notify(struct t7xx_pci_dev *t7xx_dev,
+					  enum dpmaif_txq_state state, int qno)
 {
-	if (!(mtk_dev->ccmni_ctlb->capability & NIC_CAP_TXBUSY_STOP) ||
-	    mtk_dev->ccmni_ctlb->md_sta != MD_STATE_READY ||
-	    qno >= TXQ_TYPE_CNT)
+	struct t7xx_ccmni_ctrl *ctlb = t7xx_dev->ccmni_ctlb;
+
+	if (ctlb->md_sta != MD_STATE_READY)
 		return;
 
-	if (!mtk_dev->ccmni_ctlb->ccmni_inst[0]) {
-		dev_warn(&mtk_dev->pdev->dev, "No netdev registered yet\n");
+	if (!ctlb->ccmni_inst[0]) {
+		dev_warn(&t7xx_dev->pdev->dev, "No netdev registered yet\n");
 		return;
 	}
 
 	if (state == DMPAIF_TXQ_STATE_IRQ)
-		ccmni_queue_tx_irq_notify(mtk_dev->ccmni_ctlb, qno);
+		t7xx_ccmni_queue_tx_irq_notify(ctlb, qno);
 	else if (state == DMPAIF_TXQ_STATE_FULL)
-		ccmni_queue_tx_full_notify(mtk_dev->ccmni_ctlb, qno);
+		t7xx_ccmni_queue_tx_full_notify(ctlb, qno);
 }
 
-int ccmni_init(struct mtk_pci_dev *mtk_dev)
+int t7xx_ccmni_init(struct t7xx_pci_dev *t7xx_dev)
 {
-	struct ccmni_ctl_block *ctlb;
-	int ret;
+	struct device *dev = &t7xx_dev->pdev->dev;
+	struct t7xx_ccmni_ctrl *ctlb;
 
-	ctlb = devm_kzalloc(&mtk_dev->pdev->dev, sizeof(*ctlb), GFP_KERNEL);
+	ctlb = devm_kzalloc(dev, sizeof(*ctlb), GFP_KERNEL);
 	if (!ctlb)
 		return -ENOMEM;
 
-	mtk_dev->ccmni_ctlb = ctlb;
-	ctlb->mtk_dev = mtk_dev;
-	ctlb->callbacks.state_notify = ccmni_queue_state_notify;
-	ctlb->callbacks.recv_skb = ccmni_recv_skb;
+	t7xx_dev->ccmni_ctlb = ctlb;
+	ctlb->t7xx_dev = t7xx_dev;
+	ctlb->callbacks.state_notify = t7xx_ccmni_queue_state_notify;
+	ctlb->callbacks.recv_skb = t7xx_ccmni_recv_skb;
 	ctlb->nic_dev_num = NIC_DEV_DEFAULT;
-	ctlb->capability = NIC_CAP_TXBUSY_STOP | NIC_CAP_SGIO |
-			   NIC_CAP_DATA_ACK_DVD | NIC_CAP_CCMNI_MQ;
 
-	ctlb->hif_ctrl = dpmaif_hif_init(mtk_dev, &ctlb->callbacks);
+	ctlb->hif_ctrl = t7xx_dpmaif_hif_init(t7xx_dev, &ctlb->callbacks);
 	if (!ctlb->hif_ctrl)
 		return -ENOMEM;
 
-	/* WWAN core will create a netdev for the default IP MUX channel */
-	ret = wwan_register_ops(&ctlb->mtk_dev->pdev->dev, &ccmni_wwan_ops, ctlb,
-				IP_MUX_SESSION_DEFAULT);
-	if (ret)
-		goto error_md;
-
-	init_md_status_notifier(ctlb);
-
+	t7xx_init_netdev_napi(ctlb);
+	init_md_status_notifier(t7xx_dev);
 	return 0;
-
-error_md:
-	wwan_unregister_ops(&ctlb->mtk_dev->pdev->dev);
-
-	return ret;
 }
 
-void ccmni_exit(struct mtk_pci_dev *mtk_dev)
+void t7xx_ccmni_exit(struct t7xx_pci_dev *t7xx_dev)
 {
-	struct ccmni_ctl_block *ctlb;
+	struct t7xx_ccmni_ctrl *ctlb = t7xx_dev->ccmni_ctlb;
 
-	ctlb = mtk_dev->ccmni_ctlb;
-	/* unregister FSM notifier */
-	fsm_notifier_unregister(&ctlb->md_status_notify);
-	wwan_unregister_ops(&ctlb->mtk_dev->pdev->dev);
-	dpmaif_hif_exit(ctlb->hif_ctrl);
+	t7xx_fsm_notifier_unregister(t7xx_dev->md, &ctlb->md_status_notify);
+
+	if (ctlb->wwan_is_registered) {
+		wwan_unregister_ops(&t7xx_dev->pdev->dev);
+		ctlb->wwan_is_registered = false;
+	}
+
+	t7xx_uninit_netdev_napi(ctlb);
+	t7xx_dpmaif_hif_exit(ctlb->hif_ctrl);
 }

@@ -7,9 +7,11 @@
 
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_format_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
@@ -19,23 +21,27 @@
 #include "hyperv_drm.h"
 
 static int hyperv_blit_to_vram_rect(struct drm_framebuffer *fb,
-				    const struct dma_buf_map *map,
+				    const struct iosys_map *map,
 				    struct drm_rect *rect)
 {
 	struct hyperv_drm_device *hv = to_hv(fb->dev);
+	void __iomem *dst = hv->vram;
 	void *vmap = map->vaddr; /* TODO: Use mapping abstraction properly */
 	int idx;
 
 	if (!drm_dev_enter(&hv->dev, &idx))
 		return -ENODEV;
 
-	drm_fb_memcpy_dstclip(hv->vram, fb->pitches[0], vmap, fb, rect);
+	dst += drm_fb_clip_offset(fb->pitches[0], fb->format, rect);
+	drm_fb_memcpy_toio(dst, fb->pitches[0], vmap, fb, rect);
+
 	drm_dev_exit(idx);
 
 	return 0;
 }
 
-static int hyperv_blit_to_vram_fullscreen(struct drm_framebuffer *fb, const struct dma_buf_map *map)
+static int hyperv_blit_to_vram_fullscreen(struct drm_framebuffer *fb,
+					  const struct iosys_map *map)
 {
 	struct drm_rect fullscreen = {
 		.x1 = 0,

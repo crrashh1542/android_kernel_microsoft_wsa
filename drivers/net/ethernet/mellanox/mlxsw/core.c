@@ -1975,6 +1975,7 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 		goto err_emad_init;
 
 	if (!reload) {
+		devlink_set_features(devlink, DEVLINK_F_RELOAD);
 		err = devlink_register(devlink);
 		if (err)
 			goto err_devlink_register;
@@ -2016,9 +2017,6 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 
 	mlxsw_core->is_initialized = true;
 	devlink_params_publish(devlink);
-
-	if (!reload)
-		devlink_reload_enable(devlink);
 
 	return 0;
 
@@ -2087,8 +2085,6 @@ void mlxsw_core_bus_device_unregister(struct mlxsw_core *mlxsw_core,
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_core);
 
-	if (!reload)
-		devlink_reload_disable(devlink);
 	if (devlink_is_reload_failed(devlink)) {
 		if (!reload)
 			/* Only the parts that were not de-initialized in the

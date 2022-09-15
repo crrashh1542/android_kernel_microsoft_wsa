@@ -122,14 +122,13 @@ int hclgevf_devlink_init(struct hclgevf_dev *hdev)
 	priv->hdev = hdev;
 	hdev->devlink = devlink;
 
+	devlink_set_features(devlink, DEVLINK_F_RELOAD);
 	ret = devlink_register(devlink);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register devlink, ret = %d\n",
 			ret);
 		goto out_reg_fail;
 	}
-
-	devlink_reload_enable(devlink);
 
 	return 0;
 
@@ -141,8 +140,6 @@ out_reg_fail:
 void hclgevf_devlink_uninit(struct hclgevf_dev *hdev)
 {
 	struct devlink *devlink = hdev->devlink;
-
-	devlink_reload_disable(devlink);
 
 	devlink_unregister(devlink);
 

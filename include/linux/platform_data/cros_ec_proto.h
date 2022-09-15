@@ -208,7 +208,7 @@ struct cros_ec_dev {
 	struct cros_ec_debugfs *debug_info;
 	bool has_kb_wake_angle;
 	u16 cmd_offset;
-	u32 features[2];
+	struct ec_response_get_features features;
 };
 
 #define to_cros_ec_dev(dev)  container_of(dev, struct cros_ec_dev, class_dev)
@@ -218,6 +218,9 @@ int cros_ec_prepare_tx(struct cros_ec_device *ec_dev,
 
 int cros_ec_check_result(struct cros_ec_device *ec_dev,
 			 struct cros_ec_command *msg);
+
+int cros_ec_cmd_xfer(struct cros_ec_device *ec_dev,
+		     struct cros_ec_command *msg);
 
 int cros_ec_cmd_xfer_status(struct cros_ec_device *ec_dev,
 			    struct cros_ec_command *msg);
@@ -230,11 +233,11 @@ int cros_ec_get_next_event(struct cros_ec_device *ec_dev,
 
 u32 cros_ec_get_host_event(struct cros_ec_device *ec_dev);
 
-int cros_ec_check_features(struct cros_ec_dev *ec, int feature);
+bool cros_ec_check_features(struct cros_ec_dev *ec, int feature);
 
 int cros_ec_get_sensor_count(struct cros_ec_dev *ec);
 
-int cros_ec_command(struct cros_ec_device *ec_dev, unsigned int version, int command, void *outdata,
+int cros_ec_cmd(struct cros_ec_device *ec_dev, unsigned int version, int command, void *outdata,
 		    int outsize, void *indata, int insize);
 
 /**

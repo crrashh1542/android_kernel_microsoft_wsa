@@ -1,56 +1,60 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021, MediaTek Inc.
- * Copyright (c) 2021, Intel Corporation.
+ * Copyright (c) 2021-2022, Intel Corporation.
+ *
+ * Authors:
+ *  Haijun Liu <haijun.liu@mediatek.com>
+ *  Moises Veleta <moises.veleta@intel.com>
+ *
+ * Contributors:
+ *  Amir Hanania <amir.hanania@intel.com>
+ *  Chiranjeevi Rapolu <chiranjeevi.rapolu@intel.com>
+ *  Ricardo Martinez <ricardo.martinez@linux.intel.com>
  */
 
 #ifndef __T7XX_NETDEV_H__
 #define __T7XX_NETDEV_H__
 
-#include <linux/bitfield.h>
+#include <linux/bits.h>
 #include <linux/netdevice.h>
+#include <linux/types.h>
 
-#include "t7xx_common.h"
 #include "t7xx_hif_dpmaif.h"
-#include "t7xx_monitor.h"
+#include "t7xx_pci.h"
+#include "t7xx_state_monitor.h"
 
-#define RXQ_NUM			DPMAIF_RXQ_NUM
-#define NIC_DEV_MAX		21
-#define NIC_DEV_DEFAULT		2
-#define NIC_CAP_TXBUSY_STOP	BIT(0)
-#define NIC_CAP_SGIO		BIT(1)
-#define NIC_CAP_DATA_ACK_DVD	BIT(2)
-#define NIC_CAP_CCMNI_MQ	BIT(3)
+#define RXQ_NUM				DPMAIF_RXQ_NUM
+#define NIC_DEV_MAX			21
+#define NIC_DEV_DEFAULT			2
 
-/* must be less than DPMAIF_HW_MTU_SIZE (3*1024 + 8) */
-#define CCMNI_MTU_MAX		3000
-#define CCMNI_TX_QUEUE		1000
-#define CCMNI_NETDEV_WDT_TO	(1 * HZ)
+#define CCMNI_NETDEV_WDT_TO		(1 * HZ)
+#define CCMNI_MTU_MAX			3000
+#define NIC_NAPI_POLL_BUDGET		128
 
-#define IPV4_VERSION		0x40
-#define IPV6_VERSION		0x60
-
-struct ccmni_instance {
-	unsigned int		index;
-	atomic_t		usage;
-	struct net_device	*dev;
-	struct ccmni_ctl_block	*ctlb;
-	unsigned long		tx_busy_cnt[TXQ_TYPE_CNT];
+struct t7xx_ccmni {
+	u8				index;
+	atomic_t			usage;
+	struct net_device		*dev;
+	struct t7xx_ccmni_ctrl		*ctlb;
 };
 
-struct ccmni_ctl_block {
-	struct mtk_pci_dev	*mtk_dev;
-	struct dpmaif_ctrl	*hif_ctrl;
-	struct ccmni_instance	*ccmni_inst[NIC_DEV_MAX];
-	struct dpmaif_callbacks	callbacks;
-	unsigned int		nic_dev_num;
-	unsigned int		md_sta;
-	unsigned int		capability;
-
-	struct fsm_notifier_block md_status_notify;
+struct t7xx_ccmni_ctrl {
+	struct t7xx_pci_dev		*t7xx_dev;
+	struct dpmaif_ctrl		*hif_ctrl;
+	struct t7xx_ccmni		*ccmni_inst[NIC_DEV_MAX];
+	struct dpmaif_callbacks		callbacks;
+	unsigned int			nic_dev_num;
+	unsigned int			md_sta;
+	struct t7xx_fsm_notifier	md_status_notify;
+	bool				wwan_is_registered;
+	struct net_device		dummy_dev;
+	struct napi_struct		*napi[RXQ_NUM];
+	atomic_t			napi_usr_refcnt;
+	bool				is_napi_en;
 };
 
-int ccmni_init(struct mtk_pci_dev *mtk_dev);
-void ccmni_exit(struct mtk_pci_dev *mtk_dev);
+int t7xx_ccmni_init(struct t7xx_pci_dev *t7xx_dev);
+void t7xx_ccmni_exit(struct t7xx_pci_dev *t7xx_dev);
 
 #endif /* __T7XX_NETDEV_H__ */

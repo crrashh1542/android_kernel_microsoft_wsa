@@ -400,10 +400,9 @@ static void mpc20_program_ogam_pwl(
 
 }
 
-void apply_DEDCN20_305_wa(
-		struct mpc *mpc,
-		int mpcc_id, enum dc_lut_mode current_mode,
-		enum dc_lut_mode next_mode)
+static void apply_DEDCN20_305_wa(struct mpc *mpc, int mpcc_id,
+				 enum dc_lut_mode current_mode,
+				 enum dc_lut_mode next_mode)
 {
 	struct dcn20_mpc *mpc20 = TO_DCN20_MPC(mpc);
 
@@ -525,13 +524,19 @@ static void mpc2_init_mpcc(struct mpcc *mpcc, int mpcc_inst)
 	mpcc->sm_cfg.enable = false;
 }
 
-struct mpcc *mpc2_get_mpcc_for_dpp(struct mpc_tree *tree, int dpp_id)
+static struct mpcc *mpc2_get_mpcc_for_dpp(struct mpc_tree *tree, int dpp_id)
 {
 	struct mpcc *tmp_mpcc = tree->opp_list;
 
 	while (tmp_mpcc != NULL) {
 		if (tmp_mpcc->dpp_id == 0xf || tmp_mpcc->dpp_id == dpp_id)
 			return tmp_mpcc;
+
+		/* avoid circular linked list */
+		ASSERT(tmp_mpcc != tmp_mpcc->mpcc_bot);
+		if (tmp_mpcc == tmp_mpcc->mpcc_bot)
+			break;
+
 		tmp_mpcc = tmp_mpcc->mpcc_bot;
 	}
 	return NULL;
