@@ -35,7 +35,7 @@ int max_98373_trigger(struct snd_pcm_substream *substream, int cmd);
 
 extern struct snd_soc_dai_link_component max_98390_components[2];
 extern struct snd_soc_dai_link_component max_98390_4spk_components[4];
-extern struct snd_soc_ops max_98390_ops;
+extern const struct snd_soc_ops max_98390_ops;
 
 void max_98390_set_codec_conf(struct snd_soc_card *card, int ch);
 int max_98390_spk_codec_init(struct snd_soc_pcm_runtime *rtd);
