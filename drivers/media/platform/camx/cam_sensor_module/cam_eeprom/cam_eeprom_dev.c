@@ -383,7 +383,7 @@ static int cam_eeprom_spi_driver_probe(struct spi_device *spi)
 	return cam_eeprom_spi_setup(spi);
 }
 
-static int cam_eeprom_spi_driver_remove(struct spi_device *sdev)
+static void cam_eeprom_spi_driver_remove(struct spi_device *sdev)
 {
 	int                             i;
 	struct v4l2_subdev             *sd = spi_get_drvdata(sdev);
@@ -393,13 +393,13 @@ static int cam_eeprom_spi_driver_remove(struct spi_device *sdev)
 
 	if (!sd) {
 		CAM_ERR(CAM_EEPROM, "Subdevice is NULL");
-		return -EINVAL;
+		return;
 	}
 
 	e_ctrl = (struct cam_eeprom_ctrl_t *)v4l2_get_subdevdata(sd);
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "eeprom device is NULL");
-		return -EINVAL;
+		return;
 	}
 
 	soc_info = &e_ctrl->soc_info;
@@ -423,8 +423,6 @@ static int cam_eeprom_spi_driver_remove(struct spi_device *sdev)
 	}
 	v4l2_set_subdevdata(&e_ctrl->v4l2_dev_str.sd, NULL);
 	kfree(e_ctrl);
-
-	return 0;
 }
 
 static int32_t cam_eeprom_platform_driver_probe(
