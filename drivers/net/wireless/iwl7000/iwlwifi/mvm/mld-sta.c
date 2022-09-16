@@ -989,12 +989,13 @@ static int iwl_mvm_mld_update_sta_baids(struct iwl_mvm *mvm,
 			continue;
 
 		WARN_ONCE(data->sta_mask != old_sta_mask,
-			  "BAID data corrupted - expected 0x%x found 0x%x\n",
-			  old_sta_mask, data->sta_mask);
+			  "BAID data for %d corrupted - expected 0x%x found 0x%x\n",
+			  baid, old_sta_mask, data->sta_mask);
 
 		cmd.modify.tid = cpu_to_le32(data->tid);
 
-		ret = iwl_mvm_send_cmd_pdu(mvm, 0, cmd_id, sizeof(cmd), &cmd);
+		ret = iwl_mvm_send_cmd_pdu(mvm, cmd_id, 0, sizeof(cmd), &cmd);
+		data->sta_mask = new_sta_mask;
 		if (ret)
 			return ret;
 	}
