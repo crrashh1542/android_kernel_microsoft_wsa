@@ -751,7 +751,7 @@ struct iwl_rx_mpdu_desc {
 
 #define RX_NO_DATA_RX_VEC0_HE_NSTS_MSK	0x03800000
 #define RX_NO_DATA_RX_VEC0_VHT_NSTS_MSK	0x38000000
-#define RX_NO_DATA_RX_VEC0_EHT_NSTS_MSK	0x00f00000
+#define RX_NO_DATA_RX_VEC2_EHT_NSTS_MSK	0x00f00000
 
 /* content of OFDM_RX_VECTOR_USIG_A1_OUT */
 enum iwl_rx_usig_a1 {
