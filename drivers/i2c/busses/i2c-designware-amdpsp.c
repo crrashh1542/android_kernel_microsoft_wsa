@@ -4,6 +4,7 @@
 #include <linux/bits.h>
 #include <linux/i2c.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/pci.h>
 #include <linux/psp-sev.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
@@ -30,9 +31,13 @@
 #define PSP_MBOX_FIELDS_RECOVERY	BIT(30)
 #define PSP_MBOX_FIELDS_READY		BIT(31)
 
-#define PSP_MBOX_CMD_OFFSET		0x3810570
-#define PSP_MBOX_BUFFER_L_OFFSET	0x3810574
-#define PSP_MBOX_BUFFER_H_OFFSET	0x3810578
+#define CZN_PSP_MBOX_CMD_OFFSET		0x3810570
+#define CZN_PSP_MBOX_BUFFER_L_OFFSET	0x3810574
+#define CZN_PSP_MBOX_BUFFER_H_OFFSET	0x3810578
+#define PSP_MBOX_CMD_OFFSET		0x3810A40
+#define PSP_MBOX_DOORBELL_OFFSET	0x3810A24
+
+#define AMD_CPU_ID_CZN			0x1630
 
 struct psp_req_buffer_hdr {
 	u32 total_size;
@@ -55,6 +60,7 @@ static unsigned long psp_i2c_sem_acquired;
 static u32 psp_i2c_access_count;
 static bool psp_i2c_mbox_fail;
 static struct device *psp_i2c_dev;
+static unsigned short cpu_id;
 
 /*
  * Implementation of PSP-x86 i2c-arbitration mailbox introduced for AMD Cezanne
@@ -63,6 +69,17 @@ static struct device *psp_i2c_dev;
 
 static int psp_mbox_probe(void)
 {
+	struct pci_dev *rdev;
+
+	rdev = pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(0, 0));
+	if (!rdev) {
+		dev_err(psp_i2c_dev, "Failed to get host bridge device\n");
+		return -ENODEV;
+	}
+
+	cpu_id = rdev->device;
+	pci_dev_put(rdev);
+
 	/*
 	 * Explicitly initialize system management network interface here, since
 	 * usual init happens only after PCI subsystem is ready. This is too late
@@ -81,80 +98,76 @@ static int psp_smn_read(u32 smn_addr, u32 *value)
 	return amd_smn_read(0, smn_addr, value);
 }
 
-/* Recovery field should be equal 0 to start sending commands */
-static int psp_check_mbox_recovery(void)
+static int psp_mbox_ready(u32 smn_addr)
 {
 	u32 tmp;
-	int status;
-
-	status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &tmp);
-	if (status)
-		return status;
-
-	return FIELD_GET(PSP_MBOX_FIELDS_RECOVERY, tmp);
-}
-
-static int psp_wait_cmd(void)
-{
-	u32 tmp, expected;
 	int ret, status;
-
-	/* Expect mbox_cmd to be cleared and ready bit to be set by PSP */
-	expected = FIELD_PREP(PSP_MBOX_FIELDS_READY, 1);
 
 	/*
 	 * Check for readiness of PSP mailbox in a tight loop in order to
 	 * process further as soon as command was consumed.
 	 */
 	ret = read_poll_timeout(psp_smn_read, status,
-				(status < 0) || (tmp == expected), 0,
-				PSP_CMD_TIMEOUT_US, 0, PSP_MBOX_CMD_OFFSET,
-				&tmp);
+				(status < 0) || (tmp & PSP_MBOX_FIELDS_READY),
+				0, PSP_CMD_TIMEOUT_US, 0, smn_addr, &tmp);
 	if (status)
 		ret = status;
 
 	return ret;
 }
 
+/* Recovery field should be equal 0 to start sending commands */
+static int czn_psp_check_mbox_recovery(void)
+{
+	u32 tmp;
+	int status;
+
+	status = psp_smn_read(CZN_PSP_MBOX_CMD_OFFSET, &tmp);
+	if (status)
+		return status;
+
+	return FIELD_GET(PSP_MBOX_FIELDS_RECOVERY, tmp);
+}
+
 /* Status equal to 0 means that PSP succeed processing command */
-static int psp_check_mbox_sts(void)
+static u32 czn_psp_check_mbox_sts(void)
 {
 	u32 cmd_reg;
 	int status;
 
-	status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &cmd_reg);
+	status = psp_smn_read(CZN_PSP_MBOX_CMD_OFFSET, &cmd_reg);
 	if (status)
 		return status;
 
 	return FIELD_GET(PSP_MBOX_FIELDS_STS, cmd_reg);
 }
 
-static int psp_wr_mbox_buffer(phys_addr_t buf)
+static int czn_psp_wr_mbox_buffer(phys_addr_t buf)
 {
 	u32 buf_addr_h = upper_32_bits(buf);
 	u32 buf_addr_l = lower_32_bits(buf);
 	int status;
 
-	status = psp_smn_write(PSP_MBOX_BUFFER_H_OFFSET, buf_addr_h);
+	status = psp_smn_write(CZN_PSP_MBOX_BUFFER_H_OFFSET, buf_addr_h);
 	if (status)
 		return status;
 
-	status = psp_smn_write(PSP_MBOX_BUFFER_L_OFFSET, buf_addr_l);
+	status = psp_smn_write(CZN_PSP_MBOX_BUFFER_L_OFFSET, buf_addr_l);
 	if (status)
 		return status;
 
 	return 0;
 }
 
-static int psp_send_cmd(struct psp_i2c_req *req)
+static int czn_psp_send_cmd(struct psp_i2c_req *req)
 {
 	phys_addr_t req_addr;
 	u32 cmd_reg;
 
-	if (psp_check_mbox_recovery())
+	if (czn_psp_check_mbox_recovery())
 		return -EIO;
 
-	if (psp_wait_cmd())
+	if (psp_mbox_ready(CZN_PSP_MBOX_CMD_OFFSET))
 		return -EBUSY;
 
 	/*
@@ -163,18 +176,18 @@ static int psp_send_cmd(struct psp_i2c_req *req)
 	 * PSP. Use physical address of buffer, since PSP will map this region.
 	 */
 	req_addr = __psp_pa((void *)req);
-	if (psp_wr_mbox_buffer(req_addr))
+	if (czn_psp_wr_mbox_buffer(req_addr))
 		return -EIO;
 
 	/* Write command register to trigger processing */
 	cmd_reg = FIELD_PREP(PSP_MBOX_FIELDS_CMD, PSP_I2C_REQ_BUS_CMD);
-	if (psp_smn_write(PSP_MBOX_CMD_OFFSET, cmd_reg))
+	if (psp_smn_write(CZN_PSP_MBOX_CMD_OFFSET, cmd_reg))
 		return -EIO;
 
-	if (psp_wait_cmd())
+	if (psp_mbox_ready(CZN_PSP_MBOX_CMD_OFFSET))
 		return -ETIMEDOUT;
 
-	if (psp_check_mbox_sts())
+	if (czn_psp_check_mbox_sts())
 		return -EIO;
 
 	return 0;
@@ -185,8 +198,13 @@ static int check_i2c_req_sts(struct psp_i2c_req *req)
 {
 	u32 status;
 
-	/* Status field in command-response buffer is updated by PSP */
-	status = READ_ONCE(req->hdr.status);
+	if (req) {
+		/* Status field in command-response buffer is updated by PSP */
+		status = READ_ONCE(req->hdr.status);
+	} else {
+		status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &status);
+		status &= ~PSP_MBOX_FIELDS_READY;
+	}
 
 	switch (status) {
 	case PSP_I2C_REQ_STS_OK:
@@ -199,8 +217,31 @@ static int check_i2c_req_sts(struct psp_i2c_req *req)
 	}
 }
 
-static int psp_send_check_i2c_req(struct psp_i2c_req *req)
+static int psp_send_cmd(enum psp_i2c_req_type i2c_req_type)
 {
+	int ret;
+
+	ret = psp_mbox_ready(PSP_MBOX_CMD_OFFSET);
+	if (ret)
+		return ret;
+
+	psp_smn_write(PSP_MBOX_CMD_OFFSET, i2c_req_type);
+
+	/* Ring the Doorbell for PSP by writing a non-zero value */
+	psp_smn_write(PSP_MBOX_DOORBELL_OFFSET, 0x1);
+
+	ret = psp_mbox_ready(PSP_MBOX_CMD_OFFSET);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int psp_send_check_i2c_req(struct psp_i2c_req *req,
+				  enum psp_i2c_req_type i2c_req_type)
+{
+	int ret;
+
 	/*
 	 * Errors in x86-PSP i2c-arbitration protocol may occur at two levels:
 	 * 1. mailbox communication - PSP is not operational or some IO errors
@@ -208,10 +249,15 @@ static int psp_send_check_i2c_req(struct psp_i2c_req *req)
 	 * 2. i2c-requests - PSP refuses to grant i2c arbitration to x86 for too
 	 * long.
 	 * In order to distinguish between these two in error handling code, all
-	 * errors on the first level (returned by psp_send_cmd) are shadowed by
+	 * errors on the first level (returned by *psp_send_cmd) are shadowed by
 	 * -EIO.
 	 */
-	if (psp_send_cmd(req))
+	if (req)
+		ret = czn_psp_send_cmd(req);
+	else
+		ret = psp_send_cmd(i2c_req_type);
+
+	if (ret)
 		return -EIO;
 
 	return check_i2c_req_sts(req);
@@ -219,24 +265,27 @@ static int psp_send_check_i2c_req(struct psp_i2c_req *req)
 
 static int psp_send_i2c_req(enum psp_i2c_req_type i2c_req_type)
 {
-	struct psp_i2c_req *req;
+	struct psp_i2c_req *req = NULL;
 	unsigned long start;
 	int status, ret;
 
-	/* Allocate command-response buffer */
-	req = kzalloc(sizeof(*req), GFP_KERNEL);
-	if (!req)
-		return -ENOMEM;
+	/* Allocate command-response buffer for Cezanne platforms */
+	if (cpu_id == AMD_CPU_ID_CZN) {
+		req = kzalloc(sizeof(*req), GFP_KERNEL);
+		if (!req)
+			return -ENOMEM;
 
-	req->hdr.total_size = sizeof(*req);
-	req->type = i2c_req_type;
+		req->hdr.total_size = sizeof(*req);
+		req->type = i2c_req_type;
+	}
 
 	start = jiffies;
 	ret = read_poll_timeout(psp_send_check_i2c_req, status,
 				(status != -EBUSY),
 				PSP_I2C_REQ_RETRY_DELAY_US,
 				PSP_I2C_REQ_RETRY_CNT * PSP_I2C_REQ_RETRY_DELAY_US,
-				0, req);
+				0, req, i2c_req_type);
+
 	if (ret) {
 		dev_err(psp_i2c_dev, "Timed out waiting for PSP to %s I2C bus\n",
 			(i2c_req_type == PSP_I2C_REQ_ACQUIRE) ?
