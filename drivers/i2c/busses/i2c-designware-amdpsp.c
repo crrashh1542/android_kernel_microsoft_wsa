@@ -8,12 +8,11 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
+#include <asm/amd_nb.h>
 #include <asm/msr.h>
 
 #include "i2c-designware-core.h"
 
-#define MSR_AMD_PSP_ADDR	0xc00110a2
-#define PSP_MBOX_OFFSET		0x10570
 #define PSP_CMD_TIMEOUT_US	(500 * USEC_PER_MSEC)
 
 #define PSP_I2C_RESERVATION_TIME_MS 100
@@ -31,6 +30,10 @@
 #define PSP_MBOX_FIELDS_RECOVERY	BIT(30)
 #define PSP_MBOX_FIELDS_READY		BIT(31)
 
+#define PSP_MBOX_CMD_OFFSET		0x3810570
+#define PSP_MBOX_BUFFER_L_OFFSET	0x3810574
+#define PSP_MBOX_BUFFER_H_OFFSET	0x3810578
+
 struct psp_req_buffer_hdr {
 	u32 total_size;
 	u32 status;
@@ -47,14 +50,8 @@ struct psp_i2c_req {
 	enum psp_i2c_req_type type;
 };
 
-struct psp_mbox {
-	u32 cmd_fields;
-	u64 i2c_req_addr;
-} __packed;
-
 static DEFINE_MUTEX(psp_i2c_access_mutex);
 static unsigned long psp_i2c_sem_acquired;
-static void __iomem *mbox_iomem;
 static u32 psp_i2c_access_count;
 static bool psp_i2c_mbox_fail;
 static struct device *psp_i2c_dev;
@@ -64,47 +61,43 @@ static struct device *psp_i2c_dev;
  * family of SoCs.
  */
 
-static int psp_get_mbox_addr(unsigned long *mbox_addr)
-{
-	unsigned long long psp_mmio;
-
-	if (rdmsrl_safe(MSR_AMD_PSP_ADDR, &psp_mmio))
-		return -EIO;
-
-	*mbox_addr = (unsigned long)(psp_mmio + PSP_MBOX_OFFSET);
-
-	return 0;
-}
-
 static int psp_mbox_probe(void)
 {
-	unsigned long mbox_addr;
-	int ret;
+	/*
+	 * Explicitly initialize system management network interface here, since
+	 * usual init happens only after PCI subsystem is ready. This is too late
+	 * for I2C controller driver which may be executed earlier.
+	 */
+	return amd_cache_northbridges();
+}
 
-	ret = psp_get_mbox_addr(&mbox_addr);
-	if (ret)
-		return ret;
+static int psp_smn_write(u32 smn_addr, u32 value)
+{
+	return amd_smn_write(0, smn_addr, value);
+}
 
-	mbox_iomem = ioremap(mbox_addr, sizeof(struct psp_mbox));
-	if (!mbox_iomem)
-		return -ENOMEM;
-
-	return 0;
+static int psp_smn_read(u32 smn_addr, u32 *value)
+{
+	return amd_smn_read(0, smn_addr, value);
 }
 
 /* Recovery field should be equal 0 to start sending commands */
-static int psp_check_mbox_recovery(struct psp_mbox __iomem *mbox)
+static int psp_check_mbox_recovery(void)
 {
 	u32 tmp;
+	int status;
 
-	tmp = readl(&mbox->cmd_fields);
+	status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &tmp);
+	if (status)
+		return status;
 
 	return FIELD_GET(PSP_MBOX_FIELDS_RECOVERY, tmp);
 }
 
-static int psp_wait_cmd(struct psp_mbox __iomem *mbox)
+static int psp_wait_cmd(void)
 {
 	u32 tmp, expected;
+	int ret, status;
 
 	/* Expect mbox_cmd to be cleared and ready bit to be set by PSP */
 	expected = FIELD_PREP(PSP_MBOX_FIELDS_READY, 1);
@@ -113,30 +106,55 @@ static int psp_wait_cmd(struct psp_mbox __iomem *mbox)
 	 * Check for readiness of PSP mailbox in a tight loop in order to
 	 * process further as soon as command was consumed.
 	 */
-	return readl_poll_timeout(&mbox->cmd_fields, tmp, (tmp == expected),
-				  0, PSP_CMD_TIMEOUT_US);
+	ret = read_poll_timeout(psp_smn_read, status,
+				(status < 0) || (tmp == expected), 0,
+				PSP_CMD_TIMEOUT_US, 0, PSP_MBOX_CMD_OFFSET,
+				&tmp);
+	if (status)
+		ret = status;
+
+	return ret;
 }
 
 /* Status equal to 0 means that PSP succeed processing command */
-static u32 psp_check_mbox_sts(struct psp_mbox __iomem *mbox)
+static int psp_check_mbox_sts(void)
 {
 	u32 cmd_reg;
+	int status;
 
-	cmd_reg = readl(&mbox->cmd_fields);
+	status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &cmd_reg);
+	if (status)
+		return status;
 
 	return FIELD_GET(PSP_MBOX_FIELDS_STS, cmd_reg);
 }
 
+static int psp_wr_mbox_buffer(phys_addr_t buf)
+{
+	u32 buf_addr_h = upper_32_bits(buf);
+	u32 buf_addr_l = lower_32_bits(buf);
+	int status;
+
+	status = psp_smn_write(PSP_MBOX_BUFFER_H_OFFSET, buf_addr_h);
+	if (status)
+		return status;
+
+	status = psp_smn_write(PSP_MBOX_BUFFER_L_OFFSET, buf_addr_l);
+	if (status)
+		return status;
+
+	return 0;
+}
+
 static int psp_send_cmd(struct psp_i2c_req *req)
 {
-	struct psp_mbox __iomem *mbox = mbox_iomem;
 	phys_addr_t req_addr;
 	u32 cmd_reg;
 
-	if (psp_check_mbox_recovery(mbox))
+	if (psp_check_mbox_recovery())
 		return -EIO;
 
-	if (psp_wait_cmd(mbox))
+	if (psp_wait_cmd())
 		return -EBUSY;
 
 	/*
@@ -145,16 +163,18 @@ static int psp_send_cmd(struct psp_i2c_req *req)
 	 * PSP. Use physical address of buffer, since PSP will map this region.
 	 */
 	req_addr = __psp_pa((void *)req);
-	writeq(req_addr, &mbox->i2c_req_addr);
+	if (psp_wr_mbox_buffer(req_addr))
+		return -EIO;
 
 	/* Write command register to trigger processing */
 	cmd_reg = FIELD_PREP(PSP_MBOX_FIELDS_CMD, PSP_I2C_REQ_BUS_CMD);
-	writel(cmd_reg, &mbox->cmd_fields);
+	if (psp_smn_write(PSP_MBOX_CMD_OFFSET, cmd_reg))
+		return -EIO;
 
-	if (psp_wait_cmd(mbox))
+	if (psp_wait_cmd())
 		return -ETIMEDOUT;
 
-	if (psp_check_mbox_sts(mbox))
+	if (psp_check_mbox_sts())
 		return -EIO;
 
 	return 0;
@@ -416,10 +436,4 @@ int i2c_dw_amdpsp_probe_lock_support(struct dw_i2c_dev *dev)
 	dev->release_lock = psp_release_i2c_bus;
 
 	return 0;
-}
-
-/* Unmap area used as a mailbox with PSP */
-void i2c_dw_amdpsp_remove_lock_support(struct dw_i2c_dev *dev)
-{
-	iounmap(mbox_iomem);
 }
