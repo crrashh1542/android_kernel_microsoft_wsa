@@ -147,6 +147,8 @@ static void ipc3_log_header(struct device *dev, u8 *text, u32 cmd)
 		case SOF_IPC_TRACE_DMA_PARAMS:
 			str2 = "DMA_PARAMS"; break;
 		case SOF_IPC_TRACE_DMA_POSITION:
+			if (!sof_debug_check_flag(SOF_DBG_PRINT_DMA_POSITION_UPDATE_LOGS))
+				return;
 			str2 = "DMA_POSITION"; break;
 		case SOF_IPC_TRACE_DMA_PARAMS_EXT:
 			str2 = "DMA_PARAMS_EXT"; break;
@@ -290,7 +292,7 @@ static int ipc3_wait_tx_done(struct snd_sof_ipc *ipc, void *reply_data)
 		dev_err(sdev->dev,
 			"ipc tx timed out for %#x (msg/reply size: %d/%zu)\n",
 			hdr->cmd, hdr->size, msg->reply_size);
-		snd_sof_handle_fw_exception(ipc->sdev);
+		snd_sof_handle_fw_exception(ipc->sdev, "IPC timeout");
 		ret = -ETIMEDOUT;
 	} else {
 		ret = msg->reply_error;
@@ -299,7 +301,8 @@ static int ipc3_wait_tx_done(struct snd_sof_ipc *ipc, void *reply_data)
 				"ipc tx error for %#x (msg/reply size: %d/%zu): %d\n",
 				hdr->cmd, hdr->size, msg->reply_size, ret);
 		} else {
-			ipc3_log_header(sdev->dev, "ipc tx succeeded", hdr->cmd);
+			if (sof_debug_check_flag(SOF_DBG_PRINT_IPC_SUCCESS_LOGS))
+				ipc3_log_header(sdev->dev, "ipc tx succeeded", hdr->cmd);
 			if (msg->reply_size)
 				/* copy the data returned from DSP */
 				memcpy(reply_data, msg->reply_data,
@@ -946,7 +949,7 @@ static void ipc3_trace_message(struct snd_sof_dev *sdev, void *msg_buf)
 
 	switch (msg_type) {
 	case SOF_IPC_TRACE_DMA_POSITION:
-		snd_sof_trace_update_pos(sdev, msg_buf);
+		ipc3_dtrace_posn_update(sdev, msg_buf);
 		break;
 	default:
 		dev_err(sdev->dev, "unhandled trace message %#x\n", msg_type);
@@ -1070,6 +1073,7 @@ const struct sof_ipc_ops ipc3_ops = {
 	.pm = &ipc3_pm_ops,
 	.pcm = &ipc3_pcm_ops,
 	.fw_loader = &ipc3_loader_ops,
+	.fw_tracing = &ipc3_dtrace_ops,
 
 	.tx_msg = sof_ipc3_tx_msg,
 	.rx_msg = sof_ipc3_rx_msg,

@@ -2903,6 +2903,12 @@ S:	Maintained
 F:	Documentation/hwmon/asc7621.rst
 F:	drivers/hwmon/asc7621.c
 
+ASIX AX88796C SPI ETHERNET ADAPTER
+M:	Łukasz Stelmach <l.stelmach@samsung.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/asix,ax88796c.yaml
+F:	drivers/net/ethernet/asix/ax88796c_*
+
 ASPEED PINCTRL DRIVERS
 M:	Andrew Jeffery <andrew@aj.id.au>
 L:	linux-aspeed@lists.ozlabs.org (moderated for non-subscribers)
@@ -4456,10 +4462,26 @@ F:	drivers/media/cec/i2c/ch7322.c
 CIRRUS LOGIC AUDIO CODEC DRIVERS
 M:	James Schulman <james.schulman@cirrus.com>
 M:	David Rhodes <david.rhodes@cirrus.com>
+M:	Lucas Tanure <tanureal@opensource.cirrus.com>
+M:	Richard Fitzgerald <rf@opensource.cirrus.com>
 L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 L:	patches@opensource.cirrus.com
 S:	Maintained
+F:	Documentation/devicetree/bindings/sound/cirrus,cs*
+F:	include/dt-bindings/sound/cs*
+F:	sound/pci/hda/cs*
 F:	sound/soc/codecs/cs*
+
+CIRRUS LOGIC DSP FIRMWARE DRIVER
+M:	Simon Trimmer <simont@opensource.cirrus.com>
+M:	Charles Keepax <ckeepax@opensource.cirrus.com>
+M:	Richard Fitzgerald <rf@opensource.cirrus.com>
+L:	patches@opensource.cirrus.com
+S:	Supported
+W:	https://github.com/CirrusLogic/linux-drivers/wiki
+T:	git https://github.com/CirrusLogic/linux-drivers.git
+F:	drivers/firmware/cirrus/*
+F:	include/linux/firmware/cirrus/*
 
 CIRRUS LOGIC EP93XX ETHERNET DRIVER
 M:	Hartley Sweeten <hsweeten@visionengravers.com>

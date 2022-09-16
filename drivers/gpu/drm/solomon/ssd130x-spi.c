@@ -104,13 +104,11 @@ static int ssd130x_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int ssd130x_spi_remove(struct spi_device *spi)
+static void ssd130x_spi_remove(struct spi_device *spi)
 {
 	struct ssd130x_device *ssd130x = spi_get_drvdata(spi);
 
 	ssd130x_remove(ssd130x);
-
-	return 0;
 }
 
 static void ssd130x_spi_shutdown(struct spi_device *spi)

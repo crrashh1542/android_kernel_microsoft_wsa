@@ -1335,6 +1335,7 @@ int st_accel_common_probe(struct iio_dev *indio_dev)
 {
 	struct st_sensor_data *adata = iio_priv(indio_dev);
 	struct st_sensors_platform_data *pdata = dev_get_platdata(adata->dev);
+	struct device *parent = indio_dev->dev.parent;
 	int err;
 
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -1380,31 +1381,9 @@ int st_accel_common_probe(struct iio_dev *indio_dev)
 			return err;
 	}
 
-	err = iio_device_register(indio_dev);
-	if (err)
-		goto st_accel_device_register_error;
-
-	dev_info(&indio_dev->dev, "registered accelerometer %s\n",
-		 indio_dev->name);
-
-	return 0;
-
-st_accel_device_register_error:
-	if (adata->irq > 0)
-		st_sensors_deallocate_trigger(indio_dev);
-	return err;
+	return devm_iio_device_register(parent, indio_dev);
 }
 EXPORT_SYMBOL(st_accel_common_probe);
-
-void st_accel_common_remove(struct iio_dev *indio_dev)
-{
-	struct st_sensor_data *adata = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-	if (adata->irq > 0)
-		st_sensors_deallocate_trigger(indio_dev);
-}
-EXPORT_SYMBOL(st_accel_common_remove);
 
 MODULE_AUTHOR("Denis Ciocca <denis.ciocca@st.com>");
 MODULE_DESCRIPTION("STMicroelectronics accelerometers driver");
