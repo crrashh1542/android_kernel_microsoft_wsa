@@ -936,6 +936,14 @@ config LOW_MEM_NOTIFY
 	  the presence of large swap space, the system is likely to become
 	  unusable before the OOM killer is triggered.
 
+config LRU_GEN
+	bool "Multi-Gen LRU"
+	depends on MMU
+	# make sure page->flags has enough spare bits
+	depends on 64BIT || !SPARSEMEM || SPARSEMEM_VMEMMAP
+	help
+	  A high performance LRU implementation to overcommit memory.
+
 source "mm/damon/Kconfig"
 
 endmenu
