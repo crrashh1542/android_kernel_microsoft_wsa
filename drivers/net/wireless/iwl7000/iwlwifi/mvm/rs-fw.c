@@ -282,7 +282,8 @@ rs_fw_rs_mcs2eht_mcs(enum IWL_TLC_MCS_PER_BW bw,
 	}
 }
 
-static void rs_fw_eht_set_enabled_rates(const struct ieee80211_link_sta *link_sta,
+static void rs_fw_eht_set_enabled_rates(struct ieee80211_vif *vif,
+					const struct ieee80211_link_sta *link_sta,
 					struct ieee80211_supported_band *sband,
 					struct iwl_tlc_config_cmd_v4 *cmd)
 {
@@ -298,7 +299,8 @@ static void rs_fw_eht_set_enabled_rates(const struct ieee80211_link_sta *link_st
 	struct ieee80211_eht_mcs_nss_supp_20mhz_only mcs_tx_20;
 
 	/* peer is 20Mhz only */
-	if (!(link_sta->he_cap.he_cap_elem.phy_cap_info[0] &
+	if (vif->type == NL80211_IFTYPE_AP &&
+	    !(link_sta->he_cap.he_cap_elem.phy_cap_info[0] &
 	      IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_MASK_ALL)) {
 		mcs_rx_20 = eht_rx_mcs->only_20mhz;
 	} else {
@@ -359,7 +361,8 @@ static void rs_fw_eht_set_enabled_rates(const struct ieee80211_link_sta *link_st
 		       sizeof(cmd->ht_rates[IWL_TLC_NSS_2]));
 }
 
-static void rs_fw_set_supp_rates(struct ieee80211_link_sta *link_sta,
+static void rs_fw_set_supp_rates(struct ieee80211_vif *vif,
+				 struct ieee80211_link_sta *link_sta,
 				 struct ieee80211_supported_band *sband,
 				 struct iwl_tlc_config_cmd_v4 *cmd)
 {
@@ -381,7 +384,7 @@ static void rs_fw_set_supp_rates(struct ieee80211_link_sta *link_sta,
 	/* HT/VHT rates */
 	if (cfg_eht_cap_has_eht(link_sta)) {
 		cmd->mode = IWL_TLC_MNG_MODE_EHT;
-		rs_fw_eht_set_enabled_rates(link_sta, sband, cmd);
+		rs_fw_eht_set_enabled_rates(vif, link_sta, sband, cmd);
 	} else if (he_cap->has_he) {
 		cmd->mode = IWL_TLC_MNG_MODE_HE;
 		rs_fw_he_set_enabled_rates(link_sta, sband, cmd);
@@ -580,7 +583,9 @@ u16 rs_fw_get_max_amsdu_len(struct ieee80211_sta *sta,
 	return 0;
 }
 
-void rs_fw_rate_init(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
+void rs_fw_rate_init(struct iwl_mvm *mvm,
+		     struct ieee80211_vif *vif,
+		     struct ieee80211_sta *sta,
 		     struct ieee80211_bss_conf *link_conf,
 		     struct ieee80211_link_sta *link_sta,
 		     enum nl80211_band band, bool update)
@@ -622,7 +627,7 @@ void rs_fw_rate_init(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	iwl_mvm_reset_frame_stats(mvm);
 #endif
-	rs_fw_set_supp_rates(link_sta, sband, &cfg_cmd);
+	rs_fw_set_supp_rates(vif, link_sta, sband, &cfg_cmd);
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	/*
 	 * if AP disables mimo on 160bw
