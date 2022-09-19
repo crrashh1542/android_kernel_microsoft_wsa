@@ -1213,7 +1213,7 @@ ap_ts_i2c: &i2c14 {
 	};
 
 	pen_rst_l: pen-rst-l {
-		pinmux  {
+		pinmux {
 			pins = "gpio23";
 			function = "gpio";
 		};
@@ -1280,7 +1280,7 @@ ap_ts_i2c: &i2c14 {
 	};
 
 	ts_int_l: ts-int-l {
-		pinmux  {
+		pinmux {
 			pins = "gpio125";
 			function = "gpio";
 		};
@@ -1292,7 +1292,7 @@ ap_ts_i2c: &i2c14 {
 	};
 
 	ts_reset_l: ts-reset-l {
-		pinmux  {
+		pinmux {
 			pins = "gpio118";
 			function = "gpio";
 		};
