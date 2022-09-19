@@ -232,7 +232,7 @@ static inline bool vfio_iommu_driver_allowed(struct vfio_container *container,
 }
 #endif /* CONFIG_VFIO_NOIOMMU */
 
-/**
+/*
  * IOMMU driver registration
  */
 int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
@@ -281,7 +281,7 @@ void vfio_unregister_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 }
 EXPORT_SYMBOL_GPL(vfio_unregister_iommu_driver);
 
-/**
+/*
  * Group minor allocation/free - both called with vfio.group_lock held
  */
 static int vfio_alloc_group_minor(struct vfio_group *group)
@@ -298,7 +298,7 @@ static int vfio_iommu_group_notifier(struct notifier_block *nb,
 				     unsigned long action, void *data);
 static void vfio_group_get(struct vfio_group *group);
 
-/**
+/*
  * Container objects - containers are created when /dev/vfio/vfio is
  * opened, but their lifecycle extends until the last user is done, so
  * it's freed via kref.  Must support container/group/device being
@@ -333,7 +333,7 @@ static void vfio_group_unlock_and_free(struct vfio_group *group)
 	kfree(group);
 }
 
-/**
+/*
  * Group objects - create, release, get, put, search
  */
 static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
@@ -543,7 +543,7 @@ static struct vfio_group *vfio_group_get_from_dev(struct device *dev)
 	return group;
 }
 
-/**
+/*
  * Device objects - create, release, get, put, search
  */
 /* Device reference always implies a group reference */
@@ -650,7 +650,7 @@ static int vfio_dev_viable(struct device *dev, void *data)
 	return ret;
 }
 
-/**
+/*
  * Async device support
  */
 static int vfio_group_nb_add_dev(struct vfio_group *group, struct device *dev)
@@ -761,7 +761,7 @@ static int vfio_iommu_group_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-/**
+/*
  * VFIO driver API
  */
 void vfio_init_group_dev(struct vfio_device *device, struct device *dev,
@@ -910,7 +910,7 @@ int vfio_register_emulated_iommu_dev(struct vfio_device *device)
 }
 EXPORT_SYMBOL_GPL(vfio_register_emulated_iommu_dev);
 
-/**
+/*
  * Get a reference to the vfio_device for a device.  Even if the
  * caller thinks they own the device, they could be racing with a
  * release call path, so we can't trust drvdata for the shortcut.
@@ -1044,7 +1044,7 @@ void vfio_unregister_group_dev(struct vfio_device *device)
 }
 EXPORT_SYMBOL_GPL(vfio_unregister_group_dev);
 
-/**
+/*
  * VFIO base fd, /dev/vfio/vfio
  */
 static long vfio_ioctl_check_extension(struct vfio_container *container,
@@ -1262,7 +1262,7 @@ static const struct file_operations vfio_fops = {
 	.compat_ioctl	= compat_ptr_ioctl,
 };
 
-/**
+/*
  * VFIO Group fd, /dev/vfio/$GROUP
  */
 static void __vfio_group_unset_container(struct vfio_group *group)
@@ -1614,7 +1614,7 @@ static const struct file_operations vfio_group_fops = {
 	.release	= vfio_group_fops_release,
 };
 
-/**
+/*
  * VFIO Device fd
  */
 static int vfio_device_fops_release(struct inode *inode, struct file *filep)
@@ -1727,7 +1727,7 @@ static const struct file_operations vfio_device_fops = {
 	.mmap		= vfio_device_fops_mmap,
 };
 
-/**
+/*
  * External user API, exported by symbols to be linked dynamically.
  *
  * The protocol includes:
@@ -1772,7 +1772,7 @@ struct vfio_group *vfio_group_get_external_user(struct file *filep)
 }
 EXPORT_SYMBOL_GPL(vfio_group_get_external_user);
 
-/**
+/*
  * External user API, exported by symbols to be linked dynamically.
  * The external user passes in a device pointer
  * to verify that:
@@ -1838,7 +1838,7 @@ long vfio_external_check_extension(struct vfio_group *group, unsigned long arg)
 }
 EXPORT_SYMBOL_GPL(vfio_external_check_extension);
 
-/**
+/*
  * Sub-module support
  */
 /*
@@ -2386,7 +2386,7 @@ struct iommu_domain *vfio_group_iommu_domain(struct vfio_group *group)
 }
 EXPORT_SYMBOL_GPL(vfio_group_iommu_domain);
 
-/**
+/*
  * Module/class support
  */
 static char *vfio_devnode(struct device *dev, umode_t *mode)
