@@ -9,7 +9,6 @@ config DRM_POWERVR_ROGUE_1_13
 	depends on DEVFREQ_GOV_SIMPLE_ONDEMAND
 	depends on PM_OPP
 	depends on DEVFREQ_THERMAL
-	default y
 	help
 	  Driver for PowerVR Rogue graphics hardware 1.13.
 
