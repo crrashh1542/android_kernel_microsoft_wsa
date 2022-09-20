@@ -29,13 +29,13 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
 
-#include "display/intel_panel.h"
-
 #include "i915_drv.h"
+#include "intel_backlight.h"
 #include "intel_connector.h"
 #include "intel_display_debugfs.h"
 #include "intel_display_types.h"
 #include "intel_hdcp.h"
+#include "intel_panel.h"
 
 int intel_connector_init(struct intel_connector *connector)
 {
@@ -53,6 +53,8 @@ int intel_connector_init(struct intel_connector *connector)
 
 	__drm_atomic_helper_connector_reset(&connector->base,
 					    &conn_state->base);
+
+	INIT_LIST_HEAD(&connector->panel.fixed_modes);
 
 	return 0;
 }
@@ -100,7 +102,7 @@ void intel_connector_destroy(struct drm_connector *connector)
 	if (!IS_ERR_OR_NULL(intel_connector->edid))
 		kfree(intel_connector->edid);
 
-	intel_panel_fini(&intel_connector->panel);
+	intel_panel_fini(intel_connector);
 
 	drm_connector_cleanup(connector);
 
@@ -124,7 +126,7 @@ int intel_connector_register(struct drm_connector *connector)
 		goto err_backlight;
 	}
 
-	intel_connector_debugfs_add(connector);
+	intel_connector_debugfs_add(intel_connector);
 
 	return 0;
 

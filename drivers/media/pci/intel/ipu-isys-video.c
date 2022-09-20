@@ -1073,10 +1073,9 @@ static int start_stream_firmware(struct ipu_isys_video *av,
 				       to_dma_addr(msg),
 				       sizeof(*stream_cfg),
 				       IPU_FW_ISYS_SEND_TYPE_STREAM_OPEN);
-	ipu_put_fw_mgs_buf(av->isys, (uintptr_t)stream_cfg);
-
 	if (rval < 0) {
 		dev_err(dev, "can't open stream (%d)\n", rval);
+		ipu_put_fw_mgs_buf(av->isys, (uintptr_t)stream_cfg);
 		goto out_put_stream_handle;
 	}
 
@@ -1084,6 +1083,9 @@ static int start_stream_firmware(struct ipu_isys_video *av,
 
 	tout = wait_for_completion_timeout(&ip->stream_open_completion,
 					   IPU_LIB_CALL_TIMEOUT_JIFFIES);
+
+	ipu_put_fw_mgs_buf(av->isys, (uintptr_t)stream_cfg);
+
 	if (!tout) {
 		dev_err(dev, "stream open time out\n");
 		rval = -ETIMEDOUT;
@@ -1122,7 +1124,6 @@ static int start_stream_firmware(struct ipu_isys_video *av,
 					       buf, to_dma_addr(msg),
 					       sizeof(*buf),
 					       send_type);
-		ipu_put_fw_mgs_buf(av->isys, (uintptr_t)buf);
 	} else {
 		send_type = IPU_FW_ISYS_SEND_TYPE_STREAM_START;
 		rval = ipu_fw_isys_simple_cmd(av->isys,
@@ -1423,10 +1424,12 @@ static void calculate_stream_datarate(struct video_stream_watermark *watermark)
 	u64 pixels_per_line, bytes_per_line, line_time_ns;
 	u64 pages_per_line, pb_bytes_per_line, stream_data_rate;
 	u16 sram_granulrity_shift =
-		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP) ?
+		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
+		 ipu_ver == IPU_VER_6EP_MTL) ?
 		IPU6_SRAM_GRANULRITY_SHIFT : IPU6SE_SRAM_GRANULRITY_SHIFT;
 	u16 sram_granulrity_size =
-		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP) ?
+		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
+		 ipu_ver == IPU_VER_6EP_MTL) ?
 		IPU6_SRAM_GRANULRITY_SIZE : IPU6SE_SRAM_GRANULRITY_SIZE;
 
 	pixels_per_line = watermark->width + watermark->hblank;
@@ -1550,7 +1553,7 @@ int ipu_isys_video_set_streaming(struct ipu_isys_video *av,
 	if (state) {
 		rval = start_stream_firmware(av, bl);
 		if (rval)
-			goto out_media_entity_stop_streaming;
+			goto out_update_stream_watermark;
 
 		dev_dbg(dev, "set stream: source %d, stream_handle %d\n",
 			ip->source, ip->stream_handle);
@@ -1575,6 +1578,10 @@ int ipu_isys_video_set_streaming(struct ipu_isys_video *av,
 
 out_media_entity_stop_streaming_firmware:
 	stop_streaming_firmware(av);
+
+out_update_stream_watermark:
+	if (av->aq.css_pin_type == IPU_FW_ISYS_PIN_TYPE_RAW_SOC)
+		update_stream_watermark(av, 0);
 
 out_media_entity_stop_streaming:
 	mutex_lock(&mdev->graph_mutex);

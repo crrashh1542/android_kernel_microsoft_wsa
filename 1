@@ -1,0 +1,1000 @@
+ 1192  git log
+ 1193  fg
+ 1194  vim -o patches/0099-netlink-range/mac80211.patch /home/ggreenma/work/temp/iwlwifi-backports/patches/0099-netlink-range/mac80211.patch
+ 1195  vim -O patches/0099-netlink-range/mac80211.patch /home/ggreenma/work/temp/iwlwifi-backports/patches/0099-netlink-range/mac80211.patch
+ 1196  vimdiff patches/0099-netlink-range/mac80211.patch /home/ggreenma/work/temp/iwlwifi-backports/patches/0099-netlink-range/mac80211.patch
+ 1197  vim -O patches/0099-netlink-range/mac80211.patch /home/ggreenma/work/temp/iwlwifi-backports/patches/0099-netlink-range/mac80211.patch
+ 1198  git diff
+ 1199  git diff > tmp.patch
+ 1200  git reset --hard HEAD
+ 1201  git diff
+ 1202  gll
+ 1203  vi copy-list.intel 
+ 1204  vi stack-auto-luca.ini 
+ 1205  cp stack-auto-luca.ini stack-auto-gregory.ini
+ 1206  vi stack-auto-gregory.ini
+ 1207  find . -name "git-tracker*"
+ 1208  vi /devel/git-tracker.ini.example
+ 1209  vi ./devel/git-tracker.ini.example 
+ 1210  #./devel/git-tracker.py --copy-list=copy-list.intel --conf=stack-auto-gregory.ini 
+ 1211  vi ./devel/git-tracker.py
+ 1212  vi copy-list.intel
+ 1213  vi stack-auto-gregory.ini
+ 1214  ./devel/git-tracker.py --copy-list=copy-list.intel --conf=stack-auto-gregory.ini 
+ 1215  pwd
+ 1216  git status 
+ 1217  git add patches/0097-skb-list/mac80211-status.patch
+ 1218  ga patches/0097-skb-list/mac80211-status.patch
+ 1219  gs a58d385ea
+ 1220  gll
+ 1221  git status 
+ 1222  git add patches/0097-skb-list/mac80211-status.patch
+ 1223  git commit -s
+ 1224  gll
+ 1225  gs 3011a4f9
+ 1226  git commit --amend
+ 1227  h
+ 1228  ./devel/git-tracker.py --copy-list=copy-list.intel --conf=stack-auto-gregory.ini
+ 1229  git log
+ 1230  gs
+ 1231  cat stack-auto.ini 
+ 1232  git tag
+ 1233  git tag|grep iwlwifi
+ 1234  git tag|grep iwlwifi-2022
+ 1235  git log 
+ 1236  git log --decorate=full
+ 1237  git log --decorate=full --author=coelho
+ 1238  git log --decorate=full 
+ 1239  git branch 
+ 1240  git log origin/master 
+ 1241  git log origin/master  --decorate=full
+ 1242  git log upstream/master  --decorate=full
+ 1243  git tag
+ 1244  git tag|grep iwlwifi
+ 1245  git show iwlwifi-2022-03-24
+ 1246  git branch --contains f69d7dacd2b80f128e92ed67058072556bcdb5dd
+ 1247  git log 
+ 1248  git log --decorate=full
+ 1249  git log --decorate=full --tags
+ 1250  git branch 
+ 1251  git log --decorate=full --tags
+ 1252  git log
+ 1253  git log --decorate=full --tags
+ 1254  git log --decorate=full 
+ 1255  git tag -l
+ 1256  git tag -l|grep iwlwifi
+ 1257  gs iwlwifi-2022-03-24
+ 1258  git branch -a --contains refs/tags/iwlwifi-2022-02-21
+ 1259  git tags|grep iwlwifi
+ 1260  git tag -l|grep iwlwifi
+ 1261  gll
+ 1262  git tag -l|grep iwlwifi
+ 1263  gll
+ 1264  git fetch
+ 1265  git branch -a --contains iwlwifi-2022-08-15
+ 1266  git show iwlwifi-2022-08-15
+ 1267  gll upstream/master
+ 1268  git branch 
+ 1269  git co -b upstream_master upstream/master 
+ 1270  git log
+ 1271  vi patches/0099-netlink-range/mac80211.patch
+ 1272  git co -b origin_master origin/master 
+ 1273  vi patches/0099-netlink-range/mac80211.patch
+ 1274  git branch 
+ 1275  git log patches/0099-netlink-range/mac80211.patch
+ 1276  gs 0efee9f5197f4fd20f45b46c3ccf2f04027fe7a3
+ 1277  git log patches/0099-netlink-range/mac80211.patch
+ 1278  gs acf9ccb20a33787043213150a4840a3596fddbf6
+ 1279  gs 0efee9f5197f4fd20f45b46c3ccf2f04027fe7a3
+ 1280  git branch 
+ 1281  vi patches/0099-netlink-range/mac80211.patch
+ 1282  git co upstream_master 
+ 1283  vi patches/0099-netlink-range/mac80211.patch
+ 1284  git co master 
+ 1285  git co upstream_master 
+ 1286  git branch 
+ 1287  git co origin_master 
+ 1288  gll
+ 1289  git co master 
+ 1290  git log
+ 1291  git format-patch -1
+ 1292  git tag -l|grep iwl
+ 1293  git show iwlwifi-2022-08-15
+ 1294  git show iwlwifi-2022-01-25
+ 1295  ll
+ 1296  ll backport-iwlwifi/
+ 1297  ll
+ 1298  ll patches/
+ 1299  vi patches/0083-timer_list.patch
+ 1300  git gr "#elif"
+ 1301  vi patches/0028-select_queue/mac80211.patch 
+ 1302  cd ..
+ 1303  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-linuxptp" && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "iwlwifi-linuxptp/.git/hooks/" 
+ 1304  cd iwlwifi-linuxptp/
+ 1305  find . -iname "nl80211.h"
+ 1306  vimdiff nl80211.h /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h
+ 1307  find . -iname "nl80211.h"
+ 1308  ll
+ 1309  vi nl80211.h
+ 1310  git gr NL80211_ATTR_TX_HW_TIMESTAMP,
+ 1311  git gr NL80211_ATTR_TX_HW_TIMESTAMP
+ 1312  vi nl80211.c
+ 1313  vimdiff nl80211_copy.h /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h
+ 1314  git log
+ 1315  git blame nl80211_copy.h
+ 1316  gs d4940e42
+ 1317  git log
+ 1318  vimdiff nl80211_copy.h /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h
+ 1319  cp /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h nl80211_copy.h
+ 1320  git status 
+ 1321  git diff
+ 1322  git status 
+ 1323  git add nl80211_copy.h
+ 1324  git log
+ 1325  git commit -s
+ 1326  gs
+ 1327  alias|grep gpm
+ 1328  gpm
+ 1329  cd ../
+ 1330  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-iw" && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "iwlwifi-iw/.git/hooks/" 
+ 1331  cd iwlwifi-iw/
+ 1332  find . -name "nl80211*h"
+ 1333  vimdiff nl80211.h /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h
+ 1334  cp /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/include/uapi/linux/nl80211.h .
+ 1335  git status 
+ 1336  git add nl80211.h 
+ 1337  git log -- nl80211.h
+ 1338  git status 
+ 1339  git commit -s
+ 1340  fg
+ 1341  git log -- nl80211.h
+ 1342  gs
+ 1343  gpm
+ 1344  cds
+ 1345  git branch 
+ 1346  cd /home/ggreenma/work/tmp/for_github/os_chrome_bleeding_edge
+ 1347  ll
+ 1348  mkdir tmp
+ 1349  cp 0001-CHROMIUMOS-iwl7000-update-driver.patch tmp/
+ 1350  vi 0001-CHROMIUMOS-iwl7000-update-driver.patch
+ 1351  vi ~/Downloads/tmp/855445_trace_ap_8.log 
+ 1352  vi ~/Downloads/221250880_comment2_36383796_report-41f694671f582173 
+ 1353  cd work/public/
+ 1354  ll
+ 1355  cd linux-firmware-1/
+ 1356  ll
+ 1357  ll iwlwifi-so-a0-gf-a0*
+ 1358  git log iwlwifi-so-a0-gf-a0-72.ucode
+ 1359  git remote -v
+ 1360  git log --author=greenman
+ 1361  git log --author=coelho
+ 1362  git branch 
+ 1363  git co main
+ 1364  git log --author=coelho
+ 1365  gs 8f9285cca830cb709439ee2cf14d0519d155983b
+ 1366  cd ~/work/tmp
+ 1367  ll
+ 1368  cd bugs/
+ 1369  ll
+ 1370  rm -rf *
+ 1371  mkdir redhat
+ 1372  cp ~/Downloads/iwl.dump.gpg .
+ 1373  gpg --decrypt iwl.dump.gpg 
+ 1374  c
+ 1375  gpg --decrypt iwl.dump.gpg > iwl.dump
+ 1376  c
+ 1377  ll
+ 1378  mv iwl.dump* redhat/
+ 1379  cd redhat/
+ 1380  ll
+ 1381  ll ..
+ 1382  cdw
+ 1383  cd iwlwifi-chrome-kernel/
+ 1384  vi drivers/net/wireless/iwl7000/iwlwifi/pcie/trans.c
+ 1385  git branch 
+ 1386  git co chromeos-5.10__release/core72-55
+ 1387  vi drivers/net/wireless/iwl7000/iwlwifi/mvm/tx.c +1772
+ 1388  cd ../../public/
+ 1389  ll
+ 1390  git clone https://github.com/intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1391  cat ~/.ssh/id_rsa.pub 
+ 1392  git clone git@github.com:intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1393  git clone ggreenma@github.com:intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1394  ping github.com
+ 1395  env|grep -i proxy
+ 1396  h|grep proxy
+ 1397  export all_proxy=socks://proxy-dmz.intel.com:1080/
+ 1398  export http_proxy=http://proxy-dmz.intel.com:911/
+ 1399  export https_proxy=http://proxy-dmz.intel.com:912/
+ 1400  ping github.com
+ 1401  env|grep proxy
+ 1402  dig -x 140.82.121.3
+ 1403  git clone https://github.com/intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1404  git clone https://ggreenma@github.com/intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1405  git clone git@github.com:intel-innersource/os.chrome.internal.kernel-bleeding-edge.git
+ 1406  ll
+ 1407  vi ~/Downloads/222134668_comment2_36396834_report-69b190354da62187 
+ 1408  cd linux
+ 1409  vi Makefile 
+ 1410  vi drivers/net/wireless/intel/iwlwifi/mvm/mac-ctxt.c 
+ 1411  git log -p
+ 1412  vi drivers/net/wireless/intel/iwlwifi/cfg/22000.c
+ 1413  git gr get_variable
+ 1414  vi arch/ia64/kernel/efi.c
+ 1415  git gr "efi;"
+ 1416  vi include/linux/efi.h +617
+ 1417  cws
+ 1418  cds
+ 1419  vi
+ 1420  cd -
+ 1421  git gr ndo_open
+ 1422  vi Documentation/networking/netdevices.rst +212
+ 1423  git gr ndo_open
+ 1424  git gr "->ndo_open"
+ 1425  git gr "\-\>ndo_open"
+ 1426  git gr "\->ndo_open"
+ 1427  vi net/core/dev.c +1424
+ 1428  git gr "Network is unreachable"
+ 1429  git gr ENETUNREACH
+ 1430  git gr ENETUNREACH -- *.c
+ 1431  git gr NETDEV_POST_INIT
+ 1432  vi include/linux/netdevice.h
+ 1433  cdw
+ 1434  cd ../tmp/pf1/qc/
+ 1435  ll
+ 1436  vi dmesg.log 
+ 1437  vi 992100_trace.log
+ 1438  HEXDUMP=1 trace-cmd report -i trace.dat > tr.log
+ 1439  scp trace.dat tester@10.12.217.156:~/gregory/tmp
+ 1440  python
+ 1441  ll
+ 1442  vi 992100_trace.log
+ 1443  wireshark 992100_trace.log.pcap
+ 1444  vi 992100_trace.log
+ 1445  grep -E "iwlwifi_dev_hcmd|No beacon" 992100_trace.log
+ 1446  grep -E "iwlwifi_dev_hcmd|No beacon" 992100_trace.log > 1
+ 1447  vi 1
+ 1448  vi 992100_trace.log
+ 1449  ll
+ 1450  vi dmesg.log 
+ 1451  cd ~/work/iwlwifi/
+ 1452  cd iwlwifi-vlab-2/
+ 1453  git branch 
+ 1454  git pull
+ 1455  ll run-pytm-parallel.py 
+ 1456  ga run-pytm-parallel.py 
+ 1457  git log run-pytm-parallel.py 
+ 1458  cd ../titan-pytm-tests
+ 1459  ll wifi_tests/test_list_files/TyP_Core_Cycle_70_vlab.yaml
+ 1460  ll wifi_tests/test_list_files/mld_tests.txt
+ 1461  cat wifi_tests/test_list_files/mld_tests.txt
+ 1462  cd -
+ 1463  h
+ 1464  cd ../tmp/
+ 1465  ll
+ 1466  cd ..
+ 1467  ll
+ 1468  cd ..
+ 1469  ll
+ 1470  cd tmp
+ 1471  ll
+ 1472  cd pf1/
+ 1473  ll
+ 1474  cd qc/
+ 1475  ll
+ 1476  vi 992100_trace.log
+ 1477  wireshark 992100_trace.log.pcap&
+ 1478  fg
+ 1479  cds
+ 1480  gll
+ 1481  ga drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c
+ 1482  gs 91a7a71541a
+ 1483  git reset --hard 91a7a71541a
+ 1484  git reset --hard HEAD~1
+ 1485  gs 91a7a71541a
+ 1486  ga drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c
+ 1487  gs bc08e19b36f
+ 1488  cd ../titan-pytm-tests
+ 1489  grep test_ppag_is_restored_after_fw_reset
+ 1490  git grep test_ppag_is_restored_after_fw_reset
+ 1491  vi tests/wifi/system/regulatory/acpi/ppag/test_ppag_restoring.py +91
+ 1492  git gr test_ppag_is_restored_after_fw_reset
+ 1493  find . -iname "*mld*"
+ 1494  vi ./wifi_tests/test_list_files/mld_tests.txt
+ 1495  pwd
+ 1496  git remote -v
+ 1497  ll ./wifi_tests/test_list_files/mld_tests*
+ 1498  vi ./wifi_tests/test_list_files/mld_tests2.txt
+ 1499  cd ..
+ 1500  find  . -name mld_tests.txt
+ 1501  cd titan-pytm-tests
+ 1502  cp ../titan-pytm-tests.old/wifi_tests/test_list_files/mld_tests*.txt wifi_tests/test_list_files/
+ 1503  find . -iname long_paths.tar.gz
+ 1504  ll ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1505  scp tester@10.12.217.156:~/gregory/titan-pytm-tests.old/.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1506  rm ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1507  cd .pytm_framework/
+ 1508  git status 
+ 1509  git pull
+ 1510  git co master 
+ 1511  git pull
+ 1512  cd dist/pytm_linux_rootfs
+ 1513  git pull
+ 1514  git lfs install
+ 1515  sudo dnf install git-lfs.x86_64
+ 1516  git-lfs 
+ 1517  git config --system core.longpaths true
+ 1518  git config core.longpaths true
+ 1519  cd
+ 1520  git config core.longpaths true
+ 1521  cd -
+ 1522  cd ../..
+ 1523  cd ..
+ 1524  git config core.longpaths true
+ 1525  cd .pytm_framework/
+ 1526  git config core.longpaths true
+ 1527  cd ..
+ 1528  git submodule init 
+ 1529  git submodule update --recursive 
+ 1530  cd ..
+ 1531  rm -rf titan-pytm-tests
+ 1532  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/"
+ 1533  rm -rf titan-pytm-tests
+ 1534  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/"
+ 1535  cd titan-pytm-tests
+ 1536  git config --system core.longpaths true
+ 1537  rm /etc/gitconfig
+ 1538  sudo rm /etc/gitconfig
+ 1539  git config --system core.longpaths true
+ 1540  sudo git config --system core.longpaths true
+ 1541  vi .git/config 
+ 1542  vi ~/.gitconfig 
+ 1543  vi .git/config 
+ 1544  vi ~/.gitconfig 
+ 1545  git submodule init
+ 1546  git submodule update --recursive 
+ 1547  git lfs logs last
+ 1548  vi /home/ggreenma/work/iwlwifi/titan-pytm-tests/.git/modules/.pytm_framework/modules/dist/pytm_linux_rootfs/lfs/logs/20220802T225237.639436885.log
+ 1549  vi ~/.ssh/config
+ 1550  find . -iname pytm_linux_rootfs
+ 1551  cat ~/.ssh/id_rsa
+ 1552  cat ~/.ssh/id_rsa.pub 
+ 1553  find . -iname long_paths.tar.gz
+ 1554  cd ./.pytm_framework/dist/pytm_linux_rootfs/nix/
+ 1555  ll
+ 1556  mkdir tmp
+ 1557  cp long_paths.tar.gz tmp/
+ 1558  cd tmp/
+ 1559  tar -xvzf long_paths.tar.gz 
+ 1560  ll
+ 1561  ll store/
+ 1562  cd ..
+ 1563  rm -rf tmp/
+ 1564  ll
+ 1565  rm extracted 
+ 1566  cd store/
+ 1567  ll
+ 1568  ll 3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin
+ 1569  ll 3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/
+ 1570  find . -name busybox
+ 1571  cp ./cbl9829v36x9zy2x0zphygzamjr1vqvs-pytm-buildenv/bin/busybox 3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/
+ 1572  ll ./cbl9829v36x9zy2x0zphygzamjr1vqvs-pytm-buildenv/bin/busybox
+ 1573  ll /nix/store/3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/busybox
+ 1574  scp tester@10.12.217.156:/home/tester/gregory/titan-pytm-tests.old/./.pytm_framework/dist/pytm_linux_rootfs/nix/store/3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/busybox /nix/store/3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/busybox
+ 1575  scp tester@10.12.217.156:/home/tester/gregory/titan-pytm-tests.old/./.pytm_framework/dist/pytm_linux_rootfs/nix/store/3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/busybox .
+ 1576  mv busybox 3w758r042fm0hswm1imfnpsmsbfprpcm-busybox-1.31.1-x86_64-unknown-linux-musl/bin/
+ 1577  cd ../../..
+ 1578  cd ..
+ 1579  find . -name "*flask*"
+ 1580  cd ..
+ 1581  export all_proxy=socks://proxy-dmz.intel.com:1080/
+ 1582  export http_proxy=http://proxy-dmz.intel.com:911/
+ 1583  export https_proxy=http://proxy-dmz.intel.com:912/ 
+ 1584  rm -rf titan-pytm-tests
+ 1585  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/"
+ 1586  cd titan-pytm-tests
+ 1587  mkdir logs
+ 1588  find . -iname long_paths.tar.gz
+ 1589  ll ./.pytm_framework/dist/pytm_linux_rootfs/nix/
+ 1590  ll ./.pytm_framework/dist/pytm_linux_rootfs/nix/store
+ 1591  find  ./.pytm_framework/dist/pytm_linux_rootfs/nix/store  -name busybox
+ 1592  h
+ 1593  git config --system core.longpaths true
+ 1594  sudo git config --system core.longpaths true
+ 1595  vi .git/config 
+ 1596  git submodule update --recursive
+ 1597  find . -iname long_paths.tar.gz
+ 1598  ll ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1599  vi ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1600  cd ..
+ 1601  rm -rf titan-pytm-tests
+ 1602  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/" |& tee 1
+ 1603  rm -rf titan-pytm-tests
+ 1604  git-lfs install
+ 1605  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/" |& tee 1
+ 1606  cd titan-pytm-tests/.pytm_framework/
+ 1607  git lfs install --skip-smudge
+ 1608  git lfs pull
+ 1609  cd ../..
+ 1610  rm -rf titan-pytm-tests
+ 1611  git lfs install
+ 1612  git lfs install --skip-smudge
+ 1613  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" --recursive 
+ 1614  cd titan-pytm-tests
+ 1615  find . -name "long_*"
+ 1616  ll ./.pytm_framework/dist/pytm_linux_rootfs/nix/long_paths.tar.gz
+ 1617  env|grep proxy
+ 1618  cd .pytm_framework/dist/
+ 1619  ll
+ 1620  rm -rf pytm_linux_armv7l/ pytm_linux_rootfs/
+ 1621  scp tester@10.12.217.156:/home/tester/gregory/titan-pytm-tests/.pytm_framework/dist/pytm_linux_rootfs.tar.gz .
+ 1622  tar -xvzf ytm_linux_rootfs.tar.gz
+ 1623  tar -xvzf pytm_linux_rootfs.tar.gz
+ 1624  ll
+ 1625  rm pytm_linux_rootfs.tar.gz 
+ 1626  scp tester@10.12.217.156:/home/tester/gregory/titan-pytm-tests/.pytm_framework/dist/pytm_linux_armv7l.tar.gz .
+ 1627  tar -xvzf pytm_linux_armv7l.tar.gz 
+ 1628  ll
+ 1629  rm pytm_linux_armv7l.tar.gz
+ 1630  mkdir ../logs
+ 1631  cd ../..
+ 1632  git gr test_error_recovery_while_wifi_disconnected
+ 1633  git gr test_update_ch_width
+ 1634  find . -iname "mld*"
+ 1635  vi ./wifi_tests/test_list_files/mld_tests2.txt
+ 1636  find . -iname "mld*"
+ 1637  cat ./wifi_tests/test_list_files/mld_tests2.txt
+ 1638  ./run_tests.sh run -p wifi_tests/linux/fw_validation/debug_perci -f test_Dram_D0_YoYo
+ 1639  scp ~/devices.yaml tester@10.12.217.156:~/
+ 1640  cd ../iwlwifi-vlab-3
+ 1641  scp -r driver tester@10.12.186.196:~/
+ 1642  ssh tester@10.12.186.196
+ 1643  c
+ 1644  ssh tester@10.12.186.196
+ 1645  h|grep proxy
+ 1646  ping 10.12.217.156
+ 1647  ssh tester@10.12.217.156
+ 1648  cdw
+ 1649  cd iwlwifi-chrome-kernel/
+ 1650  git branch 
+ 1651  find . -iname iwl7000
+ 1652  cd ./drivers/net/wireless/iwl7000
+ 1653  vi 
+ 1654  find . -iname iwl-trans.h
+ 1655  vi ./iwlwifi/iwl-trans.h +1217
+ 1656  fg
+ 1657  git branch 
+ 1658  cd ../../..
+ 1659  cd ..
+ 1660  git co chromeos-5.10__release/core70-65
+ 1661  #vi drivers/net/wireless/iwl7000
+ 1662  git gr  iwl_pcie_tx_init
+ 1663  vi drivers/net/wireless/intel/iwlwifi/pcie/tx.c +661
+ 1664  make -j -l5 
+ 1665  ./examples/connect-he.sh 
+ 1666  make -j -l5 
+ 1667  ./examples/connect-he.sh 
+ 1668  make -j -l5 
+ 1669  ./examples/connect-he.sh 
+ 1670  make -j -l5 
+ 1671  ./examples/connect-he.sh 
+ 1672  make -j -l5 
+ 1673  ./examples/connect-he.sh 
+ 1674  make -j -l5 
+ 1675  ./examples/connect-he.sh 
+ 1676  make -j -l5 
+ 1677  ./examples/connect-he.sh 
+ 1678  make -j -l5 
+ 1679  ./examples/connect-he.sh 
+ 1680  vi ./examples/connect-he.sh 
+ 1681  ./examples/connect-he.sh 
+ 1682  make -j -l5 
+ 1683  ./examples/connect-he.sh 
+ 1684  make -j -l5 
+ 1685  ./examples/connect-he.sh
+ 1686  ll examples/
+ 1687  ./examples/connect-eht-mlo-open.sh-in-dev
+ 1688  make -j -l5 
+ 1689  exit
+ 1690  make -j -l5 
+ 1691  make -j -l5 driver 
+ 1692  make defconfig-iwlwifi
+ 1693  make defconfigs-iwlwifi
+ 1694  make defconfig-iwlwifi
+ 1695  make driver 
+ 1696  make -j -l5
+ 1697  ./examples/connect-eht-mlo-open.sh-in-dev
+ 1698  ./examples/connect-he.sh 
+ 1699  make -j -l5
+ 1700  ./examples/connect-he.sh 
+ 1701  make -j -l5
+ 1702  ./examples/connect-he.sh 
+ 1703  make -j -l5
+ 1704  ./examples/connect-he.sh 
+ 1705  make -j -l5
+ 1706  ./examples/connect-he.sh 
+ 1707  make -j -l5
+ 1708  ./examples/connect-he.sh 
+ 1709  make -j -l5
+ 1710  ./examples/connect-he.sh 
+ 1711  make -j -l5
+ 1712  ./examples/connect-he.sh 
+ 1713  make -j -l5
+ 1714  ./examples/connect-he.sh 
+ 1715  make -j -l5
+ 1716  ll run-pytm-parallel.py
+ 1717  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/glp_perci_vlab.yaml ./wifi_tests/test_list_files/mld_tests_ch_width.txt -n
+ 1718  cd ../titan-pytm-tests
+ 1719  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/glp_perci_vlab.yaml ./wifi_tests/test_list_files/mld_tests_ch_width.txt -n
+ 1720  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/dbg_tests.txt -n
+ 1721  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/dbg_tests.txt 
+ 1722  vi /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py
+ 1723  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/dbg_tests.txt -n
+ 1724  cat ./wifi_tests/test_list_files/dbg_tests.txt
+ 1725  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run_parallel/parallel_pytm.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/mld_tests_good.txt
+ 1726  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run-pytm-parallel.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/mld_tests_good.txt
+ 1727  TMPDIR=/home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/run-pytm-parallel.py --nodes=/home/ggreenma/work/iwlwifi/titan-pytm-tests/tests/wifi/lists/TyP_Core_Cycle_70.txt ./wifi_tests/test_list_files/mld_tests_good.txt -n
+ 1728  ls -ltr logs/2022-09-11-112949
+ 1729  cat logs/2022-09-11-112949/run-pytm-parallel.log
+ 1730  cat logs/2022-09-11-112949/1000/pytm.log 
+ 1731  exit
+ 1732  make -j -l5
+ 1733  exit
+ 1734  cd work/public/linux
+ 1735  git gr thermal_zone_get_temp
+ 1736  vi drivers/thermal/thermal_helpers.c +78
+ 1737  ssh tester@10.12.186.54
+ 1738  cd ../../iwlwifi/titan-pytm-tests
+ 1739  ll logs/
+ 1740  cat ~/devices.yaml 
+ 1741  cd ..
+ 1742  scp -r iwlwifi-stack-dev/ tester@10.12.186.49:~/
+ 1743  ssh tester@10.12.186.49
+ 1744  ssh tester@10.12.217.156
+ 1745  cdw
+ 1746  cd titan-pytm-tests
+ 1747  git remote -v
+ 1748  find . -iname tva
+ 1749  cd ./wifi_tests/linux/tva
+ 1750  ll
+ 1751  vi test.py 
+ 1752  cd soft_ap/
+ 1753  ll
+ 1754  cd station/
+ 1755  ll
+ 1756  vi test.py 
+ 1757  git gr test_soft_ap_max_throughput_vht_160
+ 1758  cd ../..
+ 1759  git gr test_soft_ap_max_throughput_vht_160
+ 1760  ll
+ 1761  ll linux/
+ 1762  ll linux/basic_tpt_indications/
+ 1763  vi linux/basic_tpt_indications/test.py 
+ 1764  vi linux/basic_tpt_indications/config.yaml 
+ 1765  git gr test_uhb_collocated_connect_and_ping
+ 1766  vi linux/uhb_tests/collocated/config.yaml 
+ 1767  ./wifi_tests/test_list_files/
+ 1768  cd ..
+ 1769  ll ./wifi_tests/test_list_files/
+ 1770  #vi ./wifi_tests/test_list_files/dbg_tests.txt
+ 1771  git gr test_uhb_collocated_connect_and_ping
+ 1772  vi -o ./wifi_tests/test_list_files/dbg_tests.txt wifi_tests/test_list_files/TyP_MVM_PerCI.txt
+ 1773  ll tests/wifi/lists/TyP_Core_Cycle_70.txt 
+ 1774  cat ./wifi_tests/test_list_files/mld_tests_good.txt 
+ 1775  git gr test_uhb_collocated_connect_and_ping
+ 1776  vi wifi_tests/linux/uhb_tests/collocated/config.yaml 
+ 1777  ll logs/
+ 1778  ll logs/2022-09-11-121127/
+ 1779  ll logs/2022-09-11-121127/1000/
+ 1780  vi logs/2022-09-11-121127/1000/m5/dmesg 
+ 1781  ll /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg
+ 1782  touch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/ggg
+ 1783  ll logs/
+ 1784  ll logs/2022-09-11-121259/
+ 1785  ll logs/2022-09-11-121259/1000/
+ 1786  ll logs/2022-09-11-121259/1000/m5/
+ 1787  vi logs/2022-09-11-121259/1000/m5/dmesg 
+ 1788  ll logs/
+ 1789  ll logs/2022-09-11-121420/
+ 1790  ll logs/2022-09-11-121420/1000/
+ 1791  ll logs/2022-09-11-121420/1000/m5/
+ 1792  cat logs/2022-09-11-121420/1000/m5/dmesg 
+ 1793  ll logs/
+ 1794  ll logs/2022-09-11-121420/
+ 1795  ll logs/2022-09-11-121420/1000/
+ 1796  vi logs/2022-09-11-121420/1000/pytm.log 
+ 1797  ll logs/
+ 1798  ll logs/2022-09-11-121940/
+ 1799  ll logs/2022-09-11-121940/1000/
+ 1800  tail -f logs/2022-09-11-121940/1000/pytm.log 
+ 1801  vi logs/2022-09-11-121940/1000/pytm.log 
+ 1802  vi logs/2022-09-11-121940/1000/m5/dmesg 
+ 1803  vi logs/2022-09-11-121940/1000/m4/dmesg 
+ 1804  alias|grep run_
+ 1805  alias|grep run
+ 1806  ssh tester@10.12.217.156
+ 1807  #./run_tests.sh run -p wifi_tests/linux/he/trigger_frame/twt -f test_twt_pm_and_quota_driver
+ 1808  git gr test_uhb_collocated_connect_and_ping
+ 1809  cp ~/Downloads/devices.yaml ~/
+ 1810  cp ~/Downloads/resources.yaml ~/
+ 1811  #./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1812  rm -rf logs/*
+ 1813  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1814  ll logs/
+ 1815  ll logs/current/
+ 1816  ll logs/current/000UhbConnectCollocatedTests.test_uhb_collocated_connect_and_ping/
+ 1817  vi logs/current/000UhbConnectCollocatedTests.test_uhb_collocated_connect_and_ping/log.txt 
+ 1818  grep 10D4 logs/current/000UhbConnectCollocatedTests.test_uhb_collocated_connect_and_ping/dev_JATIvC8Q/pytm_file_dmesg.log
+ 1819  grep 10D4 logs/current/000UhbConnectCollocatedTests.test_uhb_collocated_connect_and_ping/dev_*/pytm_file_dmesg.log
+ 1820  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1821  ssh 10.12.186.219
+ 1822  ping 10.12.186.219
+ 1823  ssh tester@10.12.186.219
+ 1824  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1825  rm -rf logs/*
+ 1826  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1827  rm -rf logs/*
+ 1828  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1829  cat ~/devices.yaml 
+ 1830  ping 10.12.186.49
+ 1831  ssh tester@10.12.186.49
+ 1832  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1833  fg
+ 1834  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1835  h
+ 1836  ./run_tests.sh run -p wifi_tests/linux/uhb_tests/collocated/test.py -f test_uhb_collocated_connect_and_ping
+ 1837  cat ~/devices.yaml 
+ 1838  scp -r ../iwlwifi-stack-dev/ tester@10.12.186.229:~/
+ 1839  ssh tester@10.12.186.229
+ 1840  c
+ 1841  cp "~/Downloads/devices(2).yaml" ~/devices.yaml 
+ 1842  rm ~/Downloads/devices*
+ 1843  c
+ 1844  cp ~/Downloads/devices.yaml ~/
+ 1845  cat ~/devices.yaml 
+ 1846  ssh tester@10.12.186.203
+ 1847  cds
+ 1848  gs eb337b245f
+ 1849  gs ed8cab014a
+ 1850  gs 9a90dd745a
+ 1851  gs 4e06f54d5b
+ 1852  gs 141a4d74ea
+ 1853  gs 4dd9e5c045
+ 1854  gs 38ed173777
+ 1855  gs 2697fc92a5
+ 1856  gll
+ 1857  git log
+ 1858  git reset --hard HEAD~1
+ 1859  git pull
+ 1860  gs
+ 1861  gs b3233c476b75615c0569fd6522b3beb73b35269c
+ 1862  gs
+ 1863  git gr "firmware didn't ACK the reset"
+ 1864  vi drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c +121
+ 1865  git gr "WRT: Failed to allocate fragment size"
+ 1866  vi drivers/net/wireless/intel/iwlwifi/iwl-dbg-tlv.c +573
+ 1867  git diff --cached 
+ 1868  git blame drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1869  gs e6f7a29de2e
+ 1870  git blame drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1871  gs f12eb6ad19f
+ 1872  git log
+ 1873  gs
+ 1874  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c +507
+ 1875  git diff
+ 1876  cat ~/devices.yaml 
+ 1877  ssh tester@10.12.217.156
+ 1878  ssh tester@10.12.177.148
+ 1879  vi
+ 1880  git diff
+ 1881  git reset --hard
+ 1882  git pull -r
+ 1883  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac.c
+ 1884  git status 
+ 1885  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac.c
+ 1886  git commit -s
+ 1887  gs
+ 1888  git log
+ 1889  git rebase -i HEAD~2
+ 1890  git format-patch -2
+ 1891  ./intc-scripts/checkpatch.pl --no-tree 0001-BUGFIX-wifi-iwlwifi-mvm-set-HE-support-in-AP-mode-on.patch
+ 1892  gpm
+ 1893  cat ~/devices.yaml 
+ 1894  ssh tester@10.12.186.123
+ 1895  cat ~/devices.yaml 
+ 1896  git format-patch -1
+ 1897  cp 0001-BUGFIX-wifi-iwlwifi-mvm-fix-setting-ERP-slot.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver/
+ 1898  git format-patch -2
+ 1899  cp 0001-BUGFIX-wifi-iwlwifi-mvm-set-HE-support-in-AP-mode-on.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver/
+ 1900  gs HEAD~1
+ 1901  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac.c 
+ 1902  gs HEAD~1
+ 1903  fg
+ 1904  git diff
+ 1905  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac.c drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1906  git commit -s -m "fix"
+ 1907  git rebase -i HEAD~3
+ 1908  gll
+ 1909  gs HEAD~1
+ 1910  fg
+ 1911  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1912  gpm
+ 1913  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1914  git diff
+ 1915  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1916  git commit -s -m "fix"
+ 1917  git rebase -i HEAD~3
+ 1918  gpm
+ 1919  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1920  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1921  git commit -s -m "fix"
+ 1922  git rebase -i HEAD~3
+ 1923  gpm
+ 1924  git format-patch -2
+ 1925  cp 0001-BUGFIX-wifi-iwlwifi-mvm-update-mac-config-when-assig.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver/
+ 1926  cp 0002-BUGFIX-wifi-iwlwifi-mvm-fix-setting-ERP-slot.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver/
+ 1927  git gr "failed to update link"
+ 1928  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c +535
+ 1929  vi drivers/net/wireless/intel/iwlwifi/mvm/link.c
+ 1930  git diff
+ 1931  git add drivers/net/wireless/intel/iwlwifi/mvm/link.c
+ 1932  git commit -s
+ 1933  git rebase -i HEAD~3
+ 1934  gpm
+ 1935  gll
+ 1936  gs 49ea423e0f
+ 1937  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c +251
+ 1938  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1939  git commit -s -m "fix"
+ 1940  git rebase -i HEAD~4
+ 1941  vi
+ 1942  gll
+ 1943  git diff
+ 1944  git status 
+ 1945  git add drivers/net/wireless/intel/iwlwifi/mvm/link.c drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c drivers/net/wireless/intel/iwlwifi/mvm/mvm.h
+ 1946  git commit -s -m "fix"
+ 1947  git rebase -i HEAD~4
+ 1948  gll
+ 1949  gpm
+ 1950  git gr GRP_SYS_FW_STATISTICS_CMD
+ 1951  git gr STATISTICS_CMD
+ 1952  vi drivers/net/wireless/intel/iwlwifi/fw/api/commands.h
+ 1953  git log
+ 1954  git format-patch -3
+ 1955  cp 0001-BUGFIX-wifi-iwlwifi-mvm-update-mac-config-when-assig.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver
+ 1956  cp 0002-BUGFIX-wifi-iwlwifi-mvm-rework-active-links-counting.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver
+ 1957  cp 0003-BUGFIX-wifi-iwlwifi-mvm-fix-setting-ERP-slot.patch /home/ggreenma/work/iwlwifi/iwlwifi-vlab-3/driver
+ 1958  git gr SCD_QUEUE_CONFIG
+ 1959  vi
+ 1960  git gr 0xa9
+ 1961  git gr "type == "
+ 1962  git diff
+ 1963  git add drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1964  git commit -s -m "fix"
+ 1965  git rebase -i HEAD~4
+ 1966  gll
+ 1967  gs be9a99f4f8
+ 1968  gpm
+ 1969  cd ..
+ 1970  scp -r iwlwifi-stack-dev/ tester@10.12.217.176:~/
+ 1971  ssh tester@10.12.217.176
+ 1972  ssh tester@10.12.217.152
+ 1973  cat ~/devices.yaml 
+ 1974  ssh tester@10.12.217.152
+ 1975  scp tester@10.12.217.152:/var/log/iwl-fw-error_2022-09-12_16-28-38-427_USER_TRIGGER.tgz .
+ 1976  ssh tester@10.12.217.152
+ 1977  cat ~/devices.yaml 
+ 1978  ssh tester@10.12.217.152
+ 1979  c
+ 1980  cat ~/devices.yaml 
+ 1981  ssh tester@10.12.217.152
+ 1982  cds
+ 1983  gll
+ 1984  git pull -r
+ 1985  gll
+ 1986  gs 01c24a7668
+ 1987  c
+ 1988  ifconfig 
+ 1989  ping 10.214.230.43
+ 1990  ping 10.214.229.5
+ 1991  ifconfig 
+ 1992  ping 10.214.229.5
+ 1993  c
+ 1994  rm ~/Downloads/devices.yaml 
+ 1995  find . -iname "welcome*"
+ 1996  vi ./work/pgp/kernel-account/ggreenman/welcome.readme
+ 1997  c
+ 1998  cd work/iwlwifi/iwlwifi-tools/upstreaming/
+ 1999  ll
+ 2000  vi update_upstreaming.py
+ 2001  cdw
+ 2002  cd iwlwifi-chrome-kernel/
+ 2003  git remote -v
+ 2004  git pull
+ 2005  git branch 
+ 2006  git branch -r
+ 2007  git branch -r|grep 5.15
+ 2008  git branch 
+ 2009  git co -b chromeos-5.15__master  origin/chromeos-5.15__master
+ 2010  gll
+ 2011  git log
+ 2012  git remote -v
+ 2013  git fetch upstream
+ 2014  git branch -r upstream
+ 2015  git branch -r
+ 2016  git branch -r|grep upstream|grep 5.15
+ 2017  git log upstream/chromeos-5.15
+ 2018  git remote -v
+ 2019  git log --decorate=all upstream/chromeos-5.15
+ 2020  git log upstream/chromeos-5.15 --decorate=full
+ 2021  git branch 
+ 2022  git log --author=coelho
+ 2023  git log --author=coelho -oneline
+ 2024  git log --author=coelho --oneline
+ 2025  git tag
+ 2026  git tag|grep 5.15
+ 2027  git log --author=coelho
+ 2028  git branch 
+ 2029  git branch -r|grep upstream|grep 5.15
+ 2030  git co -b upstream_chromeos-5.15 upstream/chromeos-5.15
+ 2031  find . -iname iwl7000
+ 2032  git log
+ 2033  git branch 
+ 2034  git co chromeos-5.15__master
+ 2035  git log
+ 2036  git log --oneline 
+ 2037  gs fb6ad5cb3b67
+ 2038  git log --oneline 
+ 2039  git branch 
+ 2040  git log origin/chromeos-4.14__master
+ 2041  git log origin/chromeos-4.14__master --oneline 
+ 2042  gs fdbe5a1f9f2a
+ 2043  git branch 
+ 2044  git log chromeos-5.4__release/core72-55
+ 2045  git log --graph chromeos-5.4__release/core72-55
+ 2046  git log --graph chromeos-5.4__release/core72-55 --oneline
+ 2047  git log origin/chromeos-5.15__release/core72 
+ 2048  git log chromeos-5.15__release/core72 
+ 2049  git branch 
+ 2050  git log chromeos-5.15__release/core72-55 
+ 2051  git branch 
+ 2052  git log origin/chromeos-5.15__release/core72 --decorate=full
+ 2053  git log origin/chromeos-5.15__release/core74 
+ 2054  git log origin/chromeos-5.15__master 
+ 2055  git log origin/chromeos-5.15__master --decorate=full
+ 2056  date +%F
+ 2057  git tag
+ 2058  git ls-remote
+ 2059  git ls-remote --tags origin 
+ 2060  git ls-remote --tags origin |grep master
+ 2061  git ls-remote --tags origin |grep master|grep 15
+ 2062  git ls-remote --tags origin |grep master|grep 5.15
+ 2063  git log --decorate=full origin/chromeos-5.15__master 
+ 2064  #../iwlwifi-tools/chromeos/chrome-send-core-rebase-master.sh 
+ 2065  git tag chromeos-5.15-master-rebase-2022-09-14 origin/chromeos-5.15__master
+ 2066  ../iwlwifi-tools/chromeos/chrome-send-core-rebase-master.sh 
+ 2067  git branch 
+ 2068  git co upstream_chromeos-5.15
+ 2069  git branch -d chromeos-5.15__master
+ 2070  git log origin/chromeos-5.15__master 
+ 2071  h
+ 2072  git log --decorate=full origin/chromeos-5.15__master
+ 2073  /home/ggreenma/work/iwlwifi/iwlwifi-tools/chromeos/chrome-send-core-rebase-master.sh 
+ 2074  git remote -v
+ 2075  git push origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-14
+ 2076  git log origin/chromeos-5.15__master 
+ 2077  git log 
+ 2078  git log --oneline HEAD..bb03f6d32832500f6f9e2b76fd5962457aab0989
+ 2079  git log --oneline bb03f6d32832500f6f9e2b76fd5962457aab0989..HEAD
+ 2080  git log --oneline bb03f6d32832500f6f9e2b76fd5962457aab0989..HEAD|wc -l
+ 2081  gll
+ 2082  gll origin/chromeos-5.15__master 
+ 2083  git log --oneline upstream/chromeos-5.15 
+ 2084  git log --oneline upstream/chromeos-5.15  fb6ad5cb3b67..HEAD
+ 2085  git log --oneline upstream/chromeos-5.15  fb6ad5cb3b67..HEAD|wc -l
+ 2086  git log --oneline  origin/chromeos-5.15__master 
+ 2087  git log --oneline upstream/chromeos-5.15 
+ 2088  git log --oneline upstream/chromeos-5.15 v5.15.11..v5.15.67
+ 2089  git log --oneline upstream/chromeos-5.15 v5.15.11..v5.15.67|wc -l
+ 2090  h
+ 2091  git branch 
+ 2092  git co -b chromeos-5.15__master_backup origin/chromeos-5.15__master
+ 2093  git log
+ 2094  gll --graph
+ 2095  h
+ 2096  git co chromeos-5.15__master
+ 2097  git log
+ 2098  h
+ 2099  git log --oneline  origin/chromeos-5.15__master --graph
+ 2100  h
+ 2101  git push origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-14
+ 2102  git remote -v
+ 2103  git fetch
+ 2104  git log origin/chromeos-4.14__master
+ 2105  git push origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-14
+ 2106  git log --oneline|wc -l
+ 2107  git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-14
+ 2108  git log origin/chromeos-5.15__master 
+ 2109  git branch 
+ 2110  git co chromeos-5.15__master_backup
+ 2111  git branch -d chromeos-5.15__master
+ 2112  git branch -D chromeos-5.15__master
+ 2113  h
+ 2114  h|grep chrome-send-core-rebase-master.sh
+ 2115  /home/ggreenma/work/iwlwifi/iwlwifi-tools/chromeos/chrome-send-core-rebase-master.sh
+ 2116  git tag chromeos-5.15-master-rebase-2022-09-15 origin/chromeos-5.15__master
+ 2117  /home/ggreenma/work/iwlwifi/iwlwifi-tools/chromeos/chrome-send-core-rebase-master.sh
+ 2118  git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-15 
+ 2119  gll
+ 2120  git log origin/chromeos-5.15__master 
+ 2121  gll
+ 2122  gll --graph
+ 2123  #git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-15 
+ 2124  git log chromeos-5.15__master~2
+ 2125  git log chromeos-5.15__master~1
+ 2126  git log chromeos-5.15__master
+ 2127  git log chromeos-5.15__master~3
+ 2128  git log chromeos-5.15__master~10
+ 2129  git log
+ 2130  git log chromeos-5.15__master~1
+ 2131  gll
+ 2132  git log --first-parent 
+ 2133  git log --second-parent 
+ 2134  git log --first-parent 
+ 2135  git rev-list --parents -n 1
+ 2136  git rev-list --parents -n 1 HEAD
+ 2137  git log 
+ 2138  git rev-list --parents -n 1 HEAD
+ 2139  git log
+ 2140  git log origin/chromeos-5.15__master --oneline 
+ 2141  git log origin/chromeos-5.15__master --oneline --graph
+ 2142  git log chromeos-5.15__master --oneline --graph
+ 2143  git rev-list --parents -n 1 HEAD
+ 2144  git log HEAD^1
+ 2145  git log HEAD^2
+ 2146  git log HEAD^2 --oneline 
+ 2147  git log chromeos-5.15__master --oneline --graph
+ 2148  git log HEAD^2 --oneline 
+ 2149  git log HEAD^2 --oneline --graph 
+ 2150* 
+ 2151  h|grep skip
+ 2152  h
+ 2153  git branch 
+ 2154  git branch -r|grep sandbox
+ 2155  alias |grep gps
+ 2156  push origin HEAD:sandbox/ggreenma/chromeos-5.15__master-rebase
+ 2157  git push origin HEAD:sandbox/ggreenma/chromeos-5.15__master-rebase
+ 2158  h|grep skip
+ 2159  git push -o skip-validation origin HEAD:sandbox/ggreenma/chromeos-5.15__master-rebase
+ 2160  #git push -o skip-validation origin HEAD:sandbox/ggreenma/chromeos-5.15__master-rebase
+ 2161  git fetch
+ 2162  git log origin/chromeos-5.15__master 
+ 2163  git log origin/chromeos-5.15__master --oneline 
+ 2164  h|grep skip-val
+ 2165  git branch 
+ 2166  gll
+ 2167  h|grep skip-val
+ 2168  git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-15 
+ 2169  gll
+ 2170  git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-15 
+ 2171  cd .
+ 2172  git push -o skip-validation origin chromeos-5.15__master:chromeos-5.15__master tag chromeos-5.15__master/rebase-2022-09-15 
+ 2173  git log --oneline origin/chromeos-5.15__master
+ 2174  dat +%F
+ 2175  date +%F
+ 2176  git branch origin/chromeos-5.15__release/core74 
+ 2177  git log origin/chromeos-5.15__release/core74
+ 2178  git log origin/chromeos-5.15__master 
+ 2179  git log origin/chromeos-5.15__release/core73
+ 2180  git log --oneline origin/chromeos-5.15__release/core73
+ 2181  git log --oneline origin/chromeos-5.15__release/core74
+ 2182  git log --oneline origin/chromeos-5.15__release/core74 --decorate=full
+ 2183* gs 3cdf6fa68a39 --
+ 2184  git log --oneline origin/chromeos-5.15__release/core74 --format=fuller
+ 2185  git log --oneline origin/chromeos-5.15__release/master --format=fuller
+ 2186  git log --oneline origin/chromeos-5.15__master --format=fuller
+ 2187  git log --oneline origin/chromeos-5.15__release/master --format=fuller
+ 2188  git log --oneline origin/chromeos-5.15__release/core74 --format=fuller
+ 2189  git reflog 
+ 2190  ll *txt
+ 2191  h> 1

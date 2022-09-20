@@ -670,8 +670,6 @@ static irqreturn_t hi3110_can_ist(int irq, void *dev_id)
 
 			txerr = hi3110_read(spi, HI3110_READ_TEC);
 			rxerr = hi3110_read(spi, HI3110_READ_REC);
-			cf->data[6] = txerr;
-			cf->data[7] = rxerr;
 			tx_state = txerr >= rxerr ? new_state : 0;
 			rx_state = txerr <= rxerr ? new_state : 0;
 			can_change_state(net, cf, tx_state, rx_state);
@@ -684,6 +682,9 @@ static irqreturn_t hi3110_can_ist(int irq, void *dev_id)
 					hi3110_hw_sleep(spi);
 					break;
 				}
+			} else {
+				cf->data[6] = txerr;
+				cf->data[7] = rxerr;
 			}
 		}
 
@@ -948,7 +949,7 @@ static int hi3110_can_probe(struct spi_device *spi)
 	return ret;
 }
 
-static int hi3110_can_remove(struct spi_device *spi)
+static void hi3110_can_remove(struct spi_device *spi)
 {
 	struct hi3110_priv *priv = spi_get_drvdata(spi);
 	struct net_device *net = priv->net;
@@ -961,8 +962,6 @@ static int hi3110_can_remove(struct spi_device *spi)
 		clk_disable_unprepare(priv->clk);
 
 	free_candev(net);
-
-	return 0;
 }
 
 static int __maybe_unused hi3110_can_suspend(struct device *dev)

@@ -16,6 +16,12 @@
 #define asoc_simple_init_mic(card, sjack, prefix) \
 	asoc_simple_init_jack(card, sjack, 0, prefix, NULL)
 
+struct asoc_simple_tdm_width_map {
+	u8 sample_bits;
+	u8 slot_count;
+	u16 slot_width;
+};
+
 struct asoc_simple_dai {
 	const char *name;
 	unsigned int sysclk;
@@ -25,6 +31,9 @@ struct asoc_simple_dai {
 	unsigned int tx_slot_mask;
 	unsigned int rx_slot_mask;
 	struct clk *clk;
+	bool clk_fixed;
+	struct asoc_simple_tdm_width_map *tdm_width_map;
+	int n_tdm_widths;
 };
 
 struct asoc_simple_data {
@@ -128,6 +137,9 @@ int asoc_simple_parse_daifmt(struct device *dev,
 			     struct device_node *codec,
 			     char *prefix,
 			     unsigned int *retfmt);
+int asoc_simple_parse_tdm_width_map(struct device *dev, struct device_node *np,
+				    struct asoc_simple_dai *dai);
+
 __printf(3, 4)
 int asoc_simple_set_dailink_name(struct device *dev,
 				 struct snd_soc_dai_link *dai_link,
@@ -180,6 +192,7 @@ int asoc_simple_init_priv(struct asoc_simple_priv *priv,
 int asoc_simple_remove(struct platform_device *pdev);
 
 int asoc_graph_card_probe(struct snd_soc_card *card);
+int asoc_graph_is_ports0(struct device_node *port);
 
 #ifdef DEBUG
 static inline void asoc_simple_debug_dai(struct asoc_simple_priv *priv,

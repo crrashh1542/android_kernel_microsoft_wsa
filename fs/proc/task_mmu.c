@@ -19,6 +19,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
+#include <linux/random.h>
 #include <linux/mm_inline.h>
 
 #include <asm/elf.h>
@@ -488,7 +489,8 @@ static void smaps_page_accumulate(struct mem_size_stats *mss,
 }
 
 static void smaps_account(struct mem_size_stats *mss, struct page *page,
-		bool compound, bool young, bool dirty, bool locked)
+		bool compound, bool young, bool dirty, bool locked,
+		bool migration)
 {
 	int i, nr = compound ? compound_nr(page) : 1;
 	unsigned long size = nr * PAGE_SIZE;
@@ -515,8 +517,15 @@ static void smaps_account(struct mem_size_stats *mss, struct page *page,
 	 * page_count(page) == 1 guarantees the page is mapped exactly once.
 	 * If any subpage of the compound page mapped with PTE it would elevate
 	 * page_count().
+	 *
+	 * The page_mapcount() is called to get a snapshot of the mapcount.
+	 * Without holding the page lock this snapshot can be slightly wrong as
+	 * we cannot always read the mapcount atomically.  It is not safe to
+	 * call page_mapcount() even with PTL held if the page is not mapped,
+	 * especially for migration entries.  Treat regular migration entries
+	 * as mapcount == 1.
 	 */
-	if (page_count(page) == 1) {
+	if ((page_count(page) == 1) || migration) {
 		smaps_page_accumulate(mss, page, size, size << PSS_SHIFT, dirty,
 			locked, true);
 		return;
@@ -553,9 +562,12 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	struct vm_area_struct *vma = walk->vma;
 	bool locked = !!(vma->vm_flags & VM_LOCKED);
 	struct page *page = NULL;
+	bool migration = false, young = false, dirty = false;
 
 	if (pte_present(*pte)) {
 		page = vm_normal_page(vma, addr, *pte);
+		young = pte_young(*pte);
+		dirty = pte_dirty(*pte);
 	} else if (is_swap_pte(*pte)) {
 		swp_entry_t swpent = pte_to_swp_entry(*pte);
 
@@ -572,8 +584,11 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 			} else {
 				mss->swap_pss += (u64)PAGE_SIZE << PSS_SHIFT;
 			}
-		} else if (is_pfn_swap_entry(swpent))
+		} else if (is_pfn_swap_entry(swpent)) {
+			if (is_migration_entry(swpent))
+				migration = true;
 			page = pfn_swap_entry_to_page(swpent);
+		}
 	} else if (unlikely(IS_ENABLED(CONFIG_SHMEM) && mss->check_shmem_swap
 							&& pte_none(*pte))) {
 		page = xa_load(&vma->vm_file->f_mapping->i_pages,
@@ -586,7 +601,7 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	if (!page)
 		return;
 
-	smaps_account(mss, page, false, pte_young(*pte), pte_dirty(*pte), locked);
+	smaps_account(mss, page, false, young, dirty, locked, migration);
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -597,6 +612,7 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 	struct vm_area_struct *vma = walk->vma;
 	bool locked = !!(vma->vm_flags & VM_LOCKED);
 	struct page *page = NULL;
+	bool migration = false;
 
 	if (pmd_present(*pmd)) {
 		/* FOLL_DUMP will return -EFAULT on huge zero page */
@@ -604,8 +620,10 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 	} else if (unlikely(thp_migration_supported() && is_swap_pmd(*pmd))) {
 		swp_entry_t entry = pmd_to_swp_entry(*pmd);
 
-		if (is_migration_entry(entry))
+		if (is_migration_entry(entry)) {
+			migration = true;
 			page = pfn_swap_entry_to_page(entry);
+		}
 	}
 	if (IS_ERR_OR_NULL(page))
 		return;
@@ -617,7 +635,9 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 		/* pass */;
 	else
 		mss->file_thp += HPAGE_PMD_SIZE;
-	smaps_account(mss, page, true, pmd_young(*pmd), pmd_dirty(*pmd), locked);
+
+	smaps_account(mss, page, true, pmd_young(*pmd), pmd_dirty(*pmd),
+		      locked, migration);
 }
 #else
 static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
@@ -1556,6 +1576,7 @@ static pagemap_entry_t pte_to_pagemap_entry(struct pagemapread *pm,
 {
 	u64 frame = 0, flags = 0;
 	struct page *page = NULL;
+	bool migration = false;
 
 	if (pte_present(pte)) {
 		if (pm->show_pfn)
@@ -1577,13 +1598,14 @@ static pagemap_entry_t pte_to_pagemap_entry(struct pagemapread *pm,
 			frame = swp_type(entry) |
 				(swp_offset(entry) << MAX_SWAPFILES_SHIFT);
 		flags |= PM_SWAP;
+		migration = is_migration_entry(entry);
 		if (is_pfn_swap_entry(entry))
 			page = pfn_swap_entry_to_page(entry);
 	}
 
 	if (page && !PageAnon(page))
 		flags |= PM_FILE;
-	if (page && page_mapcount(page) == 1)
+	if (page && !migration && page_mapcount(page) == 1)
 		flags |= PM_MMAP_EXCLUSIVE;
 	if (vma->vm_flags & VM_SOFTDIRTY)
 		flags |= PM_SOFT_DIRTY;
@@ -1599,8 +1621,9 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 	spinlock_t *ptl;
 	pte_t *pte, *orig_pte;
 	int err = 0;
-
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	bool migration = false;
+
 	ptl = pmd_trans_huge_lock(pmdp, vma);
 	if (ptl) {
 		u64 flags = 0, frame = 0;
@@ -1639,11 +1662,12 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 			if (pmd_swp_uffd_wp(pmd))
 				flags |= PM_UFFD_WP;
 			VM_BUG_ON(!is_pmd_migration_entry(pmd));
+			migration = is_migration_entry(entry);
 			page = pfn_swap_entry_to_page(entry);
 		}
 #endif
 
-		if (page && page_mapcount(page) == 1)
+		if (page && !migration && page_mapcount(page) == 1)
 			flags |= PM_MMAP_EXCLUSIVE;
 
 		for (; addr != end; addr += PAGE_SIZE) {
@@ -1753,7 +1777,8 @@ static const struct mm_walk_ops pagemap_ops = {
  * Bits 5-54  swap offset if swapped
  * Bit  55    pte is soft-dirty (see Documentation/admin-guide/mm/soft-dirty.rst)
  * Bit  56    page exclusively mapped
- * Bits 57-60 zero
+ * Bit  57    pte is uffd-wp write-protected
+ * Bits 58-60 zero
  * Bit  61    page is file-page or shared-anon
  * Bit  62    page swapped
  * Bit  63    page present
@@ -1899,6 +1924,7 @@ enum reclaim_type {
 };
 
 struct walk_data {
+	unsigned long nr_to_try;
 	enum reclaim_type type;
 };
 
@@ -1945,10 +1971,10 @@ huge_unlock:
 		return 0;
 	}
 
+regular_page:
 	if (pmd_trans_unstable(pmd))
 		return 0;
 
-regular_page:
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
@@ -2026,6 +2052,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
 			goto huge_unlock;
 
+		if (!data->nr_to_try)
+			goto huge_unlock;
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
@@ -2043,6 +2071,15 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (isolate_lru_page(page))
 			goto huge_unlock;
 
+		/*
+		 * Reclaim the whole huge page even if it would make us go
+		 * over our limit. The alternative would be to split the
+		 * huge page, but if we try to do that pmd_trans_unstable()
+		 * below would fail, and we wouldn't progress.
+		 */
+		data->nr_to_try -= min_t(unsigned long, data->nr_to_try,
+		    thp_nr_pages(page));
+
 		/* Clear all the references to make sure it gets reclaimed */
 		pmdp_test_and_clear_young(vma, addr, pmd);
 		ClearPageReferenced(page);
@@ -2054,12 +2091,14 @@ huge_unlock:
 		return 0;
 	}
 
+regular_page:
 	if (pmd_trans_unstable(pmd))
 		return 0;
 
-regular_page:
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+		if (!data->nr_to_try)
+			break;
 		ptent = *pte;
 		if (!pte_present(ptent))
 			continue;
@@ -2104,6 +2143,7 @@ regular_page:
 			continue;
 
 		isolated++;
+		data->nr_to_try--;
 		list_add(&page->lru, &page_list);
 		/* Clear all the references to make sure it gets reclaimed */
 		ptep_test_and_clear_young(vma, addr, pte);
@@ -2131,9 +2171,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	struct task_struct *task;
 	char buffer[PROC_NUMBUF];
 	struct mm_struct *mm;
-	struct vm_area_struct *vma;
+	struct vm_area_struct *start, *vma;
 	enum reclaim_type type;
-	char *type_buf;
+	unsigned long num;
+	char *tok, *type_buf;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
@@ -2143,18 +2184,23 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 
 	type_buf = strstrip(buffer);
-	if (!strcmp(type_buf, "file"))
+	tok = strsep(&type_buf, " ");
+	if (!strcmp(tok, "file"))
 		type = RECLAIM_FILE;
-	else if (!strcmp(type_buf, "anon"))
+	else if (!strcmp(tok, "anon"))
 		type = RECLAIM_ANON;
 #ifdef CONFIG_SHMEM
-	else if (!strcmp(type_buf, "shmem"))
+	else if (!strcmp(tok, "shmem"))
 		type = RECLAIM_SHMEM;
 #endif
-	else if (!strcmp(type_buf, "all"))
+	else if (!strcmp(tok, "all"))
 		type = RECLAIM_ALL;
 	else
 		return -EINVAL;
+
+	tok = strsep(&type_buf, " ");
+	if (!tok || kstrtol(tok, 10, &num) < 0)
+		num = ULONG_MAX;
 
 	task = get_proc_task(file->f_path.dentry->d_inode);
 	if (!task)
@@ -2168,10 +2214,30 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 
 		struct walk_data reclaim_data = {
 			.type = type,
+			.nr_to_try = num,
 		};
 
 		mmap_read_lock(mm);
-		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		if (num != ULONG_MAX) {
+			unsigned int start_idx;
+
+			/*
+			 * Try to start at a random VMA to avoid always
+			 * reclaiming the same pages.
+			 */
+			start_idx = get_random_int() % mm->map_count;
+			for (start = mm->mmap; start_idx && start; start_idx--,
+			    start = start->vm_next);
+			BUG_ON(!start);
+		} else
+			start = mm->mmap;
+
+		for (vma = start; vma && vma->vm_next != start;
+		    (vma = vma->vm_next ? vma->vm_next :
+		    /* Only loop around if we didn't start at mm->mmap. */
+		    (start != mm->mmap ? mm->mmap : NULL))) {
+			if (!reclaim_data.nr_to_try)
+				break;
 			if (is_vm_hugetlb_page(vma))
 				continue;
 
@@ -2203,8 +2269,27 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				reclaim_walk.pmd_entry = deactivate_pte_range;
 			}
 
-			walk_page_range(mm, vma->vm_start, vma->vm_end,
-					&reclaim_walk, (void*)&reclaim_data);
+			/*
+			 * Use a random start address if we are limited in order
+			 * to avoid always hitting the same pages when we only
+			 * have a few eligible mappings.
+			 */
+			if (num != ULONG_MAX) {
+				unsigned long idx, start;
+
+				idx = (vma->vm_end - vma->vm_start) / PAGE_SIZE;
+				idx = idx ? (get_random_int() % idx) : 0;
+				start = vma->vm_start + PAGE_SIZE * idx;
+
+				walk_page_range(mm, start, vma->vm_end,
+				    &reclaim_walk, (void*)&reclaim_data);
+				if (start != vma->vm_start)
+					walk_page_range(mm, vma->vm_start,
+					    start, &reclaim_walk,
+					    (void*)&reclaim_data);
+			} else
+				walk_page_range(mm, vma->vm_start, vma->vm_end,
+				    &reclaim_walk, (void*)&reclaim_data);
 		}
 		flush_tlb_mm(mm);
 		mmap_read_unlock(mm);

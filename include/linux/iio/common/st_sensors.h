@@ -238,6 +238,7 @@ struct st_sensor_settings {
  * @hw_irq_trigger: if we're using the hardware interrupt on the sensor.
  * @hw_timestamp: Latest timestamp from the interrupt handler, when in use.
  * @buffer_data: Data used by buffer part.
+ * @odr_lock: Local lock for preventing concurrent ODR accesses/changes
  */
 struct st_sensor_data {
 	struct device *dev;
@@ -263,6 +264,8 @@ struct st_sensor_data {
 	s64 hw_timestamp;
 
 	char buffer_data[ST_SENSORS_MAX_BUFFER_SIZE] ____cacheline_aligned;
+
+	struct mutex odr_lock;
 };
 
 #ifdef CONFIG_IIO_BUFFER
@@ -273,7 +276,6 @@ irqreturn_t st_sensors_trigger_handler(int irq, void *p);
 int st_sensors_allocate_trigger(struct iio_dev *indio_dev,
 				const struct iio_trigger_ops *trigger_ops);
 
-void st_sensors_deallocate_trigger(struct iio_dev *indio_dev);
 int st_sensors_validate_device(struct iio_trigger *trig,
 			       struct iio_dev *indio_dev);
 #else
@@ -281,10 +283,6 @@ static inline int st_sensors_allocate_trigger(struct iio_dev *indio_dev,
 				const struct iio_trigger_ops *trigger_ops)
 {
 	return 0;
-}
-static inline void st_sensors_deallocate_trigger(struct iio_dev *indio_dev)
-{
-	return;
 }
 #define st_sensors_validate_device NULL
 #endif
@@ -297,8 +295,6 @@ int st_sensors_set_enable(struct iio_dev *indio_dev, bool enable);
 int st_sensors_set_axis_enable(struct iio_dev *indio_dev, u8 axis_enable);
 
 int st_sensors_power_enable(struct iio_dev *indio_dev);
-
-void st_sensors_power_disable(struct iio_dev *indio_dev);
 
 int st_sensors_debugfs_reg_access(struct iio_dev *indio_dev,
 				  unsigned reg, unsigned writeval,
@@ -330,21 +326,17 @@ void st_sensors_dev_name_probe(struct device *dev, char *name, int len);
 /* Accelerometer */
 const struct st_sensor_settings *st_accel_get_settings(const char *name);
 int st_accel_common_probe(struct iio_dev *indio_dev);
-void st_accel_common_remove(struct iio_dev *indio_dev);
 
 /* Gyroscope */
 const struct st_sensor_settings *st_gyro_get_settings(const char *name);
 int st_gyro_common_probe(struct iio_dev *indio_dev);
-void st_gyro_common_remove(struct iio_dev *indio_dev);
 
 /* Magnetometer */
 const struct st_sensor_settings *st_magn_get_settings(const char *name);
 int st_magn_common_probe(struct iio_dev *indio_dev);
-void st_magn_common_remove(struct iio_dev *indio_dev);
 
 /* Pressure */
 const struct st_sensor_settings *st_press_get_settings(const char *name);
 int st_press_common_probe(struct iio_dev *indio_dev);
-void st_press_common_remove(struct iio_dev *indio_dev);
 
 #endif /* ST_SENSORS_H */

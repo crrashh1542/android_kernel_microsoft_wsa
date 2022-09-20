@@ -253,20 +253,6 @@ please make a proposal on the linux-media mailing list.
       - Non-compressed, tiled two-planar format used by Mediatek MT8183.
 	This is an opaque intermediate format and the MDP3 hardware can be
 	used to convert it to other formats.
-    * .. _V4L2-PIX-FMT-SUNXI-TILED-NV12:
-
-      - ``V4L2_PIX_FMT_SUNXI_TILED_NV12``
-      - 'ST12'
-      - Two-planar NV12-based format used by the video engine found on Allwinner
-	(codenamed sunxi) platforms, with 32x32 tiles for the luminance plane
-	and 32x64 tiles for the chrominance plane. The data in each tile is
-	stored in linear order, within the tile bounds. Each tile follows the
-	previous one linearly in memory (from left to right, top to bottom).
-
-	The associated buffer dimensions are aligned to match an integer number
-	of tiles, resulting in 32-aligned resolutions for the luminance plane
-	and 16-aligned resolutions for the chrominance plane (with 2x2
-	subsampling).
 
 .. raw:: latex
 

@@ -399,10 +399,12 @@ void update_watermark_setting(struct ipu_isys *isys)
 	u64 threshold_bytes;
 	u64 isys_pb_datarate_mbs = 0;
 	u16 sram_granulrity_shift =
-		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP) ?
+		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
+		 ipu_ver == IPU_VER_6EP_MTL) ?
 		IPU6_SRAM_GRANULRITY_SHIFT : IPU6SE_SRAM_GRANULRITY_SHIFT;
 	int max_sram_size =
-		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP) ?
+		(ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
+		 ipu_ver == IPU_VER_6EP_MTL) ?
 		IPU6_MAX_SRAM_SIZE : IPU6SE_MAX_SRAM_SIZE;
 
 	mutex_lock(&iwake_watermark->mutex);
@@ -746,6 +748,7 @@ static int isys_runtime_pm_suspend(struct device *dev)
 	isys->reset_needed = false;
 	mutex_unlock(&isys->mutex);
 
+	isys->phy_termcal_val = 0;
 	cpu_latency_qos_update_request(&isys->pm_qos, PM_QOS_DEFAULT_VALUE);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
@@ -1048,7 +1051,8 @@ static int isys_probe(struct ipu_bus_device *adev)
 	isys->pdata = adev->pdata;
 
 	/* initial streamID for different sensor types */
-	if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP) {
+	if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
+	    ipu_ver == IPU_VER_6EP_MTL) {
 		isys->sensor_info.vc1_data_start =
 			IPU6_FW_ISYS_VC1_SENSOR_DATA_START;
 		isys->sensor_info.vc1_data_end =
@@ -1099,6 +1103,7 @@ static int isys_probe(struct ipu_bus_device *adev)
 	spin_lock_init(&isys->lock);
 	spin_lock_init(&isys->power_lock);
 	isys->power = 0;
+	isys->phy_termcal_val = 0;
 
 	mutex_init(&isys->mutex);
 	mutex_init(&isys->stream_mutex);
@@ -1283,7 +1288,6 @@ int isys_isr_one(struct ipu_bus_device *adev)
 
 	switch (resp->type) {
 	case IPU_FW_ISYS_RESP_TYPE_STREAM_OPEN_DONE:
-		ipu_put_fw_mgs_buf(ipu_bus_get_drvdata(adev), resp->buf_id);
 		complete(&pipe->stream_open_completion);
 		break;
 	case IPU_FW_ISYS_RESP_TYPE_STREAM_CLOSE_ACK:
@@ -1293,7 +1297,6 @@ int isys_isr_one(struct ipu_bus_device *adev)
 		complete(&pipe->stream_start_completion);
 		break;
 	case IPU_FW_ISYS_RESP_TYPE_STREAM_START_AND_CAPTURE_ACK:
-		ipu_put_fw_mgs_buf(ipu_bus_get_drvdata(adev), resp->buf_id);
 		complete(&pipe->stream_start_completion);
 		break;
 	case IPU_FW_ISYS_RESP_TYPE_STREAM_STOP_ACK:
@@ -1303,6 +1306,11 @@ int isys_isr_one(struct ipu_bus_device *adev)
 		complete(&pipe->stream_stop_completion);
 		break;
 	case IPU_FW_ISYS_RESP_TYPE_PIN_DATA_READY:
+		/*
+		 * firmware only release the capture msg until software
+		 * get pin_data_ready event
+		 */
+		ipu_put_fw_mgs_buf(ipu_bus_get_drvdata(adev), resp->buf_id);
 		if (resp->pin_id < IPU_ISYS_OUTPUT_PINS &&
 		    pipe->output_pins[resp->pin_id].pin_ready)
 			pipe->output_pins[resp->pin_id].pin_ready(pipe, resp);
@@ -1423,7 +1431,10 @@ module_ipu_bus_driver(isys_driver);
 static const struct pci_device_id ipu_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6SE_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_P_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_N_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_RPL_P_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_MTL_PCI_ID)},
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);

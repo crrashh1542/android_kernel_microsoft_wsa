@@ -106,4 +106,7 @@ void kvm_arm_timer_write_sysreg(struct kvm_vcpu *vcpu,
 u32 timer_get_ctl(struct arch_timer_context *ctxt);
 u64 timer_get_cval(struct arch_timer_context *ctxt);
 
+/* Nedded for debugfs */
+u64 timer_get_offset(struct arch_timer_context *ctxt);
+
 #endif

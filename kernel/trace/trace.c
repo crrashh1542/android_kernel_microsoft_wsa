@@ -185,6 +185,7 @@ static char bootup_tracer_buf[MAX_TRACER_SIZE] __initdata;
 static char *default_bootup_tracer;
 
 static bool allocate_snapshot;
+static bool snapshot_at_boot;
 
 static int __init set_cmdline_ftrace(char *str)
 {
@@ -230,12 +231,21 @@ static int __init boot_alloc_snapshot(char *str)
 __setup("alloc_snapshot", boot_alloc_snapshot);
 
 
+static int __init boot_snapshot(char *str)
+{
+	snapshot_at_boot = true;
+	boot_alloc_snapshot(str);
+	return 1;
+}
+__setup("ftrace_boot_snapshot", boot_snapshot);
+
+
 static char trace_boot_options_buf[MAX_TRACER_SIZE] __initdata;
 
 static int __init set_trace_boot_options(char *str)
 {
 	strlcpy(trace_boot_options_buf, str, MAX_TRACER_SIZE);
-	return 0;
+	return 1;
 }
 __setup("trace_options=", set_trace_boot_options);
 
@@ -246,12 +256,16 @@ static int __init set_trace_boot_clock(char *str)
 {
 	strlcpy(trace_boot_clock_buf, str, MAX_TRACER_SIZE);
 	trace_boot_clock = trace_boot_clock_buf;
-	return 0;
+	return 1;
 }
 __setup("trace_clock=", set_trace_boot_clock);
 
 static int __init set_tracepoint_printk(char *str)
 {
+	/* Ignore the "tp_printk_stop_on_boot" param */
+	if (*str == '_')
+		return 0;
+
 	if ((strcmp(str, "=0") != 0 && strcmp(str, "=off") != 0))
 		tracepoint_printk = 1;
 	return 1;
@@ -512,12 +526,6 @@ int call_filter_check_discard(struct trace_event_call *call, void *rec,
 	return 0;
 }
 
-void trace_free_pid_list(struct trace_pid_list *pid_list)
-{
-	vfree(pid_list->pids);
-	kfree(pid_list);
-}
-
 /**
  * trace_find_filtered_pid - check if a pid exists in a filtered_pid list
  * @filtered_pids: The list of pids to check
@@ -528,14 +536,7 @@ void trace_free_pid_list(struct trace_pid_list *pid_list)
 bool
 trace_find_filtered_pid(struct trace_pid_list *filtered_pids, pid_t search_pid)
 {
-	/*
-	 * If pid_max changed after filtered_pids was created, we
-	 * by default ignore all pids greater than the previous pid_max.
-	 */
-	if (search_pid >= filtered_pids->pid_max)
-		return false;
-
-	return test_bit(search_pid, filtered_pids->pids);
+	return trace_pid_list_is_set(filtered_pids, search_pid);
 }
 
 /**
@@ -592,15 +593,11 @@ void trace_filter_add_remove_task(struct trace_pid_list *pid_list,
 			return;
 	}
 
-	/* Sorry, but we don't support pid_max changing after setting */
-	if (task->pid >= pid_list->pid_max)
-		return;
-
 	/* "self" is set for forks, and NULL for exits */
 	if (self)
-		set_bit(task->pid, pid_list->pids);
+		trace_pid_list_set(pid_list, task->pid);
 	else
-		clear_bit(task->pid, pid_list->pids);
+		trace_pid_list_clear(pid_list, task->pid);
 }
 
 /**
@@ -617,18 +614,19 @@ void trace_filter_add_remove_task(struct trace_pid_list *pid_list,
  */
 void *trace_pid_next(struct trace_pid_list *pid_list, void *v, loff_t *pos)
 {
-	unsigned long pid = (unsigned long)v;
+	long pid = (unsigned long)v;
+	unsigned int next;
 
 	(*pos)++;
 
 	/* pid already is +1 of the actual previous bit */
-	pid = find_next_bit(pid_list->pids, pid_list->pid_max, pid);
+	if (trace_pid_list_next(pid_list, pid, &next) < 0)
+		return NULL;
+
+	pid = next;
 
 	/* Return pid + 1 to allow zero to be represented */
-	if (pid < pid_list->pid_max)
-		return (void *)(pid + 1);
-
-	return NULL;
+	return (void *)(pid + 1);
 }
 
 /**
@@ -645,11 +643,13 @@ void *trace_pid_next(struct trace_pid_list *pid_list, void *v, loff_t *pos)
 void *trace_pid_start(struct trace_pid_list *pid_list, loff_t *pos)
 {
 	unsigned long pid;
+	unsigned int first;
 	loff_t l = 0;
 
-	pid = find_first_bit(pid_list->pids, pid_list->pid_max);
-	if (pid >= pid_list->pid_max)
+	if (trace_pid_list_first(pid_list, &first) < 0)
 		return NULL;
+
+	pid = first;
 
 	/* Return pid + 1 so that zero can be the exit value */
 	for (pid++; pid && l < *pos;
@@ -686,7 +686,7 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 	unsigned long val;
 	int nr_pids = 0;
 	ssize_t read = 0;
-	ssize_t ret = 0;
+	ssize_t ret;
 	loff_t pos;
 	pid_t pid;
 
@@ -699,55 +699,48 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 	 * the user. If the operation fails, then the current list is
 	 * not modified.
 	 */
-	pid_list = kmalloc(sizeof(*pid_list), GFP_KERNEL);
+	pid_list = trace_pid_list_alloc();
 	if (!pid_list) {
 		trace_parser_put(&parser);
 		return -ENOMEM;
 	}
 
-	pid_list->pid_max = READ_ONCE(pid_max);
-
-	/* Only truncating will shrink pid_max */
-	if (filtered_pids && filtered_pids->pid_max > pid_list->pid_max)
-		pid_list->pid_max = filtered_pids->pid_max;
-
-	pid_list->pids = vzalloc((pid_list->pid_max + 7) >> 3);
-	if (!pid_list->pids) {
-		trace_parser_put(&parser);
-		kfree(pid_list);
-		return -ENOMEM;
-	}
-
 	if (filtered_pids) {
 		/* copy the current bits to the new max */
-		for_each_set_bit(pid, filtered_pids->pids,
-				 filtered_pids->pid_max) {
-			set_bit(pid, pid_list->pids);
+		ret = trace_pid_list_first(filtered_pids, &pid);
+		while (!ret) {
+			trace_pid_list_set(pid_list, pid);
+			ret = trace_pid_list_next(filtered_pids, pid + 1, &pid);
 			nr_pids++;
 		}
 	}
 
+	ret = 0;
 	while (cnt > 0) {
 
 		pos = 0;
 
 		ret = trace_get_user(&parser, ubuf, cnt, &pos);
-		if (ret < 0 || !trace_parser_loaded(&parser))
+		if (ret < 0)
 			break;
 
 		read += ret;
 		ubuf += ret;
 		cnt -= ret;
 
+		if (!trace_parser_loaded(&parser))
+			break;
+
 		ret = -EINVAL;
 		if (kstrtoul(parser.buffer, 0, &val))
-			break;
-		if (val >= pid_list->pid_max)
 			break;
 
 		pid = (pid_t)val;
 
-		set_bit(pid, pid_list->pids);
+		if (trace_pid_list_set(pid_list, pid) < 0) {
+			ret = -1;
+			break;
+		}
 		nr_pids++;
 
 		trace_parser_clear(&parser);
@@ -756,14 +749,13 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 	trace_parser_put(&parser);
 
 	if (ret < 0) {
-		trace_free_pid_list(pid_list);
+		trace_pid_list_free(pid_list);
 		return ret;
 	}
 
 	if (!nr_pids) {
 		/* Cleared the list of pids */
-		trace_free_pid_list(pid_list);
-		read = ret;
+		trace_pid_list_free(pid_list);
 		pid_list = NULL;
 	}
 
@@ -1492,10 +1484,12 @@ static int __init set_buf_size(char *str)
 	if (!str)
 		return 0;
 	buf_size = memparse(str, &str);
-	/* nr_entries can not be zero */
-	if (buf_size == 0)
-		return 0;
-	trace_buf_size = buf_size;
+	/*
+	 * nr_entries can not be zero and the startup
+	 * tests require some buffer space. Therefore
+	 * ensure we have at least 4096 bytes of buffer.
+	 */
+	trace_buf_size = max(4096UL, buf_size);
 	return 1;
 }
 __setup("trace_buf_size=", set_buf_size);
@@ -2834,7 +2828,7 @@ trace_event_buffer_lock_reserve(struct trace_buffer **current_rb,
 }
 EXPORT_SYMBOL_GPL(trace_event_buffer_lock_reserve);
 
-static DEFINE_SPINLOCK(tracepoint_iter_lock);
+static DEFINE_RAW_SPINLOCK(tracepoint_iter_lock);
 static DEFINE_MUTEX(tracepoint_printk_mutex);
 
 static void output_printk(struct trace_event_buffer *fbuffer)
@@ -2862,14 +2856,14 @@ static void output_printk(struct trace_event_buffer *fbuffer)
 
 	event = &fbuffer->trace_file->event_call->event;
 
-	spin_lock_irqsave(&tracepoint_iter_lock, flags);
+	raw_spin_lock_irqsave(&tracepoint_iter_lock, flags);
 	trace_seq_init(&iter->seq);
 	iter->ent = fbuffer->entry;
 	event_call->event.funcs->trace(iter, 0, event);
 	trace_seq_putc(&iter->seq, 0);
 	printk("%s", iter->seq.buffer);
 
-	spin_unlock_irqrestore(&tracepoint_iter_lock, flags);
+	raw_spin_unlock_irqrestore(&tracepoint_iter_lock, flags);
 }
 
 int tracepoint_printk_sysctl(struct ctl_table *table, int write,
@@ -3231,7 +3225,7 @@ struct trace_buffer_struct {
 	char buffer[4][TRACE_BUF_SIZE];
 };
 
-static struct trace_buffer_struct *trace_percpu_buffer;
+static struct trace_buffer_struct __percpu *trace_percpu_buffer;
 
 /*
  * This allows for lockless recording.  If we're nested too deeply, then
@@ -3241,7 +3235,7 @@ static char *get_trace_buf(void)
 {
 	struct trace_buffer_struct *buffer = this_cpu_ptr(trace_percpu_buffer);
 
-	if (!buffer || buffer->nesting >= 4)
+	if (!trace_percpu_buffer || buffer->nesting >= 4)
 		return NULL;
 
 	buffer->nesting++;
@@ -3260,7 +3254,7 @@ static void put_trace_buf(void)
 
 static int alloc_percpu_trace_buffer(void)
 {
-	struct trace_buffer_struct *buffers;
+	struct trace_buffer_struct __percpu *buffers;
 
 	if (trace_percpu_buffer)
 		return 0;
@@ -3672,11 +3666,16 @@ static char *trace_iter_expand_format(struct trace_iterator *iter)
 }
 
 /* Returns true if the string is safe to dereference from an event */
-static bool trace_safe_str(struct trace_iterator *iter, const char *str)
+static bool trace_safe_str(struct trace_iterator *iter, const char *str,
+			   bool star, int len)
 {
 	unsigned long addr = (unsigned long)str;
 	struct trace_event *trace_event;
 	struct trace_event_call *event;
+
+	/* Ignore strings with no length */
+	if (star && !len)
+		return true;
 
 	/* OK if part of the event data */
 	if ((addr >= (unsigned long)iter->ent) &&
@@ -3863,7 +3862,7 @@ void trace_check_vprintf(struct trace_iterator *iter, const char *fmt,
 		 * instead. See samples/trace_events/trace-events-sample.h
 		 * for reference.
 		 */
-		if (WARN_ONCE(!trace_safe_str(iter, str),
+		if (WARN_ONCE(!trace_safe_str(iter, str, star, len),
 			      "fmt: '%s' current_buffer: '%s'",
 			      fmt, show_buffer(&iter->seq))) {
 			int ret;
@@ -6309,10 +6308,16 @@ static void tracing_set_nop(struct trace_array *tr)
 	tr->current_trace = &nop_trace;
 }
 
+static bool tracer_options_updated;
+
 static void add_tracer_options(struct trace_array *tr, struct tracer *t)
 {
 	/* Only enable if the directory has been created already. */
 	if (!tr->dir)
+		return;
+
+	/* Only create trace option files after update_tracer_options finish */
+	if (!tracer_options_updated)
 		return;
 
 	create_trace_option_files(tr, t);
@@ -7749,7 +7754,8 @@ static struct tracing_log_err *get_tracing_log_err(struct trace_array *tr)
 		err = kzalloc(sizeof(*err), GFP_KERNEL);
 		if (!err)
 			err = ERR_PTR(-ENOMEM);
-		tr->n_err_log_entries++;
+		else
+			tr->n_err_log_entries++;
 
 		return err;
 	}
@@ -9134,6 +9140,7 @@ static void __update_tracer_options(struct trace_array *tr)
 static void update_tracer_options(struct trace_array *tr)
 {
 	mutex_lock(&trace_types_lock);
+	tracer_options_updated = true;
 	__update_tracer_options(tr);
 	mutex_unlock(&trace_types_lock);
 }
@@ -9812,6 +9819,12 @@ void trace_init_global_iter(struct trace_iterator *iter)
 	/* Output in nanoseconds only if we are using a clock in nanoseconds. */
 	if (trace_clocks[iter->tr->clock_id].in_ns)
 		iter->iter_flags |= TRACE_FILE_TIME_IN_NS;
+
+	/* Can not use kmalloc for iter.temp and iter.fmt */
+	iter->temp = static_temp_buf;
+	iter->temp_size = STATIC_TEMP_BUF_SIZE;
+	iter->fmt = static_fmt_buf;
+	iter->fmt_size = STATIC_FMT_BUF_SIZE;
 }
 
 void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
@@ -9844,11 +9857,6 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 
 	/* Simulate the iterator */
 	trace_init_global_iter(&iter);
-	/* Can not use kmalloc for iter.temp and iter.fmt */
-	iter.temp = static_temp_buf;
-	iter.temp_size = STATIC_TEMP_BUF_SIZE;
-	iter.fmt = static_fmt_buf;
-	iter.fmt_size = STATIC_FMT_BUF_SIZE;
 
 	for_each_tracing_cpu(cpu) {
 		atomic_inc(&per_cpu_ptr(iter.array_buffer->data, cpu)->disabled);
@@ -10122,6 +10130,14 @@ out_free_buffer_mask:
 	free_cpumask_var(tracing_buffer_mask);
 out:
 	return ret;
+}
+
+void __init ftrace_boot_snapshot(void)
+{
+	if (snapshot_at_boot) {
+		tracing_snapshot();
+		internal_trace_puts("** Boot snapshot taken **\n");
+	}
 }
 
 void __init early_trace_init(void)

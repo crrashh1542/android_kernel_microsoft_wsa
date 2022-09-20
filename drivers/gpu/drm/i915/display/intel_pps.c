@@ -6,9 +6,11 @@
 #include "g4x_dp.h"
 #include "i915_drv.h"
 #include "intel_de.h"
+#include "intel_display_power_well.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
 #include "intel_dpll.h"
+#include "intel_lvds.h"
 #include "intel_pps.h"
 
 static void vlv_steal_power_sequencer(struct drm_i915_private *dev_priv,
@@ -207,7 +209,8 @@ static int
 bxt_power_sequencer_idx(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
-	int backlight_controller = dev_priv->vbt.backlight.controller;
+	struct intel_connector *connector = intel_dp->attached_connector;
+	int backlight_controller = connector->panel.vbt.backlight.controller;
 
 	lockdep_assert_held(&dev_priv->pps_mutex);
 
@@ -721,6 +724,13 @@ static void edp_panel_vdd_schedule_off(struct intel_dp *intel_dp)
 	unsigned long delay;
 
 	/*
+	 * We may not yet know the real power sequencing delays,
+	 * so keep VDD enabled until we're done with init.
+	 */
+	if (intel_dp->pps.initializing)
+		return;
+
+	/*
 	 * Queue the timer to fire a long time from now (relative to the power
 	 * down delay) to keep the panel power up across a sequence of
 	 * operations.
@@ -1049,7 +1059,7 @@ void vlv_pps_init(struct intel_encoder *encoder,
 	pps_init_registers(intel_dp, true);
 }
 
-static void intel_pps_vdd_sanitize(struct intel_dp *intel_dp)
+static void pps_vdd_init(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
@@ -1070,18 +1080,16 @@ static void intel_pps_vdd_sanitize(struct intel_dp *intel_dp)
 	drm_WARN_ON(&dev_priv->drm, intel_dp->pps.vdd_wakeref);
 	intel_dp->pps.vdd_wakeref = intel_display_power_get(dev_priv,
 							    intel_aux_power_domain(dig_port));
-
-	edp_panel_vdd_schedule_off(intel_dp);
 }
 
-bool intel_pps_have_power(struct intel_dp *intel_dp)
+bool intel_pps_have_panel_power_or_vdd(struct intel_dp *intel_dp)
 {
 	intel_wakeref_t wakeref;
 	bool have_power = false;
 
 	with_intel_pps_lock(intel_dp, wakeref) {
-		have_power = edp_have_panel_power(intel_dp) &&
-						  edp_have_panel_vdd(intel_dp);
+		have_power = edp_have_panel_power(intel_dp) ||
+			     edp_have_panel_vdd(intel_dp);
 	}
 
 	return have_power;
@@ -1130,16 +1138,20 @@ intel_pps_readout_hw_state(struct intel_dp *intel_dp, struct edp_power_seq *seq)
 }
 
 static void
-intel_pps_dump_state(const char *state_name, const struct edp_power_seq *seq)
+intel_pps_dump_state(struct intel_dp *intel_dp, const char *state_name,
+		     const struct edp_power_seq *seq)
 {
-	DRM_DEBUG_KMS("%s t1_t3 %d t8 %d t9 %d t10 %d t11_t12 %d\n",
-		      state_name,
-		      seq->t1_t3, seq->t8, seq->t9, seq->t10, seq->t11_t12);
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	drm_dbg_kms(&i915->drm, "%s t1_t3 %d t8 %d t9 %d t10 %d t11_t12 %d\n",
+		    state_name,
+		    seq->t1_t3, seq->t8, seq->t9, seq->t10, seq->t11_t12);
 }
 
 static void
 intel_pps_verify_state(struct intel_dp *intel_dp)
 {
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	struct edp_power_seq hw;
 	struct edp_power_seq *sw = &intel_dp->pps.pps_delays;
 
@@ -1147,10 +1159,85 @@ intel_pps_verify_state(struct intel_dp *intel_dp)
 
 	if (hw.t1_t3 != sw->t1_t3 || hw.t8 != sw->t8 || hw.t9 != sw->t9 ||
 	    hw.t10 != sw->t10 || hw.t11_t12 != sw->t11_t12) {
-		DRM_ERROR("PPS state mismatch\n");
-		intel_pps_dump_state("sw", sw);
-		intel_pps_dump_state("hw", &hw);
+		drm_err(&i915->drm, "PPS state mismatch\n");
+		intel_pps_dump_state(intel_dp, "sw", sw);
+		intel_pps_dump_state(intel_dp, "hw", &hw);
 	}
+}
+
+static bool pps_delays_valid(struct edp_power_seq *delays)
+{
+	return delays->t1_t3 || delays->t8 || delays->t9 ||
+		delays->t10 || delays->t11_t12;
+}
+
+static void pps_init_delays_bios(struct intel_dp *intel_dp,
+				 struct edp_power_seq *bios)
+{
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
+
+	lockdep_assert_held(&dev_priv->pps_mutex);
+
+	if (!pps_delays_valid(&intel_dp->pps.bios_pps_delays))
+		intel_pps_readout_hw_state(intel_dp, &intel_dp->pps.bios_pps_delays);
+
+	*bios = intel_dp->pps.bios_pps_delays;
+
+	intel_pps_dump_state(intel_dp, "bios", bios);
+}
+
+static void pps_init_delays_vbt(struct intel_dp *intel_dp,
+				struct edp_power_seq *vbt)
+{
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	*vbt = connector->panel.vbt.edp.pps;
+
+	if (!pps_delays_valid(vbt))
+		return;
+
+	/* On Toshiba Satellite P50-C-18C system the VBT T12 delay
+	 * of 500ms appears to be too short. Ocassionally the panel
+	 * just fails to power back on. Increasing the delay to 800ms
+	 * seems sufficient to avoid this problem.
+	 */
+	if (dev_priv->quirks & QUIRK_INCREASE_T12_DELAY) {
+		vbt->t11_t12 = max_t(u16, vbt->t11_t12, 1300 * 10);
+		drm_dbg_kms(&dev_priv->drm,
+			    "Increasing T12 panel delay as per the quirk to %d\n",
+			    vbt->t11_t12);
+	}
+
+	/* T11_T12 delay is special and actually in units of 100ms, but zero
+	 * based in the hw (so we need to add 100 ms). But the sw vbt
+	 * table multiplies it with 1000 to make it in units of 100usec,
+	 * too. */
+	vbt->t11_t12 += 100 * 10;
+
+	intel_pps_dump_state(intel_dp, "vbt", vbt);
+}
+
+static void pps_init_delays_spec(struct intel_dp *intel_dp,
+				 struct edp_power_seq *spec)
+{
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
+
+	lockdep_assert_held(&dev_priv->pps_mutex);
+
+	/* Upper limits from eDP 1.3 spec. Note that we use the clunky units of
+	 * our hw here, which are all in 100usec. */
+	spec->t1_t3 = 210 * 10;
+	spec->t8 = 50 * 10; /* no limit for t8, use t7 instead */
+	spec->t9 = 50 * 10; /* no limit for t9, make it symmetric with t8 */
+	spec->t10 = 500 * 10;
+	/* This one is special and actually in units of 100ms, but zero
+	 * based in the hw (so we need to add 100 ms). But the sw vbt
+	 * table multiplies it with 1000 to make it in units of 100usec,
+	 * too. */
+	spec->t11_t12 = (510 + 100) * 10;
+
+	intel_pps_dump_state(intel_dp, "spec", spec);
 }
 
 static void pps_init_delays(struct intel_dp *intel_dp)
@@ -1162,44 +1249,12 @@ static void pps_init_delays(struct intel_dp *intel_dp)
 	lockdep_assert_held(&dev_priv->pps_mutex);
 
 	/* already initialized? */
-	if (final->t11_t12 != 0)
+	if (pps_delays_valid(final))
 		return;
 
-	intel_pps_readout_hw_state(intel_dp, &cur);
-
-	intel_pps_dump_state("cur", &cur);
-
-	vbt = dev_priv->vbt.edp.pps;
-	/* On Toshiba Satellite P50-C-18C system the VBT T12 delay
-	 * of 500ms appears to be too short. Ocassionally the panel
-	 * just fails to power back on. Increasing the delay to 800ms
-	 * seems sufficient to avoid this problem.
-	 */
-	if (dev_priv->quirks & QUIRK_INCREASE_T12_DELAY) {
-		vbt.t11_t12 = max_t(u16, vbt.t11_t12, 1300 * 10);
-		drm_dbg_kms(&dev_priv->drm,
-			    "Increasing T12 panel delay as per the quirk to %d\n",
-			    vbt.t11_t12);
-	}
-	/* T11_T12 delay is special and actually in units of 100ms, but zero
-	 * based in the hw (so we need to add 100 ms). But the sw vbt
-	 * table multiplies it with 1000 to make it in units of 100usec,
-	 * too. */
-	vbt.t11_t12 += 100 * 10;
-
-	/* Upper limits from eDP 1.3 spec. Note that we use the clunky units of
-	 * our hw here, which are all in 100usec. */
-	spec.t1_t3 = 210 * 10;
-	spec.t8 = 50 * 10; /* no limit for t8, use t7 instead */
-	spec.t9 = 50 * 10; /* no limit for t9, make it symmetric with t8 */
-	spec.t10 = 500 * 10;
-	/* This one is special and actually in units of 100ms, but zero
-	 * based in the hw (so we need to add 100 ms). But the sw vbt
-	 * table multiplies it with 1000 to make it in units of 100usec,
-	 * too. */
-	spec.t11_t12 = (510 + 100) * 10;
-
-	intel_pps_dump_state("vbt", &vbt);
+	pps_init_delays_bios(intel_dp, &cur);
+	pps_init_delays_vbt(intel_dp, &vbt);
+	pps_init_delays_spec(intel_dp, &spec);
 
 	/* Use the max of the register settings and vbt. If both are
 	 * unset, fall back to the spec limits. */
@@ -1361,18 +1416,48 @@ void intel_pps_encoder_reset(struct intel_dp *intel_dp)
 
 		pps_init_delays(intel_dp);
 		pps_init_registers(intel_dp, false);
+		pps_vdd_init(intel_dp);
 
-		intel_pps_vdd_sanitize(intel_dp);
+		if (edp_have_panel_vdd(intel_dp))
+			edp_panel_vdd_schedule_off(intel_dp);
 	}
 }
 
 void intel_pps_init(struct intel_dp *intel_dp)
 {
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	intel_wakeref_t wakeref;
+
+	intel_dp->pps.initializing = true;
 	INIT_DELAYED_WORK(&intel_dp->pps.panel_vdd_work, edp_panel_vdd_work);
 
 	pps_init_timestamps(intel_dp);
 
-	intel_pps_encoder_reset(intel_dp);
+	with_intel_pps_lock(intel_dp, wakeref) {
+		if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915))
+			vlv_initial_power_sequencer_setup(intel_dp);
+
+		pps_init_delays(intel_dp);
+		pps_init_registers(intel_dp, false);
+		pps_vdd_init(intel_dp);
+	}
+}
+
+void intel_pps_init_late(struct intel_dp *intel_dp)
+{
+	intel_wakeref_t wakeref;
+
+	with_intel_pps_lock(intel_dp, wakeref) {
+		/* Reinit delays after per-panel info has been parsed from VBT */
+		memset(&intel_dp->pps.pps_delays, 0, sizeof(intel_dp->pps.pps_delays));
+		pps_init_delays(intel_dp);
+		pps_init_registers(intel_dp, false);
+
+		intel_dp->pps.initializing = false;
+
+		if (edp_have_panel_vdd(intel_dp))
+			edp_panel_vdd_schedule_off(intel_dp);
+	}
 }
 
 void intel_pps_unlock_regs_wa(struct drm_i915_private *dev_priv)
@@ -1407,4 +1492,62 @@ void intel_pps_setup(struct drm_i915_private *i915)
 		i915->pps_mmio_base = VLV_PPS_BASE;
 	else
 		i915->pps_mmio_base = PPS_BASE;
+}
+
+void assert_pps_unlocked(struct drm_i915_private *dev_priv, enum pipe pipe)
+{
+	i915_reg_t pp_reg;
+	u32 val;
+	enum pipe panel_pipe = INVALID_PIPE;
+	bool locked = true;
+
+	if (drm_WARN_ON(&dev_priv->drm, HAS_DDI(dev_priv)))
+		return;
+
+	if (HAS_PCH_SPLIT(dev_priv)) {
+		u32 port_sel;
+
+		pp_reg = PP_CONTROL(0);
+		port_sel = intel_de_read(dev_priv, PP_ON_DELAYS(0)) & PANEL_PORT_SELECT_MASK;
+
+		switch (port_sel) {
+		case PANEL_PORT_SELECT_LVDS:
+			intel_lvds_port_enabled(dev_priv, PCH_LVDS, &panel_pipe);
+			break;
+		case PANEL_PORT_SELECT_DPA:
+			g4x_dp_port_enabled(dev_priv, DP_A, PORT_A, &panel_pipe);
+			break;
+		case PANEL_PORT_SELECT_DPC:
+			g4x_dp_port_enabled(dev_priv, PCH_DP_C, PORT_C, &panel_pipe);
+			break;
+		case PANEL_PORT_SELECT_DPD:
+			g4x_dp_port_enabled(dev_priv, PCH_DP_D, PORT_D, &panel_pipe);
+			break;
+		default:
+			MISSING_CASE(port_sel);
+			break;
+		}
+	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
+		/* presumably write lock depends on pipe, not port select */
+		pp_reg = PP_CONTROL(pipe);
+		panel_pipe = pipe;
+	} else {
+		u32 port_sel;
+
+		pp_reg = PP_CONTROL(0);
+		port_sel = intel_de_read(dev_priv, PP_ON_DELAYS(0)) & PANEL_PORT_SELECT_MASK;
+
+		drm_WARN_ON(&dev_priv->drm,
+			    port_sel != PANEL_PORT_SELECT_LVDS);
+		intel_lvds_port_enabled(dev_priv, LVDS, &panel_pipe);
+	}
+
+	val = intel_de_read(dev_priv, pp_reg);
+	if (!(val & PANEL_POWER_ON) ||
+	    ((val & PANEL_UNLOCK_MASK) == PANEL_UNLOCK_REGS))
+		locked = false;
+
+	I915_STATE_WARN(panel_pipe == pipe && locked,
+			"panel assertion failure, pipe %c regs locked\n",
+			pipe_name(pipe));
 }

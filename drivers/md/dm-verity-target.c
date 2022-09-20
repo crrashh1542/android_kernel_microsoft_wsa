@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/reboot.h>
 #include <crypto/hash.h>
+#include <linux/string.h>
 
 #define DM_MSG_PREFIX			"verity"
 
@@ -1185,8 +1186,10 @@ static int verity_get_device(struct dm_target *ti, const char *devname,
 		if (!dev_wait)
 			break;
 
-		/* No need to be too aggressive since this is a slow path. */
-		msleep(500);
+		/* This delay directly affects boot time if code reaches here.
+		 * So keep it small.
+		 */
+		msleep(5);
 	} while (dev_wait && (driver_probe_done() != 0 || *dm_dev == NULL));
 	return -1;
 }
@@ -1205,7 +1208,7 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 	char **argv = *pargv;
 	int argc = *pargc;
 	char *key, *val;
-	int nargc = 10;
+	int nargc = 13;
 	char **nargv;
 	char *errstr;
 	int i;
@@ -1218,6 +1221,9 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 	nargv[3] = "4096";	/* hash block size */
 	nargv[4] = "4096";	/* data block size */
 	nargv[9] = "-";		/* salt (optional) */
+	nargv[10] = "2";
+	nargv[11] = DM_VERITY_OPT_ERROR_BEHAVIOR;
+	nargv[12] = verity_parse_error_behavior(error_behavior);
 
 	for (i = 0; i < argc; ++i) {
 		DMDEBUG("Argument %d: '%s'", i, argv[i]);
@@ -1261,19 +1267,17 @@ static char *chromeos_args(unsigned *pargc, char ***pargv)
 		} else if (!strcmp(key, DM_VERITY_OPT_ERROR_BEHAVIOR)) {
 			char *behavior = verity_parse_error_behavior(val);
 
-			if (IS_ERR(behavior)) {
-				errstr = "Invalid error behavior";
-				goto err;
-			}
-			nargv[10] = "2";
-			nargv[11] = key;
 			nargv[12] = behavior;
-			nargc = 13;
 		}
 	}
 
 	if (!nargv[1] || !nargv[2] || !nargv[5] || !nargv[7] || !nargv[8]) {
 		errstr = "Missing argument";
+		goto err;
+	}
+
+	if (IS_ERR(nargv[12])) {
+		errstr = "Invalid error behavior";
 		goto err;
 	}
 
@@ -1582,9 +1586,56 @@ bad:
 	return r;
 }
 
+/*
+ * Check whether a DM target is a verity target.
+ */
+bool dm_is_verity_target(struct dm_target *ti)
+{
+	return ti->type->module == THIS_MODULE;
+}
+
+/*
+ * Get the verity mode (error behavior) of a verity target.
+ *
+ * Returns the verity mode of the target, or -EINVAL if 'ti' is not a verity
+ * target.
+ */
+int dm_verity_get_mode(struct dm_target *ti)
+{
+	struct dm_verity *v = ti->private;
+
+	if (!dm_is_verity_target(ti))
+		return -EINVAL;
+
+	return v->mode;
+}
+
+/*
+ * Get the root digest of a verity target.
+ *
+ * Returns a copy of the root digest, the caller is responsible for
+ * freeing the memory of the digest.
+ */
+int dm_verity_get_root_digest(struct dm_target *ti, u8 **root_digest, unsigned int *digest_size)
+{
+	struct dm_verity *v = ti->private;
+
+	if (!dm_is_verity_target(ti))
+		return -EINVAL;
+
+	*root_digest = kmemdup(v->root_digest, v->digest_size, GFP_KERNEL);
+	if (*root_digest == NULL)
+		return -ENOMEM;
+
+	*digest_size = v->digest_size;
+
+	return 0;
+}
+
 static struct target_type verity_target = {
 	.name		= "verity",
-	.version	= {1, 8, 0},
+	.features	= DM_TARGET_IMMUTABLE,
+	.version	= {1, 8, 1},
 	.module		= THIS_MODULE,
 	.ctr		= verity_ctr,
 	.dtr		= verity_dtr,

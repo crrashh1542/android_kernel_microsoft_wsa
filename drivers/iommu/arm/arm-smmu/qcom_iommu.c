@@ -590,19 +590,21 @@ static int qcom_iommu_of_xlate(struct device *dev, struct of_phandle_args *args)
 static const struct iommu_ops qcom_iommu_ops = {
 	.capable	= qcom_iommu_capable,
 	.domain_alloc	= qcom_iommu_domain_alloc,
-	.domain_free	= qcom_iommu_domain_free,
-	.attach_dev	= qcom_iommu_attach_dev,
-	.detach_dev	= qcom_iommu_detach_dev,
-	.map		= qcom_iommu_map,
-	.unmap		= qcom_iommu_unmap,
-	.flush_iotlb_all = qcom_iommu_flush_iotlb_all,
-	.iotlb_sync	= qcom_iommu_iotlb_sync,
-	.iova_to_phys	= qcom_iommu_iova_to_phys,
 	.probe_device	= qcom_iommu_probe_device,
 	.release_device	= qcom_iommu_release_device,
 	.device_group	= generic_device_group,
 	.of_xlate	= qcom_iommu_of_xlate,
 	.pgsize_bitmap	= SZ_4K | SZ_64K | SZ_1M | SZ_16M,
+	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.attach_dev	= qcom_iommu_attach_dev,
+		.detach_dev	= qcom_iommu_detach_dev,
+		.map		= qcom_iommu_map,
+		.unmap		= qcom_iommu_unmap,
+		.flush_iotlb_all = qcom_iommu_flush_iotlb_all,
+		.iotlb_sync	= qcom_iommu_iotlb_sync,
+		.iova_to_phys	= qcom_iommu_iova_to_phys,
+		.free		= qcom_iommu_domain_free,
+	}
 };
 
 static int qcom_iommu_sec_ptbl_init(struct device *dev)
@@ -748,9 +750,12 @@ static bool qcom_iommu_has_secure_context(struct qcom_iommu_dev *qcom_iommu)
 {
 	struct device_node *child;
 
-	for_each_child_of_node(qcom_iommu->dev->of_node, child)
-		if (of_device_is_compatible(child, "qcom,msm-iommu-v1-sec"))
+	for_each_child_of_node(qcom_iommu->dev->of_node, child) {
+		if (of_device_is_compatible(child, "qcom,msm-iommu-v1-sec")) {
+			of_node_put(child);
 			return true;
+		}
+	}
 
 	return false;
 }

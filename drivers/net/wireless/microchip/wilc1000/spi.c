@@ -179,14 +179,14 @@ free:
 	return ret;
 }
 
-static int wilc_bus_remove(struct spi_device *spi)
+static void wilc_bus_remove(struct spi_device *spi)
 {
 	struct wilc *wilc = spi_get_drvdata(spi);
+	struct wilc_spi *spi_priv = wilc->bus_data;
 
 	clk_disable_unprepare(wilc->rtc_clk);
 	wilc_netdev_cleanup(wilc);
-
-	return 0;
+	kfree(spi_priv);
 }
 
 static const struct of_device_id wilc_of_match[] = {

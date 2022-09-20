@@ -248,18 +248,33 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_CALIBSCALE:
 		if (indio_dev->num_channels >
 				CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
+			u16 scale;
+
+			if (val >= 2) {
+				/*
+				 * The user space is sending values already
+				 * multiplied by MOTION_SENSE_DEFAULT_SCALE.
+				 */
+				scale = val;
+			} else {
+				u64 val64 = val2 * MOTION_SENSE_DEFAULT_SCALE;
+
+				do_div(val64, 1000000);
+				scale = (val << 15) | val64;
+			}
+
 			st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_SCALE;
 			st->core.param.sensor_offset.flags =
 				MOTION_SENSE_SET_OFFSET;
 			st->core.param.sensor_offset.temp =
 				EC_MOTION_SENSE_INVALID_CALIB_TEMP;
 			if (idx == 0) {
-				st->core.calib[0].scale = val;
-				st->core.param.sensor_scale.scale[0] = val;
+				st->core.calib[0].scale = scale;
+				st->core.param.sensor_scale.scale[0] = scale;
 				ret = cros_ec_motion_send_host_cmd(
 						&st->core, 0);
 			} else {
-				st->rgb_calib[idx - 1].scale = val;
+				st->rgb_calib[idx - 1].scale = scale;
 				for (i = CROS_EC_SENSOR_X;
 				     i < CROS_EC_SENSOR_MAX_AXIS;
 				     i++)
@@ -414,6 +429,17 @@ static const struct iio_info cros_ec_light_prox_info = {
 	.read_avail = &cros_ec_sensors_core_read_avail,
 };
 
+static void cros_ec_light_clean_callback(void *arg)
+{
+	struct platform_device *pdev = (struct platform_device *)arg;
+	struct cros_ec_sensorhub *sensor_hub =
+		dev_get_drvdata(pdev->dev.parent);
+	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
+	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
+	u8 sensor_num = st->param.info.sensor_num;
+
+	cros_ec_sensorhub_unregister_push_data(sensor_hub, sensor_num + 1);
+}
 
 static int cros_ec_light_prox_probe(struct platform_device *pdev)
 {
@@ -429,8 +455,7 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ret = cros_ec_sensors_core_init(pdev, indio_dev, true,
-					cros_ec_light_capture,
-					cros_ec_light_push_data);
+					cros_ec_light_capture);
 	if (ret)
 		return ret;
 
@@ -483,8 +508,6 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 	channel++;
 
 	if (num_channels > CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
-		u8 sensor_num = state->core.param.info.sensor_num;
-
 		for (i = CROS_EC_SENSOR_X; i < CROS_EC_SENSOR_MAX_AXIS;
 				i++, channel++) {
 			cros_ec_light_channel_common(channel);
@@ -493,15 +516,6 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 			channel->channel2 = IIO_MOD_LIGHT_RED + i;
 			channel->type = IIO_LIGHT;
 		}
-		cros_ec_sensorhub_unregister_push_data(sensor_hub, sensor_num);
-		cros_ec_sensorhub_register_push_data(
-				sensor_hub, sensor_num,
-				indio_dev,
-				cros_ec_light_push_data);
-		cros_ec_sensorhub_register_push_data(
-				sensor_hub, sensor_num + 1,
-				indio_dev,
-				cros_ec_light_push_data_rgb);
 	}
 
 	/* Timestamp */
@@ -514,7 +528,27 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 
 	state->core.read_ec_sensors_data = cros_ec_sensors_read_cmd;
 
-	return devm_iio_device_register(dev, indio_dev);
+	if (num_channels > CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
+		u8 sensor_num = state->core.param.info.sensor_num;
+
+		ret = cros_ec_sensors_core_register(dev, indio_dev,
+				cros_ec_light_push_data);
+		if (ret)
+			return ret;
+
+		ret = cros_ec_sensorhub_register_push_data(
+				sensor_hub, sensor_num + 1,
+				indio_dev,
+				cros_ec_light_push_data_rgb);
+		if (ret)
+			return ret;
+
+		return devm_add_action_or_reset(dev, cros_ec_light_clean_callback,
+				pdev);
+	} else {
+		return cros_ec_sensors_core_register(dev, indio_dev,
+				cros_ec_sensors_push_data);
+	}
 }
 
 static const struct platform_device_id cros_ec_light_prox_ids[] = {

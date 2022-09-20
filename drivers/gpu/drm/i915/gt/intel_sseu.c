@@ -3,8 +3,11 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/string_helpers.h>
+
 #include "i915_drv.h"
-#include "intel_lrc_reg.h"
+#include "intel_engine_regs.h"
+#include "intel_gt_regs.h"
 #include "intel_sseu.h"
 
 void intel_sseu_set_info(struct sseu_dev_info *sseu, u8 max_slices,
@@ -31,7 +34,9 @@ intel_sseu_subslice_total(const struct sseu_dev_info *sseu)
 	return total;
 }
 
-u32 intel_sseu_get_subslices(const struct sseu_dev_info *sseu, u8 slice)
+static u32
+sseu_get_subslices(const struct sseu_dev_info *sseu,
+		   const u8 *subslice_mask, u8 slice)
 {
 	int i, offset = slice * sseu->ss_stride;
 	u32 mask = 0;
@@ -39,18 +44,32 @@ u32 intel_sseu_get_subslices(const struct sseu_dev_info *sseu, u8 slice)
 	GEM_BUG_ON(slice >= sseu->max_slices);
 
 	for (i = 0; i < sseu->ss_stride; i++)
-		mask |= (u32)sseu->subslice_mask[offset + i] <<
-			i * BITS_PER_BYTE;
+		mask |= (u32)subslice_mask[offset + i] << i * BITS_PER_BYTE;
 
 	return mask;
 }
 
+u32 intel_sseu_get_subslices(const struct sseu_dev_info *sseu, u8 slice)
+{
+	return sseu_get_subslices(sseu, sseu->subslice_mask, slice);
+}
+
+static u32 sseu_get_geometry_subslices(const struct sseu_dev_info *sseu)
+{
+	return sseu_get_subslices(sseu, sseu->geometry_subslice_mask, 0);
+}
+
+u32 intel_sseu_get_compute_subslices(const struct sseu_dev_info *sseu)
+{
+	return sseu_get_subslices(sseu, sseu->compute_subslice_mask, 0);
+}
+
 void intel_sseu_set_subslices(struct sseu_dev_info *sseu, int slice,
-			      u32 ss_mask)
+			      u8 *subslice_mask, u32 ss_mask)
 {
 	int offset = slice * sseu->ss_stride;
 
-	memcpy(&sseu->subslice_mask[offset], &ss_mask, sseu->ss_stride);
+	memcpy(&subslice_mask[offset], &ss_mask, sseu->ss_stride);
 }
 
 unsigned int
@@ -100,14 +119,24 @@ static u16 compute_eu_total(const struct sseu_dev_info *sseu)
 	return total;
 }
 
-static void gen11_compute_sseu_info(struct sseu_dev_info *sseu,
-				    u8 s_en, u32 ss_en, u16 eu_en)
+static u32 get_ss_stride_mask(struct sseu_dev_info *sseu, u8 s, u32 ss_en)
+{
+	u32 ss_mask;
+
+	ss_mask = ss_en >> (s * sseu->max_subslices);
+	ss_mask &= GENMASK(sseu->max_subslices - 1, 0);
+
+	return ss_mask;
+}
+
+static void gen11_compute_sseu_info(struct sseu_dev_info *sseu, u8 s_en,
+				    u32 g_ss_en, u32 c_ss_en, u16 eu_en)
 {
 	int s, ss;
 
-	/* ss_en represents entire subslice mask across all slices */
+	/* g_ss_en/c_ss_en represent entire subslice mask across all slices */
 	GEM_BUG_ON(sseu->max_slices * sseu->max_subslices >
-		   sizeof(ss_en) * BITS_PER_BYTE);
+		   sizeof(g_ss_en) * BITS_PER_BYTE);
 
 	for (s = 0; s < sseu->max_slices; s++) {
 		if ((s_en & BIT(s)) == 0)
@@ -115,7 +144,22 @@ static void gen11_compute_sseu_info(struct sseu_dev_info *sseu,
 
 		sseu->slice_mask |= BIT(s);
 
-		intel_sseu_set_subslices(sseu, s, ss_en);
+		/*
+		 * XeHP introduces the concept of compute vs geometry DSS. To
+		 * reduce variation between GENs around subslice usage, store a
+		 * mask for both the geometry and compute enabled masks since
+		 * userspace will need to be able to query these masks
+		 * independently.  Also compute a total enabled subslice count
+		 * for the purposes of selecting subslices to use in a
+		 * particular GEM context.
+		 */
+		intel_sseu_set_subslices(sseu, s, sseu->compute_subslice_mask,
+					 get_ss_stride_mask(sseu, s, c_ss_en));
+		intel_sseu_set_subslices(sseu, s, sseu->geometry_subslice_mask,
+					 get_ss_stride_mask(sseu, s, g_ss_en));
+		intel_sseu_set_subslices(sseu, s, sseu->subslice_mask,
+					 get_ss_stride_mask(sseu, s,
+							    g_ss_en | c_ss_en));
 
 		for (ss = 0; ss < sseu->max_subslices; ss++)
 			if (intel_sseu_has_subslice(sseu, s, ss))
@@ -129,7 +173,7 @@ static void gen12_sseu_info_init(struct intel_gt *gt)
 {
 	struct sseu_dev_info *sseu = &gt->info.sseu;
 	struct intel_uncore *uncore = gt->uncore;
-	u32 dss_en;
+	u32 g_dss_en, c_dss_en = 0;
 	u16 eu_en = 0;
 	u8 eu_en_fuse;
 	u8 s_en;
@@ -160,7 +204,9 @@ static void gen12_sseu_info_init(struct intel_gt *gt)
 		s_en = intel_uncore_read(uncore, GEN11_GT_SLICE_ENABLE) &
 		       GEN11_GT_S_ENA_MASK;
 
-	dss_en = intel_uncore_read(uncore, GEN12_GT_DSS_ENABLE);
+	g_dss_en = intel_uncore_read(uncore, GEN12_GT_GEOMETRY_DSS_ENABLE);
+	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 50))
+		c_dss_en = intel_uncore_read(uncore, GEN12_GT_COMPUTE_DSS_ENABLE);
 
 	/* one bit per pair of EUs */
 	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 50))
@@ -173,7 +219,7 @@ static void gen12_sseu_info_init(struct intel_gt *gt)
 		if (eu_en_fuse & BIT(eu))
 			eu_en |= BIT(eu * 2) | BIT(eu * 2 + 1);
 
-	gen11_compute_sseu_info(sseu, s_en, dss_en, eu_en);
+	gen11_compute_sseu_info(sseu, s_en, g_dss_en, c_dss_en, eu_en);
 
 	/* TGL only supports slice-level power gating */
 	sseu->has_slice_pg = 1;
@@ -199,7 +245,7 @@ static void gen11_sseu_info_init(struct intel_gt *gt)
 	eu_en = ~(intel_uncore_read(uncore, GEN11_EU_DISABLE) &
 		  GEN11_EU_DIS_MASK);
 
-	gen11_compute_sseu_info(sseu, s_en, ss_en, eu_en);
+	gen11_compute_sseu_info(sseu, s_en, ss_en, 0, eu_en);
 
 	/* ICL has no power gating restrictions. */
 	sseu->has_slice_pg = 1;
@@ -240,7 +286,7 @@ static void cherryview_sseu_info_init(struct intel_gt *gt)
 		sseu_set_eus(sseu, 0, 1, ~disabled_mask);
 	}
 
-	intel_sseu_set_subslices(sseu, 0, subslice_mask);
+	intel_sseu_set_subslices(sseu, 0, sseu->subslice_mask, subslice_mask);
 
 	sseu->eu_total = compute_eu_total(sseu);
 
@@ -296,7 +342,8 @@ static void gen9_sseu_info_init(struct intel_gt *gt)
 			/* skip disabled slice */
 			continue;
 
-		intel_sseu_set_subslices(sseu, s, subslice_mask);
+		intel_sseu_set_subslices(sseu, s, sseu->subslice_mask,
+					 subslice_mask);
 
 		eu_disable = intel_uncore_read(uncore, GEN9_EU_DISABLE(s));
 		for (ss = 0; ss < sseu->max_subslices; ss++) {
@@ -408,7 +455,8 @@ static void bdw_sseu_info_init(struct intel_gt *gt)
 			/* skip disabled slice */
 			continue;
 
-		intel_sseu_set_subslices(sseu, s, subslice_mask);
+		intel_sseu_set_subslices(sseu, s, sseu->subslice_mask,
+					 subslice_mask);
 
 		for (ss = 0; ss < sseu->max_subslices; ss++) {
 			u8 eu_disabled_mask;
@@ -485,10 +533,9 @@ static void hsw_sseu_info_init(struct intel_gt *gt)
 	}
 
 	fuse1 = intel_uncore_read(gt->uncore, HSW_PAVP_FUSE1);
-	switch ((fuse1 & HSW_F1_EU_DIS_MASK) >> HSW_F1_EU_DIS_SHIFT) {
+	switch (REG_FIELD_GET(HSW_F1_EU_DIS_MASK, fuse1)) {
 	default:
-		MISSING_CASE((fuse1 & HSW_F1_EU_DIS_MASK) >>
-			     HSW_F1_EU_DIS_SHIFT);
+		MISSING_CASE(REG_FIELD_GET(HSW_F1_EU_DIS_MASK, fuse1));
 		fallthrough;
 	case HSW_F1_EU_DIS_10EUS:
 		sseu->eu_per_subslice = 10;
@@ -506,7 +553,8 @@ static void hsw_sseu_info_init(struct intel_gt *gt)
 			    sseu->eu_per_subslice);
 
 	for (s = 0; s < sseu->max_slices; s++) {
-		intel_sseu_set_subslices(sseu, s, subslice_mask);
+		intel_sseu_set_subslices(sseu, s, sseu->subslice_mask,
+					 subslice_mask);
 
 		for (ss = 0; ss < sseu->max_subslices; ss++) {
 			sseu_set_eus(sseu, s, ss,
@@ -670,21 +718,17 @@ void intel_sseu_dump(const struct sseu_dev_info *sseu, struct drm_printer *p)
 	drm_printf(p, "EU total: %u\n", sseu->eu_total);
 	drm_printf(p, "EU per subslice: %u\n", sseu->eu_per_subslice);
 	drm_printf(p, "has slice power gating: %s\n",
-		   yesno(sseu->has_slice_pg));
+		   str_yes_no(sseu->has_slice_pg));
 	drm_printf(p, "has subslice power gating: %s\n",
-		   yesno(sseu->has_subslice_pg));
-	drm_printf(p, "has EU power gating: %s\n", yesno(sseu->has_eu_pg));
+		   str_yes_no(sseu->has_subslice_pg));
+	drm_printf(p, "has EU power gating: %s\n",
+		   str_yes_no(sseu->has_eu_pg));
 }
 
-void intel_sseu_print_topology(const struct sseu_dev_info *sseu,
-			       struct drm_printer *p)
+static void sseu_print_hsw_topology(const struct sseu_dev_info *sseu,
+				    struct drm_printer *p)
 {
 	int s, ss;
-
-	if (sseu->max_slices == 0) {
-		drm_printf(p, "Unavailable\n");
-		return;
-	}
 
 	for (s = 0; s < sseu->max_slices; s++) {
 		drm_printf(p, "slice%d: %u subslice(s) (0x%08x):\n",
@@ -697,6 +741,36 @@ void intel_sseu_print_topology(const struct sseu_dev_info *sseu,
 			drm_printf(p, "\tsubslice%d: %u EUs (0x%hx)\n",
 				   ss, hweight16(enabled_eus), enabled_eus);
 		}
+	}
+}
+
+static void sseu_print_xehp_topology(const struct sseu_dev_info *sseu,
+				     struct drm_printer *p)
+{
+	u32 g_dss_mask = sseu_get_geometry_subslices(sseu);
+	u32 c_dss_mask = intel_sseu_get_compute_subslices(sseu);
+	int dss;
+
+	for (dss = 0; dss < sseu->max_subslices; dss++) {
+		u16 enabled_eus = sseu_get_eus(sseu, 0, dss);
+
+		drm_printf(p, "DSS_%02d: G:%3s C:%3s, %2u EUs (0x%04hx)\n", dss,
+			   str_yes_no(g_dss_mask & BIT(dss)),
+			   str_yes_no(c_dss_mask & BIT(dss)),
+			   hweight16(enabled_eus), enabled_eus);
+	}
+}
+
+void intel_sseu_print_topology(struct drm_i915_private *i915,
+			       const struct sseu_dev_info *sseu,
+			       struct drm_printer *p)
+{
+	if (sseu->max_slices == 0) {
+		drm_printf(p, "Unavailable\n");
+	} else if (GRAPHICS_VER_FULL(i915) >= IP_VER(12, 50)) {
+		sseu_print_xehp_topology(sseu, p);
+	} else {
+		sseu_print_hsw_topology(sseu, p);
 	}
 }
 

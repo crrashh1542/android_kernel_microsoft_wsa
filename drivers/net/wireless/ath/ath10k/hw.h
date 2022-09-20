@@ -618,6 +618,9 @@ struct ath10k_hw_params {
 	 */
 	bool uart_pin_workaround;
 
+	/* Workaround for the credit size calculation */
+	bool credit_size_workaround;
+
 	/* tx stats support over pktlog */
 	bool tx_stats_over_pktlog;
 
@@ -625,6 +628,14 @@ struct ath10k_hw_params {
 	bool supports_peer_stats_info;
 
 	bool dynamic_sar_support;
+
+	bool hw_restart_disconnect;
+
+	/* limit tx credit */
+	bool tx_credit_limit;
+
+	/* WAR - Delay the unmapping of the buffer */
+	bool delay_unmap_buffer;
 
 	u32 start_retry;
 };

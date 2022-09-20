@@ -10,7 +10,11 @@
 #include "linux/thread_info.h"
 #include "linux/mm.h"
 #include <linux/version.h>
-#if KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+#include <drm/drm_file.h>
+#include <drm/drm_vblank.h>
+#include <drm/drm_ioctl.h>
+#elif KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
 #else
 #include <drm/drmP.h>
 #endif
@@ -26,6 +30,10 @@
 #include <linux/completion.h>
 
 #include <linux/dma-buf.h>
+
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(DMA_BUF);
+#endif
 
 #if KERNEL_VERSION(5, 1, 0) <= LINUX_VERSION_CODE || defined(EL8)
 #include <drm/drm_probe_helper.h>
@@ -566,7 +574,7 @@ struct drm_clip_rect evdi_painter_framebuffer_size(
 	efb = painter->scanout_fb;
 	if (!efb) {
 		if (painter->is_connected)
-			EVDI_DEBUG("Scanout buffer not set.");
+			EVDI_WARN("Scanout buffer not set.");
 		goto unlock;
 	}
 	rect.x1 = 0;
@@ -594,7 +602,7 @@ void evdi_painter_mark_dirty(struct evdi_device *evdi,
 	efb = painter->scanout_fb;
 	if (!efb) {
 		if (painter->is_connected)
-			EVDI_DEBUG("(card%d) Skip clip rect. Scanout buffer not set.\n",
+			EVDI_WARN("(card%d) Skip clip rect. Scanout buffer not set.\n",
 			   evdi->dev_index);
 		goto unlock;
 	}
@@ -671,8 +679,11 @@ void evdi_painter_send_update_ready_if_needed(struct evdi_painter *painter)
 	EVDI_CHECKPT();
 	if (painter) {
 		painter_lock(painter);
-
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE || defined(EL8)
+		if (painter->was_update_requested && painter->num_dirts) {
+#else
 		if (painter->was_update_requested) {
+#endif
 			evdi_painter_send_update_ready(painter);
 			painter->was_update_requested = false;
 		}
@@ -683,7 +694,7 @@ void evdi_painter_send_update_ready_if_needed(struct evdi_painter *painter)
 	}
 }
 
-static const char *dpms_str[] = { "on", "standby", "suspend", "off" };
+static const char * const dpms_str[] = { "on", "standby", "suspend", "off" };
 
 void evdi_painter_dpms_notify(struct evdi_device *evdi, int mode)
 {
@@ -707,7 +718,7 @@ void evdi_painter_dpms_notify(struct evdi_device *evdi, int mode)
 		break;
 	default:
 		mode_str = "unknown";
-	}
+	};
 	EVDI_INFO("(card%d) Notifying display power state: %s",
 		   evdi->dev_index, mode_str);
 	evdi_painter_send_dpms(painter, mode);
@@ -833,7 +844,7 @@ evdi_painter_connect(struct evdi_device *evdi,
 {
 	struct evdi_painter *painter = evdi->painter;
 	struct edid *new_edid = NULL;
-	int expected_edid_size = 0;
+	unsigned int expected_edid_size = 0;
 	char buf[100];
 
 	evdi_log_process(buf, sizeof(buf));
@@ -881,7 +892,8 @@ evdi_painter_connect(struct evdi_device *evdi,
 	painter->is_connected = true;
 	painter->needs_full_modeset = true;
 
-	evdi_add_i2c_adapter(evdi);
+	if (!evdi->i2c_adapter)
+		evdi_add_i2c_adapter(evdi);
 
 	painter_unlock(painter);
 
@@ -1066,9 +1078,9 @@ int evdi_painter_grabpix_ioctl(struct drm_device *drm_dev, void *data,
 		}
 	}
 
-	if (cmd->buf_width != efb->base.width ||
-		cmd->buf_height != efb->base.height) {
-		EVDI_ERROR("Invalid buffer dimension\n");
+	if ((unsigned int)cmd->buf_width != efb->base.width ||
+		(unsigned int)cmd->buf_height != efb->base.height) {
+		EVDI_DEBUG("Invalid buffer dimension\n");
 		err = -EINVAL;
 		goto err_fb;
 	}
@@ -1192,6 +1204,9 @@ void evdi_painter_cleanup(struct evdi_painter *painter)
 	kfree(painter->edid);
 	painter->edid_length = 0;
 	painter->edid = NULL;
+	if (painter->scanout_fb)
+		drm_framebuffer_put(&painter->scanout_fb->base);
+	painter->scanout_fb = NULL;
 
 	evdi_painter_send_vblank(painter);
 
@@ -1300,7 +1315,7 @@ bool evdi_painter_i2c_data_notify(struct evdi_painter *painter, struct i2c_msg *
 	}
 
 	if (msg->addr != I2C_ADDRESS_DDCCI) {
-		EVDI_DEBUG("Ignored ddc/ci data for address 0x%x\n", msg->addr);
+		EVDI_WARN("Ignored ddc/ci data for address 0x%x\n", msg->addr);
 		return false;
 	}
 

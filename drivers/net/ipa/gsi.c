@@ -340,10 +340,10 @@ static u32 gsi_ring_index(struct gsi_ring *ring, u32 offset)
  * completion to be signaled.  Returns true if the command completes
  * or false if it times out.
  */
-static bool
-gsi_command(struct gsi *gsi, u32 reg, u32 val, struct completion *completion)
+static bool gsi_command(struct gsi *gsi, u32 reg, u32 val)
 {
 	unsigned long timeout = msecs_to_jiffies(GSI_CMD_TIMEOUT);
+	struct completion *completion = &gsi->completion;
 
 	reinit_completion(completion);
 
@@ -367,8 +367,6 @@ gsi_evt_ring_state(struct gsi *gsi, u32 evt_ring_id)
 static void gsi_evt_ring_command(struct gsi *gsi, u32 evt_ring_id,
 				 enum gsi_evt_cmd_opcode opcode)
 {
-	struct gsi_evt_ring *evt_ring = &gsi->evt_ring[evt_ring_id];
-	struct completion *completion = &evt_ring->completion;
 	struct device *dev = gsi->dev;
 	bool timeout;
 	u32 val;
@@ -379,7 +377,7 @@ static void gsi_evt_ring_command(struct gsi *gsi, u32 evt_ring_id,
 	val = u32_encode_bits(evt_ring_id, EV_CHID_FMASK);
 	val |= u32_encode_bits(opcode, EV_OPCODE_FMASK);
 
-	timeout = !gsi_command(gsi, GSI_EV_CH_CMD_OFFSET, val, completion);
+	timeout = !gsi_command(gsi, GSI_EV_CH_CMD_OFFSET, val);
 
 	gsi_irq_ev_ctrl_disable(gsi);
 
@@ -479,7 +477,6 @@ static enum gsi_channel_state gsi_channel_state(struct gsi_channel *channel)
 static void
 gsi_channel_command(struct gsi_channel *channel, enum gsi_ch_cmd_opcode opcode)
 {
-	struct completion *completion = &channel->completion;
 	u32 channel_id = gsi_channel_id(channel);
 	struct gsi *gsi = channel->gsi;
 	struct device *dev = gsi->dev;
@@ -491,7 +488,7 @@ gsi_channel_command(struct gsi_channel *channel, enum gsi_ch_cmd_opcode opcode)
 
 	val = u32_encode_bits(channel_id, CH_CHID_FMASK);
 	val |= u32_encode_bits(opcode, CH_OPCODE_FMASK);
-	timeout = !gsi_command(gsi, GSI_CH_CMD_OFFSET, val, completion);
+	timeout = !gsi_command(gsi, GSI_CH_CMD_OFFSET, val);
 
 	gsi_irq_ch_ctrl_disable(gsi);
 
@@ -1075,13 +1072,10 @@ static void gsi_isr_chan_ctrl(struct gsi *gsi)
 
 	while (channel_mask) {
 		u32 channel_id = __ffs(channel_mask);
-		struct gsi_channel *channel;
 
 		channel_mask ^= BIT(channel_id);
 
-		channel = &gsi->channel[channel_id];
-
-		complete(&channel->completion);
+		complete(&gsi->completion);
 	}
 }
 
@@ -1095,13 +1089,10 @@ static void gsi_isr_evt_ctrl(struct gsi *gsi)
 
 	while (event_mask) {
 		u32 evt_ring_id = __ffs(event_mask);
-		struct gsi_evt_ring *evt_ring;
 
 		event_mask ^= BIT(evt_ring_id);
 
-		evt_ring = &gsi->evt_ring[evt_ring_id];
-
-		complete(&evt_ring->completion);
+		complete(&gsi->completion);
 	}
 }
 
@@ -1111,7 +1102,7 @@ gsi_isr_glob_chan_err(struct gsi *gsi, u32 err_ee, u32 channel_id, u32 code)
 {
 	if (code == GSI_OUT_OF_RESOURCES) {
 		dev_err(gsi->dev, "channel %u out of resources\n", channel_id);
-		complete(&gsi->channel[channel_id].completion);
+		complete(&gsi->completion);
 		return;
 	}
 
@@ -1128,7 +1119,7 @@ gsi_isr_glob_evt_err(struct gsi *gsi, u32 err_ee, u32 evt_ring_id, u32 code)
 		struct gsi_evt_ring *evt_ring = &gsi->evt_ring[evt_ring_id];
 		u32 channel_id = gsi_channel_id(evt_ring->channel);
 
-		complete(&evt_ring->completion);
+		complete(&gsi->completion);
 		dev_err(gsi->dev, "evt_ring for channel %u out of resources\n",
 			channel_id);
 		return;
@@ -1188,15 +1179,15 @@ static void gsi_isr_gp_int1(struct gsi *gsi)
 	 * Similarly, we could get an error back when updating flow control
 	 * on a channel because it's not in the proper state.
 	 *
-	 * In either case, we silently ignore a CHANNEL_NOT_RUNNING error
-	 * if we receive it.
+	 * In either case, we silently ignore a INCORRECT_CHANNEL_STATE
+	 * error if we receive it.
 	 */
 	val = ioread32(gsi->virt + GSI_CNTXT_SCRATCH_0_OFFSET);
 	result = u32_get_bits(val, GENERIC_EE_RESULT_FMASK);
 
 	switch (result) {
 	case GENERIC_EE_SUCCESS:
-	case GENERIC_EE_CHANNEL_NOT_RUNNING:
+	case GENERIC_EE_INCORRECT_CHANNEL_STATE:
 		gsi->result = 0;
 		break;
 
@@ -1376,9 +1367,10 @@ static void gsi_evt_ring_rx_update(struct gsi_evt_ring *evt_ring, u32 index)
 	struct gsi_event *event_done;
 	struct gsi_event *event;
 	struct gsi_trans *trans;
+	u32 trans_count = 0;
 	u32 byte_count = 0;
-	u32 old_index;
 	u32 event_avail;
+	u32 old_index;
 
 	trans_info = &channel->trans_info;
 
@@ -1399,6 +1391,7 @@ static void gsi_evt_ring_rx_update(struct gsi_evt_ring *evt_ring, u32 index)
 	do {
 		trans->len = __le16_to_cpu(event->len);
 		byte_count += trans->len;
+		trans_count++;
 
 		/* Move on to the next event and transaction */
 		if (--event_avail)
@@ -1410,7 +1403,7 @@ static void gsi_evt_ring_rx_update(struct gsi_evt_ring *evt_ring, u32 index)
 
 	/* We record RX bytes when they are received */
 	channel->byte_count += byte_count;
-	channel->trans_count++;
+	channel->trans_count += trans_count;
 }
 
 /* Initialize a ring, including allocating DMA memory for its entries */
@@ -1499,12 +1492,8 @@ static struct gsi_trans *gsi_channel_update(struct gsi_channel *channel)
 	if (index == ring->index % ring->count)
 		return NULL;
 
-	/* Get the transaction for the latest completed event.  Take a
-	 * reference to keep it from completing before we give the events
-	 * for this and previous transactions back to the hardware.
-	 */
+	/* Get the transaction for the latest completed event. */
 	trans = gsi_event_trans(channel, gsi_ring_virt(ring, index - 1));
-	refcount_inc(&trans->refcount);
 
 	/* For RX channels, update each completed transaction with the number
 	 * of bytes that were actually received.  For TX channels, report
@@ -1519,9 +1508,7 @@ static struct gsi_trans *gsi_channel_update(struct gsi_channel *channel)
 	gsi_trans_move_complete(trans);
 
 	/* Tell the hardware we've handled these events */
-	gsi_evt_ring_doorbell(channel->gsi, channel->evt_ring_id, index);
-
-	gsi_trans_free(trans);
+	gsi_evt_ring_doorbell(gsi, evt_ring_id, index);
 
 	return gsi_channel_trans_complete(channel);
 }
@@ -1662,7 +1649,6 @@ static int gsi_generic_command(struct gsi *gsi, u32 channel_id,
 			       enum gsi_generic_cmd_opcode opcode,
 			       u8 params)
 {
-	struct completion *completion = &gsi->completion;
 	bool timeout;
 	u32 val;
 
@@ -1689,7 +1675,7 @@ static int gsi_generic_command(struct gsi *gsi, u32 channel_id,
 	val |= u32_encode_bits(GSI_EE_MODEM, GENERIC_EE_FMASK);
 	val |= u32_encode_bits(params, GENERIC_PARAMS_FMASK);
 
-	timeout = !gsi_command(gsi, GSI_GENERIC_CMD_OFFSET, val, completion);
+	timeout = !gsi_command(gsi, GSI_GENERIC_CMD_OFFSET, val);
 
 	/* Disable the GP_INT1 IRQ type again */
 	iowrite32(BIT(ERROR_INT), gsi->virt + GSI_CNTXT_GLOB_IRQ_EN_OFFSET);
@@ -2015,18 +2001,6 @@ static void gsi_channel_evt_ring_exit(struct gsi_channel *channel)
 	gsi_evt_ring_id_free(gsi, evt_ring_id);
 }
 
-/* Init function for event rings; there is no gsi_evt_ring_exit() */
-static void gsi_evt_ring_init(struct gsi *gsi)
-{
-	u32 evt_ring_id = 0;
-
-	gsi->event_bitmap = gsi_event_bitmap_init(GSI_EVT_RING_COUNT_MAX);
-	gsi->ieob_enabled_bitmap = 0;
-	do
-		init_completion(&gsi->evt_ring[evt_ring_id].completion);
-	while (++evt_ring_id < GSI_EVT_RING_COUNT_MAX);
-}
-
 static bool gsi_channel_data_valid(struct gsi *gsi,
 				   const struct ipa_gsi_endpoint_data *data)
 {
@@ -2109,7 +2083,6 @@ static int gsi_channel_init_one(struct gsi *gsi,
 	channel->tlv_count = data->channel.tlv_count;
 	channel->tre_count = tre_count;
 	channel->event_count = data->channel.event_count;
-	init_completion(&channel->completion);
 
 	ret = gsi_channel_evt_ring_init(channel);
 	if (ret)
@@ -2169,7 +2142,8 @@ static int gsi_channel_init(struct gsi *gsi, u32 count,
 	/* IPA v4.2 requires the AP to allocate channels for the modem */
 	modem_alloc = gsi->version == IPA_VERSION_4_2;
 
-	gsi_evt_ring_init(gsi);			/* No matching exit required */
+	gsi->event_bitmap = gsi_event_bitmap_init(GSI_EVT_RING_COUNT_MAX);
+	gsi->ieob_enabled_bitmap = 0;
 
 	/* The endpoint data array is indexed by endpoint name */
 	for (i = 0; i < count; i++) {

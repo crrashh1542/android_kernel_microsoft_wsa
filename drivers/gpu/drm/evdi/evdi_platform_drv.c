@@ -144,7 +144,7 @@ int evdi_platform_device_add(struct device *device, struct device *parent)
 
 int evdi_platform_add_devices(struct device *device, unsigned int val)
 {
-	int dev_count = evdi_platform_device_count(device);
+	unsigned int dev_count = evdi_platform_device_count(device);
 
 	if (val == 0) {
 		EVDI_WARN("Adding 0 devices has no effect\n");
@@ -155,7 +155,7 @@ int evdi_platform_add_devices(struct device *device, unsigned int val)
 		return -EINVAL;
 	}
 
-	EVDI_DEBUG("Increasing device count to %u\n", dev_count + val);
+	EVDI_INFO("Increasing device count to %u\n", dev_count + val);
 	while (val-- && evdi_platform_device_add(device, NULL) == 0)
 		;
 	return 0;
@@ -180,9 +180,9 @@ void evdi_platform_remove_all_devices(struct device *device)
 	evdi_platform_drv_context_unlock(ctx);
 }
 
-int evdi_platform_device_count(struct device *device)
+unsigned int evdi_platform_device_count(struct device *device)
 {
-	int count = 0;
+	unsigned int count = 0;
 	struct evdi_platform_drv_context *ctx = NULL;
 
 	ctx = (struct evdi_platform_drv_context *)dev_get_drvdata(device);

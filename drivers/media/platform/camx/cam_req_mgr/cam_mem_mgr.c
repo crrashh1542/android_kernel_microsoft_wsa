@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <asm/cacheflush.h>
 #include <linux/dma-buf.h>
+#include <linux/iosys-map.h>
 
 #include "cam_buf_mgr.h"
 #include "cam_req_mgr_util.h"
@@ -47,7 +48,7 @@ static int cam_mem_util_map_cpu_va(struct dma_buf *dmabuf,
 	uintptr_t *vaddr,
 	size_t *len)
 {
-	struct dma_buf_map map;
+	struct iosys_map map;
 	void *addr;
 	int rc;
 
@@ -82,7 +83,7 @@ static int cam_mem_util_unmap_cpu_va(struct dma_buf *dmabuf,
 	uint64_t vaddr)
 {
 	int rc;
-	struct dma_buf_map map = DMA_BUF_MAP_INIT_VADDR((void *)vaddr);
+	struct iosys_map map = IOSYS_MAP_INIT_VADDR((void *)vaddr);
 
 	dma_buf_vunmap(dmabuf, &map);
 
@@ -740,44 +741,51 @@ static int cam_mem_util_unmap(int32_t idx,
 	return rc;
 }
 
-int cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
+static int __cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 {
 	int idx;
 	int rc;
+
+	lockdep_assert_held(&tbl.m_lock);
 
 	if (!cmd) {
 		CAM_ERR(CAM_MEM, "Invalid argument");
 		return -EINVAL;
 	}
 
-	mutex_lock(&tbl.m_lock);
 	idx = CAM_MEM_MGR_GET_HDL_IDX(cmd->buf_handle);
 	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0) {
 		CAM_ERR(CAM_MEM, "Incorrect index %d extracted from mem handle",
 			idx);
-		rc = -EINVAL;
-		goto err_mutex_unlock;
+		return -EINVAL;
 	}
 
 	if (!tbl.bufq[idx].active) {
 		CAM_ERR(CAM_MEM, "Released buffer state should be active");
-		rc = -EINVAL;
-		goto err_mutex_unlock;
+		return -EINVAL;
 	}
 
 	if (tbl.bufq[idx].buf_handle != cmd->buf_handle) {
 		CAM_ERR(CAM_MEM,
 			"Released buf handle %d not matching within table %d, idx=%d",
 			cmd->buf_handle, tbl.bufq[idx].buf_handle, idx);
-		rc = -EINVAL;
-		goto err_mutex_unlock;
+		return -EINVAL;
 	}
 
 	CAM_DBG(CAM_MEM, "Releasing hdl = %x, idx = %d", cmd->buf_handle, idx);
 	rc = cam_mem_util_unmap(idx, CAM_SMMU_MAPPING_USER);
 
-err_mutex_unlock:
+	return rc;
+}
+
+int cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
+{
+	int rc;
+
+	mutex_lock(&tbl.m_lock);
+	rc =  __cam_mem_mgr_release(cmd);
 	mutex_unlock(&tbl.m_lock);
+
 	return rc;
 }
 
@@ -1000,9 +1008,9 @@ void cam_mem_mgr_close(void)
                         CAM_DBG(CAM_MEM, "Active buffer idx=%d", i);
 			cmd.buf_handle = tbl.bufq[i].buf_handle;
 			mutex_lock(&tbl.bufq[i].q_lock);
-			mutex_unlock(&tbl.m_lock);
-			cam_mem_mgr_release(&cmd);
+			__cam_mem_mgr_release(&cmd);
 			mutex_unlock(&tbl.bufq[i].q_lock);
+			mutex_unlock(&tbl.m_lock);
 		} else {
 			mutex_unlock(&tbl.m_lock);
 		}

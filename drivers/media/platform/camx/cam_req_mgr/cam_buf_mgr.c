@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-buf.h>
+#include <linux/iosys-map.h>
 #include <media/cam_req_mgr.h>
 
 #include "cam_req_mgr_dev.h"
@@ -401,7 +402,7 @@ static void _op_dma_buf_release(struct dma_buf *dmabuf)
 	kfree(dmabuf->exp_name);
 }
 
-static int _op_dma_buf_vmap(struct dma_buf *dmabuf, struct dma_buf_map *map)
+static int _op_dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map)
 {
 	struct cmm_buffer *buffer = dmabuf->priv;
 	void *vaddr = ERR_PTR(-EINVAL);
@@ -410,12 +411,12 @@ static int _op_dma_buf_vmap(struct dma_buf *dmabuf, struct dma_buf_map *map)
 	vaddr = _cmm_dma_kmap_get(buffer);
 	mutex_unlock(&buffer->b_lock);
 
-	dma_buf_map_set_vaddr(map, vaddr);
+	iosys_map_set_vaddr(map, vaddr);
 
 	return PTR_ERR_OR_ZERO(vaddr);
 }
 
-static void _op_dma_buf_vunmap(struct dma_buf *dmabuf, struct dma_buf_map *map)
+static void _op_dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map)
 {
 	struct cmm_buffer *buffer = dmabuf->priv;
 

@@ -213,6 +213,7 @@ struct mga_device {
 	struct drm_device		base;
 	unsigned long			flags;
 
+	struct mutex			rmmio_lock; /* Protects access to rmmio */
 	resource_size_t			rmmio_base;
 	resource_size_t			rmmio_size;
 	void __iomem			*rmmio;
@@ -223,8 +224,6 @@ struct mga_device {
 	size_t				vram_fb_available;
 
 	enum mga_type			type;
-
-	int fb_mtrr;
 
 	union {
 		struct {

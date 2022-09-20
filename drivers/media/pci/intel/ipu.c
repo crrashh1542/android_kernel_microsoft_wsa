@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (C) 2013 - 2020 Intel Corporation
+// Copyright (C) 2013 - 2022 Intel Corporation
 
+#include <linux/acpi.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
@@ -288,7 +289,9 @@ static int ipu_pci_config_setup(struct pci_dev *dev)
 	pci_read_config_word(dev, PCI_COMMAND, &pci_command);
 	pci_command |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
 	pci_write_config_word(dev, PCI_COMMAND, pci_command);
-	if (ipu_ver == IPU_VER_6EP) {
+
+	/* no msi pci capability for IPU6EP */
+	if (ipu_ver == IPU_VER_6EP || ipu_ver == IPU_VER_6EP_MTL) {
 		/* likely do nothing as msi not enabled by default */
 		pci_disable_msi(dev);
 		return 0;
@@ -362,7 +365,13 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	void __iomem *psys_base = NULL;
 	struct ipu_buttress_ctrl *isys_ctrl = NULL, *psys_ctrl = NULL;
 	unsigned int dma_mask = IPU_DMA_MASK;
+	struct fwnode_handle *fwnode = dev_fwnode(&pdev->dev);
+	u32 is_es;
 	int rval;
+	u32 val;
+
+	if (!fwnode || fwnode_property_read_u32(fwnode, "is_es", &is_es))
+		is_es = 0;
 
 	isp = devm_kzalloc(&pdev->dev, sizeof(*isp), GFP_KERNEL);
 	if (!isp)
@@ -415,9 +424,15 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		ipu_ver = IPU_VER_6SE;
 		isp->cpd_fw_name = IPU6SE_FIRMWARE_NAME;
 		break;
-	case IPU6EP_PCI_ID:
+	case IPU6EP_ADL_P_PCI_ID:
+	case IPU6EP_ADL_N_PCI_ID:
+	case IPU6EP_RPL_P_PCI_ID:
 		ipu_ver = IPU_VER_6EP;
-		isp->cpd_fw_name = IPU6EP_FIRMWARE_NAME;
+		isp->cpd_fw_name = is_es ? IPU6EPES_FIRMWARE_NAME : IPU6EP_FIRMWARE_NAME;
+		break;
+	case IPU6EP_MTL_PCI_ID:
+		ipu_ver = IPU_VER_6EP_MTL;
+		isp->cpd_fw_name = IPU6EPMTL_FIRMWARE_NAME;
 		break;
 	default:
 		WARN(1, "Unsupported IPU device");
@@ -432,10 +447,7 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dev_dbg(&pdev->dev, "isys_base: 0x%lx\n", (unsigned long)isys_base);
 	dev_dbg(&pdev->dev, "psys_base: 0x%lx\n", (unsigned long)psys_base);
 
-	rval = pci_set_dma_mask(pdev, DMA_BIT_MASK(dma_mask));
-	if (!rval)
-		rval = pci_set_consistent_dma_mask(pdev,
-						   DMA_BIT_MASK(dma_mask));
+	rval = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(dma_mask));
 	if (rval) {
 		dev_err(&pdev->dev, "Failed to set DMA mask (%d)\n", rval);
 		return rval;
@@ -576,7 +588,10 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Configure the arbitration mechanisms for VC requests */
 	ipu_configure_vc_mechanism(isp);
 
-	dev_info(&pdev->dev, "IPU driver version %d.%d\n", IPU_MAJOR_VERSION,
+	val = readl(isp->base + BUTTRESS_REG_SKU);
+	dev_info(&pdev->dev, "IPU%u-v%u driver version %d.%d\n",
+		 val & 0xf, (val >> 4) & 0x7,
+		 IPU_MAJOR_VERSION,
 		 IPU_MINOR_VERSION);
 
 	return 0;
@@ -750,7 +765,10 @@ static const struct dev_pm_ops ipu_pm_ops = {
 static const struct pci_device_id ipu_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6SE_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_P_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_N_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_RPL_P_PCI_ID)},
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_MTL_PCI_ID)},
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);

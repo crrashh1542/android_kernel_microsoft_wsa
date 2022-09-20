@@ -49,6 +49,7 @@ enum btrtl_chip_id {
 	CHIP_ID_8822C = 13,
 	CHIP_ID_8761B,
 	CHIP_ID_8852A = 18,
+	CHIP_ID_8852C = 25,
 };
 
 struct id_table {
@@ -172,6 +173,13 @@ static const struct id_table ic_id_table[] = {
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8852au_fw.bin",
 	  .cfg_name = "rtl_bt/rtl8852au_config" },
+
+	/* 8852C */
+	{ IC_INFO(RTL_ROM_LMP_8852A, 0xc, 0xc, HCI_USB),
+	  .config_needed = false,
+	  .has_rom_version = true,
+	  .fw_name  = "rtl_bt/rtl8852cu_fw.bin",
+	  .cfg_name = "rtl_bt/rtl8852cu_config" },
 	};
 
 static const struct id_table *btrtl_match_ic(u16 lmp_subver, u16 hci_rev,
@@ -280,6 +288,7 @@ static int rtlbt_parse_firmware(struct hci_dev *hdev,
 		{ RTL_ROM_LMP_8822B, 13 },	/* 8822C */
 		{ RTL_ROM_LMP_8761A, 14 },	/* 8761B */
 		{ RTL_ROM_LMP_8852A, 18 },	/* 8852A */
+		{ RTL_ROM_LMP_8852A, 25 },	/* 8852C */
 	};
 
 	min_size = sizeof(struct rtl_epatch_header) + sizeof(extension_sig) + 3;
@@ -683,15 +692,10 @@ out_free:
 		}
 	}
 
-	/* The following chips supports the Microsoft vendor extension,
-	 * therefore set the corresponding VsMsftOpCode.
+	/* Both RTL8822B and RTL8852A support only one tracking device
+	 * per condition in firmware, the use of MSFT HCI extension is
+	 * eliminated. See b/200993792 for more details.
 	 */
-	switch (lmp_subver) {
-	case RTL_ROM_LMP_8822B:
-	case RTL_ROM_LMP_8852A:
-		hci_set_msft_opcode(hdev, 0xFCF0);
-		break;
-	}
 
 	return btrtl_dev;
 
@@ -751,8 +755,10 @@ void btrtl_set_quirks(struct hci_dev *hdev, struct btrtl_device_info *btrtl_dev)
 		set_bit(HCI_QUIRK_DISABLE_REMOTE_WAKE, &hdev->quirks);
 		fallthrough;
 	case CHIP_ID_8852A:
+	case CHIP_ID_8852C:
 		set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
 		set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+		hci_set_aosp_capable(hdev);
 		break;
 	default:
 		rtl_dev_dbg(hdev, "Central-peripheral role not enabled.");
@@ -927,3 +933,5 @@ MODULE_FIRMWARE("rtl_bt/rtl8822b_fw.bin");
 MODULE_FIRMWARE("rtl_bt/rtl8822b_config.bin");
 MODULE_FIRMWARE("rtl_bt/rtl8852au_fw.bin");
 MODULE_FIRMWARE("rtl_bt/rtl8852au_config.bin");
+MODULE_FIRMWARE("rtl_bt/rtl8852cu_fw.bin");
+MODULE_FIRMWARE("rtl_bt/rtl8852cu_config.bin");

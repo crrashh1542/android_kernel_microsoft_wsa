@@ -1076,14 +1076,18 @@ static int brcmuart_probe(struct platform_device *pdev)
 		priv->rx_bufs = dma_alloc_coherent(dev,
 						   priv->rx_size,
 						   &priv->rx_addr, GFP_KERNEL);
-		if (!priv->rx_bufs)
+		if (!priv->rx_bufs) {
+			ret = -EINVAL;
 			goto err;
+		}
 		priv->tx_size = UART_XMIT_SIZE;
 		priv->tx_buf = dma_alloc_coherent(dev,
 						  priv->tx_size,
 						  &priv->tx_addr, GFP_KERNEL);
-		if (!priv->tx_buf)
+		if (!priv->tx_buf) {
+			ret = -EINVAL;
 			goto err;
+		}
 	}
 
 	ret = serial8250_register_8250_port(&up);
@@ -1097,6 +1101,7 @@ static int brcmuart_probe(struct platform_device *pdev)
 	if (priv->dma_enabled) {
 		dma_irq = platform_get_irq_byname(pdev,  "dma");
 		if (dma_irq < 0) {
+			ret = dma_irq;
 			dev_err(dev, "no IRQ resource info\n");
 			goto err1;
 		}
@@ -1116,7 +1121,7 @@ err1:
 err:
 	brcmuart_free_bufs(dev, priv);
 	brcmuart_arbitration(priv, 0);
-	return -ENODEV;
+	return ret;
 }
 
 static int brcmuart_remove(struct platform_device *pdev)
@@ -1136,16 +1141,19 @@ static int __maybe_unused brcmuart_suspend(struct device *dev)
 	struct brcmuart_priv *priv = dev_get_drvdata(dev);
 	struct uart_8250_port *up = serial8250_get_port(priv->line);
 	struct uart_port *port = &up->port;
-
-	serial8250_suspend_port(priv->line);
-	clk_disable_unprepare(priv->baud_mux_clk);
+	unsigned long flags;
 
 	/*
 	 * This will prevent resume from enabling RTS before the
-	 *  baud rate has been resored.
+	 *  baud rate has been restored.
 	 */
+	spin_lock_irqsave(&port->lock, flags);
 	priv->saved_mctrl = port->mctrl;
-	port->mctrl = 0;
+	port->mctrl &= ~TIOCM_RTS;
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	serial8250_suspend_port(priv->line);
+	clk_disable_unprepare(priv->baud_mux_clk);
 
 	return 0;
 }
@@ -1155,6 +1163,7 @@ static int __maybe_unused brcmuart_resume(struct device *dev)
 	struct brcmuart_priv *priv = dev_get_drvdata(dev);
 	struct uart_8250_port *up = serial8250_get_port(priv->line);
 	struct uart_port *port = &up->port;
+	unsigned long flags;
 	int ret;
 
 	ret = clk_prepare_enable(priv->baud_mux_clk);
@@ -1177,7 +1186,15 @@ static int __maybe_unused brcmuart_resume(struct device *dev)
 		start_rx_dma(serial8250_get_port(priv->line));
 	}
 	serial8250_resume_port(priv->line);
-	port->mctrl = priv->saved_mctrl;
+
+	if (priv->saved_mctrl & TIOCM_RTS) {
+		/* Restore RTS */
+		spin_lock_irqsave(&port->lock, flags);
+		port->mctrl |= TIOCM_RTS;
+		port->ops->set_mctrl(port, port->mctrl);
+		spin_unlock_irqrestore(&port->lock, flags);
+	}
+
 	return 0;
 }
 

@@ -3331,18 +3331,16 @@ static int sja1105_probe(struct spi_device *spi)
 	return dsa_register_switch(priv->ds);
 }
 
-static int sja1105_remove(struct spi_device *spi)
+static void sja1105_remove(struct spi_device *spi)
 {
 	struct sja1105_private *priv = spi_get_drvdata(spi);
 
 	if (!priv)
-		return 0;
+		return;
 
 	dsa_unregister_switch(priv->ds);
 
 	spi_set_drvdata(spi, NULL);
-
-	return 0;
 }
 
 static void sja1105_shutdown(struct spi_device *spi)
@@ -3372,12 +3370,28 @@ static const struct of_device_id sja1105_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, sja1105_dt_ids);
 
+static const struct spi_device_id sja1105_spi_ids[] = {
+	{ "sja1105e" },
+	{ "sja1105t" },
+	{ "sja1105p" },
+	{ "sja1105q" },
+	{ "sja1105r" },
+	{ "sja1105s" },
+	{ "sja1110a" },
+	{ "sja1110b" },
+	{ "sja1110c" },
+	{ "sja1110d" },
+	{ },
+};
+MODULE_DEVICE_TABLE(spi, sja1105_spi_ids);
+
 static struct spi_driver sja1105_driver = {
 	.driver = {
 		.name  = "sja1105",
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(sja1105_dt_ids),
 	},
+	.id_table = sja1105_spi_ids,
 	.probe  = sja1105_probe,
 	.remove = sja1105_remove,
 	.shutdown = sja1105_shutdown,

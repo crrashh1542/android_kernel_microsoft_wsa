@@ -132,6 +132,8 @@ static inline void buddy_cpu_touch_watchdog(void) {}
 static inline void watchdog_check_hardlockup(void) {}
 #endif
 
+void lockup_detector_reconfigure(void);
+
 /**
  * touch_nmi_watchdog - restart NMI watchdog timeout.
  *

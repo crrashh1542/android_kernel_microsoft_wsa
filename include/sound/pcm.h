@@ -398,6 +398,8 @@ struct snd_pcm_runtime {
 	wait_queue_head_t tsleep;	/* transfer sleep */
 	struct fasync_struct *fasync;
 	bool stop_operating;		/* sync_stop will be called */
+	struct mutex buffer_mutex;	/* protect for buffer changes */
+	atomic_t buffer_accessing;	/* >0: in r/w operation, <0: blocked */
 
 	/* -- private section -- */
 	void *private_data;
@@ -614,6 +616,7 @@ void snd_pcm_stream_unlock(struct snd_pcm_substream *substream);
 void snd_pcm_stream_lock_irq(struct snd_pcm_substream *substream);
 void snd_pcm_stream_unlock_irq(struct snd_pcm_substream *substream);
 unsigned long _snd_pcm_stream_lock_irqsave(struct snd_pcm_substream *substream);
+unsigned long _snd_pcm_stream_lock_irqsave_nested(struct snd_pcm_substream *substream);
 
 /**
  * snd_pcm_stream_lock_irqsave - Lock the PCM stream
@@ -631,6 +634,20 @@ unsigned long _snd_pcm_stream_lock_irqsave(struct snd_pcm_substream *substream);
 	} while (0)
 void snd_pcm_stream_unlock_irqrestore(struct snd_pcm_substream *substream,
 				      unsigned long flags);
+
+/**
+ * snd_pcm_stream_lock_irqsave_nested - Single-nested PCM stream locking
+ * @substream: PCM substream
+ * @flags: irq flags
+ *
+ * This locks the PCM stream like snd_pcm_stream_lock_irqsave() but with
+ * the single-depth lockdep subclass.
+ */
+#define snd_pcm_stream_lock_irqsave_nested(substream, flags)		\
+	do {								\
+		typecheck(unsigned long, flags);			\
+		flags = _snd_pcm_stream_lock_irqsave_nested(substream); \
+	} while (0)
 
 /**
  * snd_pcm_group_for_each_entry - iterate over the linked substreams
@@ -1373,6 +1390,20 @@ static inline void snd_pcm_limit_isa_dma_size(int dma, size_t *max)
 const char *snd_pcm_format_name(snd_pcm_format_t format);
 
 /**
+ * snd_pcm_direction_name - Get a string naming the direction of a stream
+ * @direction: Stream's direction, one of SNDRV_PCM_STREAM_XXX
+ *
+ * Returns a string naming the direction of the stream.
+ */
+static inline const char *snd_pcm_direction_name(int direction)
+{
+	if (direction == SNDRV_PCM_STREAM_PLAYBACK)
+		return "Playback";
+	else
+		return "Capture";
+}
+
+/**
  * snd_pcm_stream_str - Get a string naming the direction of a stream
  * @substream: the pcm substream instance
  *
@@ -1380,10 +1411,7 @@ const char *snd_pcm_format_name(snd_pcm_format_t format);
  */
 static inline const char *snd_pcm_stream_str(struct snd_pcm_substream *substream)
 {
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		return "Playback";
-	else
-		return "Capture";
+	return snd_pcm_direction_name(substream->stream);
 }
 
 /*
