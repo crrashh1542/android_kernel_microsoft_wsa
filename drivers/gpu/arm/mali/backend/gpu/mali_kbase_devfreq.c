@@ -466,7 +466,7 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 	struct device_node *opp_node = of_parse_phandle(kbdev->dev->of_node,
 			"operating-points-v2", 0);
 	struct nvmem_cell *cell;
-	u32 *buf;
+	u8 *buf;
 	char opp_microvolt_name[30] = "opp-microvolt";
 	u32 table_mapping[MAX_TABS];
 	int table_count;
@@ -485,7 +485,7 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 		goto skip_volt_bin;
 	}
 
-	buf = (u32 *)nvmem_cell_read(cell, &len);
+	buf = (u8 *)nvmem_cell_read(cell, &len);
 	nvmem_cell_put(cell);
 
 	if (IS_ERR(buf)) {
