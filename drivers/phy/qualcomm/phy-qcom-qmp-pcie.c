@@ -1304,8 +1304,6 @@ struct qmp_phy;
 
 /* struct qmp_phy_cfg - per-PHY initialization config */
 struct qmp_phy_cfg {
-	/* phy-type - PCIE/UFS/USB */
-	unsigned int type;
 	/* number of lanes provided by phy */
 	int nlanes;
 
@@ -1470,7 +1468,6 @@ static const char * const sdm845_pciephy_reset_l[] = {
 };
 
 static const struct qmp_phy_cfg ipq8074_pciephy_cfg = {
-	.type			= PHY_TYPE_PCIE,
 	.nlanes			= 1,
 
 	.serdes_tbl		= ipq8074_pcie_serdes_tbl,
@@ -1499,7 +1496,6 @@ static const struct qmp_phy_cfg ipq8074_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg ipq8074_pciephy_gen3_cfg = {
-	.type			= PHY_TYPE_PCIE,
 	.nlanes			= 1,
 
 	.serdes_tbl		= ipq8074_pcie_gen3_serdes_tbl,
@@ -1530,7 +1526,6 @@ static const struct qmp_phy_cfg ipq8074_pciephy_gen3_cfg = {
 };
 
 static const struct qmp_phy_cfg ipq6018_pciephy_cfg = {
-	.type			= PHY_TYPE_PCIE,
 	.nlanes			= 1,
 
 	.serdes_tbl		= ipq6018_pcie_serdes_tbl,
@@ -1560,7 +1555,6 @@ static const struct qmp_phy_cfg ipq6018_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sdm845_qmp_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 1,
 
 	.serdes_tbl		= sdm845_qmp_pcie_serdes_tbl,
@@ -1591,7 +1585,6 @@ static const struct qmp_phy_cfg sdm845_qmp_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sdm845_qhp_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 1,
 
 	.serdes_tbl		= sdm845_qhp_pcie_serdes_tbl,
@@ -1620,7 +1613,6 @@ static const struct qmp_phy_cfg sdm845_qhp_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sm8250_qmp_gen3x1_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 1,
 
 	.serdes_tbl		= sm8250_qmp_pcie_serdes_tbl,
@@ -1659,7 +1651,6 @@ static const struct qmp_phy_cfg sm8250_qmp_gen3x1_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sm8250_qmp_gen3x2_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 2,
 
 	.serdes_tbl		= sm8250_qmp_pcie_serdes_tbl,
@@ -1699,7 +1690,6 @@ static const struct qmp_phy_cfg sm8250_qmp_gen3x2_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg msm8998_pciephy_cfg = {
-	.type			= PHY_TYPE_PCIE,
 	.nlanes			= 1,
 
 	.serdes_tbl		= msm8998_pcie_serdes_tbl,
@@ -1724,7 +1714,6 @@ static const struct qmp_phy_cfg msm8998_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sc8180x_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 1,
 
 	.serdes_tbl		= sc8180x_qmp_pcie_serdes_tbl,
@@ -1754,7 +1743,6 @@ static const struct qmp_phy_cfg sc8180x_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sdx55_qmp_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 2,
 
 	.serdes_tbl		= sdx55_qmp_pcie_serdes_tbl,
@@ -1786,7 +1774,6 @@ static const struct qmp_phy_cfg sdx55_qmp_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sm8450_qmp_gen3x1_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 1,
 
 	.serdes_tbl		= sm8450_qmp_gen3x1_pcie_serdes_tbl,
@@ -1817,7 +1804,6 @@ static const struct qmp_phy_cfg sm8450_qmp_gen3x1_pciephy_cfg = {
 };
 
 static const struct qmp_phy_cfg sm8450_qmp_gen4x2_pciephy_cfg = {
-	.type = PHY_TYPE_PCIE,
 	.nlanes = 2,
 
 	.serdes_tbl		= sm8450_qmp_gen4x2_pcie_serdes_tbl,
