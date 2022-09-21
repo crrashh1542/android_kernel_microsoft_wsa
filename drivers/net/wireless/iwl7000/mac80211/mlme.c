@@ -6943,6 +6943,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	       cfg80211_req_ap_mld_addr(req) ?: req->bss->bssid,
 	       ETH_ALEN);
 	auth_data->bss = req->bss;
+	auth_data->link_id = cfg80211_req_link_id(req);
 
 	if (iwl7000_get_auth_data_len(req) >= 4) {
 		if (req->auth_type == NL80211_AUTHTYPE_SAE) {
@@ -6961,7 +6962,8 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	 * removal and re-addition of the STA entry in
 	 * ieee80211_prep_connection().
 	 */
-	cont_auth = ifmgd->auth_data && req->bss == ifmgd->auth_data->bss;
+	cont_auth = ifmgd->auth_data && req->bss == ifmgd->auth_data->bss &&
+		    ifmgd->auth_data->link_id == cfg80211_req_link_id(req);
 
 	if (req->ie && req->ie_len) {
 		memcpy(&auth_data->data[auth_data->data_len],
@@ -7320,7 +7322,8 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 
 		/* keep sta info, bssid if matching */
 		match = ether_addr_equal(ifmgd->auth_data->ap_addr,
-					 assoc_data->ap_addr);
+					 assoc_data->ap_addr) &&
+			ifmgd->auth_data->link_id == cfg80211_req_link_id(req);
 		ieee80211_destroy_auth_data(sdata, match);
 	}
 
