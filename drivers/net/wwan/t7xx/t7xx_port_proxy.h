@@ -95,6 +95,10 @@ extern struct port_ops wwan_sub_port_ops;
 extern struct port_ops ctl_port_ops;
 extern struct port_ops devlink_port_ops;
 
+#ifdef CONFIG_WWAN_DEBUGFS
+extern struct port_ops t7xx_trace_port_ops;
+#endif
+
 void t7xx_port_proxy_reset(struct port_proxy *port_prox);
 void t7xx_port_proxy_uninit(struct port_proxy *port_prox);
 int t7xx_port_proxy_init(struct t7xx_modem *md);
