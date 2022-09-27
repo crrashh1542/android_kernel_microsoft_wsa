@@ -748,6 +748,19 @@ struct iwl_dram_data {
 };
 
 /**
+ * @drams: array of several DRAM areas that contains the
+ *	pnvm/power reduction table payloads.
+ * @n_regions: number of DRAM regions that were allocated
+ * @prph_scrath_mem_desc: points to a structure allocated in dram,
+ *	designed to show FW where all the payloads are.
+ */
+struct iwl_dram_regions {
+	struct iwl_dram_data drams[IPC_DRAM_MAP_ENTRY_NUM_MAX];
+	struct iwl_dram_data prph_scrath_mem_desc;
+	u8 n_regions;
+};
+
+/**
  * struct iwl_fw_mon - fw monitor per allocation id
  * @num_frags: number of fragments
  * @frags: an array of DRAM buffer fragments
