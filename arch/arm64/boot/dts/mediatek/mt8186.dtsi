@@ -948,8 +948,7 @@
 		};
 
 		gce: mailbox@1022c000 {
-			compatible = "mediatek,mt8186-gce",
-				     "mediatek,mt8192-gce";
+			compatible = "mediatek,mt8186-gce";
 			reg = <0 0X1022c000 0 0x4000>;
 			interrupts = <GIC_SPI 170 IRQ_TYPE_LEVEL_HIGH 0>;
 			#mbox-cells = <2>;
