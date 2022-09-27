@@ -61,12 +61,14 @@ static u8 rs_fw_sgi_cw_support(struct ieee80211_link_sta *link_sta)
 }
 
 static u16 rs_fw_get_config_flags(struct iwl_mvm *mvm,
+				  struct ieee80211_vif *vif,
 				  struct ieee80211_link_sta *link_sta,
 				  struct ieee80211_supported_band *sband)
 {
 	struct ieee80211_sta_ht_cap *ht_cap = &link_sta->ht_cap;
 	struct ieee80211_sta_vht_cap *vht_cap = &link_sta->vht_cap;
 	struct ieee80211_sta_he_cap *he_cap = &link_sta->he_cap;
+	const struct ieee80211_sta_he_cap *sband_he_cap;
 	bool vht_ena = vht_cap->vht_supported;
 	u16 flags = 0;
 
@@ -92,17 +94,19 @@ static u16 rs_fw_get_config_flags(struct iwl_mvm *mvm,
 	    IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD))
 		flags |= IWL_TLC_MNG_CFG_FLAGS_LDPC_MSK;
 
-	if (ieee80211_sband_get_iftypes_data(sband) && ieee80211_sband_get_iftypes_data(sband)->he_cap.has_he &&
-	    !(ieee80211_sband_get_iftypes_data(sband)->he_cap.he_cap_elem.phy_cap_info[1] &
-	      IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD))
+	sband_he_cap = ieee80211_get_he_iftype_cap(sband,
+						   ieee80211_vif_type_p2p(vif));
+	if (sband_he_cap &&
+	    !(sband_he_cap->he_cap_elem.phy_cap_info[1] &
+			IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD))
 		flags &= ~IWL_TLC_MNG_CFG_FLAGS_LDPC_MSK;
 
 	if (he_cap->has_he &&
 	    (he_cap->he_cap_elem.phy_cap_info[3] &
 	     IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_MASK &&
-	     ieee80211_sband_get_iftypes_data(sband) &&
-	     ieee80211_sband_get_iftypes_data(sband)->he_cap.he_cap_elem.phy_cap_info[3] &
-	     IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_TX_MASK))
+	     sband_he_cap &&
+	     sband_he_cap->he_cap_elem.phy_cap_info[3] &
+			IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_TX_MASK))
 		flags |= IWL_TLC_MNG_CFG_FLAGS_HE_DCM_NSS_1_MSK;
 
 	return flags;
@@ -600,7 +604,8 @@ void rs_fw_rate_init(struct iwl_mvm *mvm,
 	struct iwl_tlc_config_cmd_v4 cfg_cmd = {
 		.max_ch_width = update ?
 			rs_fw_bw_from_sta_bw(link_sta) : IWL_TLC_MNG_CH_WIDTH_20MHZ,
-		.flags = cpu_to_le16(rs_fw_get_config_flags(mvm, link_sta, sband)),
+		.flags = cpu_to_le16(rs_fw_get_config_flags(mvm, vif, link_sta,
+							    sband)),
 		.chains = rs_fw_set_active_chains(iwl_mvm_get_valid_tx_ant(mvm)),
 		.sgi_ch_width_supp = rs_fw_sgi_cw_support(link_sta),
 		.max_mpdu_len = iwl_mvm_is_csum_supported(mvm) ?
