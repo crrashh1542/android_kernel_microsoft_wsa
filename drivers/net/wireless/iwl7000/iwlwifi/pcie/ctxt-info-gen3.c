@@ -316,11 +316,11 @@ static int iwl_pcie_load_payloads_continuously(struct iwl_trans *trans,
 
 static int iwl_pcie_load_payloads_segments
 				(struct iwl_trans *trans,
+				 struct iwl_dram_regions *dram_regions,
 				 const struct iwl_pnvm_image *pnvm_data)
 {
-	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	struct iwl_dram_data *cur_pnvm_dram = &trans_pcie->pnvm_dram[0],
-				*desc_dram = &trans_pcie->pnvm_regions_desc_array;
+	struct iwl_dram_data *cur_payload_dram = &dram_regions->drams[0];
+	struct iwl_dram_data *desc_dram = &dram_regions->prph_scrath_mem_desc;
 	struct iwl_prph_scrath_mem_desc_addr_array *addresses;
 	const void *data;
 	u32 len;
@@ -340,30 +340,31 @@ static int iwl_pcie_load_payloads_segments
 	memset(desc_dram->block, 0, len);
 
 	/* allocate DRAM region for each payload */
-	trans_pcie->n_pnvm_regions = 0;
+	dram_regions->n_regions = 0;
 	for (i = 0; i < pnvm_data->n_chunks; i++) {
 		len = pnvm_data->chunks[i].len;
 		data = pnvm_data->chunks[i].data;
 
-		if (iwl_pcie_ctxt_info_alloc_dma(trans, data, len,
-						 cur_pnvm_dram)) {
-			iwl_trans_pcie_free_pnvm_dram(trans_pcie, trans->dev);
+		if (iwl_pcie_ctxt_info_alloc_dma(trans,
+						 data,
+						 len,
+						 cur_payload_dram)) {
+			iwl_trans_pcie_free_pnvm_dram_regions(dram_regions,
+							      trans->dev);
 			return -ENOMEM;
 		}
 
-		trans_pcie->n_pnvm_regions++;
-		cur_pnvm_dram++;
+		dram_regions->n_regions++;
+		cur_payload_dram++;
 	}
 
 	/* fill desc with the DRAM payloads addresses */
 	addresses = desc_dram->block;
-
 	for (i = 0; i < pnvm_data->n_chunks; i++) {
 		addresses->mem_descs[i] =
-			cpu_to_le64(trans_pcie->pnvm_dram[i].physical);
+			cpu_to_le64(dram_regions->drams[i].physical);
 	}
 
-	trans->pnvm_loaded = true;
 	return 0;
 
 }
@@ -375,7 +376,7 @@ int iwl_trans_pcie_ctx_info_gen3_load_pnvm(struct iwl_trans *trans,
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	struct iwl_dram_data *dram = &trans_pcie->pnvm_dram[0];
+	struct iwl_dram_regions *dram_regions = &trans_pcie->pnvm_data;
 	int ret = 0;
 
 	/* only allocate the DRAM if not allocated yet */
@@ -393,15 +394,23 @@ int iwl_trans_pcie_ctx_info_gen3_load_pnvm(struct iwl_trans *trans,
 		return -EINVAL;
 	}
 
-	/* allocate several DRAM sections */
-	if (fw_has_capa(capa, IWL_UCODE_TLV_CAPA_FRAGMENTED_PNVM_IMG))
-		return iwl_pcie_load_payloads_segments(trans, pnvm_payloads);
-
-	/* allocate one DRAM section */
-	ret = iwl_pcie_load_payloads_continuously(trans, pnvm_payloads, dram);
-	if (!ret) {
-		trans_pcie->n_pnvm_regions = 1;
-		trans->pnvm_loaded = true;
+	/* save payloads in several DRAM sections */
+	if (fw_has_capa(capa, IWL_UCODE_TLV_CAPA_FRAGMENTED_PNVM_IMG)) {
+		ret = iwl_pcie_load_payloads_segments(trans,
+						      dram_regions,
+						      pnvm_payloads);
+		if (!ret)
+			trans->pnvm_loaded = true;
+	} else {
+		/* save only in one DRAM section */
+		ret = iwl_pcie_load_payloads_continuously
+						(trans,
+						 pnvm_payloads,
+						 &dram_regions->drams[0]);
+		if (!ret) {
+			dram_regions->n_regions = 1;
+			trans->pnvm_loaded = true;
+		}
 	}
 
 	return ret;
@@ -412,9 +421,9 @@ static void iwl_pcie_set_pnvm_segments(struct iwl_trans *trans)
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
+	dma_addr_t address = trans_pcie->pnvm_data.prph_scrath_mem_desc.physical;
 
-	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr =
-		cpu_to_le64(trans_pcie->pnvm_regions_desc_array.physical);
+	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr = cpu_to_le64(address);
 }
 
 static void iwl_pcie_set_continuous_pnvm(struct iwl_trans *trans)
@@ -424,9 +433,9 @@ static void iwl_pcie_set_continuous_pnvm(struct iwl_trans *trans)
 		&trans_pcie->prph_scratch->ctrl_cfg;
 
 	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr =
-		cpu_to_le64(trans_pcie->pnvm_dram[0].physical);
+		cpu_to_le64(trans_pcie->pnvm_data.drams[0].physical);
 	prph_sc_ctrl->pnvm_cfg.pnvm_size =
-		cpu_to_le32(trans_pcie->pnvm_dram[0].size);
+		cpu_to_le32(trans_pcie->pnvm_data.drams[0].size);
 }
 
 void iwl_trans_pcie_ctx_info_gen3_set_pnvm(struct iwl_trans *trans,
@@ -441,13 +450,18 @@ void iwl_trans_pcie_ctx_info_gen3_set_pnvm(struct iwl_trans *trans,
 		iwl_pcie_set_continuous_pnvm(trans);
 }
 
+/*
+ * FIXME: Add a case in which we save the payloads in several DRAM
+ * regions and not only in drams[0] (depending on the FW capabilities).
+ */
 int iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
 						   const struct iwl_pnvm_image *payloads)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	struct iwl_dram_data *dram = &trans_pcie->reduce_power_dram;
+	struct iwl_dram_regions *dram_regions = &trans_pcie->reduced_tables_data;
+	int ret = 0;
 
 	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
 		return 0;
@@ -456,13 +470,25 @@ int iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
 		return -EBUSY;
 
 	/* only allocate the DRAM if not allocated yet */
-	if (!trans->reduce_power_loaded)
-		return iwl_pcie_load_payloads_continuously(trans,
-							   payloads,
-							   dram);
-	return 0;
+	if (!trans->reduce_power_loaded) {
+		ret = iwl_pcie_load_payloads_continuously
+						(trans,
+						 payloads,
+						 &dram_regions->drams[0]);
+		if (!ret) {
+			dram_regions->n_regions = 1;
+			trans->reduce_power_loaded = true;
+		}
+	}
+
+	return ret;
 }
 
+/*
+ * FIXME: Add a case in which we send several payloads to the
+ * prph_sc, instead of only drams[0] (depending on the FW
+ * capabilities).
+ */
 void iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
@@ -473,8 +499,8 @@ void iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans)
 		return;
 
 	prph_sc_ctrl->reduce_power_cfg.base_addr =
-		cpu_to_le64(trans_pcie->reduce_power_dram.physical);
+		cpu_to_le64(trans_pcie->reduced_tables_data.drams[0].physical);
 	prph_sc_ctrl->reduce_power_cfg.size =
-		cpu_to_le32(trans_pcie->reduce_power_dram.size);
+		cpu_to_le32(trans_pcie->reduced_tables_data.drams[0].size);
 }
 
