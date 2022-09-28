@@ -1657,7 +1657,7 @@ ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params)
 	const struct element *non_inherit = NULL;
 	u8 *nontransmitted_profile;
 	int nontransmitted_profile_len = 0;
-	size_t scratch_len = params->scratch_len ?: 2 * params->len;
+	size_t scratch_len = params->len + params->scratch_len ?: 2 * params->len;
 
 	elems = kzalloc(sizeof(*elems) + scratch_len, GFP_ATOMIC);
 	if (!elems)
@@ -1667,17 +1667,16 @@ ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params)
 	elems->scratch_len = scratch_len;
 	elems->scratch_pos = elems->scratch;
 
-	nontransmitted_profile = kmalloc(params->len, GFP_ATOMIC);
-	if (nontransmitted_profile) {
-		nontransmitted_profile_len =
-			ieee802_11_find_bssid_profile(params->start, params->len,
-						      elems, params->bss,
-						      nontransmitted_profile);
-		non_inherit =
-			cfg80211_find_ext_elem(WLAN_EID_EXT_NON_INHERITANCE,
-					       nontransmitted_profile,
-					       nontransmitted_profile_len);
-	}
+	nontransmitted_profile = elems->scratch_pos;
+	nontransmitted_profile_len =
+		ieee802_11_find_bssid_profile(params->start, params->len,
+					      elems, params->bss,
+					      nontransmitted_profile);
+	elems->scratch_pos += nontransmitted_profile_len;
+	elems->scratch_len -= nontransmitted_profile_len;
+	non_inherit = cfg80211_find_ext_elem(WLAN_EID_EXT_NON_INHERITANCE,
+					     nontransmitted_profile,
+					     nontransmitted_profile_len);
 
 	elems->crc = _ieee802_11_parse_elems_full(params, elems, non_inherit);
 
@@ -1712,8 +1711,6 @@ ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params)
 	    elems->bssid_index_len >=
 	    offsetofend(struct ieee80211_bssid_index, dtim_count))
 		elems->dtim_count = elems->bssid_index->dtim_count;
-
-	kfree(nontransmitted_profile);
 
 	return elems;
 }
