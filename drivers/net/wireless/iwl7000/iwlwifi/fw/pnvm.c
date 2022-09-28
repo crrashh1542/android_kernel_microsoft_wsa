@@ -329,7 +329,7 @@ reduce_tables:
 			 */
 			trans->reduce_power_loaded = true;
 		} else {
-			ret = iwl_trans_load_reduce_power(trans, &pnvm_data);
+			ret = iwl_trans_load_reduce_power(trans, &pnvm_data, capa);
 			if (ret) {
 				IWL_DEBUG_FW(trans,
 					     "Failed to load reduce power table %d\n",
