@@ -497,23 +497,37 @@ int iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
 	return ret;
 }
 
-/*
- * FIXME: Add a case in which we send several payloads to the
- * prph_sc, instead of only drams[0] (depending on the FW
- * capabilities).
- */
-void iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans)
+static void iwl_pcie_set_reduce_power_segments(struct iwl_trans *trans)
+{
+	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
+		&trans_pcie->prph_scratch->ctrl_cfg;
+	dma_addr_t address = trans_pcie->reduced_tables_data.prph_scrath_mem_desc.physical;
+
+	prph_sc_ctrl->reduce_power_cfg.base_addr = cpu_to_le64(address);
+}
+
+static void iwl_pcie_set_continuous_reduce_power(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
 
-	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
-		return;
-
 	prph_sc_ctrl->reduce_power_cfg.base_addr =
 		cpu_to_le64(trans_pcie->reduced_tables_data.drams[0].physical);
 	prph_sc_ctrl->reduce_power_cfg.size =
 		cpu_to_le32(trans_pcie->reduced_tables_data.drams[0].size);
+}
+
+void iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans,
+						   const struct iwl_ucode_capabilities *capa)
+{
+	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
+		return;
+
+	if (fw_has_capa(capa, IWL_UCODE_TLV_CAPA_FRAGMENTED_PNVM_IMG))
+		iwl_pcie_set_reduce_power_segments(trans);
+	else
+		iwl_pcie_set_continuous_reduce_power(trans);
 }
 

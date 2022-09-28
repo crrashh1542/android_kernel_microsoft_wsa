@@ -659,7 +659,8 @@ struct iwl_trans_ops {
 	int (*load_reduce_power)(struct iwl_trans *trans,
 				 const struct iwl_pnvm_image *payloads,
 				 const struct iwl_ucode_capabilities *capa);
-	void (*set_reduce_power)(struct iwl_trans *trans);
+	void (*set_reduce_power)(struct iwl_trans *trans,
+				 const struct iwl_ucode_capabilities *capa);
 
 	void (*interrupts)(struct iwl_trans *trans, bool enable);
 	int (*imr_dma_data)(struct iwl_trans *trans,
@@ -1643,10 +1644,12 @@ static inline int iwl_trans_load_reduce_power
 	return trans->ops->load_reduce_power(trans, payloads, capa);
 }
 
-static inline void iwl_trans_set_reduce_power(struct iwl_trans *trans)
+static inline void iwl_trans_set_reduce_power
+				(struct iwl_trans *trans,
+				 const struct iwl_ucode_capabilities *capa)
 {
 	if (trans->ops->set_reduce_power)
-		trans->ops->set_reduce_power(trans);
+		trans->ops->set_reduce_power(trans, capa);
 }
 
 static inline bool iwl_trans_dbg_ini_valid(struct iwl_trans *trans)

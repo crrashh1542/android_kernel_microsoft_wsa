@@ -339,7 +339,7 @@ reduce_tables:
 			kfree(data);
 		}
 	}
-	iwl_trans_set_reduce_power(trans);
+	iwl_trans_set_reduce_power(trans, capa);
 
 	iwl_init_notification_wait(notif_wait, &pnvm_wait,
 				   ntf_cmds, ARRAY_SIZE(ntf_cmds),
