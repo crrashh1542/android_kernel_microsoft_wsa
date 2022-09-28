@@ -322,11 +322,6 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 
 	kthread_stop(dp->ev_tsk);
 
-	/* disable all HPD interrupts */
-	dp_catalog_hpd_config_intr(dp->catalog, DP_DP_HPD_INT_MASK, false);
-
-	kthread_stop(dp->ev_tsk);
-
 	dp_power_client_deinit(dp->power);
 	dp_aux_unregister(dp->aux);
 	dp->drm_dev = NULL;
