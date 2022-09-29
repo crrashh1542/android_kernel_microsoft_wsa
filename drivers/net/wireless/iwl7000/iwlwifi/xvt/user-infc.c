@@ -592,10 +592,52 @@ static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 	return err;
 }
 
+static int iwl_xvt_stop_tx(struct iwl_xvt *xvt)
+{
+	int err = 0;
+
+	if (xvt->tx_task && xvt->is_enhanced_tx) {
+		err = kthread_stop(xvt->tx_task);
+		wake_up_interruptible(&xvt->tx_done_wq);
+		xvt->tx_task = NULL;
+		wait_for_completion(&xvt->tx_task_completion);
+	}
+
+	return err;
+}
+
+static int _iwl_xvt_modulated_tx_infinite_stop(struct tx_meta_data *xvt_tx)
+{
+	int err = 0;
+
+	if (xvt_tx->tx_mod_thread && xvt_tx->tx_task_operating) {
+		err = kthread_stop(xvt_tx->tx_mod_thread);
+		xvt_tx->tx_mod_thread = NULL;
+		wait_for_completion(&xvt_tx->tx_mod_thread_completion);
+	}
+
+	return err;
+}
+
 void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
 {
+	int i, r;
+
 	if (xvt->state == IWL_XVT_STATE_UNINITIALIZED)
 		return;
+
+	/* Ensure all TX kthreads are shut down */
+	if (xvt->tx_task)
+		IWL_WARN(xvt, "Forced stop of TX: %d\n",
+			 iwl_xvt_stop_tx(xvt));
+	for (i = 0; i < ARRAY_SIZE(xvt->tx_meta_data); i++) {
+		if (xvt->tx_meta_data[i].tx_mod_thread) {
+			r = _iwl_xvt_modulated_tx_infinite_stop(&xvt->tx_meta_data[i]);
+			IWL_WARN(xvt,
+				 "Forced stop of modulated TX (lmac: %d): %d\n",
+				 i, r);
+		}
+	}
 
 	if (xvt->fw_running) {
 		iwl_xvt_txq_disable(xvt);
@@ -1453,17 +1495,9 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
 					      struct iwl_tm_data *data_in)
 {
-	int err = 0;
 	u32 lmac_id = ((struct iwl_xvt_tx_mod_stop *)data_in->data)->lmac_id;
-	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[lmac_id];
 
-	if (xvt_tx->tx_mod_thread && xvt_tx->tx_task_operating) {
-		err = kthread_stop(xvt_tx->tx_mod_thread);
-		xvt_tx->tx_mod_thread = NULL;
-		wait_for_completion(&xvt_tx->tx_mod_thread_completion);
-	}
-
-	return err;
+	return _iwl_xvt_modulated_tx_infinite_stop(&xvt->tx_meta_data[lmac_id]);
 }
 
 static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
@@ -1537,20 +1571,6 @@ static int iwl_xvt_start_tx(struct iwl_xvt *xvt,
 	}
 
 	return 0;
-}
-
-static int iwl_xvt_stop_tx(struct iwl_xvt *xvt)
-{
-	int err = 0;
-
-	if (xvt->tx_task && xvt->is_enhanced_tx) {
-		err = kthread_stop(xvt->tx_task);
-		wake_up_interruptible(&xvt->tx_done_wq);
-		xvt->tx_task = NULL;
-		wait_for_completion(&xvt->tx_task_completion);
-	}
-
-	return err;
 }
 
 static int iwl_xvt_set_tx_payload(struct iwl_xvt *xvt,
