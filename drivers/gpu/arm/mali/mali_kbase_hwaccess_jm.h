@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2014-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -298,5 +298,23 @@ void kbase_job_slot_hardstop(struct kbase_context *kctx, int js,
  * Return: true if there are any atoms on the GPU, false otherwise
  */
 bool kbase_gpu_atoms_submitted_any(struct kbase_device *kbdev);
+
+/**
+ * kbase_backend_slot_kctx_purge_locked - Perform a purge on the slot_rb tracked
+ *                                        kctx
+ *
+ * @kbdev:	Device pointer
+ * @kctx:	The kbase context that needs to be purged from slot_rb[]
+ *
+ * For JM GPUs, the L1 read only caches may need a start_flush invalidation,
+ * potentially on all slots (even if the kctx was only using a single slot),
+ * following a context termination or address-space ID recycle. This function
+ * performs a clean-up purge on the given kctx which if it has been tracked by
+ * slot_rb[] objects.
+ *
+ * Caller must hold kbase_device->hwaccess_lock.
+ */
+void kbase_backend_slot_kctx_purge_locked(struct kbase_device *kbdev,
+					  struct kbase_context *kctx);
 
 #endif /* _KBASE_HWACCESS_JM_H_ */

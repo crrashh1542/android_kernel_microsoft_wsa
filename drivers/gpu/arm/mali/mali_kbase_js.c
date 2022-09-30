@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2011-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, you can access it online at
+ * along with this program; if not, you can access it online atkbasep_js_devdata_init
  * http://www.gnu.org/licenses/gpl-2.0.html.
  *
  */
@@ -433,6 +433,67 @@ static bool kbase_js_ctx_list_add_pullable_nolock(struct kbase_device *kbdev,
 static bool kbase_js_ctx_list_add_unpullable_nolock(struct kbase_device *kbdev,
 						struct kbase_context *kctx,
 						int js);
+
+typedef bool(katom_ordering_func)(const struct kbase_jd_atom *,
+				  const struct kbase_jd_atom *);
+
+bool kbase_js_atom_runs_before(struct kbase_device *kbdev,
+			       const struct kbase_jd_atom *katom_a,
+			       const struct kbase_jd_atom *katom_b,
+			       const kbase_atom_ordering_flag_t order_flags)
+{
+	struct kbase_context *kctx_a = katom_a->kctx;
+	struct kbase_context *kctx_b = katom_b->kctx;
+	katom_ordering_func *samectxatomprio_ordering_func =
+		kbase_jd_atom_is_younger;
+
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	if (order_flags & KBASE_ATOM_ORDERING_FLAG_SEQNR)
+		samectxatomprio_ordering_func = kbase_jd_atom_is_earlier;
+
+	/* It only makes sense to make this test for atoms on the same slot */
+	WARN_ON(katom_a->slot_nr != katom_b->slot_nr);
+
+	if (kbdev->js_ctx_scheduling_mode ==
+	    KBASE_JS_PROCESS_LOCAL_PRIORITY_MODE) {
+		/* In local priority mode, querying either way around for "a
+		 * should run before b" and "b should run before a" should
+		 * always be false when they're from different contexts
+		 */
+		if (kctx_a != kctx_b)
+			return false;
+	} else {
+		/* In system priority mode, ordering is done first strictly by
+		 * context priority, even when katom_b might be lower priority
+		 * than katom_a. This is due to scheduling of contexts in order
+		 * of highest priority first, regardless of whether the atoms
+		 * for a particular slot from such contexts have the highest
+		 * priority or not.
+		 */
+		if (kctx_a != kctx_b) {
+			if (kctx_a->priority < kctx_b->priority)
+				return true;
+			if (kctx_a->priority > kctx_b->priority)
+				return false;
+		}
+	}
+
+	/* For same contexts/contexts with the same context priority (in system
+	 * priority mode), ordering is next done by atom priority
+	 */
+	if (katom_a->sched_priority < katom_b->sched_priority)
+		return true;
+	if (katom_a->sched_priority > katom_b->sched_priority)
+		return false;
+	/* For atoms of same priority on the same kctx, they are
+	 * ordered by seq_nr/age (dependent on caller)
+	 */
+	if (kctx_a == kctx_b && samectxatomprio_ordering_func(katom_a, katom_b))
+		return true;
+
+	return false;
+}
 
 /*
  * Functions private to KBase ('Protected' functions)

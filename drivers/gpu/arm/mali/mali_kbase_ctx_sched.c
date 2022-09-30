@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2017-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2017-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,6 +23,9 @@
 #include <mali_kbase_defs.h>
 #include "mali_kbase_ctx_sched.h"
 #include "tl/mali_kbase_tracepoints.h"
+#if !MALI_USE_CSF
+#include <mali_kbase_hwaccess_jm.h>
+#endif
 
 /* Helper for ktrace */
 #if KBASE_KTRACE_ENABLE
@@ -173,6 +176,9 @@ void kbase_ctx_sched_release_ctx(struct kbase_context *kctx)
 			kbdev->as_to_kctx[kctx->as_nr] = NULL;
 			kctx->as_nr = KBASEP_AS_NR_INVALID;
 			kbase_ctx_flag_clear(kctx, KCTX_AS_DISABLED_ON_FAULT);
+#if !MALI_USE_CSF
+			kbase_backend_slot_kctx_purge_locked(kbdev, kctx);
+#endif
 		}
 	}
 

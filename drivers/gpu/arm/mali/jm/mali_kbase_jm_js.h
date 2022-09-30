@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -949,5 +949,37 @@ static inline base_jd_prio kbasep_js_sched_prio_to_atom_prio(int sched_prio)
  */
 
 base_jd_prio kbase_js_priority_check(struct kbase_device *kbdev, base_jd_prio priority);
+
+/**
+ * kbase_js_atom_runs_before - determine if atoms for the same slot have an
+ *                             ordering relation
+ * @kbdev: kbase device
+ * @katom_a: the first atom
+ * @katom_b: the second atom.
+ * @order_flags: combination of KBASE_ATOM_ORDERING_FLAG_<...> for the ordering
+ *               relation
+ *
+ * This is for making consistent decisions about the ordering of atoms when we
+ * need to do pre-emption on a slot, which includes stopping existing atoms
+ * when a new atom is ready to run, and also which other atoms to remove from
+ * the slot when the atom in JSn_HEAD is being pre-empted.
+ *
+ * This only handles @katom_a and @katom_b being for the same job slot, as
+ * pre-emption only operates within a slot.
+ *
+ * Note: there is currently no use-case for this as a sorting comparison
+ * functions, hence only a boolean returned instead of int -1, 0, +1 return. If
+ * required in future, a modification to do so would be better than calling
+ * twice with katom_a and katom_b swapped.
+ *
+ * Return:
+ * true if @katom_a should run before @katom_b, false otherwise.
+ * A false return value does not distinguish between "no ordering relation" and
+ * "@katom_a should run after @katom_b".
+ */
+bool kbase_js_atom_runs_before(struct kbase_device *kbdev,
+			       const struct kbase_jd_atom *katom_a,
+			       const struct kbase_jd_atom *katom_b,
+			       const kbase_atom_ordering_flag_t order_flags);
 
 #endif	/* _KBASE_JM_JS_H_ */
