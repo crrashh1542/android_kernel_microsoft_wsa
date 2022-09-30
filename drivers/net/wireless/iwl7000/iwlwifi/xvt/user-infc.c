@@ -1565,7 +1565,7 @@ static int iwl_xvt_start_tx(struct iwl_xvt *xvt,
 	xvt->tx_task = kthread_run(iwl_xvt_start_tx_handler,
 				   task_data, "start enhanced tx command");
 	if (!xvt->tx_task) {
-		xvt->is_enhanced_tx = true;
+		xvt->is_enhanced_tx = false;
 		kfree(task_data);
 		return -ENOMEM;
 	}
