@@ -332,14 +332,9 @@ static void iwl_xvt_stop(struct iwl_op_mode *op_mode)
 
 	iwl_fw_cancel_timestamp(&xvt->fwrt);
 
-	if (xvt->state != IWL_XVT_STATE_UNINITIALIZED) {
-		if (xvt->fw_running) {
-			iwl_xvt_txq_disable(xvt);
-			xvt->fw_running = false;
-		}
-		iwl_fw_dbg_stop_sync(&xvt->fwrt);
-		iwl_trans_stop_device(xvt->trans);
-	}
+	mutex_lock(&xvt->mutex);
+	iwl_xvt_stop_op_mode(xvt);
+	mutex_unlock(&xvt->mutex);
 
 	for (i = 0; i < ARRAY_SIZE(xvt->reorder_bufs); i++) {
 		struct iwl_xvt_reorder_buffer *buffer;

@@ -592,7 +592,7 @@ static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 	return err;
 }
 
-static void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
+void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
 {
 	if (xvt->state == IWL_XVT_STATE_UNINITIALIZED)
 		return;
