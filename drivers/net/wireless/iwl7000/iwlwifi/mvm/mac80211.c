@@ -3061,15 +3061,31 @@ static int iwl_mvm_start_ap_ibss(struct ieee80211_hw *hw,
 	if (vif->type == NL80211_IFTYPE_AP)
 		iwl_mvm_mac_ctxt_recalc_tsf_id(mvm, vif);
 
-	/* Add the mac context */
-	ret = iwl_mvm_mac_ctxt_add(mvm, vif);
-	if (ret)
-		goto out_unlock;
+	/* For older devices need to send beacon template before adding mac
+	 * context. For the newer, the beacon is a resource that belongs to a
+	 * MAC, so need to send beacon template after adding the mac.
+	 */
+	if (mvm->trans->trans_cfg->device_family > IWL_DEVICE_FAMILY_22000) {
+		/* Add the mac context */
+		ret = iwl_mvm_mac_ctxt_add(mvm, vif);
+		if (ret)
+			goto out_unlock;
 
-	/* Send the beacon template */
-	ret = iwl_mvm_mac_ctxt_beacon_changed(mvm, vif, link_conf);
-	if (ret)
-		goto out_unlock;
+		/* Send the beacon template */
+		ret = iwl_mvm_mac_ctxt_beacon_changed(mvm, vif, link_conf);
+		if (ret)
+			goto out_unlock;
+	} else {
+		/* Send the beacon template */
+		ret = iwl_mvm_mac_ctxt_beacon_changed(mvm, vif, link_conf);
+		if (ret)
+			goto out_unlock;
+
+		/* Add the mac context */
+		ret = iwl_mvm_mac_ctxt_add(mvm, vif);
+		if (ret)
+			goto out_unlock;
+	}
 
 	/* Perform the binding */
 	ret = iwl_mvm_binding_add_vif(mvm, vif);
