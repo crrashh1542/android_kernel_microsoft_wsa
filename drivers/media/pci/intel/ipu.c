@@ -604,11 +604,11 @@ out_ipu_bus_del_devices:
 		ipu_buttress_unmap_fw_image(isp->psys, &isp->fw_sgt);
 		isp->pkg_dir = NULL;
 	}
-	if (isp->psys && isp->psys->mmu)
+	if (!IS_ERR_OR_NULL(isp->psys) && !IS_ERR_OR_NULL(isp->psys->mmu))
 		ipu_mmu_cleanup(isp->psys->mmu);
-	if (isp->isys && isp->isys->mmu)
+	if (!IS_ERR_OR_NULL(isp->isys) && !IS_ERR_OR_NULL(isp->isys->mmu))
 		ipu_mmu_cleanup(isp->isys->mmu);
-	if (isp->psys)
+	if (!IS_ERR_OR_NULL(isp->psys))
 		pm_runtime_put(&isp->psys->dev);
 	ipu_bus_del_devices(pdev);
 	ipu_buttress_exit(isp);
