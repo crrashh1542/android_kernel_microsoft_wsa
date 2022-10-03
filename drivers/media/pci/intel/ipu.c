@@ -598,10 +598,12 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 out_ipu_bus_del_devices:
 	if (isp->pkg_dir) {
-		ipu_cpd_free_pkg_dir(isp->psys, isp->pkg_dir,
-				     isp->pkg_dir_dma_addr,
-				     isp->pkg_dir_size);
-		ipu_buttress_unmap_fw_image(isp->psys, &isp->fw_sgt);
+		if (isp->psys) {
+			ipu_cpd_free_pkg_dir(isp->psys, isp->pkg_dir,
+					     isp->pkg_dir_dma_addr,
+					     isp->pkg_dir_size);
+			ipu_buttress_unmap_fw_image(isp->psys, &isp->fw_sgt);
+		}
 		isp->pkg_dir = NULL;
 	}
 	if (!IS_ERR_OR_NULL(isp->psys) && !IS_ERR_OR_NULL(isp->psys->mmu))
