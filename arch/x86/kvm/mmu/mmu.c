@@ -3926,6 +3926,7 @@ static bool kvm_faultin_pfn(struct kvm_vcpu *vcpu, bool prefault, gfn_t gfn,
 		if (is_guest_mode(vcpu)) {
 			*pfn = KVM_PFN_NOSLOT;
 			*writable = false;
+			*page = NULL;
 			return false;
 		}
 		/*
