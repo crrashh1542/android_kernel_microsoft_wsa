@@ -268,8 +268,6 @@ static int msm_dsi_manager_panel_init(struct drm_connector *conn, u8 id)
 		return PTR_ERR(panel);
 	}
 
-	drm_connector_set_orientation_from_panel(conn, panel);
-
 	if (!panel || !IS_BONDED_DSI())
 		goto out;
 
