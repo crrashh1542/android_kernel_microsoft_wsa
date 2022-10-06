@@ -989,6 +989,7 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 				continue;
 
 			mvmvif->link[i] = new_link[i];
+			new_link[i] = NULL;
 			err = iwl_mvm_add_link(mvm, vif, link_conf);
 			if (err)
 				goto out_err;
@@ -1004,9 +1005,8 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 out_err:
 	/* we really don't have a good way to roll back here ... */
 	mutex_unlock(&mvm->mutex);
-	return err;
+
 free:
-	/* nor to free the unused ones ... this is a mess for now, sorry */
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++)
 		kfree(new_link[i]);
 	return err;
