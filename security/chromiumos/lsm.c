@@ -264,12 +264,21 @@ static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
 	return 0;
 }
 
+static int chromiumos_locked_down(enum lockdown_reason what)
+{
+	if (what == LOCKDOWN_BPF_WRITE_USER)
+		return -EACCES;
+
+	return 0;
+}
+
 static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(sb_mount, chromiumos_security_sb_mount),
 	LSM_HOOK_INIT(inode_follow_link, chromiumos_security_inode_follow_link),
 	LSM_HOOK_INIT(file_open, chromiumos_security_file_open),
 	LSM_HOOK_INIT(sb_eat_lsm_opts, chromiumos_sb_eat_lsm_opts),
 	LSM_HOOK_INIT(bprm_creds_for_exec, chromiumos_bprm_creds_for_exec),
+	LSM_HOOK_INIT(locked_down, chromiumos_locked_down),
 };
 
 static int __init chromiumos_security_init(void)
