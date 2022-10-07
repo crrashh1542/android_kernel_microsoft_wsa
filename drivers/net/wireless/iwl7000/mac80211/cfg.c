@@ -1909,7 +1909,7 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 #endif
 
 #if CFG80211_VERSION >= KERNEL_VERSION(9,9,9)
-	if (params->eht_capa)
+	if (params->he_capa && params->eht_capa)
 		ieee80211_eht_cap_ie_to_sta_eht_cap(sdata, sband,
 						    (u8 *)params->he_capa,
 						    params->he_capa_len,
