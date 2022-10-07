@@ -240,7 +240,6 @@ void iwl_mvm_update_link_smps(struct ieee80211_vif *vif,
 	enum ieee80211_smps_mode mode = IEEE80211_SMPS_AUTOMATIC;
 
 	if (mvm->fw_static_smps_request &&
-	    link_conf &&
 	    link_conf->chandef.width == NL80211_CHAN_WIDTH_160 &&
 	    link_conf->he_support)
 		mode = IEEE80211_SMPS_STATIC;
