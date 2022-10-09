@@ -1339,7 +1339,7 @@ static int btintel_set_debug_features(struct hci_dev *hdev,
 	}
 	kfree_skb(skb);
 
-	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT_HW);
+	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
 
 	bt_dev_info(hdev, "set debug features: trace_enable 0x%02x mask 0x%02x",
 		    trace_enable, mask[3]);
@@ -1385,7 +1385,7 @@ static int btintel_reset_debug_features(struct hci_dev *hdev,
 	bt_dev_info(hdev, "reset debug features: trace_enable 0x%02x mask 0x%02x",
 		    trace_enable, mask[3]);
 
-	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT_HW);
+	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
 
 	return 0;
 }

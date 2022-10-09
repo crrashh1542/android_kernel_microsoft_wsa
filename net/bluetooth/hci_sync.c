@@ -3851,18 +3851,10 @@ static int hci_init_sync(struct hci_dev *hdev)
 static void set_quality_report(struct hci_dev *hdev, bool enable)
 {
 	int err;
-	bool changed;
 
 	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) ||
 	    !hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
 		return;
-
-	changed = (enable != hci_dev_test_flag(hdev, HCI_QUALITY_REPORT_HW));
-	if (!changed) {
-		bt_dev_info(hdev, "set quality report (enable %d) skipped",
-			    enable);
-		return;
-	}
 
 	if (hdev->set_quality_report)
 		err = hdev->set_quality_report(hdev, enable);
