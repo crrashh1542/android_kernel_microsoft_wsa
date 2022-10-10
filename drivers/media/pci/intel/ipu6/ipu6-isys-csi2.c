@@ -459,7 +459,7 @@ int ipu_isys_csi2_set_stream(struct v4l2_subdev *sd,
 		v4l2_get_subdev_hostdata(media_entity_to_v4l2_subdev
 					 (ip->external->entity));
 	unsigned int port, port_max;
-	int ret;
+	int ret = 0;
 	u32 mask = 0;
 	unsigned int i;
 
