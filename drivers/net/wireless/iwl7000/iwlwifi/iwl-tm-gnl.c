@@ -964,10 +964,10 @@ static int iwl_tm_gnl_dump(struct sk_buff *skb, struct netlink_callback *cb)
 	dump_size = cb->args[2];
 	dump_offset = cb->args[3];
 
-	nlmsg_head = genlmsg_put(skb, NETLINK_CB_PORTID(cb->skb),
-				cb->nlh->nlmsg_seq,
-				&iwl_tm_gnl_family, NLM_F_MULTI,
-				IWL_TM_GNL_CMD_EXECUTE);
+	nlmsg_head = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+				 cb->nlh->nlmsg_seq,
+				 &iwl_tm_gnl_family, NLM_F_MULTI,
+				 IWL_TM_GNL_CMD_EXECUTE);
 
 	/*
 	 * Reserve some room for NL attribute header,
@@ -1162,7 +1162,7 @@ static int iwl_tm_gnl_netlink_notify(struct notifier_block *nb,
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(dev, &dev_list, list) {
-		if (dev->nl_events_portid == netlink_notify_portid(notify))
+		if (dev->nl_events_portid == notify->portid)
 			dev->nl_events_portid = 0;
 	}
 	rcu_read_unlock();
