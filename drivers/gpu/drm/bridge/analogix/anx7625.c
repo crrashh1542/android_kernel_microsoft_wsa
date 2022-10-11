@@ -2692,6 +2692,7 @@ static int anx7625_register_typec_switches(struct device *device, struct anx7625
 		ret = anx7625_register_mode_switch(device, sw, ctx);
 		if (ret) {
 			dev_err(device, "Failed to register mode switch: %d\n", ret);
+			of_node_put(sw);
 			break;
 		}
 	}
