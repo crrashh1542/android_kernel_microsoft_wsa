@@ -943,6 +943,9 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 		int r;
 
+		if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
+			break;
+
 		if (!(added & BIT(i)))
 			continue;
 		new_link[i] = kzalloc(sizeof(*new_link[i]), GFP_KERNEL);
@@ -987,7 +990,9 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 			if (WARN_ON(!link_conf))
 				continue;
 
-			mvmvif->link[i] = new_link[i];
+			if (!test_bit(IWL_MVM_STATUS_IN_HW_RESTART,
+				      &mvm->status))
+				mvmvif->link[i] = new_link[i];
 			new_link[i] = NULL;
 			err = iwl_mvm_add_link(mvm, vif, link_conf);
 			if (err)
