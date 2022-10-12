@@ -853,26 +853,27 @@ static void add_files(struct ieee80211_sub_if_data *sdata)
 #undef DEBUGFS_ADD_MODE
 #undef DEBUGFS_ADD
 
-#define DEBUGFS_ADD_MODE(name, mode) \
-	debugfs_create_file(#name, mode, link->debugfs_dir, \
+#define DEBUGFS_ADD_MODE(dentry, name, mode) \
+	debugfs_create_file(#name, mode, dentry, \
 			    link, &link_##name##_ops)
 
-#define DEBUGFS_ADD(name) DEBUGFS_ADD_MODE(name, 0400)
+#define DEBUGFS_ADD(dentry, name) DEBUGFS_ADD_MODE(dentry, name, 0400)
 
 static void add_link_files(struct ieee80211_link_data *link,
 			   struct dentry *dentry)
 {
-	DEBUGFS_ADD(txpower);
-	DEBUGFS_ADD(user_power_level);
-	DEBUGFS_ADD(ap_power_level);
+	DEBUGFS_ADD(dentry, txpower);
+	DEBUGFS_ADD(dentry, user_power_level);
+	DEBUGFS_ADD(dentry, ap_power_level);
 
 	switch (link->sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
-		DEBUGFS_ADD_MODE(smps, 0600);
+		DEBUGFS_ADD_MODE(dentry, smps, 0600);
 		break;
 	default:
 		break;
-	}}
+	}
+}
 
 void ieee80211_debugfs_add_netdev(struct ieee80211_sub_if_data *sdata)
 {
@@ -931,7 +932,7 @@ void ieee80211_link_debugfs_add(struct ieee80211_link_data *link)
 		debugfs_create_dir(link_dir_name,
 				   link->sdata->vif.debugfs_dir);
 
-	DEBUGFS_ADD(addr);
+	DEBUGFS_ADD(link->debugfs_dir, addr);
 	add_link_files(link, link->debugfs_dir);
 }
 
