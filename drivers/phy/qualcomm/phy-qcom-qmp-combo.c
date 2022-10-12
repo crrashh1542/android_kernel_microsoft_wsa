@@ -1986,7 +1986,6 @@ static int qmp_combo_com_init(struct qmp_phy *qphy)
 		return 0;
 	}
 
-	/* turn on regulator supplies */
 	ret = regulator_bulk_enable(cfg->num_vregs, qmp->vregs);
 	if (ret) {
 		dev_err(qmp->dev, "failed to enable regulators, err=%d\n", ret);
@@ -2816,7 +2815,6 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	qmp->dev = dev;
 	dev_set_drvdata(dev, qmp);
 
-	/* Get the specific init parameters of QMP phy */
 	combo_cfg = of_device_get_match_data(dev);
 	if (!combo_cfg)
 		return -EINVAL;
@@ -2824,7 +2822,6 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	usb_cfg = combo_cfg->usb_cfg;
 	cfg = usb_cfg; /* Setup clks and regulators */
 
-	/* per PHY serdes; usually located at base address */
 	usb_serdes = serdes = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(serdes))
 		return PTR_ERR(serdes);
@@ -2833,7 +2830,6 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	if (IS_ERR(qmp->dp_com))
 		return PTR_ERR(qmp->dp_com);
 
-	/* Only two serdes for combo PHY */
 	dp_serdes = devm_platform_ioremap_resource(pdev, 2);
 	if (IS_ERR(dp_serdes))
 		return PTR_ERR(dp_serdes);
