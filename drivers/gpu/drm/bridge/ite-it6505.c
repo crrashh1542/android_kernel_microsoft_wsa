@@ -3408,11 +3408,11 @@ static int it6505_typec_mux_set(struct typec_mux_dev *mux,
 	old_dp_connected = it6505->typec_ports[0].dp_connected ||
 			   it6505->typec_ports[1].dp_connected;
 
-	dev_dbg(dev, "mux_set dp_connected: c0=%d, c1=%d\n",
-		it6505->typec_ports[0].dp_connected, it6505->typec_ports[1].dp_connected);
-
 	data->dp_connected = (state->alt && state->alt->svid == USB_TYPEC_DP_SID &&
 			      state->alt->mode == USB_TYPEC_DP_MODE);
+
+	dev_dbg(dev, "mux_set dp_connected: c0=%d, c1=%d\n",
+		it6505->typec_ports[0].dp_connected, it6505->typec_ports[1].dp_connected);
 
 	new_dp_connected = it6505->typec_ports[0].dp_connected ||
 			   it6505->typec_ports[1].dp_connected;
