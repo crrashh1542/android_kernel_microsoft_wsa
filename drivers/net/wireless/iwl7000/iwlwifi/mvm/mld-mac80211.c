@@ -14,7 +14,6 @@ static int iwl_mvm_mld_mac_add_interface(struct ieee80211_hw *hw,
 	mutex_lock(&mvm->mutex);
 
 	mvmvif->mvm = mvm;
-	RCU_INIT_POINTER(mvmvif->deflink.probe_resp_data, NULL);
 
 	/*
 	 * Not much to do here. The stack will not allow interface
