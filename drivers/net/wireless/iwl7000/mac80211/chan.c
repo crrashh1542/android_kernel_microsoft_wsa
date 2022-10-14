@@ -871,18 +871,12 @@ static int ieee80211_assign_link_chanctx(struct ieee80211_link_data *link,
 		drv_unassign_vif_chanctx(local, sdata, link->conf, curr_ctx);
 		conf = NULL;
 		list_del(&link->assigned_chanctx_list);
-		RCU_INIT_POINTER(link->conf->chanctx_conf, NULL);
 	}
 
 	if (new_ctx) {
-		rcu_assign_pointer(link->conf->chanctx_conf, &new_ctx->conf);
-		ieee80211_recalc_chanctx_min_def(local, new_ctx, NULL);
-
 		ret = drv_assign_vif_chanctx(local, sdata, link->conf, new_ctx);
-		if (ret) {
-			RCU_INIT_POINTER(link->conf->chanctx_conf, NULL);
+		if (ret)
 			goto out;
-		}
 
 		conf = &new_ctx->conf;
 		list_add(&link->assigned_chanctx_list,
@@ -890,6 +884,8 @@ static int ieee80211_assign_link_chanctx(struct ieee80211_link_data *link,
 	}
 
 out:
+	rcu_assign_pointer(link->conf->chanctx_conf, conf);
+
 	sdata->vif.cfg.idle = !conf;
 
 	if (curr_ctx && ieee80211_chanctx_num_assigned(local, curr_ctx) > 0) {
