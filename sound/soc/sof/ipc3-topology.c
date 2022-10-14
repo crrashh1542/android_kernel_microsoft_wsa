@@ -271,6 +271,9 @@ static const struct sof_topology_token acpdmic_tokens[] = {
 	{SOF_TKN_AMD_ACPDMIC_RATE,
 		SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
 		offsetof(struct sof_ipc_dai_acpdmic_params, pdm_rate)},
+	{SOF_TKN_AMD_ACPDMIC_CH,
+		SND_SOC_TPLG_TUPLE_TYPE_WORD, get_token_u32,
+		offsetof(struct sof_ipc_dai_acpdmic_params, pdm_ch)},
 };
 
 /* Core tokens */
