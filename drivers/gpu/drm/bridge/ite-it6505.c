@@ -3508,6 +3508,7 @@ static int it6505_register_typec_switches(struct device *device, struct it6505 *
 		ret = it6505_register_mode_switch(device, sw, it6505);
 		if (ret) {
 			dev_err(device, "Failed to register mode switch: %d\n", ret);
+			of_node_put(sw);
 			break;
 		}
 	}
