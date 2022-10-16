@@ -4034,6 +4034,8 @@ static void rcu_barrier_func(void *cpu_in)
 {
 	uintptr_t cpu = (uintptr_t)cpu_in;
 	struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
+	bool wake_nocb = false;
+	bool was_alldone = false;
 
 	rcu_barrier_trace(TPS("IRQ"), -1, rcu_state.barrier_sequence);
 	rdp->barrier_head.func = rcu_barrier_callback;
@@ -4055,6 +4057,8 @@ static void rcu_barrier_func(void *cpu_in)
 				  rcu_state.barrier_sequence);
 	}
 	rcu_nocb_unlock(rdp);
+	if (wake_nocb)
+		wake_nocb_gp(rdp, false);
 }
 
 /**
