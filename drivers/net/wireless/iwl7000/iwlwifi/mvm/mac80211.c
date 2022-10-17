@@ -1634,70 +1634,6 @@ iwl_mvm_chandef_get_primary_80(struct cfg80211_chan_def *chandef)
 #endif
 }
 
-/*
- * Returns true if addding the interface is done
- * (either with success or failure)
- *
- * FIXME: remove this again and merge it in
- */
-static bool iwl_mvm_mac_add_interface_common(struct iwl_mvm *mvm,
-					     struct ieee80211_hw *hw,
-					     struct ieee80211_vif *vif,
-					     int *ret)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-
-	lockdep_assert_held(&mvm->mutex);
-
-	mvmvif->mvm = mvm;
-
-	/* the first link always points to the default one */
-	mvmvif->link[0] = &mvmvif->deflink;
-
-	/*
-	 * Not much to do here. The stack will not allow interface
-	 * types or combinations that we didn't advertise, so we
-	 * don't really have to check the types.
-	 */
-
-	/* make sure that beacon statistics don't go backwards with FW reset */
-	if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
-		mvmvif->deflink.beacon_stats.accu_num_beacons +=
-			mvmvif->deflink.beacon_stats.num_beacons;
-
-	/* Allocate resources for the MAC context, and add it to the fw  */
-	*ret = iwl_mvm_mac_ctxt_init(mvm, vif);
-	if (*ret)
-		return true;
-
-	rcu_assign_pointer(mvm->vif_id_to_mac[mvmvif->id], vif);
-
-	/* Currently not much to do for NAN */
-	if (ieee80211_viftype_nan(vif->type))
-		return true;
-
-	/*
-	 * The AP binding flow can be done only after the beacon
-	 * template is configured (which happens only in the mac80211
-	 * start_ap() flow), and adding the broadcast station can happen
-	 * only after the binding.
-	 * In addition, since modifying the MAC before adding a bcast
-	 * station is not allowed by the FW, delay the adding of MAC context to
-	 * the point where we can also add the bcast station.
-	 * In short: there's not much we can do at this point, other than
-	 * allocating resources :)
-	 */
-	if (vif->type == NL80211_IFTYPE_AP ||
-	    vif->type == NL80211_IFTYPE_ADHOC) {
-		iwl_mvm_vif_dbgfs_register(mvm, vif);
-		return true;
-	}
-
-	mvmvif->features |= hw->netdev_features;
-
-	return false;
-}
-
 static int iwl_mvm_alloc_bcast_mcast_sta(struct iwl_mvm *mvm,
 					 struct ieee80211_vif *vif)
 {
@@ -1730,9 +1666,54 @@ static int iwl_mvm_mac_add_interface(struct ieee80211_hw *hw,
 
 	mutex_lock(&mvm->mutex);
 
-	/* Common for MLD and non-MLD API */
-	if (iwl_mvm_mac_add_interface_common(mvm, hw, vif, &ret))
+	mvmvif->mvm = mvm;
+
+	/* the first link always points to the default one */
+	mvmvif->link[0] = &mvmvif->deflink;
+
+	/*
+	 * Not much to do here. The stack will not allow interface
+	 * types or combinations that we didn't advertise, so we
+	 * don't really have to check the types.
+	 */
+
+	/* make sure that beacon statistics don't go backwards with FW reset */
+	if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
+		mvmvif->deflink.beacon_stats.accu_num_beacons +=
+			mvmvif->deflink.beacon_stats.num_beacons;
+
+	/* Allocate resources for the MAC context, and add it to the fw  */
+	ret = iwl_mvm_mac_ctxt_init(mvm, vif);
+	if (ret)
 		goto out;
+
+	rcu_assign_pointer(mvm->vif_id_to_mac[mvmvif->id], vif);
+
+	/* Currently not much to do for NAN */
+	if (ieee80211_viftype_nan(vif->type)) {
+		ret = 0;
+		goto out;
+	}
+
+	/*
+	 * The AP binding flow can be done only after the beacon
+	 * template is configured (which happens only in the mac80211
+	 * start_ap() flow), and adding the broadcast station can happen
+	 * only after the binding.
+	 * In addition, since modifying the MAC before adding a bcast
+	 * station is not allowed by the FW, delay the adding of MAC context to
+	 * the point where we can also add the bcast station.
+	 * In short: there's not much we can do at this point, other than
+	 * allocating resources :)
+	 */
+	if (vif->type == NL80211_IFTYPE_AP ||
+	    vif->type == NL80211_IFTYPE_ADHOC) {
+		iwl_mvm_vif_dbgfs_register(mvm, vif);
+		ret = 0;
+		goto out;
+	}
+
+	mvmvif->features |= hw->netdev_features;
 
 	ret = iwl_mvm_mac_ctxt_add(mvm, vif);
 	if (ret)
