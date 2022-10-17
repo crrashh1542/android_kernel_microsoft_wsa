@@ -324,6 +324,12 @@
 
 #define GEN12_PAT_INDEX(index)			_MMIO(0x4800 + (index) * 4)
 
+#define XEHP_TILE0_ADDR_RANGE			_MMIO(0x4900)
+#define   XEHP_TILE_LMEM_RANGE_SHIFT		8
+
+#define XEHP_FLAT_CCS_BASE_ADDR			_MMIO(0x4910)
+#define   XEHP_CCS_BASE_SHIFT			8
+
 #define GAMTARBMODE				_MMIO(0x4a08)
 #define   ARB_MODE_BWGTLB_DISABLE		(1 << 9)
 #define   ARB_MODE_SWIZZLE_BDW			(1 << 1)
@@ -743,6 +749,7 @@
 #define   GEN6_AGGRESSIVE_TURBO			(0 << 15)
 #define   GEN9_SW_REQ_UNSLICE_RATIO_SHIFT	23
 #define   GEN9_IGNORE_SLICE_RATIO		(0 << 0)
+#define   GEN12_MEDIA_FREQ_RATIO		REG_BIT(13)
 
 #define GEN6_RC_VIDEO_FREQ			_MMIO(0xa00c)
 #define   GEN6_RC_CTL_RC6pp_ENABLE		(1 << 16)
