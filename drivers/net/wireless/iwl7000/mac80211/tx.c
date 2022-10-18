@@ -2331,6 +2331,10 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 	u16 len_rthdr;
 	int hdrlen;
 
+	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	if (unlikely(!ieee80211_sdata_running(sdata)))
+		goto fail;
+
 	memset(info, 0, sizeof(*info));
 	info->flags = IEEE80211_TX_CTL_REQ_TX_STATUS |
 		      IEEE80211_TX_CTL_INJECTED;
@@ -2390,8 +2394,6 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 	 * This is necessary, for example, for old hostapd versions that
 	 * don't use nl80211-based management TX/RX.
 	 */
-	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-
 	list_for_each_entry_rcu(tmp_sdata, &local->interfaces, list) {
 		if (!ieee80211_sdata_running(tmp_sdata))
 			continue;
@@ -4208,7 +4210,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 	struct sk_buff *next;
 	int len = skb->len;
 
-	if (unlikely(skb->len < ETH_HLEN)) {
+	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
 		kfree_skb(skb);
 		return;
 	}
@@ -4605,7 +4607,7 @@ netdev_tx_t ieee80211_subif_start_xmit_8023(struct sk_buff *skb,
 	struct ieee80211_key *key;
 	struct sta_info *sta;
 
-	if (unlikely(skb->len < ETH_HLEN)) {
+	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
 		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -5983,6 +5985,9 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 	skb_reset_network_header(skb);
 	skb_reset_mac_header(skb);
 
+	if (local->hw.queues < IEEE80211_NUM_ACS)
+		goto start_xmit;
+
 	/* update QoS header to prioritize control port frames if possible,
 	 * priorization also happens for control port frames send over
 	 * AF_PACKET
@@ -5990,6 +5995,7 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 	rcu_read_lock();
 	err = ieee80211_lookup_ra_sta(sdata, skb, &sta);
 	if (err) {
+		dev_kfree_skb(skb);
 		rcu_read_unlock();
 		return err;
 	}
@@ -6004,11 +6010,12 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 		 * for MLO STA, the SA should be the AP MLD address, but
 		 * the link ID has been selected already
 		 */
-		if (sta->sta.mlo)
+		if (sta && sta->sta.mlo)
 			memcpy(ehdr->h_source, sdata->vif.addr, ETH_ALEN);
 	}
 	rcu_read_unlock();
 
+start_xmit:
 	/* mutex lock is only needed for incrementing the cookie counter */
 	mutex_lock(&local->mtx);
 

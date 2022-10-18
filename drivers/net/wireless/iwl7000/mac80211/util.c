@@ -303,13 +303,13 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 	local_bh_disable();
 	spin_lock(&fq->lock);
 
+	sdata->vif.txqs_stopped[ac] = false;
+
 	if (!test_bit(SDATA_STATE_RUNNING, &sdata->state))
 		goto out;
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP)
 		ps = &sdata->bss->ps;
-
-	sdata->vif.txqs_stopped[ac] = false;
 
 	list_for_each_entry_rcu(sta, &local->sta_list, list) {
 		if (sdata != sta->sdata)
@@ -2216,7 +2216,7 @@ static int ieee80211_build_preq_ies_band(struct ieee80211_sub_if_data *sdata,
 		if (he_cap) {
 			enum nl80211_iftype iftype =
 				ieee80211_vif_type_p2p(&sdata->vif);
-			__le16 cap = ieee80211_get_he_6ghz_capa(sband, iftype);
+			__le16 cap = ieee80211_get_he_6ghz_capa(sband6, iftype);
 
 			pos = ieee80211_write_he_6ghz_cap(pos, cap, end);
 		}

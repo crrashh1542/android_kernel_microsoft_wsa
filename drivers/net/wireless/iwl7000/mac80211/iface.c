@@ -200,15 +200,73 @@ static int ieee80211_verify_mac(struct ieee80211_sub_if_data *sdata, u8 *addr,
 	return ret;
 }
 
+static int ieee80211_can_powered_addr_change(struct ieee80211_sub_if_data *sdata)
+{
+	struct ieee80211_roc_work *roc;
+	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_sub_if_data *scan_sdata;
+	int ret = 0;
+
+	/* To be the most flexible here we want to only limit changing the
+	 * address if the specific interface is doing offchannel work or
+	 * scanning.
+	 */
+	if (netif_carrier_ok(sdata->dev))
+		return -EBUSY;
+
+	mutex_lock(&local->mtx);
+
+	/* First check no ROC work is happening on this iface */
+	list_for_each_entry(roc, &local->roc_list, list) {
+		if (roc->sdata != sdata)
+			continue;
+
+		if (roc->started) {
+			ret = -EBUSY;
+			goto unlock;
+		}
+	}
+
+	/* And if this iface is scanning */
+	if (local->scanning) {
+		scan_sdata = rcu_dereference_protected(local->scan_sdata,
+						       lockdep_is_held(&local->mtx));
+		if (sdata == scan_sdata)
+			ret = -EBUSY;
+	}
+
+	switch (sdata->vif.type) {
+	case NL80211_IFTYPE_STATION:
+	case NL80211_IFTYPE_P2P_CLIENT:
+		/* More interface types could be added here but changing the
+		 * address while powered makes the most sense in client modes.
+		 */
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+
+unlock:
+	mutex_unlock(&local->mtx);
+	return ret;
+}
+
 static int ieee80211_change_mac(struct net_device *dev, void *addr)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_local *local = sdata->local;
 	struct sockaddr *sa = addr;
 	bool check_dup = true;
+	bool live = false;
 	int ret;
 
-	if (ieee80211_sdata_running(sdata))
-		return -EBUSY;
+	if (ieee80211_sdata_running(sdata)) {
+		ret = ieee80211_can_powered_addr_change(sdata);
+		if (ret)
+			return ret;
+
+		live = true;
+	}
 
 	if (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
 	    !(sdata->u.mntr.flags & MONITOR_FLAG_ACTIVE))
@@ -218,12 +276,20 @@ static int ieee80211_change_mac(struct net_device *dev, void *addr)
 	if (ret)
 		return ret;
 
+	if (live)
+		drv_remove_interface(local, sdata);
 	ret = eth_mac_addr(dev, sa);
 
 	if (ret == 0) {
 		memcpy(sdata->vif.addr, sa->sa_data, ETH_ALEN);
 		ether_addr_copy(sdata->vif.bss_conf.addr, sdata->vif.addr);
 	}
+
+	/* Regardless of eth_mac_addr() return we still want to add the
+	 * interface back. This should not fail...
+	 */
+	if (live)
+		WARN_ON(drv_add_interface(local, sdata));
 
 	return ret;
 }
@@ -399,7 +465,7 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 	/*
 	 * Stop TX on this interface first.
 	 */
-	if (sdata->dev)
+	if (!local->ops->wake_tx_queue && sdata->dev)
 		netif_tx_stop_all_queues(sdata->dev);
 
 	ieee80211_roc_purge(local, sdata);
@@ -1431,8 +1497,6 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 			sdata->vif.type != NL80211_IFTYPE_STATION);
 	}
 
-	set_bit(SDATA_STATE_RUNNING, &sdata->state);
-
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_P2P_DEVICE:
 		rcu_assign_pointer(local->p2p_sdata, sdata);
@@ -1490,6 +1554,8 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		}
 		spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
 	}
+
+	set_bit(SDATA_STATE_RUNNING, &sdata->state);
 
 	return 0;
  err_del_interface:
@@ -2138,7 +2204,7 @@ struct vif_params *params)
 		wdev = &sdata->wdev;
 
 		sdata->dev = NULL;
-		strlcpy(sdata->name, name, IFNAMSIZ);
+		strscpy(sdata->name, name, IFNAMSIZ);
 		ieee80211_assign_perm_addr(local, wdev->address, type);
 		memcpy(sdata->vif.addr, wdev->address, ETH_ALEN);
 		ether_addr_copy(sdata->vif.bss_conf.addr, sdata->vif.addr);
@@ -2267,6 +2333,7 @@ struct vif_params *params)
 			sdata->u.mgd.use_4addr = params->use_4addr;
 
 		ndev->features |= local->hw.netdev_features;
+		ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 		ndev->hw_features |= ndev->features &
 					MAC80211_SUPPORTED_FEATURES_TX;
 

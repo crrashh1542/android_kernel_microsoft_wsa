@@ -2072,7 +2072,7 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 					  IEEE80211_QUEUE_STOP_REASON_CSA);
 	mutex_unlock(&local->mtx);
 
-	cfg80211_ch_switch_started_notify(sdata->dev, &csa_ie.chandef,
+	cfg80211_ch_switch_started_notify(sdata->dev, &csa_ie.chandef, 0,
 					  csa_ie.count, csa_ie.mode);
 
 	if (local->ops->channel_switch) {
@@ -4597,8 +4597,11 @@ ieee80211_verify_peer_he_mcs_support(struct ieee80211_sub_if_data *sdata,
 	he_cap_elem = cfg80211_find_ext_elem(WLAN_EID_EXT_HE_CAPABILITY,
 					     ies->data, ies->len);
 
+	if (!he_cap_elem)
+		return false;
+
 	/* invalid HE IE */
-	if (!he_cap_elem || he_cap_elem->datalen < 1 + sizeof(*he_cap)) {
+	if (he_cap_elem->datalen < 1 + sizeof(*he_cap)) {
 		sdata_info(sdata,
 			   "Invalid HE elem, Disable HE\n");
 		return false;
@@ -4864,8 +4867,6 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 		}
 
 		if (!elems->vht_cap_elem) {
-			sdata_info(sdata,
-				   "bad VHT capabilities, disabling VHT\n");
 			*conn_flags |= IEEE80211_CONN_DISABLE_VHT;
 			vht_oper = NULL;
 		}
