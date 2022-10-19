@@ -631,9 +631,6 @@ struct ath10k_hw_params {
 
 	bool hw_restart_disconnect;
 
-	/* limit tx credit */
-	bool tx_credit_limit;
-
 	u32 start_retry;
 };
 
