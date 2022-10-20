@@ -594,6 +594,7 @@
 	pinctrl-0 = <&nor_pins_default>;
 	#address-cells = <1>;
 	#size-cells = <0>;
+	assigned-clock-parents = <&topckgen CLK_TOP_MAINPLL_D7_D4>;
 
 	flash@0 {
 		compatible = "jedec,spi-nor";
