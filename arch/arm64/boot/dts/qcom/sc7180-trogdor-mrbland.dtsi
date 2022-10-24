@@ -102,6 +102,10 @@
 	};
 };
 
+&mdp {
+	chromium-enable-overlays;
+};
+
 &gpio_keys {
 	status = "okay";
 };

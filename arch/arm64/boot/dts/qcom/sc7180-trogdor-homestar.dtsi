@@ -140,6 +140,10 @@ ap_ts_pen_1v8: &i2c4 {
 	};
 };
 
+&mdp {
+	chromium-enable-overlays;
+};
+
 &panel {
 	compatible = "samsung,atna33xc20";
 	enable-gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
