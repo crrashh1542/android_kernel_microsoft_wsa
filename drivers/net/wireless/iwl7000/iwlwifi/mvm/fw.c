@@ -1655,7 +1655,7 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	struct ieee80211_channel *chan;
 	struct cfg80211_chan_def chandef;
 	struct ieee80211_supported_band *sband = NULL;
-	u32 pd_notif;
+	u32 sb_cfg;
 
 	lockdep_assert_held(&mvm->mutex);
 
@@ -1663,8 +1663,8 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	if (ret)
 		return ret;
 
-	pd_notif = iwl_read_umac_prph(mvm->trans, WFPM_LMAC2_PD_NOTIFICATION);
-	if (!(pd_notif & WFPM_LMAC2_PD_RE_READ) && iwl_mei_pldr_req())
+	sb_cfg = iwl_read_umac_prph(mvm->trans, SB_MODIFY_CFG_FLAG);
+	if (!(sb_cfg & SB_CFG_RESIDES_IN_OTP_MASK) && iwl_mei_pldr_req())
 		return ret;
 
 	ret = iwl_mvm_load_rt_fw(mvm);
