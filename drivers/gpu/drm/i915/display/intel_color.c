@@ -1571,7 +1571,14 @@ static int ivb_color_check(struct intel_crtc_state *crtc_state)
 	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB &&
 	    crtc_state->hw.ctm) {
 		drm_dbg_kms(&i915->drm,
-			    "YCBCR and CTM together are not possible\n");
+			    "YCbCr and CTM together are not possible\n");
+		return -EINVAL;
+	}
+
+	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB &&
+	    crtc_state->hw.degamma_lut && crtc_state->hw.gamma_lut) {
+		drm_dbg_kms(&i915->drm,
+			    "YCbCr and degamma+gamma together are not possible\n");
 		return -EINVAL;
 	}
 
@@ -1639,7 +1646,14 @@ static int glk_color_check(struct intel_crtc_state *crtc_state)
 	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB &&
 	    crtc_state->hw.ctm) {
 		drm_dbg_kms(&i915->drm,
-			    "YCBCR and CTM together are not possible\n");
+			    "YCbCr and CTM together are not possible\n");
+		return -EINVAL;
+	}
+
+	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB &&
+	    crtc_state->hw.degamma_lut && crtc_state->hw.gamma_lut) {
+		drm_dbg_kms(&i915->drm,
+			    "YCbCr and degamma+gamma together are not possible\n");
 		return -EINVAL;
 	}
 
