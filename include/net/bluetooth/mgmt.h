@@ -843,6 +843,7 @@ struct mgmt_cp_add_adv_patterns_monitor_rssi {
 /*
  * Floss MGMT Opcodes start here.
  */
+#define MGMT_OP_GET_SCO_CODEC_CAPABILITIES_OLD	0x0057
 #define MGMT_OP_GET_SCO_CODEC_CAPABILITIES	0x0100
 #define MGMT_SCO_CODEC_CVSD			0x1
 #define MGMT_SCO_CODEC_MSBC_TRANSPARENT		0x2
@@ -870,6 +871,7 @@ struct mgmt_rp_get_codec_capabilities {
 	struct mgmt_bt_codec	codecs[];
 } __packed;
 
+#define MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE_OLD	0x0058
 #define MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE	0x0101
 struct mgmt_cp_notify_sco_connection_change {
 	__u16 hci_id;
@@ -879,6 +881,7 @@ struct mgmt_cp_notify_sco_connection_change {
 } __packed;
 #define MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE	0xB
 
+#define MGMT_OP_GET_VS_OPCODE_OLD		0x0059
 #define MGMT_OP_GET_VS_OPCODE			0x0102
 #define MGMT_VS_OPCODE_MSFT			0x0001
 
