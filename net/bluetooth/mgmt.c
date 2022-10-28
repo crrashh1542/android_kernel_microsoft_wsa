@@ -4221,6 +4221,11 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 					      MGMT_STATUS_FAILED);
 			goto unlock_quality_report;
 		}
+
+		if (val)
+			hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
+		else
+			hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
 	}
 
 	bt_dev_dbg(hdev, "quality report enable %d changed %d", val, changed);

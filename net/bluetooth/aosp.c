@@ -158,8 +158,6 @@ static int enable_quality_report(struct hci_dev *hdev)
 		return PTR_ERR(skb);
 	}
 
-	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
-
 	kfree_skb(skb);
 	return 0;
 }
@@ -178,8 +176,6 @@ static int disable_quality_report(struct hci_dev *hdev)
 			   PTR_ERR(skb));
 		return PTR_ERR(skb);
 	}
-
-	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
 
 	kfree_skb(skb);
 	return 0;
