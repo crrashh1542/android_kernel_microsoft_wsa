@@ -275,8 +275,7 @@ static u8 *iwl_get_pnvm_image(struct iwl_trans *trans_p, size_t *len)
 }
 
 int iwl_pnvm_load(struct iwl_trans *trans,
-		  struct iwl_notif_wait_data *notif_wait,
-		  const struct iwl_ucode_capabilities *capa)
+		  struct iwl_notif_wait_data *notif_wait)
 {
 	u8 *data;
 	size_t length;
@@ -308,13 +307,13 @@ int iwl_pnvm_load(struct iwl_trans *trans,
 			goto reduce_tables;
 		}
 
-		ret = iwl_trans_load_pnvm(trans, &pnvm_data, capa);
+		ret = iwl_trans_load_pnvm(trans, &pnvm_data);
 		if (ret)
 			goto reduce_tables;
 		IWL_INFO(trans, "loaded PNVM version %08x\n", pnvm_data.version);
 	}
 
-	iwl_trans_set_pnvm(trans, capa);
+	iwl_trans_set_pnvm(trans);
 
 reduce_tables:
 	/* now try to get the reduce power table, if not loaded yet */
