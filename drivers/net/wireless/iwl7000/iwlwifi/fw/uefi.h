@@ -50,8 +50,7 @@ struct uefi_cnv_common_step_data {
  */
 #if defined(CONFIG_EFI) && LINUX_VERSION_IS_GEQ(5,4,0)
 void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len);
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
-			       struct iwl_pnvm_image *pnvm_data);
+void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len);
 void iwl_uefi_get_step_table(struct iwl_trans *trans);
 #else /* CONFIG_EFI */
 static inline
@@ -61,10 +60,9 @@ void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
 }
 
 static inline
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
-			       struct iwl_pnvm_image *pnvm_data)
+void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 {
-	return -EOPNOTSUPP;
+	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static inline

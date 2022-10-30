@@ -61,14 +61,14 @@ void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
 	return data;
 }
 
-static int iwl_uefi_reduce_power_section(struct iwl_trans *trans,
-					 const u8 *data, size_t len,
-					 struct iwl_pnvm_image *pnvm_data)
+static void *iwl_uefi_reduce_power_section(struct iwl_trans *trans,
+					   const u8 *data, size_t len)
 {
 	const struct iwl_ucode_tlv *tlv;
+	u8 *reduce_power_data = NULL, *tmp;
+	u32 size = 0;
 
 	IWL_DEBUG_FW(trans, "Handling REDUCE_POWER section\n");
-	memset(pnvm_data, 0, sizeof(*pnvm_data));
 
 	while (len >= sizeof(*tlv)) {
 		u32 tlv_len, tlv_type;
@@ -82,7 +82,9 @@ static int iwl_uefi_reduce_power_section(struct iwl_trans *trans,
 		if (len < tlv_len) {
 			IWL_ERR(trans, "invalid TLV len: %zd/%u\n",
 				len, tlv_len);
-			return -EINVAL;
+			kfree(reduce_power_data);
+			reduce_power_data = ERR_PTR(-EINVAL);
+			goto out;
 		}
 
 		data += sizeof(*tlv);
@@ -93,17 +95,23 @@ static int iwl_uefi_reduce_power_section(struct iwl_trans *trans,
 				     "Got IWL_UCODE_TLV_MEM_DESC len %d\n",
 				     tlv_len);
 
-			if (pnvm_data->n_chunks == IPC_DRAM_MAP_ENTRY_NUM_MAX) {
-				IWL_DEBUG_FW(trans,
-				"too many payloads to allocate in DRAM.\n");
-				return -EINVAL;
-			}
-
 			IWL_DEBUG_FW(trans, "Adding data (size %d)\n", tlv_len);
 
-			pnvm_data->chunks[pnvm_data->n_chunks].data = data;
-			pnvm_data->chunks[pnvm_data->n_chunks].len = tlv_len;
-			pnvm_data->n_chunks++;
+			tmp = krealloc(reduce_power_data, size + tlv_len, GFP_KERNEL);
+			if (!tmp) {
+				IWL_DEBUG_FW(trans,
+					     "Couldn't allocate (more) reduce_power_data\n");
+
+				kfree(reduce_power_data);
+				reduce_power_data = ERR_PTR(-ENOMEM);
+				goto out;
+			}
+
+			reduce_power_data = tmp;
+
+			memcpy(reduce_power_data + size, data, tlv_len);
+
+			size += tlv_len;
 
 			break;
 		}
@@ -122,18 +130,27 @@ static int iwl_uefi_reduce_power_section(struct iwl_trans *trans,
 	}
 
 done:
-	if (!pnvm_data->n_chunks) {
+	if (!size) {
 		IWL_DEBUG_FW(trans, "Empty REDUCE_POWER, skipping.\n");
-		return -ENOENT;
+		/* Better safe than sorry, but 'reduce_power_data' should
+		 * always be NULL if !size.
+		 */
+		kfree(reduce_power_data);
+		reduce_power_data = ERR_PTR(-ENOENT);
+		goto out;
 	}
-	return 0;
+
+	IWL_INFO(trans, "loaded REDUCE_POWER\n");
+
+out:
+	return reduce_power_data;
 }
 
-static int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
-				       const u8 *data, size_t len,
-				       struct iwl_pnvm_image *pnvm_data)
+static void *iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
+					 const u8 *data, size_t len)
 {
 	const struct iwl_ucode_tlv *tlv;
+	void *sec_data;
 
 	IWL_DEBUG_FW(trans, "Parsing REDUCE_POWER data\n");
 
@@ -149,7 +166,7 @@ static int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 		if (len < tlv_len) {
 			IWL_ERR(trans, "invalid TLV len: %zd/%u\n",
 				len, tlv_len);
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 		}
 
 		if (tlv_type == IWL_UCODE_TLV_PNVM_SKU) {
@@ -170,11 +187,11 @@ static int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 			if (trans->sku_id[0] == le32_to_cpu(sku_id->data[0]) &&
 			    trans->sku_id[1] == le32_to_cpu(sku_id->data[1]) &&
 			    trans->sku_id[2] == le32_to_cpu(sku_id->data[2])) {
-				int ret = iwl_uefi_reduce_power_section(trans,
-								    data, len,
-								    pnvm_data);
-				if (!ret)
-					return 0;
+				sec_data = iwl_uefi_reduce_power_section(trans,
+									 data,
+									 len);
+				if (!IS_ERR(sec_data))
+					return sec_data;
 			} else {
 				IWL_DEBUG_FW(trans, "SKU ID didn't match!\n");
 			}
@@ -184,20 +201,20 @@ static int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 		}
 	}
 
-	return -ENOENT;
+	return ERR_PTR(-ENOENT);
 }
 
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
-			       struct iwl_pnvm_image *pnvm_data)
+void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 {
 	struct pnvm_sku_package *package;
+	void *data = NULL;
 	unsigned long package_size;
 	efi_status_t status;
-	int ret;
-	size_t len = 0;
+
+	*len = 0;
 
 	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
 	/*
 	 * TODO: we hardcode a maximum length here, because reading
@@ -208,7 +225,7 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
 
 	package = kmalloc(package_size, GFP_KERNEL);
 	if (!package)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	status = efi.get_variable(IWL_UEFI_REDUCED_POWER_NAME, &IWL_EFI_VAR_GUID,
 				  NULL, &package_size, package);
@@ -217,23 +234,22 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
 			     "Reduced Power UEFI variable not found 0x%lx (len %lu)\n",
 			     status, package_size);
 		kfree(package);
-		return -ENOENT;
+		return ERR_PTR(-ENOENT);
 	}
 
 	IWL_DEBUG_FW(trans, "Read reduced power from UEFI with size %lu\n",
 		     package_size);
-	len = package_size;
+	*len = package_size;
 
 	IWL_DEBUG_FW(trans, "rev %d, total_size %d, n_skus %d\n",
 		     package->rev, package->total_size, package->n_skus);
 
-	ret = iwl_uefi_reduce_power_parse(trans, package->data,
-					  len - sizeof(*package),
-					  pnvm_data);
+	data = iwl_uefi_reduce_power_parse(trans, package->data,
+					   *len - sizeof(*package));
 
 	kfree(package);
 
-	return ret;
+	return data;
 }
 
 static int iwl_uefi_step_parse(struct uefi_cnv_common_step_data *common_step_data,

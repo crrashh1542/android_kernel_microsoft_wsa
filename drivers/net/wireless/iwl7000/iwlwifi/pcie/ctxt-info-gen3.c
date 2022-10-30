@@ -442,24 +442,31 @@ void iwl_trans_pcie_ctx_info_gen3_set_pnvm(struct iwl_trans *trans,
 }
 
 int iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
-						   const struct iwl_pnvm_image *payloads)
+						   const void *data,
+						   u32 len)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	struct iwl_dram_data *dram = &trans_pcie->reduce_power_dram;
+	int ret;
 
 	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
 		return 0;
 
-	if (WARN_ON(prph_sc_ctrl->reduce_power_cfg.size))
-		return -EBUSY;
-
 	/* only allocate the DRAM if not allocated yet */
-	if (!trans->reduce_power_loaded)
-		return iwl_pcie_load_payloads_continuously(trans,
-							   payloads,
-							   dram);
+	if (!trans->reduce_power_loaded) {
+		if (WARN_ON(prph_sc_ctrl->reduce_power_cfg.size))
+			return -EBUSY;
+
+		ret = iwl_pcie_ctxt_info_alloc_dma(trans, data, len,
+					   &trans_pcie->reduce_power_dram);
+		if (ret < 0) {
+			IWL_DEBUG_FW(trans,
+				     "Failed to allocate reduce power DMA %d.\n",
+				     ret);
+			return ret;
+		}
+	}
 	return 0;
 }
 
