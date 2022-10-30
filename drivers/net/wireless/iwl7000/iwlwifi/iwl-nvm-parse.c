@@ -1020,7 +1020,8 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 		break;
 	}
 
-	if (CSR_HW_REV_TYPE(trans->hw_rev) == IWL_CFG_MAC_TYPE_GL) {
+	if (CSR_HW_REV_TYPE(trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
+	    cfg_eht_cap_has_eht(iftype_data)) {
 		cfg_eht_cap(iftype_data)->eht_cap_elem.mac_cap_info[0] &=
 				~(IEEE80211_EHT_MAC_CAP0_EPCS_PRIO_ACCESS |
 				  IEEE80211_EHT_MAC_CAP0_TRIG_TXOP_SHARING_MODE1 |
