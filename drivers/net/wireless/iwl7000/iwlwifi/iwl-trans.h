@@ -657,8 +657,7 @@ struct iwl_trans_ops {
 	void (*set_pnvm)(struct iwl_trans *trans,
 			 const struct iwl_ucode_capabilities *capa);
 	int (*load_reduce_power)(struct iwl_trans *trans,
-				 const struct iwl_pnvm_image *payloads,
-				 const struct iwl_ucode_capabilities *capa);
+				 const struct iwl_pnvm_image *payloads);
 	void (*set_reduce_power)(struct iwl_trans *trans);
 
 	void (*interrupts)(struct iwl_trans *trans, bool enable);
@@ -1637,10 +1636,9 @@ static inline void iwl_trans_set_pnvm(struct iwl_trans *trans,
 
 static inline int iwl_trans_load_reduce_power
 				(struct iwl_trans *trans,
-				 const struct iwl_pnvm_image *payloads,
-				 const struct iwl_ucode_capabilities *capa)
+				 const struct iwl_pnvm_image *payloads)
 {
-	return trans->ops->load_reduce_power(trans, payloads, capa);
+	return trans->ops->load_reduce_power(trans, payloads);
 }
 
 static inline void iwl_trans_set_reduce_power(struct iwl_trans *trans)
