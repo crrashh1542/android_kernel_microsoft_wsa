@@ -1590,10 +1590,17 @@ void iwl_mvm_rx_missed_beacons_notif(struct iwl_mvm *mvm,
 	rcu_read_lock();
 
 	/* before version four the ID in the notification refers to mac ID */
-	if (notif_ver < 4)
+	if (notif_ver < 4) {
 		vif = iwl_mvm_rcu_dereference_vif_id(mvm, id, true);
-	else
-		vif = iwl_mvm_rcu_fw_link_id_to_link_conf(mvm, id, true)->vif;
+	} else {
+		struct ieee80211_bss_conf *bss_conf =
+			iwl_mvm_rcu_fw_link_id_to_link_conf(mvm, id, true);
+
+		if (!bss_conf)
+			goto out;
+
+		vif = bss_conf->vif;
+	}
 
 	IWL_DEBUG_INFO(mvm,
 		       "missed bcn %s_id=%u, consecutive=%u (%u, %u, %u)\n",
