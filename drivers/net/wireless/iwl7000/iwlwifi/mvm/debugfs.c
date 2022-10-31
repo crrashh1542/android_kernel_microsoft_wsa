@@ -2838,6 +2838,9 @@ void iwl_mvm_dbgfs_register(struct iwl_mvm *mvm)
 
 	debugfs_create_file("mem", 0600, mvm->debugfs_dir, mvm,
 			    &iwl_dbgfs_mem_ops);
+	debugfs_create_u32("sniffer_gp2_adjust", 0600,
+			   mvm->debugfs_dir,
+			   &mvm->sniffer_gp2_adjust);
 
 	/*
 	 * Create a symlink with mac80211. It will be removed when mac80211
