@@ -1766,7 +1766,7 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_channel_switch_start_notif *notif = (void *)pkt->data;
 	struct ieee80211_vif *csa_vif, *vif;
-	struct iwl_mvm_vif *mvmvif;
+	struct iwl_mvm_vif *mvmvif, *csa_mvmvif;
 	u32 id_n_color, csa_id, mac_id;
 
 	id_n_color = le32_to_cpu(notif->id_and_color);
@@ -1786,7 +1786,8 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 			    csa_vif != vif))
 			goto out_unlock;
 
-		csa_id = FW_CMD_ID_AND_COLOR(mvmvif->id, mvmvif->color);
+		csa_mvmvif = iwl_mvm_vif_from_mac80211(csa_vif);
+		csa_id = FW_CMD_ID_AND_COLOR(csa_mvmvif->id, csa_mvmvif->color);
 		if (WARN(csa_id != id_n_color,
 			 "channel switch noa notification on unexpected vif (csa_vif=%d, notif=%d)",
 			 csa_id, id_n_color))
