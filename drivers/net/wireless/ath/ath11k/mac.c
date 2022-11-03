@@ -3725,8 +3725,17 @@ exit:
 
 	mutex_unlock(&ar->conf_mutex);
 
-	if (ar->state_11d == ATH11K_11D_PREPARING)
+	if (ar->state_11d == ATH11K_11D_PREPARING) {
+		/* When split scan feature is enabled, start 11d scan only after
+		 * the 6 GHz scan. Otherwise, the second scan with 6 GHz channels
+		 * will get delayed and there is a chance of scan timing out due
+		 * to ongoing 11d scan.
+		 */
+		if (ar->hw->wiphy->flags & WIPHY_FLAG_SPLIT_SCAN_6GHZ && !req->scan_6ghz)
+			return ret;
+
 		ath11k_mac_11d_scan_start(ar, arvif->vdev_id);
+	}
 
 	return ret;
 }
@@ -8994,8 +9003,11 @@ static int __ath11k_mac_register(struct ath11k *ar)
 
 	ar->hw->wiphy->interface_modes = ab->hw_params.interface_modes;
 
-	if (ab->hw_params.single_pdev_only && ar->supports_6ghz)
+	if (ab->hw_params.single_pdev_only && ar->supports_6ghz) {
 		ieee80211_hw_set(ar->hw, SINGLE_SCAN_ON_ALL_BANDS);
+		if (ab->hw_params.split_scan)
+			ar->hw->wiphy->flags |= WIPHY_FLAG_SPLIT_SCAN_6GHZ;
+	}
 
 	if (ab->hw_params.supports_multi_bssid) {
 		ieee80211_hw_set(ar->hw, SUPPORTS_MULTI_BSSID);
