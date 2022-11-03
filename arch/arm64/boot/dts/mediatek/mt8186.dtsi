@@ -995,8 +995,9 @@
 				 <&topckgen CLK_TOP_ADSP_BUS>;
 			clock-names = "audiodsp",
 				      "adsp_bus";
-			assigned-clocks = <&topckgen CLK_TOP_AUDIODSP>;
-			assigned-clock-parents = <&apmixedsys CLK_APMIXED_ADSPPLL>;
+			assigned-clocks = <&topckgen CLK_TOP_AUDIODSP>,
+					  <&topckgen CLK_TOP_ADSP_BUS>;
+			assigned-clock-parents = <&clk26m>, <&topckgen CLK_TOP_MAINPLL_D2_D2>;
 			power-domains = <&spm MT8186_POWER_DOMAIN_ADSP_TOP>;
 			mbox-names = "rx", "tx";
 			mboxes = <&adsp_mailbox0>, <&adsp_mailbox1>;
