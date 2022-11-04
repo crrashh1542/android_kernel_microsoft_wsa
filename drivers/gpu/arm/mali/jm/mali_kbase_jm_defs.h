@@ -87,8 +87,6 @@
 #define KBASE_KATOM_FLAG_FAIL_BLOCKER (1<<8)
 /* Atom is currently in the list of atoms blocked on cross-slot dependencies */
 #define KBASE_KATOM_FLAG_JSCTX_IN_X_DEP_LIST (1<<9)
-/* Atom is currently holding a context reference */
-#define KBASE_KATOM_FLAG_HOLDING_CTX_REF (1<<10)
 /* Atom requires GPU to be in protected mode */
 #define KBASE_KATOM_FLAG_PROTECTED (1<<11)
 /* Atom has been stored in runnable_tree */
@@ -125,6 +123,18 @@
 #define KBASE_SERIALIZE_INTER_SLOT (1 << 1)
 /* Reset the GPU after each atom completion */
 #define KBASE_SERIALIZE_RESET (1 << 2)
+
+/**
+ * enum kbase_timeout_selector - The choice of which timeout to get scaled
+ *                               using the lowest GPU frequency.
+ * @KBASE_TIMEOUT_SELECTOR_COUNT: Number of timeout selectors. Must be last in
+ *                                the enum.
+ */
+enum kbase_timeout_selector {
+
+	/* Must be the last in the enum */
+	KBASE_TIMEOUT_SELECTOR_COUNT
+};
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 /**
@@ -176,8 +186,6 @@ struct kbase_jd_atom_dependency {
 static inline const struct kbase_jd_atom *
 kbase_jd_katom_dep_atom(const struct kbase_jd_atom_dependency *dep)
 {
-	LOCAL_ASSERT(dep != NULL);
-
 	return (const struct kbase_jd_atom *)(dep->atom);
 }
 
@@ -191,8 +199,6 @@ kbase_jd_katom_dep_atom(const struct kbase_jd_atom_dependency *dep)
 static inline u8 kbase_jd_katom_dep_type(
 		const struct kbase_jd_atom_dependency *dep)
 {
-	LOCAL_ASSERT(dep != NULL);
-
 	return dep->dep_type;
 }
 
@@ -209,8 +215,6 @@ static inline void kbase_jd_katom_dep_set(
 {
 	struct kbase_jd_atom_dependency *dep;
 
-	LOCAL_ASSERT(const_dep != NULL);
-
 	dep = (struct kbase_jd_atom_dependency *)const_dep;
 
 	dep->atom = a;
@@ -226,8 +230,6 @@ static inline void kbase_jd_katom_dep_clear(
 		const struct kbase_jd_atom_dependency *const_dep)
 {
 	struct kbase_jd_atom_dependency *dep;
-
-	LOCAL_ASSERT(const_dep != NULL);
 
 	dep = (struct kbase_jd_atom_dependency *)const_dep;
 
@@ -394,16 +396,21 @@ enum kbase_atom_exit_protected_state {
  *                         sync through soft jobs and for the implicit
  *                         synchronization required on access to external
  *                         resources.
- * @dma_fence.fence_in:    Input fence
+ * @dma_fence.fence_in:    Points to the dma-buf input fence for this atom.
+ *                         The atom would complete only after the fence is
+ *                         signaled.
  * @dma_fence.fence:       Points to the dma-buf output fence for this atom.
+ * @dma_fence.fence_cb:    The object that is passed at the time of adding the
+ *                         callback that gets invoked when @dma_fence.fence_in
+ *                         is signaled.
+ * @dma_fence.fence_cb_added: Flag to keep a track if the callback was successfully
+ *                            added for @dma_fence.fence_in, which is supposed to be
+ *                            invoked on the signaling of fence.
  * @dma_fence.context:     The dma-buf fence context number for this atom. A
  *                         unique context number is allocated to each katom in
  *                         the context on context creation.
  * @dma_fence.seqno:       The dma-buf fence sequence number for this atom. This
  *                         is increased every time this katom uses dma-buf fence
- * @dma_fence.callbacks:   List of all callbacks set up to wait on other fences
- * @dma_fence.dep_count:   Atomic counter of number of outstandind dma-buf fence
- *                         dependencies for this atom.
  * @event_code:            Event code for the job chain represented by the atom,
  *                         both HW and low-level SW events are represented by
  *                         event codes.
@@ -486,7 +493,6 @@ enum kbase_atom_exit_protected_state {
  *                 BASE_JD_REQ_START_RENDERPASS set in its core requirements
  *                 with an atom that has BASE_JD_REQ_END_RENDERPASS set.
  * @jc_fragment:          Set of GPU fragment job chains
- * @retry_count:          TODO: Not used,to be removed
  */
 struct kbase_jd_atom {
 	struct work_struct work;
@@ -511,16 +517,12 @@ struct kbase_jd_atom {
 	u32 device_nr;
 	u64 jc;
 	void *softjob_data;
-#if defined(CONFIG_SYNC)
-	struct sync_fence *fence;
-	struct sync_fence_waiter sync_waiter;
-#endif				/* CONFIG_SYNC */
-#if defined(CONFIG_MALI_BIFROST_DMA_FENCE) || defined(CONFIG_SYNC_FILE)
+#if IS_ENABLED(CONFIG_SYNC_FILE)
 	struct {
 		/* Use the functions/API defined in mali_kbase_fence.h to
 		 * when working with this sub struct
 		 */
-#if defined(CONFIG_SYNC_FILE)
+#if IS_ENABLED(CONFIG_SYNC_FILE)
 #if (KERNEL_VERSION(4, 10, 0) > LINUX_VERSION_CODE)
 		struct fence *fence_in;
 #else
@@ -543,38 +545,21 @@ struct kbase_jd_atom {
 #else
 		struct dma_fence *fence;
 #endif
+
+		/* This is the callback object that is registered for the fence_in.
+		 * The callback is invoked when the fence_in is signaled.
+		 */
+#if (KERNEL_VERSION(4, 10, 0) > LINUX_VERSION_CODE)
+		struct fence_cb fence_cb;
+#else
+		struct dma_fence_cb fence_cb;
+#endif
+		bool fence_cb_added;
+
 		unsigned int context;
 		atomic_t seqno;
-		/* This contains a list of all callbacks set up to wait on
-		 * other fences.  This atom must be held back from JS until all
-		 * these callbacks have been called and dep_count have reached
-		 * 0. The initial value of dep_count must be equal to the
-		 * number of callbacks on this list.
-		 *
-		 * This list is protected by jctx.lock. Callbacks are added to
-		 * this list when the atom is built and the wait are set up.
-		 * All the callbacks then stay on the list until all callbacks
-		 * have been called and the atom is queued, or cancelled, and
-		 * then all callbacks are taken off the list and freed.
-		 */
-		struct list_head callbacks;
-		/* Atomic counter of number of outstandind dma-buf fence
-		 * dependencies for this atom. When dep_count reaches 0 the
-		 * atom may be queued.
-		 *
-		 * The special value "-1" may only be set after the count
-		 * reaches 0, while holding jctx.lock. This indicates that the
-		 * atom has been handled, either queued in JS or cancelled.
-		 *
-		 * If anyone but the dma-fence worker sets this to -1 they must
-		 * ensure that any potentially queued worker must have
-		 * completed before allowing the atom to be marked as unused.
-		 * This can be done by flushing the fence work queue:
-		 * kctx->dma_fence.wq.
-		 */
-		atomic_t dep_count;
 	} dma_fence;
-#endif /* CONFIG_MALI_BIFROST_DMA_FENCE || CONFIG_SYNC_FILE */
+#endif /* CONFIG_SYNC_FILE */
 
 	/* Note: refer to kbasep_js_atom_retained_state, which will take a copy
 	 * of some of the following members
@@ -596,8 +581,6 @@ struct kbase_jd_atom {
 	int slot_nr;
 
 	u32 atom_flags;
-
-	int retry_count;
 
 	enum kbase_atom_gpu_rb_state gpu_rb_state;
 
@@ -723,17 +706,13 @@ static inline bool kbase_jd_atom_is_earlier(const struct kbase_jd_atom *katom_a,
  * A state machine is used to control incremental rendering.
  */
 enum kbase_jd_renderpass_state {
-	KBASE_JD_RP_COMPLETE,       /* COMPLETE => START */
-	KBASE_JD_RP_START,          /* START => PEND_OOM or COMPLETE */
-	KBASE_JD_RP_PEND_OOM,       /* PEND_OOM => OOM or COMPLETE */
-	KBASE_JD_RP_OOM,            /* OOM => RETRY */
-	KBASE_JD_RP_RETRY,          /* RETRY => RETRY_PEND_OOM or
-				     *          COMPLETE
-				     */
-	KBASE_JD_RP_RETRY_PEND_OOM, /* RETRY_PEND_OOM => RETRY_OOM or
-				     *                   COMPLETE
-				     */
-	KBASE_JD_RP_RETRY_OOM,      /* RETRY_OOM => RETRY */
+	KBASE_JD_RP_COMPLETE, /* COMPLETE => START */
+	KBASE_JD_RP_START, /* START => PEND_OOM or COMPLETE */
+	KBASE_JD_RP_PEND_OOM, /* PEND_OOM => OOM or COMPLETE */
+	KBASE_JD_RP_OOM, /* OOM => RETRY */
+	KBASE_JD_RP_RETRY, /* RETRY => RETRY_PEND_OOM or COMPLETE */
+	KBASE_JD_RP_RETRY_PEND_OOM, /* RETRY_PEND_OOM => RETRY_OOM or COMPLETE */
+	KBASE_JD_RP_RETRY_OOM /* RETRY_OOM => RETRY */
 };
 
 /**
@@ -806,7 +785,7 @@ struct kbase_jd_renderpass {
  *                            atom completes
  *                            execution on GPU or the input fence get signaled.
  * @tb_lock:                  Lock to serialize the write access made to @tb to
- *                            to store the register access trace messages.
+ *                            store the register access trace messages.
  * @tb:                       Pointer to the Userspace accessible buffer storing
  *                            the trace messages for register read/write
  *                            accesses made by the Kbase. The buffer is filled

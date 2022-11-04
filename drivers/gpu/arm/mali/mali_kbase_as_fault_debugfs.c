@@ -26,7 +26,7 @@
 #include <device/mali_kbase_device.h>
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 
 static int kbase_as_fault_read(struct seq_file *sfile, void *data)
 {
@@ -71,7 +71,7 @@ static const struct file_operations as_fault_fops = {
 	.release = single_release,
 };
 
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 #endif /* CONFIG_DEBUG_FS */
 
 /*
@@ -80,7 +80,7 @@ static const struct file_operations as_fault_fops = {
 void kbase_as_fault_debugfs_init(struct kbase_device *kbdev)
 {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	uint i;
 	char as_name[64];
 	struct dentry *debugfs_directory;
@@ -93,20 +93,19 @@ void kbase_as_fault_debugfs_init(struct kbase_device *kbdev)
 	debugfs_directory = debugfs_create_dir("address_spaces",
 					       kbdev->mali_debugfs_directory);
 
-	if (debugfs_directory) {
+	if (IS_ERR_OR_NULL(debugfs_directory)) {
+		dev_warn(kbdev->dev,
+			 "unable to create address_spaces debugfs directory");
+	} else {
 		for (i = 0; i < kbdev->nr_hw_address_spaces; i++) {
 			snprintf(as_name, ARRAY_SIZE(as_name), "as%u", i);
-			debugfs_create_file(as_name, S_IRUGO,
+			debugfs_create_file(as_name, 0444,
 					    debugfs_directory,
 					    (void *)(uintptr_t)i,
 					    &as_fault_fops);
 		}
-	} else {
-		dev_warn(kbdev->dev,
-			 "unable to create address_spaces debugfs directory");
 	}
 
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 #endif /* CONFIG_DEBUG_FS */
-	return;
 }

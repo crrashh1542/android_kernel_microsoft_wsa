@@ -181,7 +181,7 @@ void kbase_backend_reset(struct kbase_device *kbdev, ktime_t *end_timestamp);
  * @kbdev: Device pointer
  * @js:    Job slot to inspect
  *
- * Return : Atom currently at the head of slot @js, or NULL
+ * Return: Atom currently at the head of slot @js, or NULL
  */
 struct kbase_jd_atom *kbase_backend_inspect_tail(struct kbase_device *kbdev,
 					int js);
@@ -192,7 +192,7 @@ struct kbase_jd_atom *kbase_backend_inspect_tail(struct kbase_device *kbdev,
  * @kbdev:	Device pointer
  * @js:		Job slot to inspect
  *
- * Return : Number of atoms currently on slot
+ * Return: Number of atoms currently on slot
  */
 int kbase_backend_nr_atoms_on_slot(struct kbase_device *kbdev, int js);
 
@@ -202,7 +202,7 @@ int kbase_backend_nr_atoms_on_slot(struct kbase_device *kbdev, int js);
  * @kbdev:	Device pointer
  * @js:		Job slot to inspect
  *
- * Return : Number of atoms currently on slot @js that are currently on the GPU.
+ * Return: Number of atoms currently on slot @js that are currently on the GPU.
  */
 int kbase_backend_nr_atoms_submitted(struct kbase_device *kbdev, int js);
 
@@ -231,12 +231,12 @@ void kbase_backend_timeouts_changed(struct kbase_device *kbdev);
  * @kbdev:	Device pointer
  * @js:		Job slot to inspect
  *
- * Return : Number of jobs that can be submitted.
+ * Return: Number of jobs that can be submitted.
  */
 int kbase_backend_slot_free(struct kbase_device *kbdev, int js);
 
 /**
- * kbase_job_check_enter_disjoint - potentially leave disjoint state
+ * kbase_job_check_leave_disjoint - potentially leave disjoint state
  * @kbdev: kbase device
  * @target_katom: atom which is finishing
  *
@@ -314,7 +314,6 @@ bool kbase_gpu_atoms_submitted_any(struct kbase_device *kbdev);
  *
  * Caller must hold kbase_device->hwaccess_lock.
  */
-void kbase_backend_slot_kctx_purge_locked(struct kbase_device *kbdev,
-					  struct kbase_context *kctx);
+void kbase_backend_slot_kctx_purge_locked(struct kbase_device *kbdev, struct kbase_context *kctx);
 
 #endif /* _KBASE_HWACCESS_JM_H_ */

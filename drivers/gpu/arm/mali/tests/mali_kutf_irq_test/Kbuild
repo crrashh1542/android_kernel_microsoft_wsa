@@ -18,7 +18,7 @@
 #
 #
 
-ifeq ($(CONFIG_MALI_BIFROST_KUTF_IRQ_TEST),y)
+ifeq ($(CONFIG_MALI_KUTF_IRQ_TEST),y)
 obj-m += mali_kutf_irq_test.o
 
 mali_kutf_irq_test-y := mali_kutf_irq_test_main.o

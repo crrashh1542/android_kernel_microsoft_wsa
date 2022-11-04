@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -46,7 +46,7 @@
 #define MINOR_FOR_FIRST_KBASE_DEV	(-1)
 
 /* KUTF test application pointer for this test */
-struct kutf_application *kutf_app;
+static struct kutf_application *kutf_app;
 
 enum portal_server_state {
 	PORTAL_STATE_NO_CLK,
@@ -113,7 +113,7 @@ struct kbasep_cmd_name_pair {
 	const char *name;
 };
 
-struct kbasep_cmd_name_pair kbasep_portal_cmd_name_map[] = {
+static const struct kbasep_cmd_name_pair kbasep_portal_cmd_name_map[] = {
 	{ PORTAL_CMD_GET_PLATFORM, GET_PLATFORM },
 	{ PORTAL_CMD_GET_CLK_RATE_MGR, GET_CLK_RATE_MGR },
 	{ PORTAL_CMD_GET_CLK_RATE_TRACE, GET_CLK_RATE_TRACE },
@@ -128,7 +128,7 @@ struct kbasep_cmd_name_pair kbasep_portal_cmd_name_map[] = {
  * this pointer is engaged, new requests for create fixture will fail
  * hence limiting the use of the portal at any time to a singleton.
  */
-struct kutf_clk_rate_trace_fixture_data *g_ptr_portal_data;
+static struct kutf_clk_rate_trace_fixture_data *g_ptr_portal_data;
 
 #define PORTAL_MSG_LEN (KUTF_MAX_LINE_LENGTH - MAX_REPLY_NAME_LEN)
 static char portal_msg_buf[PORTAL_MSG_LEN];
@@ -195,7 +195,7 @@ static void kutf_set_pm_ctx_idle(struct kutf_context *context)
 	kbase_pm_context_idle(data->kbdev);
 }
 
-static char const *kutf_clk_trace_do_change_pm_ctx(struct kutf_context *context,
+static const char *kutf_clk_trace_do_change_pm_ctx(struct kutf_context *context,
 				struct clk_trace_portal_input *cmd)
 {
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
@@ -232,7 +232,7 @@ static char const *kutf_clk_trace_do_change_pm_ctx(struct kutf_context *context,
 	return errmsg;
 }
 
-static char const *kutf_clk_trace_do_get_rate(struct kutf_context *context,
+static const char *kutf_clk_trace_do_get_rate(struct kutf_context *context,
 				struct clk_trace_portal_input *cmd)
 {
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
@@ -293,8 +293,10 @@ static char const *kutf_clk_trace_do_get_rate(struct kutf_context *context,
  * current snapshot record, and the start of the next one. The response
  * message contains the current snapshot record, with each clock's
  * data sequentially placed inside (array marker) [ ].
+ *
+ * Return: generated string
  */
-static char const *kutf_clk_trace_do_get_snapshot(struct kutf_context *context,
+static const char *kutf_clk_trace_do_get_snapshot(struct kutf_context *context,
 				struct clk_trace_portal_input *cmd)
 {
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
@@ -351,8 +353,10 @@ static char const *kutf_clk_trace_do_get_snapshot(struct kutf_context *context,
  *
  * Invokes frequency change notification callbacks with a fake
  * GPU frequency 42 kHz for the top clock domain.
+ *
+ * Return: generated string
  */
-static char const *kutf_clk_trace_do_invoke_notify_42k(
+static const char *kutf_clk_trace_do_invoke_notify_42k(
 	struct kutf_context *context,
 	struct clk_trace_portal_input *cmd)
 {
@@ -392,7 +396,7 @@ static char const *kutf_clk_trace_do_invoke_notify_42k(
 	return errmsg;
 }
 
-static char const *kutf_clk_trace_do_close_portal(struct kutf_context *context,
+static const char *kutf_clk_trace_do_close_portal(struct kutf_context *context,
 				struct clk_trace_portal_input *cmd)
 {
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
@@ -426,7 +430,7 @@ static char const *kutf_clk_trace_do_close_portal(struct kutf_context *context,
  *
  * Return: A string to indicate the platform (PV/PTM/GPU/UNKNOWN)
  */
-static char const *kutf_clk_trace_do_get_platform(
+static const char *kutf_clk_trace_do_get_platform(
 	struct kutf_context *context,
 	struct clk_trace_portal_input *cmd)
 {
@@ -435,7 +439,7 @@ static char const *kutf_clk_trace_do_get_platform(
 	const void *arbiter_if_node = NULL;
 	const void *power_node = NULL;
 	const char *platform = "GPU";
-#if defined(CONFIG_MALI_BIFROST_ARBITER_SUPPORT) && defined(CONFIG_OF)
+#if defined(CONFIG_MALI_ARBITER_SUPPORT) && defined(CONFIG_OF)
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
 
 	arbiter_if_node =
@@ -530,7 +534,7 @@ static bool kutf_clk_trace_process_portal_cmd(struct kutf_context *context,
 		errmsg = kutf_clk_trace_do_get_platform(context, cmd);
 		break;
 	case PORTAL_CMD_GET_CLK_RATE_MGR:
-		/* Fall through */
+		fallthrough;
 	case PORTAL_CMD_GET_CLK_RATE_TRACE:
 		errmsg = kutf_clk_trace_do_get_rate(context, cmd);
 		break;
@@ -538,7 +542,7 @@ static bool kutf_clk_trace_process_portal_cmd(struct kutf_context *context,
 		errmsg = kutf_clk_trace_do_get_snapshot(context, cmd);
 		break;
 	case PORTAL_CMD_INC_PM_CTX_CNT:
-		/* Fall through */
+		fallthrough;
 	case PORTAL_CMD_DEC_PM_CTX_CNT:
 		errmsg = kutf_clk_trace_do_change_pm_ctx(context, cmd);
 		break;
@@ -570,6 +574,8 @@ static bool kutf_clk_trace_process_portal_cmd(struct kutf_context *context,
  *
  * This function deal with an erroneous input request, and respond with
  * a proper 'NACK' message.
+ *
+ * Return: 0 on success, non-zero on failure
  */
 static int kutf_clk_trace_do_nack_response(struct kutf_context *context,
 				struct clk_trace_portal_input *cmd)
@@ -613,7 +619,7 @@ static int kutf_clk_trace_do_nack_response(struct kutf_context *context,
  *     3). If the GPU active transition occurs following 2), there
  *         must be rate change event from tracing.
  */
-void kutf_clk_trace_barebone_check(struct kutf_context *context)
+static void kutf_clk_trace_barebone_check(struct kutf_context *context)
 {
 	struct kutf_clk_rate_trace_fixture_data *data = context->fixture;
 	struct kbase_device *kbdev = data->kbdev;
@@ -691,7 +697,7 @@ static bool kutf_clk_trace_end_of_stream(struct clk_trace_portal_input *cmd)
 	return (cmd->named_val_err == -EBUSY);
 }
 
-void kutf_clk_trace_no_clks_dummy(struct kutf_context *context)
+static void kutf_clk_trace_no_clks_dummy(struct kutf_context *context)
 {
 	struct clk_trace_portal_input cmd;
 	unsigned long timeout = jiffies + HZ * 2;
@@ -819,14 +825,14 @@ static void *mali_kutf_clk_rate_trace_create_fixture(
 	if (!data)
 		return NULL;
 
-	*data = (const struct kutf_clk_rate_trace_fixture_data) { 0 };
+	memset(data, 0, sizeof(*data));
 	pr_debug("Hooking up the test portal to kbdev clk rate trace\n");
 	spin_lock(&kbdev->pm.clk_rtm.lock);
 
 	if (g_ptr_portal_data != NULL) {
 		pr_warn("Test portal is already in use, run aborted\n");
-		kutf_test_fail(context, "Portal allows single session only");
 		spin_unlock(&kbdev->pm.clk_rtm.lock);
+		kutf_test_fail(context, "Portal allows single session only");
 		return NULL;
 	}
 
@@ -871,8 +877,8 @@ static void *mali_kutf_clk_rate_trace_create_fixture(
 }
 
 /**
- * Destroy fixture data previously created by
- * mali_kutf_clk_rate_trace_create_fixture.
+ * mali_kutf_clk_rate_trace_remove_fixture - Destroy fixture data previously created by
+ *                                           mali_kutf_clk_rate_trace_create_fixture.
  *
  * @context:             KUTF context.
  */
@@ -896,12 +902,14 @@ static void mali_kutf_clk_rate_trace_remove_fixture(
 
 /**
  * mali_kutf_clk_rate_trace_test_module_init() - Entry point for test mdoule.
+ *
+ * Return: 0 on success, error code otherwise
  */
-int mali_kutf_clk_rate_trace_test_module_init(void)
+static int __init mali_kutf_clk_rate_trace_test_module_init(void)
 {
 	struct kutf_suite *suite;
 	unsigned int filters;
-	union kutf_callback_data suite_data = { 0 };
+	union kutf_callback_data suite_data = { NULL };
 
 	pr_debug("Creating app\n");
 
@@ -943,7 +951,7 @@ int mali_kutf_clk_rate_trace_test_module_init(void)
  * mali_kutf_clk_rate_trace_test_module_exit() - Module exit point for this
  *                                               test.
  */
-void mali_kutf_clk_rate_trace_test_module_exit(void)
+static void __exit mali_kutf_clk_rate_trace_test_module_exit(void)
 {
 	pr_debug("Exit start\n");
 	kutf_destroy_application(kutf_app);

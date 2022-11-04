@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2014, 2016, 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014, 2016, 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -22,9 +22,10 @@
 #include "mali_kbase.h"
 #include "mali_kbase_regs_history_debugfs.h"
 
-#if defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_BIFROST_NO_MALI)
+#if defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI)
 
 #include <linux/debugfs.h>
+#include "version_compat_defs.h"
 
 /**
  * kbase_io_history_resize - resize the register access history buffer.
@@ -36,7 +37,7 @@
  * If resizing fails for any reason (e.g., could not allocate memory, invalid
  * buffer size) then the original buffer will be kept intact.
  *
- * @return 0 if the buffer was resized, failure otherwise
+ * Return: 0 if the buffer was resized, failure otherwise
  */
 static int kbase_io_history_resize(struct kbase_io_history *h, u16 new_size)
 {
@@ -158,12 +159,8 @@ static int regs_history_size_set(void *data, u64 val)
 	return kbase_io_history_resize(h, (u16)val);
 }
 
-
-DEFINE_SIMPLE_ATTRIBUTE(regs_history_size_fops,
-		regs_history_size_get,
-		regs_history_size_set,
-		"%llu\n");
-
+DEFINE_DEBUGFS_ATTRIBUTE(regs_history_size_fops, regs_history_size_get, regs_history_size_set,
+			 "%llu\n");
 
 /**
  * regs_history_show - show callback for the register access history file.
@@ -173,8 +170,7 @@ DEFINE_SIMPLE_ATTRIBUTE(regs_history_size_fops,
  *
  * This function is called to dump all recent accesses to the GPU registers.
  *
- * @return 0 if successfully prints data in debugfs entry file, failure
- * otherwise
+ * Return: 0 if successfully prints data in debugfs entry file, failure otherwise
  */
 static int regs_history_show(struct seq_file *sfile, void *data)
 {
@@ -214,7 +210,7 @@ out:
  * @in: &struct inode pointer
  * @file: &struct file pointer
  *
- * @return file descriptor
+ * Return: file descriptor
  */
 static int regs_history_open(struct inode *in, struct file *file)
 {
@@ -231,14 +227,14 @@ static const struct file_operations regs_history_fops = {
 
 void kbasep_regs_history_debugfs_init(struct kbase_device *kbdev)
 {
-	debugfs_create_bool("regs_history_enabled", S_IRUGO | S_IWUSR,
+	debugfs_create_bool("regs_history_enabled", 0644,
 			kbdev->mali_debugfs_directory,
 			&kbdev->io_history.enabled);
-	debugfs_create_file("regs_history_size", S_IRUGO | S_IWUSR,
+	debugfs_create_file("regs_history_size", 0644,
 			kbdev->mali_debugfs_directory,
 			&kbdev->io_history, &regs_history_size_fops);
-	debugfs_create_file("regs_history", S_IRUGO,
+	debugfs_create_file("regs_history", 0444,
 			kbdev->mali_debugfs_directory, &kbdev->io_history,
 			&regs_history_fops);
 }
-#endif /* defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_BIFROST_NO_MALI) */
+#endif /* defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI) */

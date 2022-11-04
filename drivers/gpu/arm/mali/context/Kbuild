@@ -20,7 +20,7 @@
 
 mali_kbase-y += context/mali_kbase_context.o
 
-ifeq ($(CONFIG_MALI_BIFROST_CSF_SUPPORT),y)
+ifeq ($(CONFIG_MALI_CSF_SUPPORT),y)
     mali_kbase-y += context/backend/mali_kbase_context_csf.o
 else
     mali_kbase-y += context/backend/mali_kbase_context_jm.o
