@@ -19,4 +19,4 @@
 #
 #
 
-obj-$(CONFIG_MALI_BIFROST) += mali/
+obj-$(CONFIG_MALI) += mali/
