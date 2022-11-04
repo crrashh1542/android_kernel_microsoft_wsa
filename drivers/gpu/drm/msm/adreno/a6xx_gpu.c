@@ -1136,6 +1136,11 @@ static int hw_init(struct msm_gpu *gpu)
 	/* Enable interrupts */
 	gpu_write(gpu, REG_A6XX_RBBM_INT_0_MASK, A6XX_INT_MASK);
 
+	/* Disable an interrupt in 7c3 for now to avoid gpu interrupt storm */
+	if (adreno_is_7c3(adreno_gpu))
+		gpu_rmw(gpu, REG_A6XX_RBBM_INT_0_MASK,
+				A6XX_RBBM_INT_0_MASK_CP_HW_ERROR, 0);
+
 	ret = adreno_hw_init(gpu);
 	if (ret)
 		goto out;
