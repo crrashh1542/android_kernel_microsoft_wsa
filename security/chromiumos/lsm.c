@@ -272,6 +272,7 @@ static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
 			task_pid_nr(current));
 		kfree(cmdline);
 
+		pr_notice_ratelimited("memfd execution blocked\n");
 		return -EACCES;
 	}
 	return 0;
@@ -279,8 +280,10 @@ static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
 
 static int chromiumos_locked_down(enum lockdown_reason what)
 {
-	if (what == LOCKDOWN_BPF_WRITE_USER)
+	if (what == LOCKDOWN_BPF_WRITE_USER) {
+		pr_notice_ratelimited("BPF_WRITE_USER blocked\n");
 		return -EACCES;
+	}
 
 	return 0;
 }
@@ -303,7 +306,7 @@ static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
 	}
 
 	if (res < len || strncmp(buf, secagentd, len)) {
-		pr_notice("bpf syscall blocked");
+		pr_notice_ratelimited("bpf syscall blocked\n");
 		return -EACCES;
 	}
 
