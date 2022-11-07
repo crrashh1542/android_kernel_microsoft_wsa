@@ -320,10 +320,8 @@ int hda_cl_copy_fw(struct snd_sof_dev *sdev, struct hdac_ext_stream *hext_stream
 
 int hda_dsp_cl_boot_firmware_iccmax(struct snd_sof_dev *sdev)
 {
-	struct snd_sof_pdata *plat_data = sdev->pdata;
 	struct hdac_ext_stream *iccmax_stream;
 	struct hdac_bus *bus = sof_to_bus(sdev);
-	struct firmware stripped_firmware;
 	struct snd_dma_buffer dmab_bdl;
 	int ret, ret1;
 	u8 original_gb;
@@ -331,15 +329,11 @@ int hda_dsp_cl_boot_firmware_iccmax(struct snd_sof_dev *sdev)
 	/* save the original LTRP guardband value */
 	original_gb = snd_hdac_chip_readb(bus, VS_LTRP) & HDA_VS_INTEL_LTRP_GB_MASK;
 
-	if (plat_data->fw->size <= plat_data->fw_offset) {
-		dev_err(sdev->dev, "error: firmware size must be greater than firmware offset\n");
-		return -EINVAL;
-	}
-
-	stripped_firmware.size = plat_data->fw->size - plat_data->fw_offset;
-
-	/* prepare capture stream for ICCMAX */
-	iccmax_stream = hda_cl_stream_prepare(sdev, HDA_CL_STREAM_FORMAT, stripped_firmware.size,
+	/*
+	 * Prepare capture stream for ICCMAX. We do not need to store
+	 * the data, so use a buffer of PAGE_SIZE for receiving.
+	 */
+	iccmax_stream = hda_cl_stream_prepare(sdev, HDA_CL_STREAM_FORMAT, PAGE_SIZE,
 					      &dmab_bdl, SNDRV_PCM_STREAM_CAPTURE);
 	if (IS_ERR(iccmax_stream)) {
 		dev_err(sdev->dev, "error: dma prepare for ICCMAX stream failed\n");
