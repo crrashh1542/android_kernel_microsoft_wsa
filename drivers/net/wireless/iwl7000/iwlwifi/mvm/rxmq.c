@@ -1479,9 +1479,8 @@ static void iwl_mvm_decode_eht_ext_mu(struct iwl_mvm *mvm,
 				      struct ieee80211_radiotap_eht *eht,
 				      struct ieee80211_radiotap_eht_usig *usig)
 {
-	__le32 data1 = phy_data->d1;
-
 	if (phy_data->with_data) {
+		__le32 data1 = phy_data->d1;
 		__le32 data2 = phy_data->d2;
 		__le32 data3 = phy_data->d3;
 		__le32 data4 = phy_data->eht_d4;
