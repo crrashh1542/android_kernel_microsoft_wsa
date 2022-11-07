@@ -293,6 +293,13 @@ static void ieee80211_remove_tid_tx(struct sta_info *sta, int tid)
 
 	ieee80211_agg_splice_finish(sta->sdata, tid);
 
+	/*
+	 * Timers should be stopped. Unfortunately that is not always
+	 * the case, so warn if a timer was still active.
+	 */
+	WARN_ON_ONCE(timer_shutdown(&tid_tx->addba_resp_timer));
+	WARN_ON_ONCE(timer_shutdown(&tid_tx->session_timer));
+
 	kfree_rcu(tid_tx, rcu_head);
 }
 
@@ -358,6 +365,10 @@ int ___ieee80211_stop_tx_ba_session(struct sta_info *sta, u16 tid,
 		/* not even started yet! */
 		ieee80211_assign_tid_tx(sta, tid, NULL);
 		spin_unlock_bh(&sta->lock);
+
+		WARN_ON_ONCE(timer_shutdown(&tid_tx->addba_resp_timer));
+		WARN_ON_ONCE(timer_shutdown(&tid_tx->session_timer));
+
 		kfree_rcu(tid_tx, rcu_head);
 		return 0;
 	}
@@ -544,6 +555,9 @@ void ieee80211_tx_ba_session_handle_start(struct sta_info *sta, int tid)
 		spin_unlock_bh(&sta->lock);
 
 		ieee80211_agg_start_txq(sta, tid, false);
+
+		WARN_ON_ONCE(timer_shutdown(&tid_tx->addba_resp_timer));
+		WARN_ON_ONCE(timer_shutdown(&tid_tx->session_timer));
 
 		kfree_rcu(tid_tx, rcu_head);
 		return;
