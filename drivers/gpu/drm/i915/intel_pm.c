@@ -30,6 +30,7 @@
 #include <linux/pm_runtime.h>
 
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_plane_helper.h>
 
@@ -2874,7 +2875,7 @@ static void intel_read_wm_latency(struct drm_i915_private *dev_priv,
 
 		/* read the first set of memory latencies[0:3] */
 		val = 0; /* data0 to be programmed to 0 for first set */
-		ret = snb_pcode_read(dev_priv, GEN9_PCODE_READ_MEM_LATENCY,
+		ret = snb_pcode_read(&dev_priv->uncore, GEN9_PCODE_READ_MEM_LATENCY,
 				     &val, NULL);
 
 		if (ret) {
@@ -2893,7 +2894,7 @@ static void intel_read_wm_latency(struct drm_i915_private *dev_priv,
 
 		/* read the second set of memory latencies[4:7] */
 		val = 1; /* data0 to be programmed to 1 for second set */
-		ret = snb_pcode_read(dev_priv, GEN9_PCODE_READ_MEM_LATENCY,
+		ret = snb_pcode_read(&dev_priv->uncore, GEN9_PCODE_READ_MEM_LATENCY,
 				     &val, NULL);
 		if (ret) {
 			drm_err(&dev_priv->drm,
@@ -3679,7 +3680,7 @@ intel_sagv_block_time(struct drm_i915_private *dev_priv)
 		u32 val = 0;
 		int ret;
 
-		ret = snb_pcode_read(dev_priv,
+		ret = snb_pcode_read(&dev_priv->uncore,
 				     GEN12_PCODE_READ_SAGV_BLOCK_TIME_US,
 				     &val, NULL);
 		if (ret) {
@@ -3748,7 +3749,7 @@ static void skl_sagv_enable(struct drm_i915_private *dev_priv)
 		return;
 
 	drm_dbg_kms(&dev_priv->drm, "Enabling SAGV\n");
-	ret = snb_pcode_write(dev_priv, GEN9_PCODE_SAGV_CONTROL,
+	ret = snb_pcode_write(&dev_priv->uncore, GEN9_PCODE_SAGV_CONTROL,
 			      GEN9_SAGV_ENABLE);
 
 	/* We don't need to wait for SAGV when enabling */
@@ -3781,7 +3782,7 @@ static void skl_sagv_disable(struct drm_i915_private *dev_priv)
 
 	drm_dbg_kms(&dev_priv->drm, "Disabling SAGV\n");
 	/* bspec says to keep retrying for at least 1 ms */
-	ret = skl_pcode_request(dev_priv, GEN9_PCODE_SAGV_CONTROL,
+	ret = skl_pcode_request(&dev_priv->uncore, GEN9_PCODE_SAGV_CONTROL,
 				GEN9_SAGV_DISABLE,
 				GEN9_SAGV_IS_DISABLED, GEN9_SAGV_IS_DISABLED,
 				1);
@@ -4100,8 +4101,8 @@ static u16 skl_ddb_entry_init(struct skl_ddb_entry *entry,
 
 static int intel_dbuf_slice_size(struct drm_i915_private *dev_priv)
 {
-	return INTEL_INFO(dev_priv)->dbuf.size /
-		hweight8(INTEL_INFO(dev_priv)->dbuf.slice_mask);
+	return INTEL_INFO(dev_priv)->display.dbuf.size /
+		hweight8(INTEL_INFO(dev_priv)->display.dbuf.slice_mask);
 }
 
 static void
@@ -4120,7 +4121,7 @@ skl_ddb_entry_for_slices(struct drm_i915_private *dev_priv, u8 slice_mask,
 	ddb->end = fls(slice_mask) * slice_size;
 
 	WARN_ON(ddb->start >= ddb->end);
-	WARN_ON(ddb->end > INTEL_INFO(dev_priv)->dbuf.size);
+	WARN_ON(ddb->end > INTEL_INFO(dev_priv)->display.dbuf.size);
 }
 
 static unsigned int mbus_ddb_offset(struct drm_i915_private *i915, u8 slice_mask)
@@ -5307,10 +5308,16 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 		      modifier == I915_FORMAT_MOD_4_TILED ||
 		      modifier == I915_FORMAT_MOD_Yf_TILED ||
 		      modifier == I915_FORMAT_MOD_Y_TILED_CCS ||
-		      modifier == I915_FORMAT_MOD_Yf_TILED_CCS;
+		      modifier == I915_FORMAT_MOD_Yf_TILED_CCS ||
+		      modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS ||
+		      modifier == I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS ||
+		      modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC;
 	wp->x_tiled = modifier == I915_FORMAT_MOD_X_TILED;
 	wp->rc_surface = modifier == I915_FORMAT_MOD_Y_TILED_CCS ||
-			 modifier == I915_FORMAT_MOD_Yf_TILED_CCS;
+			 modifier == I915_FORMAT_MOD_Yf_TILED_CCS ||
+			 modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS ||
+			 modifier == I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS ||
+			 modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC;
 	wp->is_planar = intel_format_info_is_yuv_semiplanar(format, modifier);
 
 	wp->width = width;
@@ -6095,7 +6102,7 @@ skl_compute_ddb(struct intel_atomic_state *state)
 			    "Enabled dbuf slices 0x%x -> 0x%x (total dbuf slices 0x%x), mbus joined? %s->%s\n",
 			    old_dbuf_state->enabled_slices,
 			    new_dbuf_state->enabled_slices,
-			    INTEL_INFO(dev_priv)->dbuf.slice_mask,
+			    INTEL_INFO(dev_priv)->display.dbuf.slice_mask,
 			    str_yes_no(old_dbuf_state->joined_mbus),
 			    str_yes_no(new_dbuf_state->joined_mbus));
 	}
@@ -7639,10 +7646,9 @@ static void xehpsdv_init_clock_gating(struct drm_i915_private *dev_priv)
 
 static void dg2_init_clock_gating(struct drm_i915_private *i915)
 {
-	/* Wa_22010954014:dg2_g10 */
-	if (IS_DG2_G10(i915))
-		intel_uncore_rmw(&i915->uncore, XEHP_CLOCK_GATE_DIS, 0,
-				 SGSI_SIDECLK_DIS);
+	/* Wa_22010954014:dg2 */
+	intel_uncore_rmw(&i915->uncore, XEHP_CLOCK_GATE_DIS, 0,
+			 SGSI_SIDECLK_DIS);
 
 	/*
 	 * Wa_14010733611:dg2_g10
@@ -7651,6 +7657,17 @@ static void dg2_init_clock_gating(struct drm_i915_private *i915)
 	if (IS_DG2_GRAPHICS_STEP(i915, G10, STEP_A0, STEP_B0))
 		intel_uncore_rmw(&i915->uncore, XEHP_CLOCK_GATE_DIS, 0,
 				 SGR_DIS | SGGI_DIS);
+}
+
+static void pvc_init_clock_gating(struct drm_i915_private *dev_priv)
+{
+	/* Wa_14012385139:pvc */
+	if (IS_PVC_BD_STEP(dev_priv, STEP_A0, STEP_B0))
+		intel_uncore_rmw(&dev_priv->uncore, XEHP_CLOCK_GATE_DIS, 0, SGR_DIS);
+
+	/* Wa_22010954014:pvc */
+	if (IS_PVC_BD_STEP(dev_priv, STEP_A0, STEP_B0))
+		intel_uncore_rmw(&dev_priv->uncore, XEHP_CLOCK_GATE_DIS, 0, SGSI_SIDECLK_DIS);
 }
 
 static void cnp_init_clock_gating(struct drm_i915_private *dev_priv)
@@ -8069,6 +8086,7 @@ static const struct drm_i915_clock_gating_funcs platform##_clock_gating_funcs = 
 	.init_clock_gating = platform##_init_clock_gating,		\
 }
 
+CG_FUNCS(pvc);
 CG_FUNCS(dg2);
 CG_FUNCS(xehpsdv);
 CG_FUNCS(adlp);
@@ -8107,7 +8125,9 @@ CG_FUNCS(nop);
  */
 void intel_init_clock_gating_hooks(struct drm_i915_private *dev_priv)
 {
-	if (IS_DG2(dev_priv))
+	if (IS_PONTEVECCHIO(dev_priv))
+		dev_priv->clock_gating_funcs = &pvc_clock_gating_funcs;
+	else if (IS_DG2(dev_priv))
 		dev_priv->clock_gating_funcs = &dg2_clock_gating_funcs;
 	else if (IS_XEHPSDV(dev_priv))
 		dev_priv->clock_gating_funcs = &xehpsdv_clock_gating_funcs;

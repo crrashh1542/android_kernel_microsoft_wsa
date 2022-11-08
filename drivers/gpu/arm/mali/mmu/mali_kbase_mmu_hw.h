@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2014-2015, 2018-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2015, 2018-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -31,6 +31,8 @@
 #ifndef _KBASE_MMU_HW_H_
 #define _KBASE_MMU_HW_H_
 
+#include "mali_kbase_mmu.h"
+
 /* Forward declarations */
 struct kbase_device;
 struct kbase_as;
@@ -53,6 +55,43 @@ enum kbase_mmu_fault_type {
 };
 
 /**
+ * enum kbase_mmu_op_type - enum for MMU operations
+ * @KBASE_MMU_OP_NONE:        To help catch uninitialized struct
+ * @KBASE_MMU_OP_FIRST:       The lower boundary of enum
+ * @KBASE_MMU_OP_LOCK:        Lock memory region
+ * @KBASE_MMU_OP_UNLOCK:      Unlock memory region
+ * @KBASE_MMU_OP_FLUSH_PT:    Flush page table (CLN+INV L2 only)
+ * @KBASE_MMU_OP_FLUSH_MEM:   Flush memory (CLN+INV L2+LSC)
+ * @KBASE_MMU_OP_COUNT:       The upper boundary of enum
+ */
+enum kbase_mmu_op_type {
+	KBASE_MMU_OP_NONE = 0, /* Must be zero */
+	KBASE_MMU_OP_FIRST, /* Must be the first non-zero op */
+	KBASE_MMU_OP_LOCK = KBASE_MMU_OP_FIRST,
+	KBASE_MMU_OP_UNLOCK,
+	KBASE_MMU_OP_FLUSH_PT,
+	KBASE_MMU_OP_FLUSH_MEM,
+	KBASE_MMU_OP_COUNT /* Must be the last in enum */
+};
+
+/**
+ * struct kbase_mmu_hw_op_param  - parameters for kbase_mmu_hw_do_* functions
+ * @vpfn:           MMU Virtual Page Frame Number to start the operation on.
+ * @nr:             Number of pages to work on.
+ * @op:             Operation type (written to ASn_COMMAND).
+ * @kctx_id:        Kernel context ID for MMU command tracepoint.
+ * @flush_skip_levels: Page table levels to skip flushing. (Only
+ *                     applicable if GPU supports feature)
+ */
+struct kbase_mmu_hw_op_param {
+	u64 vpfn;
+	u32 nr;
+	enum kbase_mmu_op_type op;
+	u32 kctx_id;
+	u64 flush_skip_levels;
+};
+
+/**
  * kbase_mmu_hw_configure - Configure an address space for use.
  * @kbdev:          kbase device to configure.
  * @as:             address space to configure.
@@ -64,23 +103,74 @@ void kbase_mmu_hw_configure(struct kbase_device *kbdev,
 		struct kbase_as *as);
 
 /**
- * kbase_mmu_hw_do_operation - Issue an operation to the MMU.
- * @kbdev:         kbase device to issue the MMU operation on.
- * @as:            address space to issue the MMU operation on.
- * @vpfn:          MMU Virtual Page Frame Number to start the operation on.
- * @nr:            Number of pages to work on.
- * @type:          Operation type (written to ASn_COMMAND).
- * @handling_irq:  Is this operation being called during the handling
- *                 of an interrupt?
+ * kbase_mmu_hw_do_unlock_no_addr - Issue UNLOCK command to the MMU without
+ *                                  programming the LOCKADDR register and wait
+ *                                  for it to complete before returning.
  *
- * Issue an operation (MMU invalidate, MMU flush, etc) on the address space that
- * is associated with the provided kbase_context over the specified range
+ * @kbdev:     Kbase device to issue the MMU operation on.
+ * @as:        Address space to issue the MMU operation on.
+ * @op_param:  Pointer to struct containing information about the MMU
+ *             operation to perform.
  *
- * Return: Zero if the operation was successful, non-zero otherwise.
+ * This function should be called for GPU where GPU command is used to flush
+ * the cache(s) instead of MMU command.
+ *
+ * Return: 0 if issuing the command was successful, otherwise an error code.
  */
-int kbase_mmu_hw_do_operation(struct kbase_device *kbdev, struct kbase_as *as,
-		u64 vpfn, u32 nr, u32 type,
-		unsigned int handling_irq);
+int kbase_mmu_hw_do_unlock_no_addr(struct kbase_device *kbdev,
+				   struct kbase_as *as,
+				   const struct kbase_mmu_hw_op_param *op_param);
+
+/**
+ * kbase_mmu_hw_do_unlock - Issue UNLOCK command to the MMU and wait for it
+ *                          to complete before returning.
+ *
+ * @kbdev:     Kbase device to issue the MMU operation on.
+ * @as:        Address space to issue the MMU operation on.
+ * @op_param:  Pointer to struct containing information about the MMU
+ *             operation to perform.
+ *
+ * Return: 0 if issuing the command was successful, otherwise an error code.
+ */
+int kbase_mmu_hw_do_unlock(struct kbase_device *kbdev, struct kbase_as *as,
+			   const struct kbase_mmu_hw_op_param *op_param);
+/**
+ * kbase_mmu_hw_do_flush - Issue a flush operation to the MMU.
+ *
+ * @kbdev:      Kbase device to issue the MMU operation on.
+ * @as:         Address space to issue the MMU operation on.
+ * @op_param:   Pointer to struct containing information about the MMU
+ *              operation to perform.
+ *
+ * Issue a flush operation on the address space as per the information
+ * specified inside @op_param. This function should not be called for
+ * GPUs where MMU command to flush the cache(s) is deprecated.
+ * mmu_hw_mutex needs to be held when calling this function.
+ *
+ * Return: 0 if the operation was successful, non-zero otherwise.
+ */
+int kbase_mmu_hw_do_flush(struct kbase_device *kbdev, struct kbase_as *as,
+			  const struct kbase_mmu_hw_op_param *op_param);
+
+/**
+ * kbase_mmu_hw_do_flush_locked - Issue a flush operation to the MMU.
+ *
+ * @kbdev:      Kbase device to issue the MMU operation on.
+ * @as:         Address space to issue the MMU operation on.
+ * @op_param:   Pointer to struct containing information about the MMU
+ *              operation to perform.
+ *
+ * Issue a flush operation on the address space as per the information
+ * specified inside @op_param. This function should not be called for
+ * GPUs where MMU command to flush the cache(s) is deprecated.
+ * Both mmu_hw_mutex and hwaccess_lock need to be held when calling this
+ * function.
+ *
+ * Return: 0 if the operation was successful, non-zero otherwise.
+ */
+int kbase_mmu_hw_do_flush_locked(struct kbase_device *kbdev,
+				 struct kbase_as *as,
+				 const struct kbase_mmu_hw_op_param *op_param);
 
 /**
  * kbase_mmu_hw_clear_fault - Clear a fault that has been previously reported by

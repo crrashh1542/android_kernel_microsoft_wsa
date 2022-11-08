@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/bitfield.h>
+#include <linux/average.h>
 #include "qmi.h"
 #include "htc.h"
 #include "wmi.h"
@@ -416,6 +417,8 @@ struct ath11k_per_ppdu_tx_stats {
 	u32 retry_bytes;
 };
 
+DECLARE_EWMA(avg_rssi, 10, 8)
+
 struct ath11k_sta {
 	struct ath11k_vif *arvif;
 
@@ -434,6 +437,7 @@ struct ath11k_sta {
 	u64 rx_duration;
 	u64 tx_duration;
 	u8 rssi_comb;
+	struct ewma_avg_rssi avg_rssi;
 	s8 rssi_beacon;
 	s8 chain_signal[IEEE80211_MAX_CHAINS];
 	struct ath11k_htt_tx_stats *tx_stats;
@@ -530,8 +534,6 @@ struct ath11k {
 	struct ath11k_pdev_wmi *wmi;
 	struct ath11k_pdev_dp dp;
 	u8 mac_addr[ETH_ALEN];
-	u32 ht_cap_info;
-	u32 vht_cap_info;
 	struct ath11k_he ar_he;
 	enum ath11k_state state;
 	bool supports_6ghz;
@@ -825,7 +827,7 @@ struct ath11k_base {
 
 	/* Below regd's are protected by ab->data_lock */
 	/* This is the regd set for every radio
-	 * by the firmware during initializatin
+	 * by the firmware during initialization
 	 */
 	struct ieee80211_regdomain *default_regd[MAX_RADIOS];
 	/* This regd is set during dynamic country setting

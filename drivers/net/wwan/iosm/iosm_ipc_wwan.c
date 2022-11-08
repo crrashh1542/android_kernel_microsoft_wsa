@@ -8,6 +8,7 @@
 #include <linux/if_link.h>
 #include <linux/rtnetlink.h>
 #include <linux/wwan.h>
+#include <net/pkt_sched.h>
 
 #include "iosm_ipc_chnl_cfg.h"
 #include "iosm_ipc_imem_ops.h"
@@ -159,7 +160,7 @@ static void ipc_wwan_setup(struct net_device *iosm_dev)
 {
 	iosm_dev->header_ops = NULL;
 	iosm_dev->hard_header_len = 0;
-	iosm_dev->priv_flags |= IFF_NO_QUEUE;
+	iosm_dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
 
 	iosm_dev->type = ARPHRD_NONE;
 	iosm_dev->mtu = ETH_DATA_LEN;
@@ -322,14 +323,15 @@ struct iosm_wwan *ipc_wwan_init(struct iosm_imem *ipc_imem, struct device *dev)
 	ipc_wwan->dev = dev;
 	ipc_wwan->ipc_imem = ipc_imem;
 
+	mutex_init(&ipc_wwan->if_mutex);
+
 	/* WWAN core will create a netdev for the default IP MUX channel */
 	if (wwan_register_ops(ipc_wwan->dev, &iosm_wwan_ops, ipc_wwan,
 			      IP_MUX_SESSION_DEFAULT)) {
+		mutex_destroy(&ipc_wwan->if_mutex);
 		kfree(ipc_wwan);
 		return NULL;
 	}
-
-	mutex_init(&ipc_wwan->if_mutex);
 
 	return ipc_wwan;
 }

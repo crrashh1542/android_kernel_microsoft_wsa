@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2014-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -38,10 +38,23 @@ struct rb_entry {
 	struct kbase_jd_atom *katom;
 };
 
+/* SLOT_RB_TAG_PURGED assumes a value that is different from
+ * NULL (SLOT_RB_NULL_TAG_VAL) and will not be the result of
+ * any valid pointer via macro translation: SLOT_RB_TAG_KCTX(x).
+ */
+#define SLOT_RB_TAG_PURGED ((u64)(1 << 1))
+#define SLOT_RB_NULL_TAG_VAL ((u64)0)
+
+/**
+ * SLOT_RB_TAG_KCTX() - a function-like macro for converting a pointer to a
+ *			u64 for serving as tagged value.
+ * @kctx: Pointer to kbase context.
+ */
+#define SLOT_RB_TAG_KCTX(kctx) (u64)((uintptr_t)(kctx))
 /**
  * struct slot_rb - Slot ringbuffer
  * @entries:		Ringbuffer entries
- * @last_context:	The last context to submit a job on this slot
+ * @last_kctx_tagged:	The last context to submit a job on this slot
  * @read_idx:		Current read index of buffer
  * @write_idx:		Current write index of buffer
  * @job_chain_flag:	Flag used to implement jobchain disambiguation
@@ -49,7 +62,7 @@ struct rb_entry {
 struct slot_rb {
 	struct rb_entry entries[SLOT_RB_SIZE];
 
-	struct kbase_context *last_context;
+	u64 last_kctx_tagged;
 
 	u8 read_idx;
 	u8 write_idx;

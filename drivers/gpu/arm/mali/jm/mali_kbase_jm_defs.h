@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -343,19 +343,6 @@ enum kbase_atom_exit_protected_state {
 };
 
 /**
- * struct kbase_ext_res - Contains the info for external resources referred
- *                        by an atom, which have been mapped on GPU side.
- * @gpu_address:          Start address of the memory region allocated for
- *                        the resource from GPU virtual address space.
- * @alloc:                pointer to physical pages tracking object, set on
- *                        mapping the external resource on GPU side.
- */
-struct kbase_ext_res {
-	u64 gpu_address;
-	struct kbase_mem_phy_alloc *alloc;
-};
-
-/**
  * struct kbase_jd_atom  - object representing the atom, containing the complete
  *                         state and attributes of an atom.
  * @work:                  work item for the bottom half processing of the atom,
@@ -388,7 +375,8 @@ struct kbase_ext_res {
  *                         each allocation is read in order to enforce an
  *                         overall physical memory usage limit.
  * @nr_extres:             number of external resources referenced by the atom.
- * @extres:                pointer to the location containing info about
+ * @extres:                Pointer to @nr_extres VA regions containing the external
+ *                         resource allocation and other information.
  *                         @nr_extres external resources referenced by the atom.
  * @device_nr:             indicates the coregroup with which the atom is
  *                         associated, when
@@ -518,7 +506,7 @@ struct kbase_jd_atom {
 #endif /* MALI_JIT_PRESSURE_LIMIT_BASE */
 
 	u16 nr_extres;
-	struct kbase_ext_res *extres;
+	struct kbase_va_region **extres;
 
 	u32 device_nr;
 	u64 jc;
@@ -651,6 +639,51 @@ static inline bool kbase_jd_katom_is_protected(
 		const struct kbase_jd_atom *katom)
 {
 	return (bool)(katom->atom_flags & KBASE_KATOM_FLAG_PROTECTED);
+}
+
+/**
+ * kbase_jd_atom_is_younger - query if one atom is younger by age than another
+ *
+ * @katom_a: the first atom
+ * @katom_b: the second atom
+ *
+ * Return: true if the first atom is strictly younger than the second,
+ *         false otherwise.
+ */
+static inline bool kbase_jd_atom_is_younger(const struct kbase_jd_atom *katom_a,
+					    const struct kbase_jd_atom *katom_b)
+{
+	return ((s32)(katom_a->age - katom_b->age) < 0);
+}
+
+/**
+ * kbase_jd_atom_is_earlier - Check whether the first atom has been submitted
+ *                            earlier than the second one
+ *
+ * @katom_a: the first atom
+ * @katom_b: the second atom
+ *
+ * Return: true if the first atom has been submitted earlier than the
+ * second atom. It is used to understand if an atom that is ready has been
+ * submitted earlier than the currently running atom, so that the currently
+ * running atom should be preempted to allow the ready atom to run.
+ */
+static inline bool kbase_jd_atom_is_earlier(const struct kbase_jd_atom *katom_a,
+					    const struct kbase_jd_atom *katom_b)
+{
+	/* No seq_nr set? */
+	if (!katom_a->seq_nr || !katom_b->seq_nr)
+		return false;
+
+	/* Efficiently handle the unlikely case of wrapping.
+	 * The following code assumes that the delta between the sequence number
+	 * of the two atoms is less than INT64_MAX.
+	 * In the extremely unlikely case where the delta is higher, the comparison
+	 * defaults for no preemption.
+	 * The code also assumes that the conversion from unsigned to signed types
+	 * works because the signed integers are 2's complement.
+	 */
+	return (s64)(katom_a->seq_nr - katom_b->seq_nr) < 0;
 }
 
 /*

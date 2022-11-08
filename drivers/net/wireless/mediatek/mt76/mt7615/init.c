@@ -401,6 +401,7 @@ mt7615_init_wiphy(struct ieee80211_hw *hw)
 	ieee80211_hw_set(hw, TX_STATUS_NO_AMPDU_LEN);
 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
 	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
+	ieee80211_hw_set(hw, SUPPORTS_VHT_EXT_NSS_BW);
 
 	if (is_mt7615(&phy->dev->mt76))
 		hw->max_tx_fragments = MT_TXP_MAX_BUF_NUM;
@@ -552,7 +553,6 @@ void mt7615_init_device(struct mt7615_dev *dev)
 	dev->pm.stats.last_wake_event = jiffies;
 	dev->pm.stats.last_doze_event = jiffies;
 	mt7615_cap_dbdc_disable(dev);
-	dev->phy.dfs_state = -1;
 
 #ifdef CONFIG_NL80211_TESTMODE
 	dev->mt76.test_ops = &mt7615_testmode_ops;

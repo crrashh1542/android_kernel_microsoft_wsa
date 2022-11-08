@@ -93,7 +93,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = true,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -132,7 +132,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = true,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -172,7 +172,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -207,7 +207,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.supports_peer_stats_info = true,
 		.dynamic_sar_support = true,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 		.start_retry = ATH10K_START_RETRY,
 	},
@@ -247,7 +247,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -286,7 +286,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -325,7 +325,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -368,7 +368,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.supports_peer_stats_info = true,
 		.dynamic_sar_support = true,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -413,7 +413,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -465,7 +465,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -514,7 +514,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -553,7 +553,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -594,7 +594,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -626,6 +626,8 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.credit_size_workaround = true,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
+		.use_fw_tx_credits = true,
+		.delay_unmap_buffer = false,
 	},
 	{
 		.id = QCA4019_HW_1_0_DEV_VERSION,
@@ -670,7 +672,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = false,
 		.hw_restart_disconnect = false,
-		.tx_credit_limit = false,
+		.use_fw_tx_credits = true,
 		.delay_unmap_buffer = false,
 	},
 	{
@@ -702,7 +704,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.tx_stats_over_pktlog = false,
 		.dynamic_sar_support = true,
 		.hw_restart_disconnect = true,
-		.tx_credit_limit = true,
+		.use_fw_tx_credits = false,
 		.delay_unmap_buffer = true,
 	},
 };

@@ -1339,8 +1339,6 @@ static int btintel_set_debug_features(struct hci_dev *hdev,
 	}
 	kfree_skb(skb);
 
-	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT_HW);
-
 	bt_dev_info(hdev, "set debug features: trace_enable 0x%02x mask 0x%02x",
 		    trace_enable, mask[3]);
 
@@ -1384,8 +1382,6 @@ static int btintel_reset_debug_features(struct hci_dev *hdev,
 
 	bt_dev_info(hdev, "reset debug features: trace_enable 0x%02x mask 0x%02x",
 		    trace_enable, mask[3]);
-
-	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT_HW);
 
 	return 0;
 }
@@ -1820,6 +1816,11 @@ static int btintel_download_wait(struct hci_dev *hdev, ktime_t calltime, int mse
 		return -ETIMEDOUT;
 	}
 
+	if (btintel_test_flag(hdev, INTEL_FIRMWARE_VERIFY_FAILED)) {
+		bt_dev_err(hdev, "Firmware secure verification failed");
+		return -EAGAIN;
+	}
+
 	if (btintel_test_flag(hdev, INTEL_FIRMWARE_FAILED)) {
 		bt_dev_err(hdev, "Firmware loading failed");
 		return -ENOEXEC;
@@ -2081,7 +2082,7 @@ download:
 	 * of this device.
 	 */
 	err = btintel_download_wait(hdev, calltime, 5000);
-	if (err == -ETIMEDOUT)
+	if (err == -ETIMEDOUT || err == -EAGAIN)
 		btintel_reset_to_bootloader(hdev);
 
 done:
@@ -2273,7 +2274,7 @@ static int btintel_prepare_fw_download_tlv(struct hci_dev *hdev,
 	 * of this device.
 	 */
 	err = btintel_download_wait(hdev, calltime, 5000);
-	if (err == -ETIMEDOUT)
+	if (err == -ETIMEDOUT || err == -EAGAIN)
 		btintel_reset_to_bootloader(hdev);
 
 done:
@@ -2767,8 +2768,15 @@ void btintel_secure_send_result(struct hci_dev *hdev,
 	if (len != sizeof(*evt))
 		return;
 
-	if (evt->result)
-		btintel_set_flag(hdev, INTEL_FIRMWARE_FAILED);
+	if (evt->result) {
+		bt_dev_err(hdev, "Intel Secure Send Results event result: %u status: %u",
+			   evt->result, evt->status);
+
+		if (evt->result == 3)
+			btintel_set_flag(hdev, INTEL_FIRMWARE_VERIFY_FAILED);
+		else
+			btintel_set_flag(hdev, INTEL_FIRMWARE_FAILED);
+	}
 
 	if (btintel_test_and_clear_flag(hdev, INTEL_DOWNLOADING) &&
 	    btintel_test_flag(hdev, INTEL_FIRMWARE_LOADED))

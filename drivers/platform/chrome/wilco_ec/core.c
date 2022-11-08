@@ -141,7 +141,6 @@ unregister_rtc:
 unregister_debugfs:
 	if (ec->debugfs_pdev)
 		platform_device_unregister(ec->debugfs_pdev);
-	cros_ec_lpc_mec_destroy();
 	return ret;
 }
 
@@ -156,10 +155,6 @@ static int wilco_ec_remove(struct platform_device *pdev)
 	platform_device_unregister(ec->rtc_pdev);
 	if (ec->debugfs_pdev)
 		platform_device_unregister(ec->debugfs_pdev);
-
-	/* Teardown cros_ec interface */
-	cros_ec_lpc_mec_destroy();
-
 	return 0;
 }
 

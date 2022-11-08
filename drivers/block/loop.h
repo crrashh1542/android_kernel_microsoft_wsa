@@ -32,7 +32,6 @@ struct loop_device {
 	loff_t		lo_offset;
 	loff_t		lo_sizelimit;
 	int		lo_flags;
-	bool		block_open_on_autoclear;
 	int		(*transfer)(struct loop_device *, int cmd,
 				    struct page *raw_page, unsigned raw_off,
 				    struct page *loop_page, unsigned loop_off,

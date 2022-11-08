@@ -344,8 +344,7 @@ enum {
 	HCI_ENABLE_LL_PRIVACY,
 	HCI_CMD_PENDING,
 	HCI_FORCE_NO_MITM,
-	HCI_QUALITY_REPORT,    /* indicating if the user space enables it */
-	HCI_QUALITY_REPORT_HW, /* indicates if it is enabled in controller */
+	HCI_QUALITY_REPORT,
 	HCI_OFFLOAD_CODECS_ENABLED,
 	HCI_LE_SIMULTANEOUS_ROLES,
 

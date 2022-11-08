@@ -115,6 +115,9 @@ static int sof_ipc3_pcm_hw_params(struct snd_soc_component *component,
 			pcm.params.no_stream_position = 1;
 	}
 
+	if (platform_params->cont_update_posn)
+		pcm.params.cont_update_posn = 1;
+
 	dev_dbg(component->dev, "stream_tag %d", pcm.params.stream_tag);
 
 	/* send hw_params IPC to the DSP */
@@ -333,6 +336,7 @@ static int sof_ipc3_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd,
 			channels->min, channels->max);
 		break;
 	case SOF_DAI_AMD_SP:
+	case SOF_DAI_AMD_SP_VIRTUAL:
 		rate->min = private->dai_config->acpsp.fsync_rate;
 		rate->max = private->dai_config->acpsp.fsync_rate;
 		channels->min = private->dai_config->acpsp.tdm_slots;
@@ -344,6 +348,7 @@ static int sof_ipc3_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd,
 			channels->min, channels->max);
 		break;
 	case SOF_DAI_AMD_HS:
+	case SOF_DAI_AMD_HS_VIRTUAL:
 		rate->min = private->dai_config->acphs.fsync_rate;
 		rate->max = private->dai_config->acphs.fsync_rate;
 		channels->min = private->dai_config->acphs.tdm_slots;

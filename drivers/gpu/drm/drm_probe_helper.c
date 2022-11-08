@@ -354,6 +354,24 @@ drm_helper_probe_detect(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_helper_probe_detect);
 
+static int drm_helper_probe_get_modes(struct drm_connector *connector)
+{
+	const struct drm_connector_helper_funcs *connector_funcs =
+		connector->helper_private;
+	int count;
+
+	count = connector_funcs->get_modes(connector);
+
+	/*
+	 * Fallback for when DDC probe failed in drm_get_edid() and thus skipped
+	 * override/firmware EDID.
+	 */
+	if (count == 0 && connector->status == connector_status_connected)
+		count = drm_add_override_edid_modes(connector);
+
+	return count;
+}
+
 static int __drm_helper_update_and_validate(struct drm_connector *connector,
 					    uint32_t maxX, uint32_t maxY,
 					    struct drm_modeset_acquire_ctx *ctx)
@@ -473,8 +491,6 @@ int drm_helper_probe_single_connector_modes(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode;
-	const struct drm_connector_helper_funcs *connector_funcs =
-		connector->helper_private;
 	int count = 0, ret;
 	enum drm_connector_status old_status;
 	struct drm_modeset_acquire_ctx ctx;
@@ -559,14 +575,7 @@ retry:
 		goto exit;
 	}
 
-	count = (*connector_funcs->get_modes)(connector);
-
-	/*
-	 * Fallback for when DDC probe failed in drm_get_edid() and thus skipped
-	 * override/firmware EDID.
-	 */
-	if (count == 0 && connector->status == connector_status_connected)
-		count = drm_add_override_edid_modes(connector);
+	count = drm_helper_probe_get_modes(connector);
 
 	if (count == 0 && (connector->status == connector_status_connected ||
 			   connector->status == connector_status_unknown)) {
@@ -1004,3 +1013,73 @@ bool drm_helper_hpd_irq_event(struct drm_device *dev)
 	return changed;
 }
 EXPORT_SYMBOL(drm_helper_hpd_irq_event);
+
+/**
+ * drm_connector_helper_get_modes_from_ddc - Updates the connector's EDID
+ *                                           property from the connector's
+ *                                           DDC channel
+ * @connector: The connector
+ *
+ * Returns:
+ * The number of detected display modes.
+ *
+ * Uses a connector's DDC channel to retrieve EDID data and update the
+ * connector's EDID property and display modes. Drivers can use this
+ * function to implement struct &drm_connector_helper_funcs.get_modes
+ * for connectors with a DDC channel.
+ */
+int drm_connector_helper_get_modes_from_ddc(struct drm_connector *connector)
+{
+	struct edid *edid;
+	int count = 0;
+
+	if (!connector->ddc)
+		return 0;
+
+	edid = drm_get_edid(connector, connector->ddc);
+
+	// clears property if EDID is NULL
+	drm_connector_update_edid_property(connector, edid);
+
+	if (edid) {
+		count = drm_add_edid_modes(connector, edid);
+		kfree(edid);
+	}
+
+	return count;
+}
+EXPORT_SYMBOL(drm_connector_helper_get_modes_from_ddc);
+
+/**
+ * drm_connector_helper_get_modes - Read EDID and update connector.
+ * @connector: The connector
+ *
+ * Read the EDID using drm_edid_read() (which requires that connector->ddc is
+ * set), and update the connector using the EDID.
+ *
+ * This can be used as the "default" connector helper .get_modes() hook if the
+ * driver does not need any special processing. This is sets the example what
+ * custom .get_modes() hooks should do regarding EDID read and connector update.
+ *
+ * Returns: Number of modes.
+ */
+int drm_connector_helper_get_modes(struct drm_connector *connector)
+{
+	const struct drm_edid *drm_edid;
+	int count;
+
+	drm_edid = drm_edid_read(connector);
+
+	/*
+	 * Unconditionally update the connector. If the EDID was read
+	 * successfully, fill in the connector information derived from the
+	 * EDID. Otherwise, if the EDID is NULL, clear the connector
+	 * information.
+	 */
+	count = drm_edid_connector_update(connector, drm_edid);
+
+	drm_edid_free(drm_edid);
+
+	return count;
+}
+EXPORT_SYMBOL(drm_connector_helper_get_modes);

@@ -322,11 +322,6 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 
 	kthread_stop(dp->ev_tsk);
 
-	/* disable all HPD interrupts */
-	dp_catalog_hpd_config_intr(dp->catalog, DP_DP_HPD_INT_MASK, false);
-
-	kthread_stop(dp->ev_tsk);
-
 	dp_power_client_deinit(dp->power);
 	dp_aux_unregister(dp->aux);
 	dp->drm_dev = NULL;
@@ -1254,7 +1249,7 @@ int dp_display_request_irq(struct msm_dp *dp_display)
 		return -EINVAL;
 	}
 
-	rc = devm_request_irq(&dp->pdev->dev, dp->irq,
+	rc = devm_request_irq(dp_display->drm_dev->dev, dp->irq,
 			dp_display_irq_handler,
 			IRQF_TRIGGER_HIGH, "dp_display_isr", dp);
 	if (rc < 0) {

@@ -126,8 +126,6 @@
 
 static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_state);
 static void intel_set_pipe_src_size(const struct intel_crtc_state *crtc_state);
-static void i9xx_set_pipeconf(const struct intel_crtc_state *crtc_state);
-static void ilk_set_pipeconf(const struct intel_crtc_state *crtc_state);
 static void hsw_set_transconf(const struct intel_crtc_state *crtc_state);
 static void bdw_set_pipemisc(const struct intel_crtc_state *crtc_state);
 static void ilk_pfit_enable(const struct intel_crtc_state *crtc_state);
@@ -501,6 +499,9 @@ void vlv_wait_port_ready(struct drm_i915_private *dev_priv,
 	i915_reg_t dpll_reg;
 
 	switch (dig_port->base.port) {
+	default:
+		MISSING_CASE(dig_port->base.port);
+		fallthrough;
 	case PORT_B:
 		port_mask = DPLL_PORTB_READY_MASK;
 		dpll_reg = DPLL(0);
@@ -514,8 +515,6 @@ void vlv_wait_port_ready(struct drm_i915_private *dev_priv,
 		port_mask = DPLL_PORTD_READY_MASK;
 		dpll_reg = DPIO_PHY_STATUS;
 		break;
-	default:
-		BUG();
 	}
 
 	if (intel_de_wait_for_register(dev_priv, dpll_reg,
@@ -2083,22 +2082,20 @@ bool intel_phy_is_combo(struct drm_i915_private *dev_priv, enum phy phy)
 {
 	if (phy == PHY_NONE)
 		return false;
-	else if (IS_DG2(dev_priv))
-		/*
-		 * DG2 outputs labelled as "combo PHY" in the bspec use
-		 * SNPS PHYs with completely different programming,
-		 * hence we always return false here.
-		 */
-		return false;
 	else if (IS_ALDERLAKE_S(dev_priv))
 		return phy <= PHY_E;
 	else if (IS_DG1(dev_priv) || IS_ROCKETLAKE(dev_priv))
 		return phy <= PHY_D;
 	else if (IS_JSL_EHL(dev_priv))
 		return phy <= PHY_C;
-	else if (DISPLAY_VER(dev_priv) >= 11)
+	else if (IS_ALDERLAKE_P(dev_priv) || IS_DISPLAY_VER(dev_priv, 11, 12))
 		return phy <= PHY_B;
 	else
+		/*
+		 * DG2 outputs labelled as "combo PHY" in the bspec use
+		 * SNPS PHYs with completely different programming,
+		 * hence we always return false here.
+		 */
 		return false;
 }
 
@@ -3016,14 +3013,18 @@ static void intel_get_pipe_src_size(struct intel_crtc *crtc,
 	intel_bigjoiner_adjust_pipe_src(pipe_config);
 }
 
-static void i9xx_set_pipeconf(const struct intel_crtc_state *crtc_state)
+void i9xx_set_pipeconf(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	u32 pipeconf = 0;
 
-	/* we keep both pipes enabled on 830 */
-	if (IS_I830(dev_priv))
+	/*
+	 * - We keep both pipes enabled on 830
+	 * - During modeset the pipe is still disabled and must remain so
+	 * - During fastset the pipe is already enabled and must remain so
+	 */
+	if (IS_I830(dev_priv) || !intel_crtc_needs_modeset(crtc_state))
 		pipeconf |= PIPECONF_ENABLE;
 
 	if (crtc_state->double_wide)
@@ -3038,6 +3039,10 @@ static void i9xx_set_pipeconf(const struct intel_crtc_state *crtc_state)
 				    PIPECONF_DITHER_TYPE_SP;
 
 		switch (crtc_state->pipe_bpp) {
+		default:
+			/* Case prevented by intel_choose_pipe_bpp_dither. */
+			MISSING_CASE(crtc_state->pipe_bpp);
+			fallthrough;
 		case 18:
 			pipeconf |= PIPECONF_BPC_6;
 			break;
@@ -3047,9 +3052,6 @@ static void i9xx_set_pipeconf(const struct intel_crtc_state *crtc_state)
 		case 30:
 			pipeconf |= PIPECONF_BPC_10;
 			break;
-		default:
-			/* Case prevented by intel_choose_pipe_bpp_dither. */
-			BUG();
 		}
 	}
 
@@ -3335,16 +3337,25 @@ out:
 	return ret;
 }
 
-static void ilk_set_pipeconf(const struct intel_crtc_state *crtc_state)
+void ilk_set_pipeconf(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	enum pipe pipe = crtc->pipe;
-	u32 val;
+	u32 val = 0;
 
-	val = 0;
+	/*
+	 * - During modeset the pipe is still disabled and must remain so
+	 * - During fastset the pipe is already enabled and must remain so
+	 */
+	if (!intel_crtc_needs_modeset(crtc_state))
+		val |= PIPECONF_ENABLE;
 
 	switch (crtc_state->pipe_bpp) {
+	default:
+		/* Case prevented by intel_choose_pipe_bpp_dither. */
+		MISSING_CASE(crtc_state->pipe_bpp);
+		fallthrough;
 	case 18:
 		val |= PIPECONF_BPC_6;
 		break;
@@ -3357,9 +3368,6 @@ static void ilk_set_pipeconf(const struct intel_crtc_state *crtc_state)
 	case 36:
 		val |= PIPECONF_BPC_12;
 		break;
-	default:
-		/* Case prevented by intel_choose_pipe_bpp_dither. */
-		BUG();
 	}
 
 	if (crtc_state->dither)
@@ -3399,6 +3407,13 @@ static void hsw_set_transconf(const struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 val = 0;
+
+	/*
+	 * - During modeset the pipe is still disabled and must remain so
+	 * - During fastset the pipe is already enabled and must remain so
+	 */
+	if (!intel_crtc_needs_modeset(crtc_state))
+		val |= PIPECONF_ENABLE;
 
 	if (IS_HASWELL(dev_priv) && crtc_state->dither)
 		val |= PIPECONF_DITHER_EN | PIPECONF_DITHER_TYPE_SP;

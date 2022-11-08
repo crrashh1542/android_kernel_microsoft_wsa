@@ -2533,6 +2533,7 @@ static void query_phy_status_page0(struct rtw_dev *rtwdev, u8 *phy_status,
 	s8 rx_power[RTW_RF_PATH_MAX];
 	s8 min_rx_power = -120;
 	u8 rssi;
+	u8 channel;
 	int path;
 
 	rx_power[RF_PATH_A] = GET_PHY_STAT_P0_PWDB_A(phy_status);
@@ -2552,6 +2553,11 @@ static void query_phy_status_page0(struct rtw_dev *rtwdev, u8 *phy_status,
 
 	rx_power[RF_PATH_A] -= 110;
 	rx_power[RF_PATH_B] -= 110;
+
+	channel = GET_PHY_STAT_P0_CHANNEL(phy_status);
+	if (channel == 0)
+		channel = rtwdev->hal.current_channel;
+	rtw_set_rx_freq_band(pkt_stat, channel);
 
 	pkt_stat->rx_power[RF_PATH_A] = rx_power[RF_PATH_A];
 	pkt_stat->rx_power[RF_PATH_B] = rx_power[RF_PATH_B];
@@ -2578,6 +2584,7 @@ static void query_phy_status_page1(struct rtw_dev *rtwdev, u8 *phy_status,
 	u8 evm_dbm = 0;
 	u8 rssi;
 	int path;
+	u8 channel;
 
 	if (pkt_stat->rate > DESC_RATE11M && pkt_stat->rate < DESC_RATEMCS0)
 		rxsc = GET_PHY_STAT_P1_L_RXSC(phy_status);
@@ -2590,6 +2597,9 @@ static void query_phy_status_page1(struct rtw_dev *rtwdev, u8 *phy_status,
 		bw = RTW_CHANNEL_WIDTH_80;
 	else
 		bw = RTW_CHANNEL_WIDTH_20;
+
+	channel = GET_PHY_STAT_P1_CHANNEL(phy_status);
+	rtw_set_rx_freq_band(pkt_stat, channel);
 
 	pkt_stat->rx_power[RF_PATH_A] = GET_PHY_STAT_P1_PWDB_A(phy_status) - 110;
 	pkt_stat->rx_power[RF_PATH_B] = GET_PHY_STAT_P1_PWDB_B(phy_status) - 110;
@@ -5298,7 +5308,7 @@ struct rtw_chip_info rtw8822c_hw_spec = {
 	.max_power_index = 0x7f,
 	.csi_buf_pg_num = 50,
 	.band = RTW_BAND_2G | RTW_BAND_5G,
-	.page_size = 128,
+	.page_size = TX_PAGE_SIZE,
 	.dig_min = 0x20,
 	.default_1ss_tx_path = BB_PATH_A,
 	.path_div_supported = true,
@@ -5336,12 +5346,14 @@ struct rtw_chip_info rtw8822c_hw_spec = {
 	.edcca_th = rtw8822c_edcca_th,
 	.l2h_th_ini_cs = 60,
 	.l2h_th_ini_ad = 45,
+	.ampdu_density = IEEE80211_HT_MPDU_DENSITY_2,
 
 #ifdef CONFIG_PM
 	.wow_fw_name = "rtw88/rtw8822c_wow_fw.bin",
 	.wowlan_stub = &rtw_wowlan_stub_8822c,
 	.max_sched_scan_ssids = 4,
 #endif
+	.max_scan_ie_len = (RTW_PROBE_PG_CNT - 1) * TX_PAGE_SIZE,
 	.coex_para_ver = 0x2103181c,
 	.bt_desired_ver = 0x1c,
 	.scbd_support = true,

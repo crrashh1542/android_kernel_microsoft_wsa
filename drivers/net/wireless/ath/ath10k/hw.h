@@ -631,10 +631,8 @@ struct ath10k_hw_params {
 
 	bool hw_restart_disconnect;
 
-	/* limit tx credit */
-	bool tx_credit_limit;
+	bool use_fw_tx_credits;
 
-	/* WAR - Delay the unmapping of the buffer */
 	bool delay_unmap_buffer;
 
 	u32 start_retry;

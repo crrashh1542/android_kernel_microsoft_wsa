@@ -130,6 +130,12 @@ struct t7xx_port {
 	bool				chan_enable;
 	struct task_struct		*thread;
 	struct t7xx_devlink	*dl;
+#ifdef CONFIG_WWAN_DEBUGFS
+	void 				*relaych;
+	struct dentry			*ctrl_file;
+	struct dentry			*debugfs_dir;
+	struct dentry                   *debugfs_wwan_dir;
+#endif
 };
 
 int t7xx_get_port_mtu(struct t7xx_port *port);

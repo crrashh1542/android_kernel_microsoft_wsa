@@ -1208,6 +1208,20 @@
 				};
 			};
 
+			blsp1_uart2_default: blsp1-uart2-default {
+				pins = "gpio41", "gpio42", "gpio43", "gpio44";
+				function = "blsp_uart2";
+				drive-strength = <16>;
+				bias-disable;
+			};
+
+			blsp1_uart2_sleep: blsp1-uart2-sleep {
+				pins = "gpio41", "gpio42", "gpio43", "gpio44";
+				function = "gpio";
+				drive-strength = <2>;
+				bias-disable;
+			};
+
 			blsp1_i2c3_default: blsp1-i2c2-default {
 				pins = "gpio47", "gpio48";
 				function = "blsp_i2c3";
@@ -2556,11 +2570,15 @@
 			interrupt-names = "hs_phy_irq", "ss_phy_irq";
 
 			clocks = <&gcc GCC_SYS_NOC_USB3_AXI_CLK>,
-				<&gcc GCC_USB30_MASTER_CLK>,
-				<&gcc GCC_AGGRE2_USB3_AXI_CLK>,
-				<&gcc GCC_USB30_MOCK_UTMI_CLK>,
-				<&gcc GCC_USB30_SLEEP_CLK>,
-				<&gcc GCC_USB_PHY_CFG_AHB2PHY_CLK>;
+				 <&gcc GCC_USB30_MASTER_CLK>,
+				 <&gcc GCC_AGGRE2_USB3_AXI_CLK>,
+				 <&gcc GCC_USB30_SLEEP_CLK>,
+				 <&gcc GCC_USB30_MOCK_UTMI_CLK>;
+			clock-names = "cfg_noc",
+				      "core",
+				      "iface",
+				      "sleep",
+				      "mock_utmi";
 
 			assigned-clocks = <&gcc GCC_USB30_MOCK_UTMI_CLK>,
 					  <&gcc GCC_USB30_MASTER_CLK>;
@@ -2569,7 +2587,7 @@
 			power-domains = <&gcc USB30_GDSC>;
 			status = "disabled";
 
-			usb3_dwc3: dwc3@6a00000 {
+			usb3_dwc3: usb@6a00000 {
 				compatible = "snps,dwc3";
 				reg = <0x06a00000 0xcc00>;
 				interrupts = <0 131 IRQ_TYPE_LEVEL_HIGH>;
@@ -2701,6 +2719,9 @@
 			clocks = <&gcc GCC_BLSP1_UART2_APPS_CLK>,
 				 <&gcc GCC_BLSP1_AHB_CLK>;
 			clock-names = "core", "iface";
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&blsp1_uart2_default>;
+			pinctrl-1 = <&blsp1_uart2_sleep>;
 			dmas = <&blsp1_dma 2>, <&blsp1_dma 3>;
 			dma-names = "tx", "rx";
 			status = "disabled";
@@ -2876,7 +2897,7 @@
 			qcom,select-utmi-as-pipe-clk;
 			status = "disabled";
 
-			dwc3@7600000 {
+			usb2_dwc3: usb@7600000 {
 				compatible = "snps,dwc3";
 				reg = <0x07600000 0xcc00>;
 				interrupts = <0 138 IRQ_TYPE_LEVEL_HIGH>;
