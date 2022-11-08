@@ -1643,6 +1643,7 @@ void iwl_trans_free(struct iwl_trans *trans);
 #ifdef CONFIG_PCI
 int __must_check iwl_pci_register_driver(void);
 void iwl_pci_unregister_driver(void);
+void iwl_trans_pcie_remove(struct iwl_trans *trans, bool rescan);
 #else
 static inline int __must_check iwl_pci_register_driver(void)
 {
@@ -1650,6 +1651,10 @@ static inline int __must_check iwl_pci_register_driver(void)
 }
 
 static inline void iwl_pci_unregister_driver(void)
+{
+}
+
+static inline void iwl_trans_pcie_remove(struct iwl_trans *trans, bool rescan)
 {
 }
 #endif /* CONFIG_PCI */
