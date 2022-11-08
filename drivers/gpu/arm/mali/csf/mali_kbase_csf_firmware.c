@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2018-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2018-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -634,8 +634,9 @@ static int parse_memory_setup_entry(struct kbase_device *kbdev,
 	list_add(&interface->node, &kbdev->csf.firmware_interfaces);
 
 	ret = kbase_mmu_insert_pages_no_flush(kbdev, &kbdev->csf.mcu_mmu,
-			virtual_start >> PAGE_SHIFT, phys, num_pages, mem_flags,
-			KBASE_MEM_GROUP_CSF_FW);
+					      virtual_start >> PAGE_SHIFT, phys,
+					      num_pages, mem_flags,
+					      KBASE_MEM_GROUP_CSF_FW, NULL);
 
 	if (ret != 0) {
 		dev_err(kbdev->dev, "Failed to insert firmware pages\n");
@@ -2273,8 +2274,9 @@ int kbase_csf_firmware_mcu_shared_mapping_init(
 	gpu_map_properties |= gpu_map_prot;
 
 	ret = kbase_mmu_insert_pages_no_flush(kbdev, &kbdev->csf.mcu_mmu,
-			va_reg->start_pfn, &phys[0], num_pages,
-			gpu_map_properties, KBASE_MEM_GROUP_CSF_FW);
+					      va_reg->start_pfn, &phys[0],
+					      num_pages, gpu_map_properties,
+					      KBASE_MEM_GROUP_CSF_FW, NULL);
 	if (ret)
 		goto mmu_insert_pages_error;
 

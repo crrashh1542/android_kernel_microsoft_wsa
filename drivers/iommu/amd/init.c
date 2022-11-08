@@ -811,19 +811,14 @@ static void free_ga_log(struct amd_iommu *iommu)
 #endif
 }
 
+#ifdef CONFIG_IRQ_REMAP
 static int iommu_ga_log_enable(struct amd_iommu *iommu)
 {
-#ifdef CONFIG_IRQ_REMAP
 	u32 status, i;
 	u64 entry;
 
 	if (!iommu->ga_log)
 		return -EINVAL;
-
-	/* Check if already running */
-	status = readl(iommu->mmio_base + MMIO_STATUS_OFFSET);
-	if (WARN_ON(status & (MMIO_STATUS_GALOG_RUN_MASK)))
-		return 0;
 
 	entry = iommu_virt_to_phys(iommu->ga_log) | GA_LOG_SIZE_512;
 	memcpy_toio(iommu->mmio_base + MMIO_GA_LOG_BASE_OFFSET,
@@ -848,13 +843,12 @@ static int iommu_ga_log_enable(struct amd_iommu *iommu)
 
 	if (WARN_ON(i >= LOOP_TIMEOUT))
 		return -EINVAL;
-#endif /* CONFIG_IRQ_REMAP */
+
 	return 0;
 }
 
 static int iommu_init_ga_log(struct amd_iommu *iommu)
 {
-#ifdef CONFIG_IRQ_REMAP
 	if (!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir))
 		return 0;
 
@@ -872,10 +866,8 @@ static int iommu_init_ga_log(struct amd_iommu *iommu)
 err_out:
 	free_ga_log(iommu);
 	return -EINVAL;
-#else
-	return 0;
-#endif /* CONFIG_IRQ_REMAP */
 }
+#endif /* CONFIG_IRQ_REMAP */
 
 static int __init alloc_cwwb_sem(struct amd_iommu *iommu)
 {
@@ -1856,10 +1848,6 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 	if (iommu_feature(iommu, FEATURE_PPR) && alloc_ppr_log(iommu))
 		return -ENOMEM;
 
-	ret = iommu_init_ga_log(iommu);
-	if (ret)
-		return ret;
-
 	if (iommu->cap & (1UL << IOMMU_CAP_NPCACHE)) {
 		pr_info("Using strict mode due to virtualization\n");
 		iommu_set_dma_strict();
@@ -1899,8 +1887,11 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 	amd_iommu_erratum_746_workaround(iommu);
 	amd_iommu_ats_write_check_workaround(iommu);
 
-	iommu_device_sysfs_add(&iommu->iommu, &iommu->dev->dev,
+	ret = iommu_device_sysfs_add(&iommu->iommu, &iommu->dev->dev,
 			       amd_iommu_groups, "ivhd%d", iommu->index);
+	if (ret)
+		return ret;
+
 	iommu_device_register(&iommu->iommu, &amd_iommu_ops, NULL);
 
 	return pci_enable_device(iommu->dev);
@@ -1936,8 +1927,6 @@ static void print_iommu_info(void)
 	}
 	if (irq_remapping_enabled) {
 		pr_info("Interrupt remapping enabled\n");
-		if (AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir))
-			pr_info("Virtual APIC enabled\n");
 		if (amd_iommu_xt_mode == IRQ_REMAP_X2APIC_MODE)
 			pr_info("X2APIC enabled\n");
 	}
@@ -2218,9 +2207,6 @@ enable_faults:
 
 	if (iommu->ppr_log != NULL)
 		iommu_feature_enable(iommu, CONTROL_PPRINT_EN);
-
-	iommu_ga_log_enable(iommu);
-
 	return 0;
 }
 
@@ -2426,8 +2412,6 @@ static void iommu_enable_ga(struct amd_iommu *iommu)
 #ifdef CONFIG_IRQ_REMAP
 	switch (amd_iommu_guest_ir) {
 	case AMD_IOMMU_GUEST_IR_VAPIC:
-		iommu_feature_enable(iommu, CONTROL_GAM_EN);
-		fallthrough;
 	case AMD_IOMMU_GUEST_IR_LEGACY_GA:
 		iommu_feature_enable(iommu, CONTROL_GA_EN);
 		iommu->irte_ops = &irte_128_ops;
@@ -2498,19 +2482,6 @@ static void early_enable_iommus(void)
 			iommu_flush_all_caches(iommu);
 		}
 	}
-
-#ifdef CONFIG_IRQ_REMAP
-	/*
-	 * Note: We have already checked GASup from IVRS table.
-	 *       Now, we need to make sure that GAMSup is set.
-	 */
-	if (AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir) &&
-	    !check_feature_on_all_iommus(FEATURE_GAM_VAPIC))
-		amd_iommu_guest_ir = AMD_IOMMU_GUEST_IR_LEGACY_GA;
-
-	if (AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir))
-		amd_iommu_irq_ops.capability |= (1 << IRQ_POSTING_CAP);
-#endif
 }
 
 static void enable_iommus_v2(void)
@@ -2523,10 +2494,63 @@ static void enable_iommus_v2(void)
 	}
 }
 
+static void enable_iommus_vapic(void)
+{
+#ifdef CONFIG_IRQ_REMAP
+	u32 status, i;
+	struct amd_iommu *iommu;
+
+	for_each_iommu(iommu) {
+		/*
+		 * Disable GALog if already running. It could have been enabled
+		 * in the previous boot before kdump.
+		 */
+		status = readl(iommu->mmio_base + MMIO_STATUS_OFFSET);
+		if (!(status & MMIO_STATUS_GALOG_RUN_MASK))
+			continue;
+
+		iommu_feature_disable(iommu, CONTROL_GALOG_EN);
+		iommu_feature_disable(iommu, CONTROL_GAINT_EN);
+
+		/*
+		 * Need to set and poll check the GALOGRun bit to zero before
+		 * we can set/ modify GA Log registers safely.
+		 */
+		for (i = 0; i < LOOP_TIMEOUT; ++i) {
+			status = readl(iommu->mmio_base + MMIO_STATUS_OFFSET);
+			if (!(status & MMIO_STATUS_GALOG_RUN_MASK))
+				break;
+			udelay(10);
+		}
+
+		if (WARN_ON(i >= LOOP_TIMEOUT))
+			return;
+	}
+
+	if (AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir) &&
+	    !check_feature_on_all_iommus(FEATURE_GAM_VAPIC)) {
+		amd_iommu_guest_ir = AMD_IOMMU_GUEST_IR_LEGACY_GA;
+		return;
+	}
+
+	/* Enabling GAM support */
+	for_each_iommu(iommu) {
+		if (iommu_init_ga_log(iommu) ||
+		    iommu_ga_log_enable(iommu))
+			return;
+
+		iommu_feature_enable(iommu, CONTROL_GAM_EN);
+	}
+
+	amd_iommu_irq_ops.capability |= (1 << IRQ_POSTING_CAP);
+	pr_info("Virtual APIC enabled\n");
+#endif
+}
+
 static void enable_iommus(void)
 {
 	early_enable_iommus();
-
+	enable_iommus_vapic();
 	enable_iommus_v2();
 }
 
@@ -2923,6 +2947,7 @@ static int __init state_next(void)
 		register_syscore_ops(&amd_iommu_syscore_ops);
 		ret = amd_iommu_init_pci();
 		init_state = ret ? IOMMU_INIT_ERROR : IOMMU_PCI_INIT;
+		enable_iommus_vapic();
 		enable_iommus_v2();
 		break;
 	case IOMMU_PCI_INIT:

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2014-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -55,6 +55,7 @@ enum base_hw_feature {
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_L2_CONFIG,
 	BASE_HW_FEATURE_ASN_HASH,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 
@@ -247,6 +248,7 @@ static const enum base_hw_feature base_hw_features_tTRx[] = {
 	BASE_HW_FEATURE_COHERENCY_REG,
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_CLEAN_ONLY_SAFE,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 
@@ -274,6 +276,7 @@ static const enum base_hw_feature base_hw_features_tNAx[] = {
 	BASE_HW_FEATURE_COHERENCY_REG,
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_CLEAN_ONLY_SAFE,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 
@@ -302,6 +305,7 @@ static const enum base_hw_feature base_hw_features_tBEx[] = {
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_L2_CONFIG,
 	BASE_HW_FEATURE_CLEAN_ONLY_SAFE,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 
@@ -330,6 +334,7 @@ static const enum base_hw_feature base_hw_features_tBAx[] = {
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_L2_CONFIG,
 	BASE_HW_FEATURE_CLEAN_ONLY_SAFE,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 
@@ -358,6 +363,7 @@ static const enum base_hw_feature base_hw_features_tDUx[] = {
 	BASE_HW_FEATURE_IDVS_GROUP_SIZE,
 	BASE_HW_FEATURE_L2_CONFIG,
 	BASE_HW_FEATURE_CLEAN_ONLY_SAFE,
+	BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
 	BASE_HW_FEATURE_END
 };
 

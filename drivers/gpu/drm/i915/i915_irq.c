@@ -2653,9 +2653,9 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 }
 
 static u32
-gen11_gu_misc_irq_ack(struct intel_gt *gt, const u32 master_ctl)
+gen11_gu_misc_irq_ack(struct drm_i915_private *i915, const u32 master_ctl)
 {
-	void __iomem * const regs = gt->uncore->regs;
+	void __iomem * const regs = i915->uncore.regs;
 	u32 iir;
 
 	if (!(master_ctl & GEN11_GU_MISC_IRQ))
@@ -2669,10 +2669,10 @@ gen11_gu_misc_irq_ack(struct intel_gt *gt, const u32 master_ctl)
 }
 
 static void
-gen11_gu_misc_irq_handler(struct intel_gt *gt, const u32 iir)
+gen11_gu_misc_irq_handler(struct drm_i915_private *i915, const u32 iir)
 {
 	if (iir & GEN11_GU_MISC_GSE)
-		intel_opregion_asle_intr(gt->i915);
+		intel_opregion_asle_intr(i915);
 }
 
 static inline u32 gen11_master_intr_disable(void __iomem * const regs)
@@ -2736,11 +2736,11 @@ static irqreturn_t gen11_irq_handler(int irq, void *arg)
 	if (master_ctl & GEN11_DISPLAY_IRQ)
 		gen11_display_irq_handler(i915);
 
-	gu_misc_iir = gen11_gu_misc_irq_ack(gt, master_ctl);
+	gu_misc_iir = gen11_gu_misc_irq_ack(i915, master_ctl);
 
 	gen11_master_intr_enable(regs);
 
-	gen11_gu_misc_irq_handler(gt, gu_misc_iir);
+	gen11_gu_misc_irq_handler(i915, gu_misc_iir);
 
 	pmu_irq_stats(i915, IRQ_HANDLED);
 
@@ -2801,11 +2801,11 @@ static irqreturn_t dg1_irq_handler(int irq, void *arg)
 	if (master_ctl & GEN11_DISPLAY_IRQ)
 		gen11_display_irq_handler(i915);
 
-	gu_misc_iir = gen11_gu_misc_irq_ack(gt, master_ctl);
+	gu_misc_iir = gen11_gu_misc_irq_ack(i915, master_ctl);
 
 	dg1_master_intr_enable(regs);
 
-	gen11_gu_misc_irq_handler(gt, gu_misc_iir);
+	gen11_gu_misc_irq_handler(i915, gu_misc_iir);
 
 	pmu_irq_stats(i915, IRQ_HANDLED);
 
@@ -4370,8 +4370,8 @@ HPD_FUNCS(ilk);
 
 void intel_hpd_irq_setup(struct drm_i915_private *i915)
 {
-	if (i915->display_irqs_enabled && i915->hotplug_funcs)
-		i915->hotplug_funcs->hpd_irq_setup(i915);
+	if (i915->display_irqs_enabled && i915->display.funcs.hotplug)
+		i915->display.funcs.hotplug->hpd_irq_setup(i915);
 }
 
 /**
@@ -4424,22 +4424,22 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 
 	if (HAS_GMCH(dev_priv)) {
 		if (I915_HAS_HOTPLUG(dev_priv))
-			dev_priv->hotplug_funcs = &i915_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &i915_hpd_funcs;
 	} else {
 		if (HAS_PCH_DG2(dev_priv))
-			dev_priv->hotplug_funcs = &icp_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &icp_hpd_funcs;
 		else if (HAS_PCH_DG1(dev_priv))
-			dev_priv->hotplug_funcs = &dg1_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &dg1_hpd_funcs;
 		else if (DISPLAY_VER(dev_priv) >= 11)
-			dev_priv->hotplug_funcs = &gen11_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &gen11_hpd_funcs;
 		else if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv))
-			dev_priv->hotplug_funcs = &bxt_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &bxt_hpd_funcs;
 		else if (INTEL_PCH_TYPE(dev_priv) >= PCH_ICP)
-			dev_priv->hotplug_funcs = &icp_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &icp_hpd_funcs;
 		else if (INTEL_PCH_TYPE(dev_priv) >= PCH_SPT)
-			dev_priv->hotplug_funcs = &spt_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &spt_hpd_funcs;
 		else
-			dev_priv->hotplug_funcs = &ilk_hpd_funcs;
+			dev_priv->display.funcs.hotplug = &ilk_hpd_funcs;
 	}
 }
 

@@ -32,9 +32,9 @@ static int kxsd9_spi_probe(struct spi_device *spi)
 				  spi_get_device_id(spi)->name);
 }
 
-static int kxsd9_spi_remove(struct spi_device *spi)
+static void kxsd9_spi_remove(struct spi_device *spi)
 {
-	return kxsd9_common_remove(&spi->dev);
+	kxsd9_common_remove(&spi->dev);
 }
 
 static const struct spi_device_id kxsd9_spi_id[] = {

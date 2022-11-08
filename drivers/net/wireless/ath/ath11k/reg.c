@@ -15,6 +15,7 @@
 #define ETSI_WEATHER_RADAR_BAND_LOW		5590
 #define ETSI_WEATHER_RADAR_BAND_HIGH		5650
 #define ETSI_WEATHER_RADAR_BAND_CAC_TIMEOUT	600000
+#define ATH11K_MAX_REG_WAIT	(3 * HZ)
 
 static const struct ieee80211_regdomain ath11k_world_regd = {
 	.n_reg_rules = 3,
@@ -241,6 +242,8 @@ int ath11k_regd_update(struct ath11k *ar)
 	struct ieee80211_regdomain *regd, *regd_copy = NULL;
 	int ret, regd_len, pdev_id;
 	struct ath11k_base *ab;
+	unsigned long before;
+	int acquired;
 
 	ab = ar->ab;
 	pdev_id = ar->pdev_idx;
@@ -285,7 +288,21 @@ int ath11k_regd_update(struct ath11k *ar)
 		goto err;
 	}
 
-	rtnl_lock();
+	before = jiffies;
+	while (true) {
+		acquired = rtnl_trylock();
+		if (!acquired)
+			cond_resched();
+		if (acquired || time_after(jiffies, before + ATH11K_MAX_REG_WAIT))
+			break;
+	}
+
+	if (!acquired) {
+		ret = -EBUSY;
+		ath11k_warn(ar->ab, "rtnl acquire failed\n");
+		goto err;
+	}
+
 	wiphy_lock(ar->hw->wiphy);
 	ret = regulatory_set_wiphy_regd_sync(ar->hw->wiphy, regd_copy);
 	wiphy_unlock(ar->hw->wiphy);

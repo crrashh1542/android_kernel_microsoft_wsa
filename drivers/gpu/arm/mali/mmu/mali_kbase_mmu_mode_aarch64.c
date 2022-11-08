@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2014, 2016-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2014, 2016-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -35,12 +35,13 @@
 #define ENTRY_IS_INVAL		2ULL
 #define ENTRY_IS_PTE		3ULL
 
-#define ENTRY_ATTR_BITS (7ULL << 2)	/* bits 4:2 */
 #define ENTRY_ACCESS_RW (1ULL << 6)     /* bits 6:7 */
 #define ENTRY_ACCESS_RO (3ULL << 6)
-#define ENTRY_SHARE_BITS (3ULL << 8)	/* bits 9:8 */
 #define ENTRY_ACCESS_BIT (1ULL << 10)
 #define ENTRY_NX_BIT (1ULL << 54)
+
+#define UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR (55)
+#define VALID_ENTRY_MASK ((u64)0xF << UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR)
 
 /* Helper Function to perform assignment of page table entries, to
  * ensure the use of strd, which is required on LPAE systems.
@@ -85,6 +86,7 @@ static phys_addr_t pte_to_phy_addr(u64 entry)
 	if (!(entry & 1))
 		return 0;
 
+	entry &= ~VALID_ENTRY_MASK;
 	return entry & ~0xFFF;
 }
 
@@ -151,18 +153,59 @@ static void entry_set_ate(u64 *entry,
 				ENTRY_ACCESS_BIT | ENTRY_IS_ATE_L02);
 }
 
-static void entry_set_pte(u64 *entry, phys_addr_t phy)
+static unsigned int get_num_valid_entries(u64 *pgd)
 {
-	page_table_entry_set(entry, (phy & PAGE_MASK) |
-			ENTRY_ACCESS_BIT | ENTRY_IS_PTE);
+	register unsigned int num_of_valid_entries;
+
+	num_of_valid_entries =
+		(unsigned int)((pgd[2] & VALID_ENTRY_MASK) >>
+			       (UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR - 8));
+	num_of_valid_entries |=
+		(unsigned int)((pgd[1] & VALID_ENTRY_MASK) >>
+			       (UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR - 4));
+	num_of_valid_entries |=
+		(unsigned int)((pgd[0] & VALID_ENTRY_MASK) >>
+			       (UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR));
+
+	return num_of_valid_entries;
 }
 
-static void entry_invalidate(u64 *entry)
+static void set_num_valid_entries(u64 *pgd, unsigned int num_of_valid_entries)
 {
-	page_table_entry_set(entry, ENTRY_IS_INVAL);
+	WARN_ON_ONCE(num_of_valid_entries > KBASE_MMU_PAGE_ENTRIES);
+
+	pgd[0] &= ~VALID_ENTRY_MASK;
+	pgd[0] |= ((u64)(num_of_valid_entries & 0xF)
+		   << UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR);
+
+	pgd[1] &= ~VALID_ENTRY_MASK;
+	pgd[1] |= ((u64)((num_of_valid_entries >> 4) & 0xF)
+		   << UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR);
+
+	pgd[2] &= ~VALID_ENTRY_MASK;
+	pgd[2] |= ((u64)((num_of_valid_entries >> 8) & 0xF)
+		   << UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR);
 }
 
-static struct kbase_mmu_mode const aarch64_mode = {
+static void entry_set_pte(u64 *pgd, u64 vpfn, phys_addr_t phy)
+{
+	unsigned int nr_entries = get_num_valid_entries(pgd);
+
+	page_table_entry_set(&pgd[vpfn], (phy & PAGE_MASK) | ENTRY_ACCESS_BIT |
+						 ENTRY_IS_PTE);
+
+	set_num_valid_entries(pgd, nr_entries + 1);
+}
+
+static void entries_invalidate(u64 *entry, u32 count)
+{
+	u32 i;
+
+	for (i = 0; i < count; i++)
+		page_table_entry_set(entry + i, ENTRY_IS_INVAL);
+}
+
+static const struct kbase_mmu_mode aarch64_mode = {
 	.update = mmu_update,
 	.get_as_setup = kbase_mmu_get_as_setup,
 	.disable_as = mmu_disable_as,
@@ -171,7 +214,9 @@ static struct kbase_mmu_mode const aarch64_mode = {
 	.pte_is_valid = pte_is_valid,
 	.entry_set_ate = entry_set_ate,
 	.entry_set_pte = entry_set_pte,
-	.entry_invalidate = entry_invalidate,
+	.entries_invalidate = entries_invalidate,
+	.get_num_valid_entries = get_num_valid_entries,
+	.set_num_valid_entries = set_num_valid_entries,
 	.flags = KBASE_MMU_MODE_HAS_NON_CACHEABLE
 };
 

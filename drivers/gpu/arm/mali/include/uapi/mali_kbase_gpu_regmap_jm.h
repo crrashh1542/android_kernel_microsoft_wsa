@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -175,6 +175,7 @@
 /* Possible values of JS_CONFIG and JS_CONFIG_NEXT registers */
 #define JS_CONFIG_START_FLUSH_NO_ACTION        (0u << 0)
 #define JS_CONFIG_START_FLUSH_CLEAN            (1u << 8)
+#define JS_CONFIG_START_FLUSH_INV_SHADER_OTHER (2u << 8)
 #define JS_CONFIG_START_FLUSH_CLEAN_INVALIDATE (3u << 8)
 #define JS_CONFIG_START_MMU                    (1u << 10)
 #define JS_CONFIG_JOB_CHAIN_FLAG               (1u << 11)

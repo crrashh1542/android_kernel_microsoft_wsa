@@ -137,7 +137,7 @@ EXPORT_SYMBOL_NS(max_98373_set_codec_conf, SND_SOC_INTEL_SOF_MAXIM_COMMON);
 /*
  * Maxim MAX98390
  */
-const struct snd_soc_dapm_route max_98390_dapm_routes[] = {
+static const struct snd_soc_dapm_route max_98390_dapm_routes[] = {
 	/* speaker */
 	{ "Left Spk", NULL, "Left BE_OUT" },
 	{ "Right Spk", NULL, "Right BE_OUT" },
@@ -153,7 +153,7 @@ static const struct snd_soc_dapm_widget max_98390_tt_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("TR Spk", NULL),
 };
 
-const struct snd_soc_dapm_route max_98390_tt_dapm_routes[] = {
+static const struct snd_soc_dapm_route max_98390_tt_dapm_routes[] = {
 	/* Tweeter speaker */
 	{ "TL Spk", NULL, "Tweeter Left BE_OUT" },
 	{ "TR Spk", NULL, "Tweeter Right BE_OUT" },
@@ -222,14 +222,13 @@ struct snd_soc_dai_link_component max_98390_4spk_components[] = {
 EXPORT_SYMBOL_NS(max_98390_4spk_components, SND_SOC_INTEL_SOF_MAXIM_COMMON);
 
 static int max_98390_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
+			       struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
 	struct snd_soc_dai *codec_dai;
 	int i;
 
 	for_each_rtd_codec_dais(rtd, i, codec_dai) {
-
 		if (i >= ARRAY_SIZE(max_98390_4spk_components)) {
 			dev_err(codec_dai->dev, "invalid codec index %d\n", i);
 			return -ENODEV;
@@ -263,7 +262,7 @@ int max_98390_spk_codec_init(struct snd_soc_pcm_runtime *rtd)
 
 	/* add regular speakers dapm route */
 	ret = snd_soc_dapm_add_routes(&card->dapm, max_98390_dapm_routes,
-					ARRAY_SIZE(max_98390_dapm_routes));
+				      ARRAY_SIZE(max_98390_dapm_routes));
 	if (ret) {
 		dev_err(rtd->dev, "unable to add Left/Right Speaker dapm, ret %d\n", ret);
 		return ret;
@@ -272,7 +271,7 @@ int max_98390_spk_codec_init(struct snd_soc_pcm_runtime *rtd)
 	/* add widgets/controls/dapm for tweeter speakers */
 	if (acpi_dev_present("MX98390", "3", -1)) {
 		ret = snd_soc_dapm_new_controls(&card->dapm, max_98390_tt_dapm_widgets,
-							ARRAY_SIZE(max_98390_tt_dapm_widgets));
+						ARRAY_SIZE(max_98390_tt_dapm_widgets));
 
 		if (ret) {
 			dev_err(rtd->dev, "unable to add tweeter dapm controls, ret %d\n", ret);
@@ -288,7 +287,7 @@ int max_98390_spk_codec_init(struct snd_soc_pcm_runtime *rtd)
 		}
 
 		ret = snd_soc_dapm_add_routes(&card->dapm, max_98390_tt_dapm_routes,
-						ARRAY_SIZE(max_98390_tt_dapm_routes));
+					      ARRAY_SIZE(max_98390_tt_dapm_routes));
 		if (ret)
 			dev_err(rtd->dev,
 				"unable to add Tweeter Left/Right Speaker dapm, ret %d\n", ret);
@@ -297,7 +296,7 @@ int max_98390_spk_codec_init(struct snd_soc_pcm_runtime *rtd)
 }
 EXPORT_SYMBOL_NS(max_98390_spk_codec_init, SND_SOC_INTEL_SOF_MAXIM_COMMON);
 
-struct snd_soc_ops max_98390_ops = {
+const struct snd_soc_ops max_98390_ops = {
 	.hw_params = max_98390_hw_params,
 };
 EXPORT_SYMBOL_NS(max_98390_ops, SND_SOC_INTEL_SOF_MAXIM_COMMON);

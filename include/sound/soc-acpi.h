@@ -156,6 +156,7 @@ struct snd_soc_acpi_link_adr {
  * @links: array of link _ADR descriptors, null terminated.
  * @drv_name: machine driver name
  * @fw_filename: firmware file name. Used when SOF is not enabled.
+ * @tplg_filename: topology file name. Used when SOF is not enabled.
  * @board: board name
  * @machine_quirk: pointer to quirk, usually based on DMI information when
  * ACPI ID alone is not sufficient, wrong or misleading
@@ -168,12 +169,13 @@ struct snd_soc_acpi_link_adr {
  */
 /* Descriptor for SST ASoC machine driver */
 struct snd_soc_acpi_mach {
-	const u8 id[ACPI_ID_LEN];
+	u8 id[ACPI_ID_LEN];
 	const struct snd_soc_acpi_codecs *comp_ids;
 	const u32 link_mask;
 	const struct snd_soc_acpi_link_adr *links;
 	const char *drv_name;
 	const char *fw_filename;
+	const char *tplg_filename;
 	const char *board;
 	struct snd_soc_acpi_mach * (*machine_quirk)(void *arg);
 	const void *quirk_data;

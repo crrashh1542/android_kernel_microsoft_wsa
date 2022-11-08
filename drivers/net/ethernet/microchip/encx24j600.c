@@ -1091,7 +1091,7 @@ error_out:
 	return ret;
 }
 
-static int encx24j600_spi_remove(struct spi_device *spi)
+static void encx24j600_spi_remove(struct spi_device *spi)
 {
 	struct encx24j600_priv *priv = dev_get_drvdata(&spi->dev);
 
@@ -1099,8 +1099,6 @@ static int encx24j600_spi_remove(struct spi_device *spi)
 	kthread_stop(priv->kworker_task);
 
 	free_netdev(priv->ndev);
-
-	return 0;
 }
 
 static const struct spi_device_id encx24j600_spi_id_table[] = {

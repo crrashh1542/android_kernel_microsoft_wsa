@@ -16,6 +16,7 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/of_gpio.h>
 #include <sound/tlv.h>
 #include "max98927.h"
@@ -147,12 +148,13 @@ static int max98927_dai_set_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 
 	dev_dbg(component->dev, "%s: fmt 0x%08X\n", __func__, fmt);
 
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBS_CFS:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBC_CFC:
+		max98927->provider = false;
 		mode = MAX98927_PCM_MASTER_MODE_SLAVE;
 		break;
-	case SND_SOC_DAIFMT_CBM_CFM:
-		max98927->master = true;
+	case SND_SOC_DAIFMT_CBP_CFP:
+		max98927->provider = true;
 		mode = MAX98927_PCM_MASTER_MODE_MASTER;
 		break;
 	default:
@@ -269,7 +271,7 @@ static int max98927_set_clock(struct max98927_priv *max98927,
 	int blr_clk_ratio = params_channels(params) * max98927->ch_size;
 	int value;
 
-	if (max98927->master) {
+	if (max98927->provider) {
 		int i;
 		/* match rate to closest value */
 		for (i = 0; i < ARRAY_SIZE(rate_table); i++) {
@@ -620,18 +622,6 @@ static SOC_ENUM_SINGLE_DECL(max98927_current_limit,
 		MAX98927_R0042_BOOST_CTRL1, 1,
 		max98927_current_limit_text);
 
-static const char * const max98927_env_track_headroom_text[] = {
-	"0.000V", "0.125V", "0.250V", "0.375V", "0.500V", "0.625V",
-	"0.750V", "0.875V", "1.000V", "1.125V", "1.250V", "1.375V",
-	"1.500V", "1.625V", "1.750V", "1.875V", "2.000V", "2.125V",
-	"2.250V", "2.375V", "2.500V", "2.625V", "2.750V", "2.875V",
-	"3.000V", "3.125V", "3.250V", "3.375V", "3.500V"
-};
-
-static SOC_ENUM_SINGLE_DECL(max98927_env_track_headroom,
-		MAX98927_R0082_ENV_TRACK_VOUT_HEADROOM, 0,
-		max98927_env_track_headroom_text);
-
 static const struct snd_kcontrol_new max98927_snd_controls[] = {
 	SOC_SINGLE_TLV("Speaker Volume", MAX98927_R003C_SPK_GAIN,
 		0, 6, 0,
@@ -649,9 +639,6 @@ static const struct snd_kcontrol_new max98927_snd_controls[] = {
 		MAX98927_AMP_VOL_SEL_SHIFT, 1, 0),
 	SOC_ENUM("Boost Output Voltage", max98927_boost_voltage),
 	SOC_ENUM("Current Limit", max98927_current_limit),
-	SOC_SINGLE("EnvTrack Switch", MAX98927_R0086_ENV_TRACK_CTRL,
-		MAX98927_ENV_TRACKER_EN_SHIFT, 1, 0),
-	SOC_ENUM("EnvTrack Headroom", max98927_env_track_headroom),
 };
 
 static const struct snd_soc_dapm_route max98927_audio_map[] = {
@@ -750,10 +737,13 @@ static int max98927_probe(struct snd_soc_component *component)
 	/* Envelope Tracking configuration */
 	regmap_write(max98927->regmap,
 		MAX98927_R0082_ENV_TRACK_VOUT_HEADROOM,
-		0x0A);
+		0x08);
 	regmap_write(max98927->regmap,
 		MAX98927_R0086_ENV_TRACK_CTRL,
 		0x01);
+	regmap_write(max98927->regmap,
+		MAX98927_R0087_ENV_TRACK_BOOST_VOUT_READ,
+		0x10);
 
 	/* voltage, current slot configuration */
 	regmap_write(max98927->regmap,
@@ -842,7 +832,6 @@ static const struct snd_soc_component_driver soc_component_dev_max98927 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config max98927_regmap = {
@@ -909,6 +898,19 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 			"Failed to allocate regmap: %d\n", ret);
 		return ret;
 	}
+	
+	max98927->reset_gpio 
+		= devm_gpiod_get_optional(&i2c->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(max98927->reset_gpio)) {
+		ret = PTR_ERR(max98927->reset_gpio);
+		return dev_err_probe(&i2c->dev, ret, "failed to request GPIO reset pin");
+	}
+
+	if (max98927->reset_gpio) {
+		gpiod_set_value_cansleep(max98927->reset_gpio, 0);
+		/* Wait for i2c port to be ready */
+		usleep_range(5000, 6000);
+	}
 
 	/* Check Revision ID */
 	ret = regmap_read(max98927->regmap,
@@ -931,6 +933,17 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev, "Failed to register component: %d\n", ret);
 
 	return ret;
+}
+
+static int max98927_i2c_remove(struct i2c_client *i2c)
+{
+	struct max98927_priv *max98927 = i2c_get_clientdata(i2c);
+
+	if (max98927->reset_gpio) {
+		gpiod_set_value_cansleep(max98927->reset_gpio, 1);
+	}
+
+	return 0;
 }
 
 static const struct i2c_device_id max98927_i2c_id[] = {
@@ -964,6 +977,7 @@ static struct i2c_driver max98927_i2c_driver = {
 		.pm = &max98927_pm,
 	},
 	.probe  = max98927_i2c_probe,
+	.remove = max98927_i2c_remove,
 	.id_table = max98927_i2c_id,
 };
 

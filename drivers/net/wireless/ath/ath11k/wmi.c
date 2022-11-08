@@ -418,7 +418,7 @@ ath11k_pull_mac_phy_cap_svc_ready_ext(struct ath11k_pdev_wmi *wmi_handle,
 
 	/* tx/rx chainmask reported from fw depends on the actual hw chains used,
 	 * For example, for 4x4 capable macphys, first 4 chains can be used for first
-	 * mac and the remaing 4 chains can be used for the second mac or vice-versa.
+	 * mac and the remaining 4 chains can be used for the second mac or vice-versa.
 	 * In this case, tx/rx chainmask 0xf will be advertised for first mac and 0xf0
 	 * will be advertised for second mac or vice-versa. Compute the shift value
 	 * for tx/rx chainmask which will be used to advertise supported ht/vht rates to
@@ -625,10 +625,25 @@ struct sk_buff *ath11k_wmi_alloc_skb(struct ath11k_wmi_base *wmi_sc, u32 len)
 	return skb;
 }
 
+static u32 ath11k_wmi_mgmt_get_freq(struct ath11k *ar,
+				    struct ieee80211_tx_info *info)
+{
+	struct ath11k_base *ab = ar->ab;
+	u32 freq = 0;
+
+	if (ab->hw_params.support_off_channel_tx &&
+	    ar->scan.is_roc &&
+	    (info->flags & IEEE80211_TX_CTL_TX_OFFCHAN))
+		freq = ar->scan.roc_freq;
+
+	return freq;
+}
+
 int ath11k_wmi_mgmt_send(struct ath11k *ar, u32 vdev_id, u32 buf_id,
 			 struct sk_buff *frame)
 {
 	struct ath11k_pdev_wmi *wmi = ar->wmi;
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(frame);
 	struct wmi_mgmt_send_cmd *cmd;
 	struct wmi_tlv *frame_tlv;
 	struct sk_buff *skb;
@@ -649,7 +664,7 @@ int ath11k_wmi_mgmt_send(struct ath11k *ar, u32 vdev_id, u32 buf_id,
 			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
 	cmd->vdev_id = vdev_id;
 	cmd->desc_id = buf_id;
-	cmd->chanfreq = 0;
+	cmd->chanfreq = ath11k_wmi_mgmt_get_freq(ar, info);
 	cmd->paddr_lo = lower_32_bits(ATH11K_SKB_CB(frame)->paddr);
 	cmd->paddr_hi = upper_32_bits(ATH11K_SKB_CB(frame)->paddr);
 	cmd->frame_len = frame->len;
@@ -980,8 +995,12 @@ int ath11k_wmi_vdev_up(struct ath11k *ar, u32 vdev_id, u32 aid, const u8 *bssid)
 {
 	struct ath11k_pdev_wmi *wmi = ar->wmi;
 	struct wmi_vdev_up_cmd *cmd;
+	struct ieee80211_bss_conf *bss_conf;
+	struct ath11k_vif *arvif;
 	struct sk_buff *skb;
 	int ret;
+
+	arvif = ath11k_mac_get_arvif(ar, vdev_id);
 
 	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, sizeof(*cmd));
 	if (!skb)
@@ -995,6 +1014,17 @@ int ath11k_wmi_vdev_up(struct ath11k *ar, u32 vdev_id, u32 aid, const u8 *bssid)
 	cmd->vdev_assoc_id = aid;
 
 	ether_addr_copy(cmd->vdev_bssid.addr, bssid);
+
+	if (arvif && arvif->vif->type == NL80211_IFTYPE_STATION) {
+		bss_conf = &arvif->vif->bss_conf;
+
+		if (bss_conf->nontransmitted) {
+			ether_addr_copy(cmd->trans_bssid.addr,
+					bss_conf->transmitter_bssid);
+			cmd->profile_idx = bss_conf->bssid_index;
+			cmd->profile_num = bss_conf->bssid_indicator;
+		}
+	}
 
 	ret = ath11k_wmi_cmd_send(wmi, skb, WMI_VDEV_UP_CMDID);
 	if (ret) {
@@ -3051,8 +3081,34 @@ int ath11k_wmi_pdev_pktlog_disable(struct ath11k *ar)
 	return ret;
 }
 
-int
-ath11k_wmi_send_twt_enable_cmd(struct ath11k *ar, u32 pdev_id)
+void ath11k_wmi_fill_default_twt_params(struct wmi_twt_enable_params *twt_params)
+{
+	twt_params->sta_cong_timer_ms = ATH11K_TWT_DEF_STA_CONG_TIMER_MS;
+	twt_params->default_slot_size = ATH11K_TWT_DEF_DEFAULT_SLOT_SIZE;
+	twt_params->congestion_thresh_setup = ATH11K_TWT_DEF_CONGESTION_THRESH_SETUP;
+	twt_params->congestion_thresh_teardown =
+		ATH11K_TWT_DEF_CONGESTION_THRESH_TEARDOWN;
+	twt_params->congestion_thresh_critical =
+		ATH11K_TWT_DEF_CONGESTION_THRESH_CRITICAL;
+	twt_params->interference_thresh_teardown =
+		ATH11K_TWT_DEF_INTERFERENCE_THRESH_TEARDOWN;
+	twt_params->interference_thresh_setup =
+		ATH11K_TWT_DEF_INTERFERENCE_THRESH_SETUP;
+	twt_params->min_no_sta_setup = ATH11K_TWT_DEF_MIN_NO_STA_SETUP;
+	twt_params->min_no_sta_teardown = ATH11K_TWT_DEF_MIN_NO_STA_TEARDOWN;
+	twt_params->no_of_bcast_mcast_slots = ATH11K_TWT_DEF_NO_OF_BCAST_MCAST_SLOTS;
+	twt_params->min_no_twt_slots = ATH11K_TWT_DEF_MIN_NO_TWT_SLOTS;
+	twt_params->max_no_sta_twt = ATH11K_TWT_DEF_MAX_NO_STA_TWT;
+	twt_params->mode_check_interval = ATH11K_TWT_DEF_MODE_CHECK_INTERVAL;
+	twt_params->add_sta_slot_interval = ATH11K_TWT_DEF_ADD_STA_SLOT_INTERVAL;
+	twt_params->remove_sta_slot_interval =
+		ATH11K_TWT_DEF_REMOVE_STA_SLOT_INTERVAL;
+	/* TODO add MBSSID support */
+	twt_params->mbss_support = 0;
+}
+
+int ath11k_wmi_send_twt_enable_cmd(struct ath11k *ar, u32 pdev_id,
+				   struct wmi_twt_enable_params *params)
 {
 	struct ath11k_pdev_wmi *wmi = ar->wmi;
 	struct ath11k_base *ab = wmi->wmi_ab->ab;
@@ -3070,28 +3126,22 @@ ath11k_wmi_send_twt_enable_cmd(struct ath11k *ar, u32 pdev_id)
 	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_TWT_ENABLE_CMD) |
 			  FIELD_PREP(WMI_TLV_LEN, len - TLV_HDR_SIZE);
 	cmd->pdev_id = pdev_id;
-	cmd->sta_cong_timer_ms = ATH11K_TWT_DEF_STA_CONG_TIMER_MS;
-	cmd->default_slot_size = ATH11K_TWT_DEF_DEFAULT_SLOT_SIZE;
-	cmd->congestion_thresh_setup = ATH11K_TWT_DEF_CONGESTION_THRESH_SETUP;
-	cmd->congestion_thresh_teardown =
-		ATH11K_TWT_DEF_CONGESTION_THRESH_TEARDOWN;
-	cmd->congestion_thresh_critical =
-		ATH11K_TWT_DEF_CONGESTION_THRESH_CRITICAL;
-	cmd->interference_thresh_teardown =
-		ATH11K_TWT_DEF_INTERFERENCE_THRESH_TEARDOWN;
-	cmd->interference_thresh_setup =
-		ATH11K_TWT_DEF_INTERFERENCE_THRESH_SETUP;
-	cmd->min_no_sta_setup = ATH11K_TWT_DEF_MIN_NO_STA_SETUP;
-	cmd->min_no_sta_teardown = ATH11K_TWT_DEF_MIN_NO_STA_TEARDOWN;
-	cmd->no_of_bcast_mcast_slots = ATH11K_TWT_DEF_NO_OF_BCAST_MCAST_SLOTS;
-	cmd->min_no_twt_slots = ATH11K_TWT_DEF_MIN_NO_TWT_SLOTS;
-	cmd->max_no_sta_twt = ATH11K_TWT_DEF_MAX_NO_STA_TWT;
-	cmd->mode_check_interval = ATH11K_TWT_DEF_MODE_CHECK_INTERVAL;
-	cmd->add_sta_slot_interval = ATH11K_TWT_DEF_ADD_STA_SLOT_INTERVAL;
-	cmd->remove_sta_slot_interval =
-		ATH11K_TWT_DEF_REMOVE_STA_SLOT_INTERVAL;
-	/* TODO add MBSSID support */
-	cmd->mbss_support = 0;
+	cmd->sta_cong_timer_ms = params->sta_cong_timer_ms;
+	cmd->default_slot_size = params->default_slot_size;
+	cmd->congestion_thresh_setup = params->congestion_thresh_setup;
+	cmd->congestion_thresh_teardown = params->congestion_thresh_teardown;
+	cmd->congestion_thresh_critical = params->congestion_thresh_critical;
+	cmd->interference_thresh_teardown = params->interference_thresh_teardown;
+	cmd->interference_thresh_setup = params->interference_thresh_setup;
+	cmd->min_no_sta_setup = params->min_no_sta_setup;
+	cmd->min_no_sta_teardown = params->min_no_sta_teardown;
+	cmd->no_of_bcast_mcast_slots = params->no_of_bcast_mcast_slots;
+	cmd->min_no_twt_slots = params->min_no_twt_slots;
+	cmd->max_no_sta_twt = params->max_no_sta_twt;
+	cmd->mode_check_interval = params->mode_check_interval;
+	cmd->add_sta_slot_interval = params->add_sta_slot_interval;
+	cmd->remove_sta_slot_interval = params->remove_sta_slot_interval;
+	cmd->mbss_support = params->mbss_support;
 
 	ret = ath11k_wmi_cmd_send(wmi, skb, WMI_TWT_ENABLE_CMDID);
 	if (ret) {
@@ -5259,6 +5309,8 @@ static void ath11k_wmi_event_scan_started(struct ath11k *ar)
 		break;
 	case ATH11K_SCAN_STARTING:
 		ar->scan.state = ATH11K_SCAN_RUNNING;
+		if (ar->scan.is_roc)
+			ieee80211_ready_on_channel(ar->hw);
 		complete(&ar->scan.started);
 		break;
 	}
@@ -5341,6 +5393,8 @@ static void ath11k_wmi_event_scan_foreign_chan(struct ath11k *ar, u32 freq)
 	case ATH11K_SCAN_RUNNING:
 	case ATH11K_SCAN_ABORTING:
 		ar->scan_channel = ieee80211_get_channel(ar->hw->wiphy, freq);
+		if (ar->scan.is_roc && ar->scan.roc_freq == freq)
+			complete(&ar->scan.on_channel);
 		break;
 	}
 }
@@ -6533,7 +6587,7 @@ static int ath11k_reg_chan_list_event(struct ath11k_base *ab, struct sk_buff *sk
 
 fallback:
 	/* Fallback to older reg (by sending previous country setting
-	 * again if fw has succeded and we failed to process here.
+	 * again if fw has succeeded and we failed to process here.
 	 * The Regdomain should be uniform across driver and fw. Since the
 	 * FW has processed the command and sent a success status, we expect
 	 * this function to succeed as well. If it doesn't, CTRY needs to be

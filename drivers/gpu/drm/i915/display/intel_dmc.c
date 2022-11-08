@@ -52,6 +52,10 @@
 
 #define DISPLAY_VER12_DMC_MAX_FW_SIZE	ICL_DMC_MAX_FW_SIZE
 
+#define DG2_DMC_PATH			DMC_PATH(dg2, 2, 07)
+#define DG2_DMC_VERSION_REQUIRED	DMC_VERSION(2, 07)
+MODULE_FIRMWARE(DG2_DMC_PATH);
+
 #define ADLP_DMC_PATH			DMC_PATH(adlp, 2, 16)
 #define ADLP_DMC_VERSION_REQUIRED	DMC_VERSION(2, 16)
 MODULE_FIRMWARE(ADLP_DMC_PATH);
@@ -244,9 +248,14 @@ struct stepping_info {
 	char substepping;
 };
 
+static bool has_dmc_id_fw(struct drm_i915_private *i915, int dmc_id)
+{
+	return i915->dmc.dmc_info[dmc_id].payload;
+}
+
 bool intel_dmc_has_payload(struct drm_i915_private *i915)
 {
-	return i915->dmc.dmc_info[DMC_FW_MAIN].payload;
+	return has_dmc_id_fw(i915, DMC_FW_MAIN);
 }
 
 static const struct stepping_info *
@@ -268,6 +277,112 @@ static void gen9_set_dc_state_debugmask(struct drm_i915_private *dev_priv)
 	intel_de_posting_read(dev_priv, DC_STATE_DEBUG);
 }
 
+static void disable_event_handler(struct drm_i915_private *i915,
+				  i915_reg_t ctl_reg, i915_reg_t htp_reg)
+{
+	intel_de_write(i915, ctl_reg,
+		       REG_FIELD_PREP(DMC_EVT_CTL_TYPE_MASK,
+				      DMC_EVT_CTL_TYPE_EDGE_0_1) |
+		       REG_FIELD_PREP(DMC_EVT_CTL_EVENT_ID_MASK,
+				      DMC_EVT_CTL_EVENT_ID_FALSE));
+	intel_de_write(i915, htp_reg, 0);
+}
+
+static void
+disable_flip_queue_event(struct drm_i915_private *i915,
+			 i915_reg_t ctl_reg, i915_reg_t htp_reg)
+{
+	u32 event_ctl;
+	u32 event_htp;
+
+	event_ctl = intel_de_read(i915, ctl_reg);
+	event_htp = intel_de_read(i915, htp_reg);
+	if (event_ctl != (DMC_EVT_CTL_ENABLE |
+			  DMC_EVT_CTL_RECURRING |
+			  REG_FIELD_PREP(DMC_EVT_CTL_TYPE_MASK,
+					 DMC_EVT_CTL_TYPE_EDGE_0_1) |
+			  REG_FIELD_PREP(DMC_EVT_CTL_EVENT_ID_MASK,
+					 DMC_EVT_CTL_EVENT_ID_CLK_MSEC)) ||
+	    !event_htp) {
+		drm_dbg_kms(&i915->drm,
+			    "Unexpected DMC event configuration (control %08x htp %08x)\n",
+			    event_ctl, event_htp);
+		return;
+	}
+
+	disable_event_handler(i915, ctl_reg, htp_reg);
+}
+
+static bool
+get_flip_queue_event_regs(struct drm_i915_private *i915, int dmc_id,
+			  i915_reg_t *ctl_reg, i915_reg_t *htp_reg)
+{
+	switch (dmc_id) {
+	case DMC_FW_MAIN:
+		if (DISPLAY_VER(i915) == 12) {
+			*ctl_reg = DMC_EVT_CTL(i915, dmc_id, 3);
+			*htp_reg = DMC_EVT_HTP(i915, dmc_id, 3);
+
+			return true;
+		}
+		break;
+	case DMC_FW_PIPEA ... DMC_FW_PIPED:
+		if (IS_DG2(i915)) {
+			*ctl_reg = DMC_EVT_CTL(i915, dmc_id, 2);
+			*htp_reg = DMC_EVT_HTP(i915, dmc_id, 2);
+
+			return true;
+		}
+		break;
+	}
+
+	return false;
+}
+
+static void
+disable_all_flip_queue_events(struct drm_i915_private *i915)
+{
+	int dmc_id;
+
+	/* TODO: check if the following applies to all D13+ platforms. */
+	if (!IS_DG2(i915) && !IS_TIGERLAKE(i915))
+		return;
+
+	for (dmc_id = 0; dmc_id < DMC_FW_MAX; dmc_id++) {
+		i915_reg_t ctl_reg;
+		i915_reg_t htp_reg;
+
+		if (!has_dmc_id_fw(i915, dmc_id))
+			continue;
+
+		if (!get_flip_queue_event_regs(i915, dmc_id, &ctl_reg, &htp_reg))
+			continue;
+
+		disable_flip_queue_event(i915, ctl_reg, htp_reg);
+	}
+}
+
+static void disable_all_event_handlers(struct drm_i915_private *i915)
+{
+	int id;
+
+	/* TODO: disable the event handlers on pre-GEN12 platforms as well */
+	if (DISPLAY_VER(i915) < 12)
+		return;
+
+	for (id = DMC_FW_MAIN; id < DMC_FW_MAX; id++) {
+		int handler;
+
+		if (!has_dmc_id_fw(i915, id))
+			continue;
+
+		for (handler = 0; handler < DMC_EVENT_HANDLER_COUNT_GEN12; handler++)
+			disable_event_handler(i915,
+					      DMC_EVT_CTL(i915, id, handler),
+					      DMC_EVT_HTP(i915, id, handler));
+	}
+}
+
 /**
  * intel_dmc_load_program() - write the firmware from memory to register.
  * @dev_priv: i915 drm device.
@@ -283,6 +398,8 @@ void intel_dmc_load_program(struct drm_i915_private *dev_priv)
 
 	if (!intel_dmc_has_payload(dev_priv))
 		return;
+
+	disable_all_event_handlers(dev_priv);
 
 	assert_rpm_wakelock_held(&dev_priv->runtime_pm);
 
@@ -308,6 +425,28 @@ void intel_dmc_load_program(struct drm_i915_private *dev_priv)
 	dev_priv->dmc.dc_state = 0;
 
 	gen9_set_dc_state_debugmask(dev_priv);
+
+	/*
+	 * Flip queue events need to be disabled before enabling DC5/6.
+	 * i915 doesn't use the flip queue feature, so disable it already
+	 * here.
+	 */
+	disable_all_flip_queue_events(dev_priv);
+}
+
+/**
+ * intel_dmc_disable_program() - disable the firmware
+ * @i915: i915 drm device
+ *
+ * Disable all event handlers in the firmware, making sure the firmware is
+ * inactive after the display is uninitialized.
+ */
+void intel_dmc_disable_program(struct drm_i915_private *i915)
+{
+	if (!intel_dmc_has_payload(i915))
+		return;
+
+	disable_all_event_handlers(i915);
 }
 
 void assert_dmc_loaded(struct drm_i915_private *i915)
@@ -740,7 +879,11 @@ void intel_dmc_ucode_init(struct drm_i915_private *dev_priv)
 	 */
 	intel_dmc_runtime_pm_get(dev_priv);
 
-	if (IS_ALDERLAKE_P(dev_priv)) {
+	if (IS_DG2(dev_priv)) {
+		dmc->fw_path = DG2_DMC_PATH;
+		dmc->required_version = DG2_DMC_VERSION_REQUIRED;
+		dmc->max_fw_size = DISPLAY_VER13_DMC_MAX_FW_SIZE;
+	} else if (IS_ALDERLAKE_P(dev_priv)) {
 		dmc->fw_path = ADLP_DMC_PATH;
 		dmc->required_version = ADLP_DMC_VERSION_REQUIRED;
 		dmc->max_fw_size = DISPLAY_VER13_DMC_MAX_FW_SIZE;

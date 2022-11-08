@@ -22,20 +22,18 @@
 #define RTW_MAX_SEC_CAM_NUM		32
 #define MAX_PG_CAM_BACKUP_NUM		8
 
+#define RTW_SCAN_MAX_SSIDS		4
+
 #define RTW_MAX_PATTERN_NUM		12
 #define RTW_MAX_PATTERN_MASK_SIZE	16
 #define RTW_MAX_PATTERN_SIZE		128
 
 #define RTW_WATCH_DOG_DELAY_TIME	round_jiffies_relative(HZ * 2)
 
-/* AP need to stop beaconing after hearing radar signal in 10s.
- * So design 10s to restore NO_IR flag referenced by beacon hint.
- */
-#define RTW_DFS_TIMEOUT			msecs_to_jiffies(10000)
-
 #define RFREG_MASK			0xfffff
 #define INV_RF_DATA			0xffffffff
 #define TX_PAGE_SIZE_SHIFT		7
+#define TX_PAGE_SIZE			(1 << TX_PAGE_SIZE_SHIFT)
 
 #define RTW_CHANNEL_WIDTH_MAX		3
 #define RTW_RF_PATH_MAX			4
@@ -86,11 +84,9 @@ struct rtw_hci {
 	 IS_CH_5G_BAND_3(channel) || IS_CH_5G_BAND_4(channel))
 
 enum rtw_supported_band {
-	RTW_BAND_2G = 1 << 0,
-	RTW_BAND_5G = 1 << 1,
-	RTW_BAND_60G = 1 << 2,
-
-	RTW_BAND_MAX,
+	RTW_BAND_2G = BIT(NL80211_BAND_2GHZ),
+	RTW_BAND_5G = BIT(NL80211_BAND_5GHZ),
+	RTW_BAND_60G = BIT(NL80211_BAND_60GHZ),
 };
 
 /* now, support upto 80M bw */
@@ -522,12 +518,8 @@ struct rtw_timer_list {
 
 struct rtw_channel_params {
 	u8 center_chan;
+	u8 primary_chan;
 	u8 bandwidth;
-	u8 primary_chan_idx;
-	/* center channel by different available bandwidth,
-	 * val of (bw > current bandwidth) is invalid
-	 */
-	u8 cch_by_bw[RTW_MAX_CHANNEL_WIDTH + 1];
 };
 
 struct rtw_hw_reg {
@@ -591,6 +583,7 @@ struct rtw_tx_pkt_info {
 	u32 tx_pkt_size;
 	u8 offset;
 	u8 pkt_offset;
+	u8 tim_offset;
 	u8 mac_id;
 	u8 rate_id;
 	u8 rate;
@@ -642,6 +635,8 @@ struct rtw_rx_pkt_stat {
 	s8 rx_snr[RTW_RF_PATH_MAX];
 	u8 rx_evm[RTW_RF_PATH_MAX];
 	s8 cfo_tail[RTW_RF_PATH_MAX];
+	u16 freq;
+	u8 band;
 
 	struct rtw_sta_info *si;
 	struct ieee80211_vif *vif;
@@ -812,6 +807,8 @@ struct rtw_vif {
 	struct list_head rsvd_page_list;
 	struct ieee80211_tx_queue_params tx_params[IEEE80211_NUM_ACS];
 	const struct rtw_vif_port *conf;
+	struct cfg80211_scan_request *scan_req;
+	struct ieee80211_scan_ies *scan_ies;
 
 	struct rtw_traffic_stats stats;
 
@@ -1184,6 +1181,7 @@ struct rtw_chip_info {
 	bool rx_ldpc;
 	bool tx_stbc;
 	u8 max_power_index;
+	u8 ampdu_density;
 
 	u16 fw_fifo_addr[RTW_FW_FIFO_MAX];
 	const struct rtw_fwcd_segs *fwcd_segs;
@@ -1237,6 +1235,7 @@ struct rtw_chip_info {
 	const char *wow_fw_name;
 	const struct wiphy_wowlan_support *wowlan_stub;
 	const u8 max_sched_scan_ssids;
+	const u16 max_scan_ie_len;
 
 	/* for 8821c set channel */
 	u32 ch_param[3];
@@ -1818,6 +1817,7 @@ struct rtw_fw_state {
 	u8 sub_index;
 	u16 h2c_version;
 	u32 feature;
+	u32 feature_ext;
 };
 
 struct rtw_sar {
@@ -1835,8 +1835,10 @@ struct rtw_hal {
 
 	u8 ps_mode;
 	u8 current_channel;
+	u8 current_primary_channel_index;
 	u8 current_band_width;
 	u8 current_band_type;
+	u8 primary_channel;
 
 	/* center channel for different available bandwidth,
 	 * val of (bw > current_band_width) is invalid
@@ -1885,12 +1887,38 @@ struct rtw_path_div {
 	u16 path_b_cnt;
 };
 
+struct rtw_chan_info {
+	int pri_ch_idx;
+	int action_id;
+	int bw;
+	u8 extra_info;
+	u8 channel;
+	u16 timeout;
+};
+
+struct rtw_chan_list {
+	u32 buf_size;
+	u32 ch_num;
+	u32 size;
+	u16 addr;
+};
+
+struct rtw_hw_scan_info {
+	struct ieee80211_vif *scanning_vif;
+	u8 probe_pg_size;
+	u8 op_pri_ch_idx;
+	u8 op_pri_ch;
+	u8 op_chan;
+	u8 op_bw;
+};
+
 struct rtw_dev {
 	struct ieee80211_hw *hw;
 	struct device *dev;
 
 	struct rtw_hci hci;
 
+	struct rtw_hw_scan_info scan_info;
 	struct rtw_chip_info *chip;
 	struct rtw_hal hal;
 	struct rtw_fifo_conf fifo;
@@ -1919,7 +1947,9 @@ struct rtw_dev {
 	/* c2h cmd queue & handler work */
 	struct sk_buff_head c2h_queue;
 	struct work_struct c2h_work;
+	struct work_struct ips_work;
 	struct work_struct fw_recovery_work;
+	struct work_struct update_beacon_work;
 
 	/* used to protect txqs list */
 	spinlock_t txq_lock;
@@ -1962,11 +1992,6 @@ struct rtw_dev {
 	struct completion fw_scan_density;
 
 	struct rtw_sar sar;
-
-	/* protects dfs channel context */
-	struct mutex dfs_mutex;
-	u32 dfs_channel_map;
-	unsigned long dfs_last_update;
 
 	/* hci related data, must be last */
 	u8 priv[] __aligned(sizeof(void *));
@@ -2050,6 +2075,22 @@ static inline int rtw_chip_dump_fw_crash(struct rtw_dev *rtwdev)
 	return 0;
 }
 
+static inline
+enum nl80211_band rtw_hw_to_nl80211_band(enum rtw_supported_band hw_band)
+{
+	switch (hw_band) {
+	default:
+	case RTW_BAND_2G:
+		return NL80211_BAND_2GHZ;
+	case RTW_BAND_5G:
+		return NL80211_BAND_5GHZ;
+	case RTW_BAND_60G:
+		return NL80211_BAND_60GHZ;
+	}
+}
+
+void rtw_set_rx_freq_band(struct rtw_rx_pkt_stat *pkt_stat, u8 channel);
+void rtw_set_dtim_period(struct rtw_dev *rtwdev, int dtim_period);
 void rtw_get_channel_params(struct cfg80211_chan_def *chandef,
 			    struct rtw_channel_params *ch_param);
 bool check_hw_ready(struct rtw_dev *rtwdev, u32 addr, u32 mask, u32 target);
@@ -2064,6 +2105,10 @@ void rtw_vif_port_config(struct rtw_dev *rtwdev, struct rtw_vif *rtwvif,
 			 u32 config);
 void rtw_tx_report_purge_timer(struct timer_list *t);
 void rtw_update_sta_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si);
+void rtw_core_scan_start(struct rtw_dev *rtwdev, struct rtw_vif *rtwvif,
+			 const u8 *mac_addr, bool hw_scan);
+void rtw_core_scan_complete(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
+			    bool hw_scan);
 int rtw_core_start(struct rtw_dev *rtwdev);
 void rtw_core_stop(struct rtw_dev *rtwdev);
 int rtw_chip_info_setup(struct rtw_dev *rtwdev);
@@ -2083,7 +2128,7 @@ void rtw_core_fw_scan_notify(struct rtw_dev *rtwdev, bool start);
 int rtw_dump_fw(struct rtw_dev *rtwdev, const u32 ocp_src, u32 size,
 		u32 fwcd_item);
 int rtw_dump_reg(struct rtw_dev *rtwdev, const u32 addr, const u32 size);
-void rtw_replace_radar_flag_with_no_ir(struct ieee80211_hw *hw);
-void rtw_restore_no_ir_flag(struct rtw_dev *rtwdev);
-
+void rtw_update_channel(struct rtw_dev *rtwdev, u8 center_channel,
+			u8 primary_channel, enum rtw_supported_band band,
+			enum rtw_bandwidth bandwidth);
 #endif

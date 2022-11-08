@@ -20,12 +20,14 @@
 #define pr_fmt(fmt) "Chromium OS LSM: " fmt
 
 #include <asm/syscall.h>
+#include <linux/audit.h>
 #include <linux/binfmts.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/fs_parser.h>
 #include <linux/fs_struct.h>
 #include <linux/lsm_hooks.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/namei.h>	/* for nameidata_get_total_link_count */
@@ -39,6 +41,8 @@
 
 #include "inode_mark.h"
 #include "utils.h"
+
+static const char secagentd[] = "/usr/sbin/secagentd";
 
 #if defined(CONFIG_SECURITY_CHROMIUMOS_NO_UNPRIVILEGED_UNSAFE_MOUNTS) || \
 	defined(CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT)
@@ -258,11 +262,53 @@ static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
 {
 	struct file *file = bprm->file;
 
-	if (shmem_file(file))
+	if (shmem_file(file)) {
+		char *cmdline = printable_cmdline(current);
+
+		audit_log(
+			audit_context(),
+			GFP_ATOMIC,
+			AUDIT_AVC,
+			"ChromeOS LSM: memfd execution attempt, cmd=%s, pid=%d",
+			cmdline ? cmdline : "(null)",
+			task_pid_nr(current));
+		kfree(cmdline);
+
+		return -EACCES;
+	}
+	return 0;
+}
+
+static int chromiumos_locked_down(enum lockdown_reason what)
+{
+	if (what == LOCKDOWN_BPF_WRITE_USER)
 		return -EACCES;
 
 	return 0;
 }
+
+#ifdef CONFIG_BPF_SYSCALL
+static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
+{
+	char buf[128];
+	int res;
+	int len;
+
+	len = strlen(secagentd);
+	res = get_cmdline(current, buf, sizeof(buf));
+	if (res > 0 && buf[res - 1] == '\0') {
+		// null terminated.
+		res = res - 1;
+	}
+
+	if (res < len || strncmp(buf, secagentd, len)) {
+		pr_notice("bpf syscall blocked");
+		return -EACCES;
+	}
+
+	return 0;
+}
+#endif
 
 static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(sb_mount, chromiumos_security_sb_mount),
@@ -270,6 +316,10 @@ static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(file_open, chromiumos_security_file_open),
 	LSM_HOOK_INIT(sb_eat_lsm_opts, chromiumos_sb_eat_lsm_opts),
 	LSM_HOOK_INIT(bprm_creds_for_exec, chromiumos_bprm_creds_for_exec),
+	LSM_HOOK_INIT(locked_down, chromiumos_locked_down),
+#ifdef CONFIG_BPF_SYSCALL
+	LSM_HOOK_INIT(bpf, chromiumos_bpf),
+#endif
 };
 
 static int __init chromiumos_security_init(void)

@@ -91,6 +91,8 @@ static const struct acp_pcm_table pcm_dev[] = {
 	{I2S_SP, "I2SSP"},
 	{PDM_DMIC, "DMIC"},
 	{I2S_HS, "I2SHS"},
+	{I2S_HS, "Low Latency"},
+	{I2S_HS, "Media Playback MUX 1"},
 };
 
 static enum acp_pcm_types get_id_from_list(const char *name)
@@ -173,6 +175,10 @@ snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_subst
 	bytescount = acp_get_byte_count(sdev, substream, pcm_id);
 	if (bytescount < 0)
 		return -EINVAL;
+	if (!(strcmp(spcm->pcm.pcm_name, "Low Latency")) ||
+	    !(strcmp(spcm->pcm.pcm_name, "Media Playback MUX 1")))
+		bytescount = bytescount >> 2;
+
 	buffersize = frames_to_bytes(substream->runtime, substream->runtime->buffer_size);
 	pos = do_div(bytescount, buffersize);
 

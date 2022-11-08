@@ -675,7 +675,6 @@ mos_bt_uart: &uart7 {
 		pins = "gpio83";
 		function = "gpio";
 		drive-strength = <8>;
-		output-high;
 	};
 
 	wcd_reset_n_sleep: wcd-reset-n-sleep {

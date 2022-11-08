@@ -41,13 +41,14 @@ static void mt7921s_unregister_device(struct mt7921_dev *dev)
 {
 	struct mt76_connac_pm *pm = &dev->pm;
 
+	cancel_work_sync(&dev->init_work);
 	mt76_unregister_device(&dev->mt76);
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
 
 	mt76s_deinit(&dev->mt76);
 	mt7921s_wfsys_reset(dev);
-	mt7921_mcu_exit(dev);
+	skb_queue_purge(&dev->mt76.mcu.res_q);
 
 	mt76_free_device(&dev->mt76);
 }
@@ -58,7 +59,10 @@ static int mt7921s_parse_intr(struct mt76_dev *dev, struct mt76s_intr *intr)
 	struct mt7921_sdio_intr *irq_data = sdio->intr_data;
 	int i, err;
 
+	sdio_claim_host(sdio->func);
 	err = sdio_readsb(sdio->func, irq_data, MCR_WHISR, sizeof(*irq_data));
+	sdio_release_host(sdio->func);
+
 	if (err < 0)
 		return err;
 
@@ -88,9 +92,9 @@ static int mt7921s_probe(struct sdio_func *func,
 		.survey_flags = SURVEY_INFO_TIME_TX |
 				SURVEY_INFO_TIME_RX |
 				SURVEY_INFO_TIME_BSS_RX,
-		.tx_prepare_skb = mt7921s_tx_prepare_skb,
-		.tx_complete_skb = mt7921s_tx_complete_skb,
-		.tx_status_data = mt7921s_tx_status_data,
+		.tx_prepare_skb = mt7921_usb_sdio_tx_prepare_skb,
+		.tx_complete_skb = mt7921_usb_sdio_tx_complete_skb,
+		.tx_status_data = mt7921_usb_sdio_tx_status_data,
 		.rx_skb = mt7921_queue_rx_skb,
 		.sta_ps = mt7921_sta_ps,
 		.sta_add = mt7921_mac_sta_add,

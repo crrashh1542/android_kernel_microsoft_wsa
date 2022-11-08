@@ -113,7 +113,7 @@ void intel_fdi_link_train(struct intel_crtc *crtc,
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 
-	dev_priv->fdi_funcs->fdi_link_train(crtc, crtc_state);
+	dev_priv->display.funcs.fdi->fdi_link_train(crtc, crtc_state);
 }
 
 /* units of 100MHz */
@@ -256,7 +256,7 @@ retry:
 	pipe_config->fdi_lanes = lane;
 
 	intel_link_compute_m_n(pipe_config->pipe_bpp, lane, fdi_dotclock,
-			       link_bw, &pipe_config->fdi_m_n, false, false);
+			       link_bw, &pipe_config->fdi_m_n, false);
 
 	ret = ilk_check_fdi_lanes(dev, crtc->pipe, pipe_config);
 	if (ret == -EDEADLK)
@@ -1066,11 +1066,11 @@ void
 intel_fdi_init_hook(struct drm_i915_private *dev_priv)
 {
 	if (IS_IRONLAKE(dev_priv)) {
-		dev_priv->fdi_funcs = &ilk_funcs;
+		dev_priv->display.funcs.fdi = &ilk_funcs;
 	} else if (IS_SANDYBRIDGE(dev_priv)) {
-		dev_priv->fdi_funcs = &gen6_funcs;
+		dev_priv->display.funcs.fdi = &gen6_funcs;
 	} else if (IS_IVYBRIDGE(dev_priv)) {
 		/* FIXME: detect B0+ stepping and use auto training */
-		dev_priv->fdi_funcs = &ivb_funcs;
+		dev_priv->display.funcs.fdi = &ivb_funcs;
 	}
 }

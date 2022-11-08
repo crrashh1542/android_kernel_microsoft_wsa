@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -203,6 +203,7 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 	u32 cfg;
 	u64 const jc_head = select_job_chain(katom);
 	u64 affinity;
+	struct slot_rb *ptr_slot_rb = &kbdev->hwaccess.backend.slot_rb[js];
 
 	KBASE_DEBUG_ASSERT(kbdev);
 	KBASE_DEBUG_ASSERT(katom);
@@ -232,9 +233,21 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 			!(kbdev->serialize_jobs & KBASE_SERIALIZE_RESET))
 		cfg |= JS_CONFIG_ENABLE_FLUSH_REDUCTION;
 
-	if (0 != (katom->core_req & BASE_JD_REQ_SKIP_CACHE_START))
-		cfg |= JS_CONFIG_START_FLUSH_NO_ACTION;
-	else
+	if (0 != (katom->core_req & BASE_JD_REQ_SKIP_CACHE_START)) {
+		/* Force a cache maintenance operation if the newly submitted
+		 * katom to the slot is from a different kctx. For a JM GPU
+		 * that has the feature BASE_HW_FEATURE_FLUSH_INV_SHADER_OTHER,
+		 * applies a FLUSH_INV_SHADER_OTHER. Otherwise, do a
+		 * FLUSH_CLEAN_INVALIDATE.
+		 */
+		u64 tagged_kctx = ptr_slot_rb->last_kctx_tagged;
+
+		if (tagged_kctx != SLOT_RB_NULL_TAG_VAL &&
+		    tagged_kctx != SLOT_RB_TAG_KCTX(kctx)) {
+				cfg |= JS_CONFIG_START_FLUSH_CLEAN_INVALIDATE;
+		} else
+			cfg |= JS_CONFIG_START_FLUSH_NO_ACTION;
+	} else
 		cfg |= JS_CONFIG_START_FLUSH_CLEAN_INVALIDATE;
 
 	if (0 != (katom->core_req & BASE_JD_REQ_SKIP_CACHE_END) &&
@@ -300,6 +313,10 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 			&kbdev->gpu_props.props.raw_props.js_features[js],
 			"ctx_nr,atom_nr");
 	kbase_kinstr_jm_atom_hw_submit(katom);
+
+	/* Update the slot's last katom submission kctx */
+	ptr_slot_rb->last_kctx_tagged = SLOT_RB_TAG_KCTX(kctx);
+
 #if IS_ENABLED(CONFIG_GPU_TRACEPOINTS)
 	if (!kbase_backend_nr_atoms_submitted(kbdev, js)) {
 		/* If this is the only job on the slot, trace it as starting */
@@ -310,7 +327,6 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 						sizeof(js_string)),
 				ktime_to_ns(katom->start_timestamp),
 				(u32)katom->kctx->id, 0, katom->work_id);
-		kbdev->hwaccess.backend.slot_rb[js].last_context = katom->kctx;
 	}
 #endif
 
@@ -756,38 +772,29 @@ void kbase_job_slot_ctx_priority_check_locked(struct kbase_context *kctx,
 				struct kbase_jd_atom *target_katom)
 {
 	struct kbase_device *kbdev;
-	int js = target_katom->slot_nr;
-	int priority = target_katom->sched_priority;
-	int seq_nr = target_katom->seq_nr;
+	int target_js = target_katom->slot_nr;
 	int i;
 	bool stop_sent = false;
 
-	KBASE_DEBUG_ASSERT(kctx != NULL);
 	kbdev = kctx->kbdev;
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
-	for (i = 0; i < kbase_backend_nr_atoms_on_slot(kbdev, js); i++) {
-		struct kbase_jd_atom *katom;
+	for (i = 0; i < kbase_backend_nr_atoms_on_slot(kbdev, target_js); i++) {
+		struct kbase_jd_atom *slot_katom;
 
-		katom = kbase_gpu_inspect(kbdev, js, i);
-		if (!katom)
+		slot_katom = kbase_gpu_inspect(kbdev, target_js, i);
+		if (!slot_katom)
 			continue;
 
-		if ((kbdev->js_ctx_scheduling_mode ==
-			KBASE_JS_PROCESS_LOCAL_PRIORITY_MODE) &&
-				(katom->kctx != kctx))
-			continue;
-
-		if ((katom->sched_priority > priority) ||
-		    (katom->kctx == kctx && kbase_is_existing_atom_submitted_later_than_ready(seq_nr, katom->seq_nr))) {
+		if (kbase_js_atom_runs_before(kbdev, target_katom, slot_katom,
+					      KBASE_ATOM_ORDERING_FLAG_SEQNR)) {
 			if (!stop_sent)
 				KBASE_TLSTREAM_TL_ATTRIB_ATOM_PRIORITIZED(
 						kbdev,
 						target_katom);
 
-			kbase_job_slot_softstop(kbdev, js, katom);
+			kbase_job_slot_softstop(kbdev, target_js, slot_katom);
 			stop_sent = true;
 		}
 	}

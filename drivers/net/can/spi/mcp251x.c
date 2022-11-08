@@ -1419,10 +1419,13 @@ static int mcp251x_can_probe(struct spi_device *spi)
 
 	ret = mcp251x_gpio_setup(priv);
 	if (ret)
-		goto error_probe;
+		goto out_unregister_candev;
 
 	netdev_info(net, "MCP%x successfully initialized.\n", priv->model);
 	return 0;
+
+out_unregister_candev:
+	unregister_candev(net);
 
 error_probe:
 	destroy_workqueue(priv->wq);
@@ -1439,7 +1442,7 @@ out_free:
 	return ret;
 }
 
-static int mcp251x_can_remove(struct spi_device *spi)
+static void mcp251x_can_remove(struct spi_device *spi)
 {
 	struct mcp251x_priv *priv = spi_get_drvdata(spi);
 	struct net_device *net = priv->net;
@@ -1454,8 +1457,6 @@ static int mcp251x_can_remove(struct spi_device *spi)
 	clk_disable_unprepare(priv->clk);
 
 	free_candev(net);
-
-	return 0;
 }
 
 static int __maybe_unused mcp251x_can_suspend(struct device *dev)

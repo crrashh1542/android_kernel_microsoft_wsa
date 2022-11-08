@@ -245,10 +245,6 @@
 #define MAX98927_BROWNOUT_DSP_EN (0x1 << 2)
 #define MAX98927_BROWNOUT_DSP_SHIFT (2)
 
-/* MAX98927_R0086_ENV_TRACK_CTRL */
-#define MAX98927_ENV_TRACKER_EN (0x1 << 0)
-#define MAX98927_ENV_TRACKER_EN_SHIFT (0)
-
 /* MAX98927_R0100_SOFT_RESET */
 #define MAX98927_SOFT_RESET (0x1 << 0)
 
@@ -259,6 +255,7 @@ struct max98927_priv {
 	struct regmap *regmap;
 	struct snd_soc_component *component;
 	struct max98927_pdata *pdata;
+	struct gpio_desc *reset_gpio; 
 	unsigned int spk_gain;
 	unsigned int sysclk;
 	unsigned int v_l_slot;
@@ -267,7 +264,7 @@ struct max98927_priv {
 	unsigned int ch_size;
 	unsigned int rate;
 	unsigned int iface;
-	unsigned int master;
+	unsigned int provider;
 	unsigned int digital_gain;
 	bool tdm_mode;
 };

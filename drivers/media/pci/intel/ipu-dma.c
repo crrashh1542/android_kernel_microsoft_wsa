@@ -438,7 +438,6 @@ static int ipu_dma_map_sg(struct device *dev, struct scatterlist *sglist,
 			goto out_fail;
 
 		sg_dma_address(sg) = iova_addr << PAGE_SHIFT;
-		sg->length = sg_dma_len(sg);
 
 		iova_addr += PAGE_ALIGN(sg_dma_len(sg)) >> PAGE_SHIFT;
 	}

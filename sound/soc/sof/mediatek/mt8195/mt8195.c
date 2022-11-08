@@ -12,7 +12,6 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/io.h>
-#include <linux/of_platform.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
@@ -25,6 +24,7 @@
 #include "../../sof-of-dev.h"
 #include "../../sof-audio.h"
 #include "../adsp_helper.h"
+#include "../mtk-adsp-common.h"
 #include "mt8195.h"
 #include "mt8195-clk.h"
 
@@ -144,6 +144,14 @@ static int platform_parse_resource(struct platform_device *pdev, void *data)
 	}
 
 	dev_dbg(dev, "DMA %pR\n", &res);
+
+	adsp->pa_shared_dram = (phys_addr_t)res.start;
+	adsp->shared_size = resource_size(&res);
+	if (adsp->pa_shared_dram & DRAM_REMAP_MASK) {
+		dev_err(dev, "adsp shared dma memory(%#x) is not 4K-aligned\n",
+			(u32)adsp->pa_shared_dram);
+		return -EINVAL;
+	}
 
 	ret = of_reserved_mem_device_init(dev);
 	if (ret) {
@@ -273,23 +281,18 @@ static int adsp_shared_base_ioremap(struct platform_device *pdev, void *data)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_adsp_chip_info *adsp = data;
-	u32 shared_size;
 
 	/* remap shared-dram base to be non-cachable */
-	shared_size = TOTAL_SIZE_SHARED_DRAM_FROM_TAIL;
-	adsp->pa_shared_dram = adsp->pa_dram + adsp->dramsize - shared_size;
-	if (adsp->va_dram) {
-		adsp->shared_dram = adsp->va_dram + DSP_DRAM_SIZE - shared_size;
-	} else {
-		adsp->shared_dram = devm_ioremap(dev, adsp->pa_shared_dram,
-						 shared_size);
-		if (!adsp->shared_dram) {
-			dev_err(dev, "ioremap failed for shared DRAM\n");
-			return -ENOMEM;
-		}
+	adsp->shared_dram = devm_ioremap(dev, adsp->pa_shared_dram,
+					 adsp->shared_size);
+	if (!adsp->shared_dram) {
+		dev_err(dev, "failed to ioremap base %pa size %#x\n",
+			adsp->shared_dram, adsp->shared_size);
+		return -ENOMEM;
 	}
+
 	dev_dbg(dev, "shared-dram vbase=%p, phy addr :%pa,  size=%#x\n",
-		adsp->shared_dram, &adsp->pa_shared_dram, shared_size);
+		adsp->shared_dram, &adsp->pa_shared_dram, adsp->shared_size);
 
 	return 0;
 }
@@ -361,9 +364,11 @@ static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 		goto err_adsp_sram_power_off;
 	}
 
-	sdev->bar[SOF_FW_BLK_TYPE_SRAM] = devm_ioremap_wc(sdev->dev,
-							  priv->adsp->pa_dram,
-							  priv->adsp->dramsize);
+	priv->adsp->va_sram = sdev->bar[SOF_FW_BLK_TYPE_IRAM];
+
+	sdev->bar[SOF_FW_BLK_TYPE_SRAM] = devm_ioremap(sdev->dev,
+						       priv->adsp->pa_dram,
+						       priv->adsp->dramsize);
 	if (!sdev->bar[SOF_FW_BLK_TYPE_SRAM]) {
 		dev_err(sdev->dev, "failed to ioremap base %pa size %#x\n",
 			&priv->adsp->pa_dram, priv->adsp->dramsize);
@@ -438,6 +443,19 @@ static int mt8195_dsp_suspend(struct snd_sof_dev *sdev, u32 target_state)
 {
 	struct platform_device *pdev = container_of(sdev->dev, struct platform_device, dev);
 	int ret;
+	u32 reset_sw, dbg_pc;
+
+	/* wait dsp enter idle, timeout is 1 second */
+	ret = snd_sof_dsp_read_poll_timeout(sdev, DSP_REG_BAR,
+					    DSP_RESET_SW, reset_sw,
+					    ((reset_sw & ADSP_PWAIT) == ADSP_PWAIT),
+					    SUSPEND_DSP_IDLE_POLL_INTERVAL_US,
+					    SUSPEND_DSP_IDLE_TIMEOUT_US);
+	if (ret < 0) {
+		dbg_pc = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGPC);
+		dev_warn(sdev->dev, "dsp not idle, powering off anyway : swrest %#x, pc %#x, ret %d\n",
+			 reset_sw, dbg_pc, ret);
+	}
 
 	/* stall and reset dsp */
 	sof_hifixdsp_shutdown(sdev);
@@ -484,6 +502,31 @@ static int mt8195_ipc_msg_data(struct snd_sof_dev *sdev,
 {
 	sof_mailbox_read(sdev, sdev->dsp_box.offset, p, sz);
 	return 0;
+}
+
+static void mt8195_adsp_dump(struct snd_sof_dev *sdev, u32 flags)
+{
+	u32 dbg_pc, dbg_data, dbg_bus0, dbg_bus1, dbg_inst;
+	u32 dbg_ls0stat, dbg_ls1stat, faultbus, faultinfo, swrest;
+
+	/* dump debug registers */
+	dbg_pc = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGPC);
+	dbg_data = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGDATA);
+	dbg_bus0 = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGBUS0);
+	dbg_bus1 = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGBUS1);
+	dbg_inst = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGINST);
+	dbg_ls0stat = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGLS0STAT);
+	dbg_ls1stat = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGLS1STAT);
+	faultbus = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PFAULTBUS);
+	faultinfo = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PFAULTINFO);
+	swrest = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_RESET_SW);
+
+	dev_info(sdev->dev, "adsp dump : pc %#x, data %#x, bus0 %#x, bus1 %#x, swrest %#x",
+		 dbg_pc, dbg_data, dbg_bus0, dbg_bus1, swrest);
+	dev_info(sdev->dev, "dbg_inst %#x, ls0stat %#x, ls1stat %#x, faultbus %#x, faultinfo %#x",
+		 dbg_inst, dbg_ls0stat, dbg_ls1stat, faultbus, faultinfo);
+
+	mtk_adsp_dump(sdev, flags);
 }
 
 static struct snd_soc_dai_driver mt8195_dai[] = {
@@ -552,6 +595,9 @@ static struct snd_sof_dsp_ops sof_mt8195_ops = {
 
 	/* Firmware ops */
 	.dsp_arch_ops = &sof_xtensa_arch_ops,
+
+	/* Debug information */
+	.dbg_dump = mt8195_adsp_dump,
 
 	/* DAI drivers */
 	.drv = mt8195_dai,

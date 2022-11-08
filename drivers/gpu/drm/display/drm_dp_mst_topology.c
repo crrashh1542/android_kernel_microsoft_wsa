@@ -42,6 +42,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
@@ -1669,13 +1670,10 @@ __dump_topology_ref_history(struct drm_dp_mst_topology_ref_history *history,
 	for (i = 0; i < history->len; i++) {
 		const struct drm_dp_mst_topology_ref_entry *entry =
 			&history->entries[i];
-		ulong *entries;
-		uint nr_entries;
 		u64 ts_nsec = entry->ts_nsec;
 		u32 rem_nsec = do_div(ts_nsec, 1000000000);
 
-		nr_entries = stack_depot_fetch(entry->backtrace, &entries);
-		stack_trace_snprint(buf, PAGE_SIZE, entries, nr_entries, 4);
+		stack_depot_snprint(entry->backtrace, buf, PAGE_SIZE, 4);
 
 		drm_printf(&p, "  %d %ss (last at %5llu.%06u):\n%s",
 			   entry->count,
@@ -2670,24 +2668,14 @@ static int drm_dp_check_and_send_link_address(struct drm_dp_mst_topology_mgr *mg
 	}
 
 	list_for_each_entry(port, &mstb->ports, next) {
-		struct drm_dp_mst_branch *mstb_child = NULL;
-
-		if (port->input || !port->ddps)
+		if (port->input || !port->ddps || !port->mstb)
 			continue;
 
-		if (port->mstb)
-			mstb_child = drm_dp_mst_topology_get_mstb_validated(
-			    mgr, port->mstb);
-
-		if (mstb_child) {
-			ret = drm_dp_check_and_send_link_address(mgr,
-								 mstb_child);
-			drm_dp_mst_topology_put_mstb(mstb_child);
-			if (ret == 1)
-				changed = true;
-			else if (ret < 0)
-				return ret;
-		}
+		ret = drm_dp_check_and_send_link_address(mgr, port->mstb);
+		if (ret == 1)
+			changed = true;
+		else if (ret < 0)
+			return ret;
 	}
 
 	return changed;
@@ -4922,14 +4910,14 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 		seq_printf(m, "dpcd: %*ph\n", DP_RECEIVER_CAP_SIZE, buf);
 
 		ret = drm_dp_dpcd_read(mgr->aux, DP_FAUX_CAP, buf, 2);
-		if (ret) {
+		if (ret != 2) {
 			seq_printf(m, "faux/mst read failed\n");
 			goto out;
 		}
 		seq_printf(m, "faux/mst: %*ph\n", 2, buf);
 
 		ret = drm_dp_dpcd_read(mgr->aux, DP_MSTM_CTRL, buf, 1);
-		if (ret) {
+		if (ret != 1) {
 			seq_printf(m, "mst ctrl read failed\n");
 			goto out;
 		}
@@ -4937,7 +4925,7 @@ void drm_dp_mst_dump_topology(struct seq_file *m,
 
 		/* dump the standard OUI branch header */
 		ret = drm_dp_dpcd_read(mgr->aux, DP_BRANCH_OUI, buf, DP_BRANCH_OUI_HEADER_SIZE);
-		if (ret) {
+		if (ret != DP_BRANCH_OUI_HEADER_SIZE) {
 			seq_printf(m, "branch oui read failed\n");
 			goto out;
 		}
@@ -5471,8 +5459,7 @@ EXPORT_SYMBOL(drm_dp_mst_topology_state_funcs);
  *
  * This function wraps drm_atomic_get_priv_obj_state() passing in the MST atomic
  * state vtable so that the private object state returned is that of a MST
- * topology object. Also, drm_atomic_get_private_obj_state() expects the caller
- * to care of the locking, so warn if don't hold the connection_mutex.
+ * topology object.
  *
  * RETURNS:
  *

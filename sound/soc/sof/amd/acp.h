@@ -69,6 +69,14 @@
 #define BOX_SIZE_512				0x200
 #define BOX_SIZE_1024				0x400
 
+enum clock_source {
+	ACP_CLOCK_96M = 0,
+	ACP_CLOCK_48M,
+	ACP_CLOCK_24M,
+	ACP_CLOCK_ACLK,
+	ACP_CLOCK_MCLK,
+};
+
 struct  acp_atu_grp_pte {
 	u32 low;
 	u32 high;
@@ -248,7 +256,7 @@ struct snd_soc_acpi_mach *amd_sof_machine_select(struct snd_sof_dev *sdev);
 int snd_amd_acp_find_config(struct pci_dev *pci);
 
 /* Trace */
-int acp_sof_trace_init(struct snd_sof_dev *sdev,
+int acp_sof_trace_init(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 		       struct sof_ipc_dma_trace_params_ext *dtrace_params);
 int acp_sof_trace_release(struct snd_sof_dev *sdev);
 
