@@ -42,8 +42,6 @@
 #include "inode_mark.h"
 #include "utils.h"
 
-static const char secagentd[] = "/usr/sbin/secagentd";
-
 #if defined(CONFIG_SECURITY_CHROMIUMOS_NO_UNPRIVILEGED_UNSAFE_MOUNTS) || \
 	defined(CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT)
 static void report(const char *origin, const struct path *path, char *operation)
@@ -214,7 +212,7 @@ static int chromiumos_security_file_open(struct file *file)
 	return policy == CHROMIUMOS_INODE_POLICY_BLOCK ? -EACCES : 0;
 }
 
-int chromiumos_sb_eat_lsm_opts(char *options, void **mnt_opts)
+static int chromiumos_sb_eat_lsm_opts(char *options, void **mnt_opts)
 {
 	char *from = options, *to = options;
 	bool found = false;
@@ -288,6 +286,9 @@ static int chromiumos_locked_down(enum lockdown_reason what)
 }
 
 #ifdef CONFIG_BPF_SYSCALL
+
+static const char secagentd[] = "/usr/sbin/secagentd";
+
 static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
 {
 	char buf[128];
