@@ -222,7 +222,7 @@ static int iwl_dbg_tlv_alloc_region(struct iwl_trans *trans,
 	if (type == IWL_FW_INI_REGION_DEVICE_MEMORY &&
 	    reg->sub_type == IWL_FW_INI_REGION_DEVICE_MEMORY_SUBTYPE_HW_SMEM) {
 		IWL_DEBUG_FW(trans, "WRT: skipping HW-SMEM region\n");
-		return -EOPNOTSUPP;
+		return 0;
 	}
 #endif
 	if (type == IWL_FW_INI_REGION_INTERNAL_BUFFER) {
