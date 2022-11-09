@@ -1354,7 +1354,6 @@ static int iwl_xvt_start_tx_handler(void *data)
 			if (xvt->fw_error) {
 				IWL_ERR(xvt, "FW Error during TX\n");
 				status = XVT_TX_DRIVER_ABORTED;
-				err = -ENODEV;
 				goto on_exit;
 			}
 
@@ -1371,7 +1370,6 @@ static int iwl_xvt_start_tx_handler(void *data)
 				if (!skb) {
 					IWL_ERR(xvt, "skb is NULL\n");
 					status = XVT_TX_DRIVER_ABORTED;
-					err = -ENOMEM;
 					goto on_exit;
 				}
 				err = iwl_xvt_transmit_packet(xvt,
