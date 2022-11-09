@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2021 Intel Corporation
+ * Copyright (C) 2018-2022 Intel Corporation
  */
 #include "xvt.h"
 #include "fw/dbg.h"
+#include "fw/acpi.h"
 
 #define XVT_DEBUGFS_WRITE_WRAPPER(name, buflen, argtype)		\
 static ssize_t _iwl_dbgfs_##name##_write(struct file *file,		\
@@ -94,6 +95,10 @@ static ssize_t iwl_dbgfs_set_profile_write(struct iwl_xvt *xvt, char *buf,
 	int chain_a, chain_b;
 
 	if (sscanf(buf, "%d %d", &chain_a, &chain_b) != 2)
+		return -EINVAL;
+
+	if (!(chain_a > 0 && chain_a < ACPI_SAR_PROFILE_NUM) ||
+	    !(chain_b > 0 && chain_b < ACPI_SAR_PROFILE_NUM))
 		return -EINVAL;
 
 	mutex_lock(&xvt->mutex);
