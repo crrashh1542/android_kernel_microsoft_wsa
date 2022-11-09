@@ -1779,11 +1779,11 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 	id_n_color = le32_to_cpu(notif->id_and_color);
 	mac_id = id_n_color & FW_CTXT_ID_MSK;
 
-	if (WARN_ON_ONCE(mac_id >= NUM_MAC_INDEX_DRIVER))
-		return;
-
 	rcu_read_lock();
-	vif = rcu_dereference(mvm->vif_id_to_mac[mac_id]);
+	vif = iwl_mvm_rcu_dereference_vif_id(mvm, mac_id, true);
+	if (!vif)
+		goto out_unlock;
+
 	mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
 	switch (vif->type) {
