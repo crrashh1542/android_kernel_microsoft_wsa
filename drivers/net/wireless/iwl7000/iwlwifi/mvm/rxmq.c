@@ -1730,9 +1730,9 @@ static void iwl_mvm_decode_eht_phy_data(struct iwl_mvm *mvm,
 		usig->common |= LE32_DEC_ENC(usig_a1,
 					     IWL_RX_USIG_A1_UL_FLAG,
 					     IEEE80211_RADIOTAP_EHT_USIG_COMMON_UL_DL);
-		usig->common |= LE32_DEC_ENC(data0,
+		usig->common |= LE32_DEC_ENC(usig_a1,
 					     IWL_RX_USIG_A1_BSS_COLOR,
-					     IEEE80211_RADIOTAP_EHT_USIG_COMMON_BSS_COLOR_KNOWN);
+					     IEEE80211_RADIOTAP_EHT_USIG_COMMON_BSS_COLOR);
 	}
 
 	eht->known |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_KNOWN_SPATIAL_REUSE);
