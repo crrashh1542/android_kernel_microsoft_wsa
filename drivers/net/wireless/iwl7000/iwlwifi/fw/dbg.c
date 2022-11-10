@@ -2269,7 +2269,7 @@ static u32 iwl_dump_ini_info(struct iwl_fw_runtime *fwrt,
 	 * according to the detected HW
 	 */
 	hw_type = CSR_HW_REV_TYPE(fwrt->trans->hw_rev);
-	if (hw_type == IWL_AX210_HW_TYPE) {
+	if (hw_type == IWL_AX210_HW_TYPE || hw_type == IWL_BNJ_HW_TYPE) {
 		u32 prph_val = iwl_read_umac_prph(fwrt->trans, WFPM_OTP_CFG1_ADDR);
 		u32 is_jacket = !!(prph_val & WFPM_OTP_CFG1_IS_JACKET_BIT);
 		u32 is_cdb = !!(prph_val & WFPM_OTP_CFG1_IS_CDB_BIT);
@@ -2280,8 +2280,9 @@ static u32 iwl_dump_ini_info(struct iwl_fw_runtime *fwrt,
 		 * these bits to the HW type. We won't have collisions since we
 		 * add these bits after the highest possible bit in the mask.
 		 */
-		hw_type |= masked_bits << IWL_AX210_HW_TYPE_ADDITION_SHIFT;
+		hw_type |= masked_bits << IWL_HW_TYPE_ADDITION_SHIFT;
 	}
+
 	dump->hw_type = cpu_to_le32(hw_type);
 
 	dump->rf_id_flavor =
