@@ -411,3 +411,4 @@ int iwl_xvt_init_sar_tables(struct iwl_xvt *xvt);
 int iwl_xvt_sar_select_profile(struct iwl_xvt *xvt, int prof_a, int prof_b);
 int iwl_xvt_init_ppag_tables(struct iwl_xvt *xvt);
 void iwl_xvt_txpath_flush_send_cmd(struct iwl_xvt *xvt, u32 sta_id, u16 tfd_msk);
+void iwl_xvt_lari_cfg(struct iwl_xvt *xvt);

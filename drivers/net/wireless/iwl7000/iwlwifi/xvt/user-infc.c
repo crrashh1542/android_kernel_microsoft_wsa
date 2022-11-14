@@ -464,6 +464,8 @@ static int iwl_xvt_continue_init_unified(struct iwl_xvt *xvt)
 		goto init_error;
 	}
 
+	iwl_xvt_lari_cfg(xvt);
+
 	return err;
 init_error:
 	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
