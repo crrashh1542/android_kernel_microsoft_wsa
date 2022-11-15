@@ -8784,9 +8784,11 @@ static int __floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 	rp.hci_id = hdev->id;
 
 	switch (vendor_specification) {
+#if IS_ENABLED(CONFIG_BT_MSFTEXT)
 	case MGMT_VS_OPCODE_MSFT:
 		rp.opcode = hdev->msft_opcode;
 		break;
+#endif
 	default:
 		rp.opcode = HCI_OP_NOP;
 	}
