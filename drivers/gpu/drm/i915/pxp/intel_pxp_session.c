@@ -420,6 +420,8 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 
 	intel_uncore_write(gt->uncore, PXP_GLOBAL_TERMINATE, 1);
 
+	intel_pxp_tee_end_arb_fw_session(pxp, ARB_SESSION);
+
 out:
 	mutex_unlock(&pxp->session_mutex);
 	return ret;

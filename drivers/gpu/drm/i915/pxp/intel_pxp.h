@@ -27,7 +27,7 @@ void intel_pxp_init_hw(struct intel_pxp *pxp);
 void intel_pxp_fini_hw(struct intel_pxp *pxp);
 
 void intel_pxp_mark_termination_in_progress(struct intel_pxp *pxp);
-
+void intel_pxp_tee_end_arb_fw_session(struct intel_pxp *pxp, u32 arb_session_id);
 int intel_pxp_start(struct intel_pxp *pxp);
 
 int intel_pxp_key_check(struct intel_pxp *pxp,
