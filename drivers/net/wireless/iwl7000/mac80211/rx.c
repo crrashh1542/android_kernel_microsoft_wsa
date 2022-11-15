@@ -4850,6 +4850,9 @@ static bool ieee80211_prepare_and_rx_handle(struct ieee80211_rx_data *rx,
 		 */
 		shwt = skb_hwtstamps(rx->skb);
 		shwt->hwtstamp = skb_hwtstamps(skb)->hwtstamp;
+
+		/* reload hdr since we need it below */
+		hdr = (void *)rx->skb->data;
 	}
 
 	if (unlikely(link_sta)) {
