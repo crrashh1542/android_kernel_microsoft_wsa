@@ -29,6 +29,8 @@ void intel_pxp_fini_hw(struct intel_pxp *pxp);
 void intel_pxp_mark_termination_in_progress(struct intel_pxp *pxp);
 void intel_pxp_tee_end_arb_fw_session(struct intel_pxp *pxp, u32 arb_session_id);
 int intel_pxp_start(struct intel_pxp *pxp);
+void intel_pxp_end(struct intel_pxp *pxp);
+void intel_pxp_terminate(struct intel_pxp *pxp, bool post_invalidation_needs_restart);
 
 int intel_pxp_key_check(struct intel_pxp *pxp,
 			struct drm_i915_gem_object *obj,
@@ -76,6 +78,10 @@ static inline int i915_pxp_ops_ioctl(struct drm_device *dev, void *data, struct 
 }
 
 static inline void intel_pxp_close(struct intel_pxp *pxp, struct drm_file *drmfile)
+{
+}
+
+static inline void intel_pxp_terminate(struct intel_pxp *pxp, bool post_invalidation_needs_restart)
 {
 }
 #endif
