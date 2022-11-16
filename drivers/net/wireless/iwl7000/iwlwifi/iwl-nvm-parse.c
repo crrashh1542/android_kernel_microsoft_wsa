@@ -1293,7 +1293,12 @@ static void iwl_init_eht_band_override(struct iwl_trans *trans,
 		IWL_COPY_BIN(eht_phy_cap, eht_cap.eht_cap_elem.phy_cap_info);
 #endif
 
-		if (trans->dbg_cfg.eht_mcs_only_20Mhz.len) {
+		/*
+		 * As a testing configuration the 'eht_mcs_only_20Mhz' field is
+		 * only valid for the 2GHz band
+		 */
+		if (sband->band == NL80211_BAND_2GHZ &&
+		    trans->dbg_cfg.eht_mcs_only_20Mhz.len) {
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 			IWL_COPY_BIN(eht_mcs_only_20Mhz,
 				     eht_cap.eht_mcs_nss_supp.only_20mhz);
