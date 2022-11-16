@@ -1187,11 +1187,11 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 				goto err_disable_clk_peri_therm;
 			}
 		}
-	}
 
-	ret = devm_thermal_add_hwmon_sysfs(tzdev);
-	if (ret)
-		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
+		ret = devm_thermal_add_hwmon_sysfs(tzdev);
+		if (ret)
+			dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs: %d\n", ret);
+	}
 
 	return 0;
 
