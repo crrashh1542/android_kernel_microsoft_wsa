@@ -222,6 +222,8 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
 
+	mutex_unlock(&jpeg_enc_dev->hw_mutex);
+
 	return rc;
 
 error_reg_cpas:
