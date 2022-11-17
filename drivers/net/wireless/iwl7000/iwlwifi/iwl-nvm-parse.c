@@ -1325,13 +1325,15 @@ static void iwl_init_eht_band_override(struct iwl_trans *trans,
 	}
 }
 
-static void iwl_init_eht_override(struct iwl_trans *trans,
+static void iwl_init_he_eht_override(struct iwl_trans *trans,
 				  struct ieee80211_supported_band *sbands)
 {
 	int band_id;
 
-	for (band_id = 0; band_id < NUM_NL80211_BANDS; band_id++)
+	for (band_id = 0; band_id < NUM_NL80211_BANDS; band_id++) {
+		iwl_init_he_override(trans, &sbands[band_id]);
 		iwl_init_eht_band_override(trans, &sbands[band_id]);
+	}
 }
 #endif
 
@@ -1790,9 +1792,7 @@ iwl_parse_nvm_data(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	data->calib_version = 255;
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	iwl_init_he_override(trans, &data->bands[NL80211_BAND_2GHZ]);
-	iwl_init_he_override(trans, &data->bands[NL80211_BAND_5GHZ]);
-	iwl_init_eht_override(trans, data->bands);
+	iwl_init_he_eht_override(trans, data->bands);
 #endif
 	return data;
 }
@@ -2352,9 +2352,7 @@ struct iwl_nvm_data *iwl_get_nvm(struct iwl_trans *trans,
 			sbands_flags, v4, fw);
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	iwl_init_he_override(trans, &nvm->bands[NL80211_BAND_2GHZ]);
-	iwl_init_he_override(trans, &nvm->bands[NL80211_BAND_5GHZ]);
-	iwl_init_eht_override(trans, nvm->bands);
+	iwl_init_he_eht_override(trans, nvm->bands);
 #endif
 	iwl_free_resp(&hcmd);
 	return nvm;
