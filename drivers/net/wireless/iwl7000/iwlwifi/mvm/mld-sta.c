@@ -633,15 +633,19 @@ static int iwl_mvm_alloc_sta_after_restart(struct iwl_mvm *mvm,
 	 * pick up the first valid one.
 	 */
 	for_each_sta_active_link(vif, sta, link_sta, link_id) {
+		struct iwl_mvm_vif_link_info *mvm_link;
 		struct ieee80211_bss_conf *link_conf =
 			link_conf_dereference_protected(vif, link_id);
-		struct iwl_mvm_vif_link_info *mvm_link =
-			mvmvif->link[link_conf->link_id];
 		struct iwl_mvm_link_sta *mvm_link_sta =
 			rcu_dereference_protected(mvm_sta->link[link_id],
 						  lockdep_is_held(&mvm->mutex));
 
-		if (!link_conf || !mvm_link || !mvm_link_sta)
+		if (!link_conf)
+			continue;
+
+		mvm_link = mvmvif->link[link_conf->link_id];
+
+		if (!mvm_link || !mvm_link_sta)
 			continue;
 
 		sta_id = mvm_link_sta->sta_id;
