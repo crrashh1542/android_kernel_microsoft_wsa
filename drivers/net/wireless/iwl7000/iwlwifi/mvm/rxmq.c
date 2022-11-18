@@ -1818,13 +1818,12 @@ static void iwl_mvm_rx_eht(struct iwl_mvm *mvm, struct sk_buff *skb,
 	struct ieee80211_radiotap_eht *eht;
 	struct ieee80211_radiotap_eht_usig *usig;
 	size_t eht_len = sizeof(*eht);
-
 	u32 rate_n_flags = phy_data->rate_n_flags;
 	u32 he_type = rate_n_flags & RATE_MCS_HE_TYPE_MSK;
 	/* EHT and HE have the same valus for LTF */
 	u8 ltf = IEEE80211_RADIOTAP_HE_DATA5_LTF_SIZE_UNKNOWN;
-
 	u16 phy_info = phy_data->phy_info;
+	u32 bw;
 
 	/* u32 for 1 user_info */
 	if (phy_data->with_data)
@@ -1837,9 +1836,14 @@ static void iwl_mvm_rx_eht(struct iwl_mvm *mvm, struct sk_buff *skb,
 	rx_status->flag |= RX_FLAG_RADIOTAP_TLV_AT_END;
 	usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW_KNOWN);
 
+	/* specific handling for 320MHz */
+	bw = FIELD_GET(RATE_MCS_CHAN_WIDTH_MSK, rate_n_flags);
+	if (bw == RATE_MCS_CHAN_WIDTH_320_VAL)
+		bw += FIELD_GET(IWL_RX_PHY_DATA0_EHT_BW320_SLOT,
+				le32_to_cpu(phy_data->d0));
+
 	usig->common |= cpu_to_le32
-		(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW,
-			    FIELD_GET(RATE_MCS_CHAN_WIDTH_MSK, rate_n_flags)));
+		(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW, bw));
 
 	/* report the AMPDU-EOF bit on single frames */
 	if (!queue && !(phy_info & IWL_RX_MPDU_PHY_AMPDU)) {
