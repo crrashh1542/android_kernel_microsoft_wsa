@@ -764,7 +764,7 @@ static int tpm_cr50_i2c_probe(struct i2c_client *client)
 	loc = tpm_cr50_request_locality(chip, TPM_CR50_I2C_DEFAULT_LOC);
 	if (loc < 0) {
 		dev_err(dev, "Could not request locality\n");
-		return rc;
+		return loc;
 	}
 
 	/* Read four bytes from DID_VID register */
