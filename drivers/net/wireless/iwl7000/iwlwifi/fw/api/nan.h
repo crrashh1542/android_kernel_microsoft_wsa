@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018, 2022 Intel Corporation
  */
 #ifndef __iwl_fw_api_nan_h__
 #define __iwl_fw_api_nan_h__
@@ -65,7 +65,7 @@ struct iwl_fw_chan_avail {
 /**
  * struct iwl_nan_umac_cfg - NAN umac config parameters
  *
- * @action: one of the FW_CTXT_ACTION_*
+ * @action: see &enum iwl_ctxt_action
  * @tsf_id: tsf id to use in beacons
  * @sta_id: STA used for NAN operations. Currently it is AUX STA.
  * @node_addr: our address
@@ -205,7 +205,7 @@ struct iwl_nan_add_func_common_tail {
 /**
  * struct iwl_nan_add_func_common - NAN add/remove function, common part
  *
- * @action: one of the FW_CTXT_ACTION_ADD/REMOVE
+ * @action: see &enum iwl_ctxt_action
  * @instance_id: instance id of the DE function to remove
  * @type: enum %iwl_fw_nan_func_type
  * @service_id: service id
