@@ -274,7 +274,7 @@ int iwl_pnvm_load(struct iwl_trans *trans,
 		  struct iwl_notif_wait_data *notif_wait,
 		  const struct iwl_ucode_capabilities *capa)
 {
-	u8 *data;
+	u8 *data = NULL;
 	size_t length;
 	struct iwl_notification_wait pnvm_wait;
 	static const u16 ntf_cmds[] = { WIDE_ID(REGULATORY_AND_NVM_GROUP,
@@ -334,7 +334,6 @@ reduce_tables:
 					     ret);
 				trans->reduce_power_loaded = true;
 			}
-			kfree(data);
 		}
 	}
 	iwl_trans_set_reduce_power(trans, capa);
