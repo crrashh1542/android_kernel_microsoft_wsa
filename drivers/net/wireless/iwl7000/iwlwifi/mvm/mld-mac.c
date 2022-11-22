@@ -135,6 +135,8 @@ static int iwl_mvm_mld_mac_ctxt_cmd_sta(struct iwl_mvm *mvm,
 	}
 
 	cmd.client.assoc_id = cpu_to_le16(vif->cfg.aid);
+	cmd.client.esr_transition_timeout =
+		u16_get_bits(vif->cfg.eml_cap, IEEE80211_EML_CAP_TRANSITION_TIMEOUT);
 
 	if (vif->probe_req_reg && vif->cfg.assoc && vif->p2p)
 		cmd.filter_flags |= cpu_to_le32(MAC_CFG_FILTER_ACCEPT_PROBE_REQ);
