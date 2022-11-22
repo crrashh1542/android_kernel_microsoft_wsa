@@ -656,9 +656,10 @@ static int iwl_mvm_alloc_sta_after_restart(struct iwl_mvm *mvm,
 
 		rcu_assign_pointer(mvm->fw_id_to_mac_id[sta_id], sta);
 		rcu_assign_pointer(mvm->fw_id_to_link_sta[sta_id], link_sta);
-		iwl_mvm_realloc_queues_after_restart(mvm, sta);
 		ret = 0;
 	}
+
+	iwl_mvm_realloc_queues_after_restart(mvm, sta);
 
 	return ret;
 }
