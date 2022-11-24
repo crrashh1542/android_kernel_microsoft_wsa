@@ -3476,7 +3476,16 @@ static int it6505_typec_mux_set(struct typec_mux_dev *mux,
 	it6505_typec_ports_update(it6505);
 
 	if (!old_dp_connected && new_dp_connected) {
-		pm_runtime_get_sync(dev);
+		int ret = pm_runtime_get_sync(dev);
+
+		/*
+		 * On system resume, mux_set can be triggered before
+		 * pm_runtime_force_resume re-enables runtime power management.
+		 * Handling the error here to make sure the bridge is powered on.
+		 */
+		if (ret < 0)
+			it6505_poweron(it6505);
+
 		complete_all(&it6505->extcon_completion);
 	}
 
