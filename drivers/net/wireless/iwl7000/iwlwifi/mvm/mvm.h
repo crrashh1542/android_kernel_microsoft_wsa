@@ -325,6 +325,7 @@ struct iwl_mvm_vif_link_info {
 
 	bool he_ru_2mhz_block;
 	bool active;
+	bool listen_lmac;
 
 	u16 cab_queue;
 	/* Assigned while mac80211 has the link in a channel context,

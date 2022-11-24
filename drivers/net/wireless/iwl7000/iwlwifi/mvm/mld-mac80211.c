@@ -1016,7 +1016,6 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 	}
 
 	if (hweight16(new_links) > 1) {
-
 		if (vif->type == NL80211_IFTYPE_AP) {
 			if (n_active > mvm->fw->ucode_capa.num_beacons)
 				return -EOPNOTSUPP;
@@ -1024,6 +1023,14 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 			return -EOPNOTSUPP;
 		}
 	}
+
+	/* A second link is added and eSR is supported */
+	esr_start = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
+		    (n_active == 1) && (hweight16(added) > 0);
+
+	/* A link is removed and we have now only one active link */
+	esr_end = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
+		  (n_active > 1) && (hweight16(removed) > 0);
 
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 		int r;
@@ -1046,6 +1053,8 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 
 		for (r = 0; r < NUM_IWL_MVM_SMPS_REQ; r++)
 			new_link[i]->smps_requests[r] = IEEE80211_SMPS_AUTOMATIC;
+
+		new_link[i]->listen_lmac = esr_start;
 	}
 
 	mutex_lock(&mvm->mutex);
@@ -1066,9 +1075,7 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 				goto out_err;
 			kfree(mvmvif->link[i]);
 			mvmvif->link[i] = NULL;
-		}
-
-		if (added & BIT(i)) {
+		} else if (added & BIT(i)) {
 			struct ieee80211_bss_conf *link_conf;
 
 			link_conf = link_conf_dereference_protected(vif, i);
@@ -1082,16 +1089,11 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 			err = iwl_mvm_add_link(mvm, vif, link_conf);
 			if (err)
 				goto out_err;
+		} else if ((new_links & BIT(i)) && esr_end) {
+			if (!WARN_ON(!mvmvif->link[i]))
+				mvmvif->link[i]->listen_lmac = false;
 		}
 	}
-
-	/* A second link is added and eSR is supported */
-	esr_start = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
-		    (n_active == 1) && (hweight16(added) > 0);
-
-	/* A link is removed and we have now only one active link */
-	esr_end = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
-		  (n_active > 1) && (hweight16(removed) > 0);
 
 	if (esr_start)
 		err = iwl_mvm_esr_mode_active(mvm, vif);
