@@ -1170,23 +1170,15 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
          */
         cmd->v1.flags = cpu_to_le32(fwrt->ppag_flags);
 
+	IWL_DEBUG_RADIO(fwrt, "PPAG cmd ver is %d\n", cmd_ver);
 	if (cmd_ver == 1) {
                 num_sub_bands = IWL_NUM_SUB_BANDS_V1;
                 gain = cmd->v1.gain[0];
                 *cmd_size = sizeof(cmd->v1);
                 if (fwrt->ppag_ver == 1 || fwrt->ppag_ver == 2) {
                         IWL_DEBUG_RADIO(fwrt,
-                                        "PPAG table rev is %d but FW supports v1, sending truncated table\n",
+					"PPAG table rev is %d but FW supports rev 0, sending truncated table\n",
                                         fwrt->ppag_ver);
-			if (!fw_has_capa(&fwrt->fw->ucode_capa,
-					 IWL_UCODE_TLV_CAPA_PPAG_CHINA_BIOS_SUPPORT)) {
-				cmd->v1.flags &= cpu_to_le32(IWL_PPAG_ETSI_MASK);
-				IWL_DEBUG_RADIO(fwrt,
-						"FW doesn't support ppag China bit\n");
-			} else {
-				IWL_DEBUG_RADIO(fwrt,
-						"FW supports ppag China bit\n");
-			}
 		}
 	} else if (cmd_ver >= 2 && cmd_ver <= 4) {
                 num_sub_bands = IWL_NUM_SUB_BANDS_V2;
@@ -1194,16 +1186,26 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
                 *cmd_size = sizeof(cmd->v2);
                 if (fwrt->ppag_ver == 0) {
                         IWL_DEBUG_RADIO(fwrt,
-                                        "PPAG table is v1 but FW supports v2, sending padded table\n");
-                } else if (cmd_ver == 2 && fwrt->ppag_ver == 2) {
-                        IWL_DEBUG_RADIO(fwrt,
-                                        "PPAG table is v3 but FW supports v2, sending partial bitmap.\n");
-                        cmd->v1.flags &= cpu_to_le32(IWL_PPAG_ETSI_MASK);
+					"PPAG table rev is 0 but FW supports rev 1 or 2, sending padded table\n");
                 }
         } else {
                 IWL_DEBUG_RADIO(fwrt, "Unsupported PPAG command version\n");
                 return -EINVAL;
         }
+
+	// ppag mode
+	if ((cmd_ver == 1 && !fw_has_capa(&fwrt->fw->ucode_capa,
+					  IWL_UCODE_TLV_CAPA_PPAG_CHINA_BIOS_SUPPORT)) ||
+	    (cmd_ver == 2 && fwrt->ppag_ver == 2)) {
+		cmd->v1.flags &= cpu_to_le32(IWL_PPAG_ETSI_MASK);
+		IWL_DEBUG_RADIO(fwrt, "FW doesn't support ppag China bit\n");
+	} else {
+		IWL_DEBUG_RADIO(fwrt, "FW supports ppag China bit\n");
+	}
+
+	IWL_DEBUG_RADIO(fwrt,
+			"PPAG MODE bits going to be sent: %d\n",
+			cmd->v1.flags & cpu_to_le32(ACPI_PPAG_MASK));
 
 	for (i = 0; i < IWL_NUM_CHAIN_LIMITS; i++) {
                 for (j = 0; j < num_sub_bands; j++) {
