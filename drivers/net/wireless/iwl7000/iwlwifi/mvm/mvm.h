@@ -1583,6 +1583,28 @@ static inline bool iwl_mvm_is_ctdp_supported(struct iwl_mvm *mvm)
 			   IWL_UCODE_TLV_CAPA_CTDP_SUPPORT);
 }
 
+static inline bool iwl_mvm_is_esr_supported(struct iwl_trans *trans)
+{
+	if ((CSR_HW_RFID_TYPE(trans->hw_rf_id) == IWL_CFG_RF_TYPE_FM) &&
+	    !CSR_HW_RFID_IS_CDB(trans->hw_rf_id))
+		/* Step A doesn't support eSR */
+		return CSR_HW_RFID_STEP(trans->hw_rf_id);
+
+	return false;
+}
+
+static inline int iwl_mvm_max_active_links(struct iwl_mvm *mvm)
+{
+	struct iwl_trans *trans = mvm->fwrt.trans;
+
+	if (iwl_mvm_is_esr_supported(trans) ||
+	    (CSR_HW_RFID_TYPE(trans->hw_rf_id) == IWL_CFG_RF_TYPE_FM &&
+	     CSR_HW_RFID_IS_CDB(trans->hw_rf_id)))
+		return IWL_MVM_FW_MAX_ACTIVE_LINKS_NUM;
+
+	return 1;
+}
+
 static inline bool iwl_mvm_has_new_tx_csum(struct iwl_mvm *mvm)
 {
 	return false;
