@@ -103,6 +103,7 @@ struct iwl_mvm_phy_ctxt {
 
 	/* track for RLC config command */
 	u32 center_freq1;
+	bool rlc_disabled;
 };
 
 struct iwl_mvm_time_event_data {
@@ -1823,6 +1824,8 @@ void iwl_mvm_phy_ctxt_unref(struct iwl_mvm *mvm,
 int iwl_mvm_phy_ctx_count(struct iwl_mvm *mvm);
 u8 iwl_mvm_get_channel_width(struct cfg80211_chan_def *chandef);
 u8 iwl_mvm_get_ctrl_pos(struct cfg80211_chan_def *chandef);
+int iwl_mvm_phy_send_rlc(struct iwl_mvm *mvm, struct iwl_mvm_phy_ctxt *ctxt,
+			 u8 chains_static, u8 chains_dynamic);
 
 /* MAC (virtual interface) programming */
 

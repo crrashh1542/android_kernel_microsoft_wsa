@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2017 Intel Deutschland GmbH
  */
@@ -155,13 +155,15 @@ static void iwl_mvm_phy_ctxt_cmd_data(struct iwl_mvm *mvm,
 					     chains_static, chains_dynamic);
 }
 
-static int iwl_mvm_phy_send_rlc(struct iwl_mvm *mvm,
-				struct iwl_mvm_phy_ctxt *ctxt,
-				u8 chains_static, u8 chains_dynamic)
+int iwl_mvm_phy_send_rlc(struct iwl_mvm *mvm, struct iwl_mvm_phy_ctxt *ctxt,
+			 u8 chains_static, u8 chains_dynamic)
 {
 	struct iwl_rlc_config_cmd cmd = {
 		.phy_id = cpu_to_le32(ctxt->id),
 	};
+
+	if (ctxt->rlc_disabled)
+		return 0;
 
 	if (iwl_fw_lookup_cmd_ver(mvm->fw, WIDE_ID(DATA_PATH_GROUP,
 						   RLC_CONFIG_CMD), 0) < 2)

@@ -917,10 +917,11 @@ static int iwl_mvm_mld_roc(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	return iwl_mvm_roc_common(hw, vif, channel, duration, type, &ops);
 }
 
-static void iwl_mvm_esr_mode_active(struct iwl_mvm *mvm,
-				    struct ieee80211_vif *vif)
+static int iwl_mvm_esr_mode_active(struct iwl_mvm *mvm,
+				   struct ieee80211_vif *vif)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	int link_id, ret = 0;
 
 	mvmvif->esr_active = true;
 
@@ -929,12 +930,29 @@ static void iwl_mvm_esr_mode_active(struct iwl_mvm *mvm,
 
 	iwl_mvm_update_smps_on_active_links(mvm, vif, IWL_MVM_SMPS_REQ_FW,
 					    IEEE80211_SMPS_OFF);
+
+	for_each_mvm_vif_valid_link(mvmvif, link_id) {
+		struct iwl_mvm_vif_link_info *link = mvmvif->link[link_id];
+
+		if (!link->phy_ctxt)
+			continue;
+
+		ret = iwl_mvm_phy_send_rlc(mvm, link->phy_ctxt, 2, 2);
+		if (ret)
+			break;
+
+		link->phy_ctxt->rlc_disabled = true;
+	}
+
+	return ret;
 }
 
-static void iwl_mvm_esr_mode_inactive(struct iwl_mvm *mvm,
-				      struct ieee80211_vif *vif)
+static int iwl_mvm_esr_mode_inactive(struct iwl_mvm *mvm,
+				     struct ieee80211_vif *vif)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	struct ieee80211_bss_conf *link_conf;
+	int link_id, ret = 0;
 
 	mvmvif->esr_active = false;
 
@@ -942,6 +960,35 @@ static void iwl_mvm_esr_mode_inactive(struct iwl_mvm *mvm,
 
 	iwl_mvm_update_smps_on_active_links(mvm, vif, IWL_MVM_SMPS_REQ_FW,
 					    IEEE80211_SMPS_AUTOMATIC);
+
+	for_each_vif_active_link(vif, link_conf, link_id) {
+		struct ieee80211_chanctx_conf *chanctx_conf;
+		struct iwl_mvm_phy_ctxt *phy_ctxt;
+		u8 static_chains, dynamic_chains;
+
+		rcu_read_lock();
+
+		chanctx_conf = rcu_dereference(link_conf->chanctx_conf);
+		phy_ctxt = mvmvif->link[link_id]->phy_ctxt;
+
+		if (!chanctx_conf || !phy_ctxt) {
+			rcu_read_unlock();
+			continue;
+		}
+
+		phy_ctxt->rlc_disabled = false;
+		static_chains = chanctx_conf->rx_chains_static;
+		dynamic_chains = chanctx_conf->rx_chains_dynamic;
+
+		rcu_read_unlock();
+
+		ret = iwl_mvm_phy_send_rlc(mvm, phy_ctxt, static_chains,
+					   dynamic_chains);
+		if (ret)
+			break;
+	}
+
+	return ret;
 }
 
 static int
@@ -1047,9 +1094,11 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 		  (n_active > 1) && (hweight16(removed) > 0);
 
 	if (esr_start)
-		iwl_mvm_esr_mode_active(mvm, vif);
+		err = iwl_mvm_esr_mode_active(mvm, vif);
 	if (esr_end)
-		iwl_mvm_esr_mode_inactive(mvm, vif);
+		err = iwl_mvm_esr_mode_inactive(mvm, vif);
+	if (err)
+		goto out_err;
 
 	err = 0;
 	if (new_links == 0) {
