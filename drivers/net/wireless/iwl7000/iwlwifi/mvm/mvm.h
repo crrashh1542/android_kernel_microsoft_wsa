@@ -376,6 +376,7 @@ struct iwl_mvm_vif {
 	bool ap_ibss_active;
 	bool pm_enabled;
 	bool monitor_active;
+	bool esr_active;
 
 	u8 low_latency: 6;
 	u8 low_latency_actual: 1;

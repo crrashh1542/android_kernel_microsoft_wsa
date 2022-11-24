@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -315,6 +315,10 @@ void iwl_mvm_update_smps(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	    IEEE80211_SMPS_AUTOMATIC)
 		smps_mode = mvmvif->link[link_id]->smps_requests[IWL_MVM_SMPS_REQ_DBG];
 #endif
+
+	/* SMPS is disabled in eSR */
+	if (mvmvif->esr_active)
+		smps_mode = IEEE80211_SMPS_OFF;
 
 	ieee80211_request_smps(vif, link_id, smps_mode);
 }

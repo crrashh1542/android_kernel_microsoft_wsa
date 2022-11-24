@@ -917,6 +917,33 @@ static int iwl_mvm_mld_roc(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	return iwl_mvm_roc_common(hw, vif, channel, duration, type, &ops);
 }
 
+static void iwl_mvm_esr_mode_active(struct iwl_mvm *mvm,
+				    struct ieee80211_vif *vif)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+
+	mvmvif->esr_active = true;
+
+	/* Disable SMPS overrideing by user */
+	vif->driver_flags |= IEEE80211_VIF_DISABLE_SMPS_OVERRIDE;
+
+	iwl_mvm_update_smps_on_active_links(mvm, vif, IWL_MVM_SMPS_REQ_FW,
+					    IEEE80211_SMPS_OFF);
+}
+
+static void iwl_mvm_esr_mode_inactive(struct iwl_mvm *mvm,
+				      struct ieee80211_vif *vif)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+
+	mvmvif->esr_active = false;
+
+	vif->driver_flags &= ~IEEE80211_VIF_DISABLE_SMPS_OVERRIDE;
+
+	iwl_mvm_update_smps_on_active_links(mvm, vif, IWL_MVM_SMPS_REQ_FW,
+					    IEEE80211_SMPS_AUTOMATIC);
+}
+
 static int
 iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif,
@@ -928,19 +955,20 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	u16 removed = old_links & ~new_links;
 	u16 added = new_links & ~old_links;
+	unsigned int n_active = 0;
+	bool esr_start, esr_end;
 	int err, i;
 
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		struct ieee80211_bss_conf *link_conf;
+
+		link_conf = link_conf_dereference_protected(vif, i);
+		if (link_conf &&
+		    rcu_access_pointer(link_conf->chanctx_conf))
+			n_active++;
+	}
+
 	if (hweight16(new_links) > 1) {
-		unsigned int n_active = 0;
-
-		for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-			struct ieee80211_bss_conf *link_conf;
-
-			link_conf = link_conf_dereference_protected(vif, i);
-			if (link_conf &&
-			    rcu_access_pointer(link_conf->chanctx_conf))
-				n_active++;
-		}
 
 		if (vif->type == NL80211_IFTYPE_AP) {
 			if (n_active > mvm->fw->ucode_capa.num_beacons)
@@ -1009,6 +1037,19 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 				goto out_err;
 		}
 	}
+
+	/* A second link is added and eSR is supported */
+	esr_start = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
+		    (n_active == 1) && (hweight16(added) > 0);
+
+	/* A link is removed and we have now only one active link */
+	esr_end = iwl_mvm_is_esr_supported(mvm->fwrt.trans) &&
+		  (n_active > 1) && (hweight16(removed) > 0);
+
+	if (esr_start)
+		iwl_mvm_esr_mode_active(mvm, vif);
+	if (esr_end)
+		iwl_mvm_esr_mode_inactive(mvm, vif);
 
 	err = 0;
 	if (new_links == 0) {
