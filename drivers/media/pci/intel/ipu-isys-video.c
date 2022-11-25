@@ -29,6 +29,11 @@
 #include "ipu-fw-isys.h"
 #include "ipu-fw-com.h"
 
+#define IPU_IS_DEFAULT_FREQ	\
+	(IPU_IS_FREQ_RATIO_BASE * IPU_IS_FREQ_CTL_DEFAULT_RATIO)
+#define IPU6SE_IS_DEFAULT_FREQ	\
+	(IPU_IS_FREQ_RATIO_BASE * IPU6SE_IS_FREQ_CTL_DEFAULT_RATIO)
+
 /* use max resolution pixel rate by default */
 #define DEFAULT_PIXEL_RATE	(360000000ULL * 2 * 4 / 10)
 
@@ -590,6 +595,21 @@ static int link_validate(struct media_link *link)
 	return 0;
 }
 
+static void set_buttress_isys_freq(struct ipu_isys_video *av, bool max)
+{
+	struct ipu_device *isp = av->isys->adev->isp;
+
+	if (max) {
+		ipu_buttress_isys_freq_set(isp, BUTTRESS_MAX_FORCE_IS_FREQ);
+	} else {
+		if (ipu_ver == IPU_VER_6SE)
+			ipu_buttress_isys_freq_set(isp, IPU6SE_IS_DEFAULT_FREQ);
+		else
+			ipu_buttress_isys_freq_set(isp, IPU_IS_DEFAULT_FREQ);
+	}
+
+}
+
 static void get_stream_opened(struct ipu_isys_video *av)
 {
 	unsigned long flags;
@@ -597,6 +617,9 @@ static void get_stream_opened(struct ipu_isys_video *av)
 	spin_lock_irqsave(&av->isys->lock, flags);
 	av->isys->stream_opened++;
 	spin_unlock_irqrestore(&av->isys->lock, flags);
+
+	if (av->isys->stream_opened > 1)
+		set_buttress_isys_freq(av, true);
 }
 
 static void put_stream_opened(struct ipu_isys_video *av)
@@ -606,6 +629,9 @@ static void put_stream_opened(struct ipu_isys_video *av)
 	spin_lock_irqsave(&av->isys->lock, flags);
 	av->isys->stream_opened--;
 	spin_unlock_irqrestore(&av->isys->lock, flags);
+
+	if (av->isys->stream_opened <= 1)
+		set_buttress_isys_freq(av, false);
 }
 
 static int get_stream_handle(struct ipu_isys_video *av)
