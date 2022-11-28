@@ -1899,9 +1899,7 @@ static void iwl_mvm_rx_eht(struct iwl_mvm *mvm, struct sk_buff *skb,
 	}
 
 	if (ltf != IEEE80211_RADIOTAP_HE_DATA5_LTF_SIZE_UNKNOWN) {
-		eht->known |= cpu_to_le32
-			(IEEE80211_RADIOTAP_EHT_KNOWN_GI |
-			 IEEE80211_RADIOTAP_EHT_KNOWN_LTF);
+		eht->known |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_KNOWN_GI);
 		eht->data[0] |= cpu_to_le32
 			(FIELD_PREP(IEEE80211_RADIOTAP_EHT_DATA0_LTF,
 				    ltf) |
