@@ -1720,13 +1720,12 @@ static int sdma_v5_2_set_clockgating_state(void *handle,
 
 	switch (adev->ip_versions[SDMA0_HWIP][0]) {
 	case IP_VERSION(5, 2, 0):
-	case IP_VERSION(5, 2, 1):
 	case IP_VERSION(5, 2, 2):
-	case IP_VERSION(5, 2, 3):
+	case IP_VERSION(5, 2, 1):
 	case IP_VERSION(5, 2, 4):
 	case IP_VERSION(5, 2, 5):
 	case IP_VERSION(5, 2, 6):
-	case IP_VERSION(5, 2, 7):
+	case IP_VERSION(5, 2, 3):
 		sdma_v5_2_update_medium_grain_clock_gating(adev,
 				state == AMD_CG_STATE_GATE);
 		sdma_v5_2_update_medium_grain_light_sleep(adev,
