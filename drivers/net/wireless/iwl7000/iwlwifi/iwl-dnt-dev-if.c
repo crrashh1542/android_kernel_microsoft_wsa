@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2014, 2019-2021 Intel Corporation
+ * Copyright (C) 2014, 2019-2022 Intel Corporation
  * Copyright (C) 2014 Intel Mobile Communications GmbH
  */
 #include <linux/types.h>
@@ -164,8 +164,7 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 		wr_ptr = iwl_read_prph(trans, cfg->dbgc_dram_wrptr_addr);
 	else
 		wr_ptr = iwl_read_prph(trans, cfg->dbg_mon_wr_ptr_addr);
-	/* iwl_read_prph returns 0x5a5a5a5a when it fails to grab nic access */
-	if (wr_ptr == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(wr_ptr)) {
 		IWL_ERR(trans,
 			"Can't read write pointer - not reordering buffer\n");
 		dont_reorder = true;
@@ -223,21 +222,20 @@ static int iwl_dnt_dev_if_retrieve_marbh_monitor_data(struct iwl_dnt *dnt,
 	/* FIXME send stop command to FW */
 
 	wr_ptr = iwl_read_prph(trans, cfg->dbg_mon_wr_ptr_addr);
-	/* iwl_read_prph returns 0x5a5a5a5a when it fails to grab nic access */
-	if (wr_ptr == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(wr_ptr)) {
 		IWL_ERR(trans, "Can't read write pointer\n");
 		return -ENODEV;
 	}
 
 	read_val = iwl_read_prph(trans, cfg->dbg_mon_buff_base_addr_reg_addr);
-	if (read_val == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(read_val)) {
 		IWL_ERR(trans, "Can't read monitor base address\n");
 		return -ENODEV;
 	}
 	dnt->mon_base_addr = read_val;
 
 	read_val = iwl_read_prph(trans, cfg->dbg_mon_buff_end_addr_reg_addr);
-	if (read_val == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(read_val)) {
 		IWL_ERR(trans, "Can't read monitor end address\n");
 		return -ENODEV;
 	}
@@ -280,15 +278,13 @@ static int iwl_dnt_dev_if_retrieve_smem_monitor_data(struct iwl_dnt *dnt,
 	wr_ptr_shift = 2;
 
 	base = iwl_read_prph(trans, base_addr);
-	/* iwl_read_prph returns 0x5a5a5a5a when it fails to grab nic access */
-	if (base == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(base)) {
 		IWL_ERR(trans, "Can't read base addr\n");
 		return -ENODEV;
 	}
 
 	end = iwl_read_prph(trans, end_addr);
-	/* iwl_read_prph returns 0x5a5a5a5a when it fails to grab nic access */
-	if (end == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(end)) {
 		IWL_ERR(trans, "Can't read end addr\n");
 		return -ENODEV;
 	}
@@ -299,8 +295,7 @@ static int iwl_dnt_dev_if_retrieve_smem_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	wr_ptr = iwl_read_prph(trans, wr_ptr_addr);
-	/* iwl_read_prph returns 0x5a5a5a5a when it fails to grab nic access */
-	if (wr_ptr == 0x5a5a5a5a) {
+	if (iwl_trans_is_hw_error_value(wr_ptr)) {
 		IWL_ERR(trans, "Can't read write pointer, not re-aligning\n");
 		wr_ptr = base << 8;
 	}
