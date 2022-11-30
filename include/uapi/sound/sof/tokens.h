@@ -189,9 +189,4 @@
 #define SOF_TKN_AMD_ACPDMIC_RATE               1800
 #define SOF_TKN_AMD_ACPDMIC_CH                 1801
 
-/* ACP I2S */
-#define SOF_TKN_AMD_ACPI2S_RATE			1700
-#define SOF_TKN_AMD_ACPI2S_CH			1701
-#define SOF_TKN_AMD_ACPI2S_TDM_MODE		1702
-
 #endif
