@@ -6438,7 +6438,7 @@ static bool iwl_mvm_mac_can_aggregate(struct ieee80211_hw *hw,
 	if (mvm->trans->trans_cfg->device_family > IWL_DEVICE_FAMILY_BZ ||
 	    (mvm->trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_BZ &&
 	     !(CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
-	       mvm->trans->hw_rev_step == SILICON_A_STEP)))
+	       mvm->trans->hw_rev_step <= SILICON_B_STEP)))
 		return iwl_mvm_tx_csum_bz(mvm, head, true) ==
 		       iwl_mvm_tx_csum_bz(mvm, skb, true);
 
