@@ -18,6 +18,10 @@
 #ifndef _LINUX_RHASHTABLE_H
 #define _LINUX_RHASHTABLE_H
 
+#if LINUX_VERSION_IS_GEQ(5,10,0)
+#undef _LINUX_RHASHTABLE_H
+#include <linux/rhashtable.h>
+#else
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/jhash.h>
@@ -1272,4 +1276,5 @@ static inline void rhltable_destroy(struct rhltable *hlt)
 	return rhltable_free_and_destroy(hlt, NULL, NULL);
 }
 
+#endif /* LINUX_VERSION_IS_GEQ(5,10,0) */
 #endif /* _LINUX_RHASHTABLE_H */
