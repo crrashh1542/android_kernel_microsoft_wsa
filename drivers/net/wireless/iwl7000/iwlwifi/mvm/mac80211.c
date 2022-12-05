@@ -926,7 +926,8 @@ void iwl_mvm_mac_tx(struct ieee80211_hw *hw,
 		}
 	}
 
-	if (tmp_sta && !sta && link_id != IEEE80211_LINK_UNSPECIFIED) {
+	if (tmp_sta && !sta && link_id != IEEE80211_LINK_UNSPECIFIED &&
+	    !ieee80211_is_probe_resp(hdr->frame_control)) {
 		/* translate MLD addresses to LINK addresses */
 		struct ieee80211_link_sta *link_sta =
 			rcu_dereference(tmp_sta->link[link_id]);
