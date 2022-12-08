@@ -16,10 +16,6 @@
 #include <linux/thermal.h>
 #endif
 
-#ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-#include <linux/ptp_clock_kernel.h>
-#endif
-
 #include <linux/ktime.h>
 
 #include "iwl-op-mode.h"
@@ -830,31 +826,6 @@ struct iwl_csi_data_buffer {
 	unsigned int offset;
 	unsigned int page_order;
 };
-
-struct ptp_data {
-	struct ptp_clock *ptp_clock;
-	struct ptp_clock_info ptp_clock_info;
-
-	struct delayed_work dwork;
-
-	/* The last GP2 reading from the hw */
-	u32 last_gp2;
-
-	/* number of wraparounds since scale_update_adj_time_ns */
-	u32 wrap_counter;
-
-	/* GP2 time when the scale was last updated */
-	u32 scale_update_gp2;
-
-	/* Adjusted time when the scale was last updated in nanoseconds */
-	u64 scale_update_adj_time_ns;
-
-	/* clock frequency offset, scaled to 65536000000 */
-	u64 scaled_freq;
-
-	/* Delta between hardware clock and ptp clock in nanoseconds */
-	s64 delta;
-};
 #endif
 
 struct iwl_time_sync_data {
@@ -1218,9 +1189,8 @@ struct iwl_mvm {
 	unsigned int csi_portid;
 
 	struct list_head list;
-
-	struct ptp_data ptp_data;
 #endif /* CPTCFG_IWLMVM_VENDOR_CMDS */
+
 	struct {
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
 		u8 csi_notif;
@@ -2396,11 +2366,12 @@ void iwl_mvm_active_rx_filters(struct iwl_mvm *mvm);
 void iwl_mvm_rx_csi_header(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb);
 void iwl_mvm_rx_csi_chunk(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb);
 int iwl_mvm_send_csi_cmd(struct iwl_mvm *mvm);
+#endif
+
 static inline u64 iwl_mvm_ptp_get_adj_time(struct iwl_mvm *mvm, u64 base_time)
 {
 	return base_time;
 }
-#endif
 
 /* NAN */
 void iwl_mvm_nan_match(struct iwl_mvm *mvm,
