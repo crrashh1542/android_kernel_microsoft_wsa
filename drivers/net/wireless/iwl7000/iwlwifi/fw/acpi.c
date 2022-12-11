@@ -1194,13 +1194,16 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
         }
 
 	// ppag mode
+	IWL_DEBUG_RADIO(fwrt,
+			"PPAG MODE bits were read from bios: %d\n",
+			cmd->v1.flags & cpu_to_le32(ACPI_PPAG_MASK));
 	if ((cmd_ver == 1 && !fw_has_capa(&fwrt->fw->ucode_capa,
 					  IWL_UCODE_TLV_CAPA_PPAG_CHINA_BIOS_SUPPORT)) ||
 	    (cmd_ver == 2 && fwrt->ppag_ver == 2)) {
 		cmd->v1.flags &= cpu_to_le32(IWL_PPAG_ETSI_MASK);
-		IWL_DEBUG_RADIO(fwrt, "FW doesn't support ppag China bit\n");
+		IWL_DEBUG_RADIO(fwrt, "masking ppag China bit\n");
 	} else {
-		IWL_DEBUG_RADIO(fwrt, "FW supports ppag China bit\n");
+		IWL_DEBUG_RADIO(fwrt, "isn't masking ppag China bit\n");
 	}
 
 	IWL_DEBUG_RADIO(fwrt,
