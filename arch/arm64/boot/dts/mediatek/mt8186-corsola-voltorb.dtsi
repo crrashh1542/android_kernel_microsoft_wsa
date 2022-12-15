@@ -9,6 +9,14 @@
 
 / {
 	/delete-node/ gpio-keys;
+
+	max98360a: max98360a {
+		status = "okay";
+
+		compatible = "maxim,max98360a";
+		sdmode-gpios = <&pio 150 0>;
+		#sound-dai-cells = <0>;
+	};
 };
 
 &keyboard_controller {
@@ -48,4 +56,18 @@
 
 &opp1_15 {
 	opp-hz = /bits/ 64 <2200000000>;
+};
+
+&rt1019p{
+	status = "disabled";
+};
+
+&sound {
+	status = "okay";
+
+	compatible = "mediatek,mt8186-mt6366-rt5682s-max98360-sound";
+
+	playback-codecs {
+		sound-dai = <&it6505dptx>,<&max98360a>;
+	};
 };

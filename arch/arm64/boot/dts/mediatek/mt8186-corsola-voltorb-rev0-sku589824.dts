@@ -12,6 +12,21 @@
 		     "mediatek,mt8186";
 };
 
+&max98360a {
+	status = "disabled";
+};
+
+&rt1019p{
+	status = "okay";
+};
+
+&sound {
+	compatible = "mediatek,mt8186-mt6366-rt1019-rt5682s-sound";
+	playback-codecs {
+		sound-dai = <&it6505dptx>,<&rt1019p>;
+	};
+};
+
 &spmi {
 	status = "disabled";
 };
