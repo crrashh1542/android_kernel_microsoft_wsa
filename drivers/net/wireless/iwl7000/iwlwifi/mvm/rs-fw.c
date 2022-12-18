@@ -627,7 +627,8 @@ void iwl_mvm_rs_fw_rate_init(struct iwl_mvm *mvm,
 	/* Enable external EHT LTF only for GL device and if there's
 	 * mutual support by AP and client
 	 */
-	if (CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
+	if (!mvm->trans->dbg_cfg.eht_disable_extra_ltf &&
+	    CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
 	    cfg_eht_cap_has_eht(ieee80211_sband_get_iftypes_data(sband)) &&
 	    cfg_eht_cap(ieee80211_sband_get_iftypes_data(sband))->eht_cap_elem.phy_cap_info[5] &
 	    IEEE80211_EHT_PHY_CAP5_SUPP_EXTRA_EHT_LTF &&
