@@ -98,6 +98,7 @@ static int iwl_mvm_mld_mac_ctxt_cmd_sta(struct iwl_mvm *mvm,
 					u32 action, bool force_assoc_off)
 {
 	struct iwl_mac_config_cmd cmd = {};
+	u16 esr_transition_timeout;
 
 	WARN_ON(vif->type != NL80211_IFTYPE_STATION);
 
@@ -135,7 +136,12 @@ static int iwl_mvm_mld_mac_ctxt_cmd_sta(struct iwl_mvm *mvm,
 	}
 
 	cmd.client.assoc_id = cpu_to_le16(vif->cfg.aid);
+	esr_transition_timeout =
+		u16_get_bits(vif->cfg.eml_cap, IEEE80211_EML_CAP_TRANSITION_TIMEOUT);
+
 	cmd.client.esr_transition_timeout =
+		min_t(u16, IEEE80211_EML_CAP_TRANSITION_TIMEOUT_128TU,
+		      esr_transition_timeout);
 		u16_get_bits(vif->cfg.eml_cap, IEEE80211_EML_CAP_TRANSITION_TIMEOUT);
 	cmd.client.medium_sync_delay = cpu_to_le16(vif->cfg.eml_med_sync_delay);
 
