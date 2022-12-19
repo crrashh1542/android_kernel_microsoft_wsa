@@ -1015,9 +1015,6 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 	}
 
 	list_for_each_entry(rtd, &card->rtd_list, list) {
-		dev_vdbg(scomp->dev, "tplg: check widget: %s stream: %s dai stream: %s\n",
-			 w->name,  w->sname, rtd->dai_link->stream_name);
-
 		/* does stream match DAI link ? */
 		if (!rtd->dai_link->stream_name ||
 		    strcmp(w->sname, rtd->dai_link->stream_name))
@@ -1036,7 +1033,7 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 					break;
 				}
 			}
-			if (i == rtd->num_cpus) {
+			if (i == rtd->dai_link->num_cpus) {
 				dev_err(scomp->dev, "error: can't find BE for DAI %s\n",
 					w->name);
 
@@ -1058,7 +1055,7 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 					break;
 				}
 			}
-			if (i == rtd->num_cpus) {
+			if (i == rtd->dai_link->num_cpus) {
 				dev_err(scomp->dev, "error: can't find BE for DAI %s\n",
 					w->name);
 
@@ -1541,9 +1538,6 @@ static int sof_dai_load(struct snd_soc_component *scomp, int index,
 
 	stream = SNDRV_PCM_STREAM_PLAYBACK;
 
-	dev_vdbg(scomp->dev, "tplg: pcm %s stream tokens: playback d0i3:%d\n",
-		 spcm->pcm.pcm_name, spcm->stream[stream].d0i3_compatible);
-
 	caps = &spcm->pcm.caps[stream];
 
 	/* allocate playback page table buffer */
@@ -1570,9 +1564,6 @@ capture:
 	/* do we need to allocate capture PCM DMA pages */
 	if (!spcm->pcm.capture)
 		return ret;
-
-	dev_vdbg(scomp->dev, "tplg: pcm %s stream tokens: capture d0i3:%d\n",
-		 spcm->pcm.pcm_name, spcm->stream[stream].d0i3_compatible);
 
 	caps = &spcm->pcm.caps[stream];
 
