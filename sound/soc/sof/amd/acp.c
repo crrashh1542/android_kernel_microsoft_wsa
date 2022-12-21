@@ -40,7 +40,7 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 	return 0;
 }
 
-static void master_clock_generate(struct acp_dev_data *adata)
+void master_clock_generate(struct acp_dev_data *adata)
 {
 	int data;
 	smn_write(adata->smn_dev, MP1_C2PMSG_93,0);
