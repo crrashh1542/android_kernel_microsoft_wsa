@@ -216,10 +216,6 @@ int acp_sof_trace_init(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 		       struct sof_ipc_dma_trace_params_ext *dtrace_params);
 int acp_sof_trace_release(struct snd_sof_dev *sdev);
 
-/* PM Callbacks */
-int amd_sof_acp_suspend(struct snd_sof_dev *sdev, u32 target_state);
-int amd_sof_acp_resume(struct snd_sof_dev *sdev);
-
 struct sof_amd_acp_desc {
 	unsigned int host_bridge_id;
 };
