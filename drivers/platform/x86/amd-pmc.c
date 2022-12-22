@@ -38,6 +38,7 @@
 #define AMD_PMC_STB_INDEX_DATA		0xFC
 #define AMD_PMC_STB_PMI_0		0x03E30600
 #define AMD_PMC_STB_PREDEF		0xC6000001
+#define AMD_PMC_STB_SHOW		0xC6000007
 
 /* STB S2D(Spill to DRAM) has different message port offset */
 #define STB_SPILL_TO_DRAM		0xBE
@@ -49,6 +50,7 @@
 #define S2D_TELEMETRY_BYTES_MAX		0x100000
 #define S2D_TELEMETRY_DRAMBYTES_MAX	0x300000
 #define S2D_CIRCULAR_DRAMBYTES_MAX	0x200000
+#define S2D_ENTRIES_TO_MOVE		13
 
 /* Base address of SMU for mapping physical address to virtual address */
 #define AMD_PMC_SMU_INDEX_ADDRESS	0xB8
@@ -256,11 +258,21 @@ static const struct file_operations amd_pmc_stb_debugfs_fops = {
 static int amd_pmc_stb_debugfs_open_v2(struct inode *inode, struct file *filp)
 {
 	struct amd_pmc_dev *dev = filp->f_inode->i_private;
-	u32 *buf;
+	u32 *buf, ret;
+	u32 i = S2D_ENTRIES_TO_MOVE;
 
 	buf = kzalloc(S2D_CIRCULAR_DRAMBYTES_MAX, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
+
+	/* Write dummy Postcode while reading the STB buffer */
+	while (i--) {
+		ret = amd_pmc_write_stb(dev, AMD_PMC_STB_SHOW);
+		if (ret) {
+			dev_err(dev->dev, "error writing to STB: %d\n", ret);
+			break;
+		}
+	}
 
 	memcpy_fromio(buf, dev->stb_virt_addr, S2D_CIRCULAR_DRAMBYTES_MAX);
 	filp->private_data = buf;
