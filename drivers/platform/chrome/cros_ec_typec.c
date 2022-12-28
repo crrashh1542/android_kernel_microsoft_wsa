@@ -344,6 +344,7 @@ static int cros_typec_register_port_altmodes(struct cros_typec_data *typec,
 	if (IS_ERR(amode))
 		return PTR_ERR(amode);
 	port->port_altmode[CROS_EC_ALTMODE_DP] = amode;
+	typec_altmode_set_drvdata(amode, port);
 
 	/*
 	 * Register TBT compatibility alt mode. The EC will not enter the mode
@@ -357,6 +358,7 @@ static int cros_typec_register_port_altmodes(struct cros_typec_data *typec,
 	if (IS_ERR(amode))
 		return PTR_ERR(amode);
 	port->port_altmode[CROS_EC_ALTMODE_TBT] = amode;
+	typec_altmode_set_drvdata(amode, port);
 
 	port->state.alt = NULL;
 	port->state.mode = TYPEC_STATE_USB;
