@@ -176,7 +176,6 @@ role_sw_err:
 	port->ori_sw = NULL;
 ori_sw_err:
 	typec_retimer_put(port->retimer);
-	port->retimer = NULL;
 retimer_sw_err:
 	typec_mux_put(port->mux);
 	port->mux = NULL;
