@@ -29,6 +29,7 @@ config DRM_MSM
 	select SYNC_FILE
 	select PM_OPP
 	select NVMEM
+	select PM_GENERIC_DOMAINS
 	help
 	  DRM/KMS driver for MSM/snapdragon.
 
