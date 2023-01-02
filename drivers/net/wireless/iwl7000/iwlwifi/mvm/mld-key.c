@@ -232,8 +232,43 @@ int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
 {
 	u32 sta_mask = iwl_mvm_get_sec_sta_mask(mvm, vif, sta, keyconf);
 	u32 key_flags = iwl_mvm_get_sec_flags(mvm, vif, sta, keyconf);
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	struct iwl_mvm_vif_link_info *mvm_link = NULL;
+	int ret;
 
-	return iwl_mvm_mld_send_key(mvm, sta_mask, key_flags, keyconf);
+	if (keyconf->keyidx == 4 || keyconf->keyidx == 5) {
+		unsigned int link_id = 0;
+
+		/* set to -1 for non-MLO right now */
+		if (keyconf->link_id >= 0)
+			link_id = keyconf->link_id;
+
+		mvm_link = mvmvif->link[link_id];
+		if (WARN_ON(!mvm_link))
+			return -EINVAL;
+
+		if (mvm_link->igtk) {
+			IWL_DEBUG_MAC80211(mvm, "remove old IGTK %d\n",
+					   mvm_link->igtk->keyidx);
+			ret = iwl_mvm_sec_key_del(mvm, vif, sta,
+						  mvm_link->igtk);
+			if (ret)
+				IWL_ERR(mvm,
+					"failed to remove old IGTK (ret=%d)\n",
+					ret);
+		}
+
+		WARN_ON(mvm_link->igtk);
+	}
+
+	ret = iwl_mvm_mld_send_key(mvm, sta_mask, key_flags, keyconf);
+	if (ret)
+		return ret;
+
+	if (mvm_link)
+		mvm_link->igtk = keyconf;
+
+	return 0;
 }
 
 static int _iwl_mvm_sec_key_del(struct iwl_mvm *mvm,
@@ -244,10 +279,27 @@ static int _iwl_mvm_sec_key_del(struct iwl_mvm *mvm,
 {
 	u32 sta_mask = iwl_mvm_get_sec_sta_mask(mvm, vif, sta, keyconf);
 	u32 key_flags = iwl_mvm_get_sec_flags(mvm, vif, sta, keyconf);
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	int ret;
 
 	if (WARN_ON(!sta_mask))
 		return -EINVAL;
+
+	if (keyconf->keyidx == 4 || keyconf->keyidx == 5) {
+		struct iwl_mvm_vif_link_info *mvm_link;
+		unsigned int link_id = 0;
+
+		/* set to -1 for non-MLO right now */
+		if (keyconf->link_id >= 0)
+			link_id = keyconf->link_id;
+
+		mvm_link = mvmvif->link[link_id];
+		if (WARN_ON(!mvm_link))
+			return -EINVAL;
+
+		if (mvm_link->igtk == keyconf)
+			mvm_link->igtk = NULL;
+	}
 
 	ret = __iwl_mvm_sec_key_del(mvm, sta_mask, key_flags, keyconf->keyidx,
 				    flags);
