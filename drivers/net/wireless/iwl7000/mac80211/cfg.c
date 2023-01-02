@@ -5,7 +5,7 @@
  * Copyright 2006-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 #include <linux/ieee80211.h>
@@ -4393,7 +4393,7 @@ static int ieee80211_set_ap_chanwidth(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_link_data *link;
 	int ret;
-	u32 changed = 0;
+	u64 changed = 0;
 
 	link = sdata_dereference(sdata->link[link_id], sdata);
 

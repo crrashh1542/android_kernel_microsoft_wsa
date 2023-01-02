@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * mac80211 - channel management
- * Copyright 2020 - 2022 Intel Corporation
+ * Copyright 2020 - 2023 Intel Corporation
  */
 
 #include <linux/nl80211.h>
@@ -1938,7 +1938,7 @@ int ieee80211_link_use_reserved_context(struct ieee80211_link_data *link)
 
 int ieee80211_link_change_bandwidth(struct ieee80211_link_data *link,
 				    const struct cfg80211_chan_def *chandef,
-				    u32 *changed)
+				    u64 *changed)
 {
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_bss_conf *link_conf = link->conf;

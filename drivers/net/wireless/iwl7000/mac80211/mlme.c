@@ -551,7 +551,7 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 			       const struct ieee80211_he_operation *he_oper,
 			       const struct ieee80211_eht_operation *eht_oper,
 			       const struct ieee80211_s1g_oper_ie *s1g_oper,
-			       const u8 *bssid, u32 *changed)
+			       const u8 *bssid, u64 *changed)
 {
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
@@ -5996,7 +5996,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 				elems->vht_cap_elem, elems->ht_operation,
 				elems->vht_operation, elems->he_operation,
 				elems->eht_operation,
-				elems->s1g_oper, bssid, (u32 *)&changed)) {
+				elems->s1g_oper, bssid, &changed)) {
 		mutex_unlock(&local->sta_mtx);
 		sdata_info(sdata,
 			   "failed to follow AP %pM bandwidth change, disconnect\n",
