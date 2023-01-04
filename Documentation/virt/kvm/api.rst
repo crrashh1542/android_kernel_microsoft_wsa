@@ -7265,3 +7265,12 @@ The argument to KVM_ENABLE_CAP is also a bitmask, and must be a subset
 of the result of KVM_CHECK_EXTENSION.  KVM will forward to userspace
 the hypercalls whose corresponding bit is in the argument, and return
 ENOSYS for the others.
+
+8.35 KVM_CAP_UCLAMP_SYNC
+------------------------
+
+:Architectures: arm64
+
+This capability indicates that the KVM uclamp sync service is supported
+in the host. A VMM can check whether the service is available to the
+guest on migration.

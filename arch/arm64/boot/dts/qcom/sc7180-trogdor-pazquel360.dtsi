@@ -27,8 +27,6 @@ ap_ts_pen_1v8: &i2c4 {
 		interrupt-parent = <&tlmm>;
 		interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
 
-		hid-descr-addr = <0x0001>;
-
 		vcc33-supply = <&pp3300_ts>;
 		vccio-supply = <&pp1800_l10a>;
 		reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;

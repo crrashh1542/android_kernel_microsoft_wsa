@@ -52,17 +52,49 @@ properties:
     maxItems: 1
     description: extcon specifier for the Power Delivery
 
-  data-lanes:
-    maxItems: 1
-    description: restrict the dp output data-lanes with value of 1-4
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
 
-  max-pixel-clock-khz:
-    maxItems: 1
-    description: restrict max pixel clock
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
+        description: A port node pointing to DPI host port node
 
-  port:
-    $ref: /schemas/graph.yaml#/properties/port
-    description: A port node pointing to DPI host port node
+        properties:
+          endpoint:
+            $ref: /schemas/graph.yaml#/$defs/endpoint-base
+            unevaluatedProperties: false
+
+            properties:
+              link-frequencies:
+                minItems: 1
+                maxItems: 1
+                description: Allowed max link frequencies in Hz
+
+      port@1:
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
+        description: Video port for DP output
+
+        properties:
+          endpoint:
+            $ref: /schemas/graph.yaml#/$defs/endpoint-base
+            unevaluatedProperties: false
+
+            properties:
+              data-lanes:
+                minItems: 1
+                uniqueItems: true
+                items:
+                  - enum: [ 0, 1 ]
+                  - const: 1
+                  - const: 2
+                  - const: 3
+
+    required:
+      - port@0
+      - port@1
 
   switches:
     type: object
@@ -98,6 +130,7 @@ required:
   - pwr18-supply
   - interrupts
   - reset-gpios
+  - ports
 
 oneOf:
   - required:
@@ -125,12 +158,25 @@ examples:
             pwr18-supply = <&it6505_pp18_reg>;
             reset-gpios = <&pio 179 1>;
             extcon = <&usbc_extcon>;
-            data-lanes = <2>;
-            max-pixel-clock-khz = <150000>;
 
-            port {
-                it6505_in: endpoint {
-                    remote-endpoint = <&dpi_out>;
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    it6505_in: endpoint {
+                        remote-endpoint = <&dpi_out>;
+                        link-frequencies = /bits/ 64 <150000000>;
+                    };
+                };
+
+                port@1 {
+                    reg = <1>;
+                    it6505_out: endpoint {
+                        remote-endpoint = <&dp_in>;
+                        data-lanes = <0 1>;
+                    };
                 };
             };
         };

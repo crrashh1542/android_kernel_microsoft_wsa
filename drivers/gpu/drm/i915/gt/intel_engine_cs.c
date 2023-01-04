@@ -672,7 +672,7 @@ static void engine_mask_apply_compute_fuses(struct intel_gt *gt)
 	unsigned long ccs_mask;
 	unsigned int i;
 
-	if (GRAPHICS_VER_FULL(i915) < IP_VER(12, 50))
+	if (hweight32(CCS_MASK(gt)) <= 1)
 		return;
 
 	ccs_mask = intel_slicemask_from_xehp_dssmask(info->sseu.compute_subslice_mask,
@@ -736,7 +736,7 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 	u16 vdbox_mask;
 	u16 vebox_mask;
 
-	info->engine_mask = INTEL_INFO(i915)->platform_engine_mask;
+	info->engine_mask = RUNTIME_INFO(i915)->platform_engine_mask;
 
 	if (GRAPHICS_VER(i915) < 11)
 		return info->engine_mask;

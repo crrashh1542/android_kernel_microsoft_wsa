@@ -428,6 +428,33 @@ bool acpi_bus_power_manageable(acpi_handle handle)
 }
 EXPORT_SYMBOL(acpi_bus_power_manageable);
 
+static int acpi_power_up_if_adr_present(struct acpi_device *adev, void *not_used)
+{
+	if (!(adev->flags.power_manageable && adev->pnp.type.bus_address))
+		return 0;
+
+	acpi_handle_debug(adev->handle, "Power state: %s\n",
+			  acpi_power_state_string(adev->power.state));
+
+	if (adev->power.state == ACPI_STATE_D3_COLD)
+		return acpi_device_set_power(adev, ACPI_STATE_D0);
+
+	return 0;
+}
+
+/**
+ * acpi_dev_power_up_children_with_adr - Power up childres with valid _ADR
+ * @adev: Parent ACPI device object.
+ *
+ * Change the power states of the direct children of @adev that are in D3cold
+ * and hold valid _ADR objects to D0 in order to allow bus (e.g. PCI)
+ * enumeration code to access them.
+ */
+void acpi_dev_power_up_children_with_adr(struct acpi_device *adev)
+{
+	acpi_dev_for_each_child(adev, acpi_power_up_if_adr_present, NULL);
+}
+
 #ifdef CONFIG_PM
 static DEFINE_MUTEX(acpi_pm_notifier_lock);
 static DEFINE_MUTEX(acpi_pm_notifier_install_lock);
@@ -633,7 +660,22 @@ static int acpi_dev_pm_get_state(struct device *dev, struct acpi_device *adev,
 		d_min = ret;
 		wakeup = device_may_wakeup(dev) && adev->wakeup.flags.valid
 			&& adev->wakeup.sleep_state >= target_state;
+	} else if (device_may_wakeup(dev) && dev->power.wakeirq) {
+		/*
+		 * The ACPI subsystem doesn't manage the wake bit for IRQs
+		 * defined with ExclusiveAndWake and SharedAndWake. Instead we
+		 * expect them to be managed via the PM subsystem. Drivers
+		 * should call dev_pm_set_wake_irq to register an IRQ as a wake
+		 * source.
+		 *
+		 * If a device has a wake IRQ attached we need to check the
+		 * _S0W method to get the correct wake D-state. Otherwise we
+		 * end up putting the device into D3Cold which will more than
+		 * likely disable wake functionality.
+		 */
+		wakeup = true;
 	} else {
+		/* ACPI GPE is specified in _PRW. */
 		wakeup = adev->wakeup.flags.valid;
 	}
 

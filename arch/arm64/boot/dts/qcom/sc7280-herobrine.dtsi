@@ -501,13 +501,16 @@ ap_spi_fp: &spi9 {
 	cs-gpios = <&tlmm 39 GPIO_ACTIVE_LOW>;
 
 	cros_ec_fp: ec@0 {
-		compatible = "google,cros-ec-spi";
+		compatible = "google,cros-ec-fp", "google,cros-ec-spi";
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <61 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&fp_to_ap_irq_l>, <&fp_rst_l>, <&fpmcu_boot0>;
+		boot0-gpios = <&tlmm 68 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&tlmm 78 GPIO_ACTIVE_LOW>;
 		spi-max-frequency = <3000000>;
+		vdd-supply = <&pp3300_fp_mcu>;
 	};
 };
 
@@ -757,27 +760,27 @@ ap_ec_spi: &spi10 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&bios_flash_wp_od>;
 
-	amp_en: amp-en {
+	amp_en: amp-en-state {
 		pins = "gpio63";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	ap_ec_int_l: ap-ec-int-l {
+	ap_ec_int_l: ap-ec-int-l-state {
 		pins = "gpio18";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	bios_flash_wp_od: bios-flash-wp-od {
+	bios_flash_wp_od: bios-flash-wp-od-state {
 		pins = "gpio16";
 		function = "gpio";
 		/* Has external pull */
 		bias-disable;
 	};
 
-	en_fp_rails: en-fp-rails {
+	en_fp_rails: en-fp-rails-state {
 		pins = "gpio77";
 		function = "gpio";
 		bias-disable;
@@ -785,60 +788,60 @@ ap_ec_spi: &spi10 {
 		output-high;
 	};
 
-	en_pp3300_codec: en-pp3300-codec {
+	en_pp3300_codec: en-pp3300-codec-state {
 		pins = "gpio105";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	en_pp3300_dx_edp: en-pp3300-dx-edp {
+	en_pp3300_dx_edp: en-pp3300-dx-edp-state {
 		pins = "gpio80";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	fp_rst_l: fp-rst-l {
+	fp_rst_l: fp-rst-l-state {
 		pins = "gpio78";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	fp_to_ap_irq_l: fp-to-ap-irq-l {
+	fp_to_ap_irq_l: fp-to-ap-irq-l-state {
 		pins = "gpio61";
 		function = "gpio";
 		/* Has external pullup */
 		bias-disable;
 	};
 
-	fpmcu_boot0: fpmcu-boot0 {
+	fpmcu_boot0: fpmcu-boot0-state {
 		pins = "gpio68";
 		function = "gpio";
 		bias-disable;
 	};
 
-	gsc_ap_int_odl: gsc-ap-int-odl {
+	gsc_ap_int_odl: gsc-ap-int-odl-state {
 		pins = "gpio104";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	hp_irq: hp-irq {
+	hp_irq: hp-irq-state {
 		pins = "gpio101";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	hub_en: hub-en {
+	hub_en: hub-en-state {
 		pins = "gpio157";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	pe_wake_odl: pe-wake-odl {
+	pe_wake_odl: pe-wake-odl-state {
 		pins = "gpio3";
 		function = "gpio";
 		/* Has external pull */
@@ -847,45 +850,45 @@ ap_ec_spi: &spi10 {
 	};
 
 	/* For ap_spi_fp */
-	qup_spi9_cs_gpio_init_high: qup-spi9-cs-gpio-init-high {
+	qup_spi9_cs_gpio_init_high: qup-spi9-cs-gpio-init-high-state {
 		pins = "gpio39";
 		function = "gpio";
 		output-high;
 	};
 
 	/* For ap_ec_spi */
-	qup_spi10_cs_gpio_init_high: qup-spi10-cs-gpio-init-high {
+	qup_spi10_cs_gpio_init_high: qup-spi10-cs-gpio-init-high-state {
 		pins = "gpio43";
 		function = "gpio";
 		output-high;
 	};
 
-	sar0_irq_odl: sar0-irq-odl {
+	sar0_irq_odl: sar0-irq-odl-state {
 		pins = "gpio141";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	sar1_irq_odl: sar1-irq-odl {
+	sar1_irq_odl: sar1-irq-odl-state {
 		pins = "gpio140";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	sd_cd_odl: sd-cd-odl {
+	sd_cd_odl: sd-cd-odl-state {
 		pins = "gpio91";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	ssd_en: ssd-en {
+	ssd_en: ssd-en-state {
 		pins = "gpio51";
 		function = "gpio";
 		bias-disable;
 		drive-strength = <2>;
 	};
 
-	ssd_rst_l: ssd-rst-l {
+	ssd_rst_l: ssd-rst-l-state {
 		pins = "gpio2";
 		function = "gpio";
 		bias-disable;
@@ -893,14 +896,14 @@ ap_ec_spi: &spi10 {
 		output-low;
 	};
 
-	tp_int_odl: tp-int-odl {
+	tp_int_odl: tp-int-odl-state {
 		pins = "gpio7";
 		function = "gpio";
 		/* Has external pullup */
 		bias-disable;
 	};
 
-	wf_cam_en: wf-cam-en {
+	wf_cam_en: wf-cam-en-state {
 		pins = "gpio119";
 		function = "gpio";
 		/* Has external pulldown */

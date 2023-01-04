@@ -1625,7 +1625,7 @@ static int svs_bank_resource_setup(struct svs_platform *svsp)
 
 		dev_set_drvdata(svsb->dev, svsp);
 
-		ret = dev_pm_opp_of_add_table(svsb->opp_dev);
+		ret = devm_pm_opp_of_add_table(svsb->opp_dev);
 		if (ret) {
 			dev_err(svsb->dev, "add opp table fail: %d\n", ret);
 			return ret;
@@ -2724,7 +2724,7 @@ static struct platform_driver svs_driver = {
 	.driver	= {
 		.name		= "mtk-svs",
 		.pm		= &svs_pm_ops,
-		.of_match_table	= of_match_ptr(svs_of_match),
+		.of_match_table	= svs_of_match,
 	},
 };
 

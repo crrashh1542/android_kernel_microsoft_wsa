@@ -194,6 +194,30 @@ int tb_lc_start_lane_initialization(struct tb_port *port)
 }
 
 /**
+ * tb_lc_is_clx_supported() - Check whether CLx is supported by the lane adapter
+ * @port: Lane adapter
+ *
+ * TB_LC_LINK_ATTR_CPS bit reflects if the link supports CLx including
+ * active cables (if connected on the link).
+ */
+bool tb_lc_is_clx_supported(struct tb_port *port)
+{
+	struct tb_switch *sw = port->sw;
+	int cap, ret;
+	u32 val;
+
+	cap = find_port_lc_cap(port);
+	if (cap < 0)
+		return false;
+
+	ret = tb_sw_read(sw, &val, TB_CFG_SWITCH, cap + TB_LC_LINK_ATTR, 1);
+	if (ret)
+		return false;
+
+	return !!(val & TB_LC_LINK_ATTR_CPS);
+}
+
+/**
  * tb_lc_is_usb_plugged() - Is there USB device connected to port
  * @port: Device router lane 0 adapter
  *

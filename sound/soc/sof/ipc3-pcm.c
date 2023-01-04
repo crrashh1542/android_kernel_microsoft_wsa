@@ -355,9 +355,7 @@ static int sof_ipc3_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd,
 		channels->max = private->dai_config->acphs.tdm_slots;
 
 		dev_dbg(component->dev,
-			"AMD_HS rate_min: %d rate_max: %d\n", rate->min, rate->max);
-		dev_dbg(component->dev, "AMD_HS channels_min: %d channels_max: %d\n",
-			channels->min, channels->max);
+			"AMD_HS channel_max: %d rate_max: %d\n", channels->max, rate->max);
 		break;
 	case SOF_DAI_AMD_DMIC:
 		rate->min = private->dai_config->acpdmic.pdm_rate;

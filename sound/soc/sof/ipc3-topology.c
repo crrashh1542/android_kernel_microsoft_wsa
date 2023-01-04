@@ -1144,11 +1144,11 @@ static int sof_link_acp_dmic_load(struct snd_soc_component *scomp, struct snd_so
 	u32 size = sizeof(*config);
 	int ret;
 
-	/* handle master/slave and inverted clocks */
+       /* handle master/slave and inverted clocks */
 	sof_dai_set_format(hw_config, config);
 
-	/* init IPC */
 	config->hdr.size = size;
+
 	/* parse the required set of ACPDMIC tokens based on num_hw_cfgs */
 	ret = sof_update_ipc_object(scomp, &config->acpdmic, SOF_ACPDMIC_TOKENS, slink->tuples,
 				    slink->num_tuples, size, slink->num_hw_configs);
@@ -1156,8 +1156,8 @@ static int sof_link_acp_dmic_load(struct snd_soc_component *scomp, struct snd_so
 		return ret;
 
 	dev_info(scomp->dev, "ACP_DMIC config ACP%d channel %d rate %d\n",
-		config->dai_index, config->acpdmic.pdm_ch,
-		config->acpdmic.pdm_rate);
+		 config->dai_index, config->acpdmic.pdm_ch,
+		 config->acpdmic.pdm_rate);
 
 	dai->number_configs = 1;
 	dai->current_config = 0;
@@ -1240,7 +1240,7 @@ static int sof_link_acp_hs_load(struct snd_soc_component *scomp, struct snd_sof_
 	u32 size = sizeof(*config);
 	int ret;
 
-	/* handle master/slave and inverted clocks */
+	/* Configures the DAI hardware format and inverted clocks */
 	sof_dai_set_format(hw_config, config);
 
 	/* init IPC */
@@ -1297,6 +1297,7 @@ static int sof_link_afe_load(struct snd_soc_component *scomp, struct snd_sof_dai
 static int sof_link_ssp_load(struct snd_soc_component *scomp, struct snd_sof_dai_link *slink,
 			     struct sof_ipc_dai_config *config, struct snd_sof_dai *dai)
 {
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_tplg_hw_config *hw_config = slink->hw_configs;
 	struct sof_dai_private_data *private = dai->private;
 	u32 size = sizeof(*config);
@@ -1320,6 +1321,12 @@ static int sof_link_ssp_load(struct snd_soc_component *scomp, struct snd_sof_dai
 		sof_dai_set_format(&hw_config[i], &config[i]);
 
 		config[i].hdr.size = size;
+
+		if (sdev->mclk_id_override) {
+			dev_dbg(scomp->dev, "tplg: overriding topology mclk_id %d by quirk %d\n",
+				config[i].ssp.mclk_id, sdev->mclk_id_quirk);
+			config[i].ssp.mclk_id = sdev->mclk_id_quirk;
+		}
 
 		/* copy differentiating hw configs to ipc structs */
 		config[i].ssp.mclk_rate = le32_to_cpu(hw_config[i].mclk_rate);
@@ -2396,7 +2403,7 @@ static int sof_ipc3_parse_manifest(struct snd_soc_component *scomp, int index,
 	}
 
 	dev_info(scomp->dev,
-		 "Topology: ABI %d:%d:%d Kernel ABI %hhu:%hhu:%hhu\n",
+		 "Topology: ABI %d:%d:%d Kernel ABI %d:%d:%d\n",
 		 man->priv.data[0], man->priv.data[1], man->priv.data[2],
 		 SOF_ABI_MAJOR, SOF_ABI_MINOR, SOF_ABI_PATCH);
 
@@ -2407,15 +2414,10 @@ static int sof_ipc3_parse_manifest(struct snd_soc_component *scomp, int index,
 		return -EINVAL;
 	}
 
-	if (SOF_ABI_VERSION_MINOR(abi_version) > SOF_ABI_MINOR) {
-		if (!IS_ENABLED(CONFIG_SND_SOC_SOF_STRICT_ABI_CHECKS)) {
-			dev_warn(scomp->dev, "%s: Topology ABI is more recent than kernel\n",
-				 __func__);
-		} else {
-			dev_err(scomp->dev, "%s: Topology ABI is more recent than kernel\n",
-				__func__);
-			return -EINVAL;
-		}
+	if (IS_ENABLED(CONFIG_SND_SOC_SOF_STRICT_ABI_CHECKS) &&
+	    SOF_ABI_VERSION_MINOR(abi_version) > SOF_ABI_MINOR) {
+		dev_err(scomp->dev, "%s: Topology ABI is more recent than kernel\n", __func__);
+		return -EINVAL;
 	}
 
 	return 0;

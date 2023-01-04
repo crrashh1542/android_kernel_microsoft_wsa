@@ -1195,7 +1195,7 @@ static void dn_dev_delete(struct net_device *dev)
 	if (dn_db == NULL)
 		return;
 
-	del_timer_sync(&dn_db->timer);
+	timer_shutdown_sync(&dn_db->timer);
 	dn_dev_sysctl_unregister(&dn_db->parms);
 	dn_dev_check_default(dev);
 	neigh_ifdown(&dn_neigh_table, dev);

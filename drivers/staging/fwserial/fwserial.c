@@ -2101,7 +2101,7 @@ static void fwserial_remove_peer(struct fwtty_peer *peer)
 		peer->serial->self = NULL;
 
 	/* cancel the request timeout timer (if running) */
-	del_timer(&peer->timer);
+	timer_shutdown(&peer->timer);
 
 	port = peer->port;
 	peer->port = NULL;

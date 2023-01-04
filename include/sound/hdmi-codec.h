@@ -32,8 +32,8 @@ struct hdmi_codec_daifmt {
 	} fmt;
 	unsigned int bit_clk_inv:1;
 	unsigned int frame_clk_inv:1;
-	unsigned int bit_clk_master:1;
-	unsigned int frame_clk_master:1;
+	unsigned int bit_clk_provider:1;
+	unsigned int frame_clk_provider:1;
 	/* bit_fmt could be standard PCM format or
 	 * IEC958 encoded format. ALSA IEC958 plugin will pass
 	 * IEC958_SUBFRAME format to the underneath driver.
@@ -54,13 +54,6 @@ struct hdmi_codec_params {
 
 typedef void (*hdmi_codec_plugged_cb)(struct device *dev,
 				      bool plugged);
-
-enum {
-	HDMI_CODEC_TRIGGER_EVENT_STOP,
-	HDMI_CODEC_TRIGGER_EVENT_START,
-	HDMI_CODEC_TRIGGER_EVENT_SUSPEND,
-	HDMI_CODEC_TRIGGER_EVENT_RESUME,
-};
 
 struct hdmi_codec_pdata;
 struct hdmi_codec_ops {
@@ -92,7 +85,7 @@ struct hdmi_codec_ops {
 	 * PCM trigger callback.
 	 * Optional
 	 */
-	int (*trigger)(struct device *dev, int event);
+	int (*trigger)(struct device *dev, int cmd);
 
 	/*
 	 * Shuts down the audio stream.

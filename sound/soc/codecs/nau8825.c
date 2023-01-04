@@ -1247,27 +1247,42 @@ static const struct snd_soc_dapm_route nau8825_dapm_routes[] = {
 	{"HPOR", NULL, "Class G"},
 };
 
-static int nau8825_clock_check(struct nau8825 *nau8825,
-	int stream, int rate, int osr)
+static const struct nau8825_osr_attr *
+nau8825_get_osr(struct nau8825 *nau8825, int stream)
 {
-	int osrate;
+	unsigned int osr;
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		regmap_read(nau8825->regmap,
+			    NAU8825_REG_DAC_CTRL1, &osr);
+		osr &= NAU8825_DAC_OVERSAMPLE_MASK;
 		if (osr >= ARRAY_SIZE(osr_dac_sel))
-			return -EINVAL;
-		osrate = osr_dac_sel[osr].osr;
+			return NULL;
+		return &osr_dac_sel[osr];
 	} else {
+		regmap_read(nau8825->regmap,
+			    NAU8825_REG_ADC_RATE, &osr);
+		osr &= NAU8825_ADC_SYNC_DOWN_MASK;
 		if (osr >= ARRAY_SIZE(osr_adc_sel))
-			return -EINVAL;
-		osrate = osr_adc_sel[osr].osr;
+			return NULL;
+		return &osr_adc_sel[osr];
 	}
+}
 
-	if (!osrate || rate * osr > CLK_DA_AD_MAX) {
-		dev_err(nau8825->dev, "exceed the maximum frequency of CLK_ADC or CLK_DAC\n");
+static int nau8825_dai_startup(struct snd_pcm_substream *substream,
+			       struct snd_soc_dai *dai)
+{
+	struct snd_soc_component *component = dai->component;
+	struct nau8825 *nau8825 = snd_soc_component_get_drvdata(component);
+	const struct nau8825_osr_attr *osr;
+
+	osr = nau8825_get_osr(nau8825, substream->stream);
+	if (!osr || !osr->osr)
 		return -EINVAL;
-	}
 
-	return 0;
+	return snd_pcm_hw_constraint_minmax(substream->runtime,
+					    SNDRV_PCM_HW_PARAM_RATE,
+					    0, CLK_DA_AD_MAX / osr->osr);
 }
 
 static int nau8825_hw_params(struct snd_pcm_substream *substream,
@@ -1276,7 +1291,9 @@ static int nau8825_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_component *component = dai->component;
 	struct nau8825 *nau8825 = snd_soc_component_get_drvdata(component);
-	unsigned int val_len = 0, osr, ctrl_val, bclk_fs, bclk_div;
+	unsigned int val_len = 0, ctrl_val, bclk_fs, bclk_div;
+	const struct nau8825_osr_attr *osr;
+	int err = -EINVAL;
 
 	nau8825_sema_acquire(nau8825, 3 * HZ);
 
@@ -1286,29 +1303,19 @@ static int nau8825_hw_params(struct snd_pcm_substream *substream,
 	 * values must be selected such that the maximum frequency is less
 	 * than 6.144 MHz.
 	 */
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		regmap_read(nau8825->regmap, NAU8825_REG_DAC_CTRL1, &osr);
-		osr &= NAU8825_DAC_OVERSAMPLE_MASK;
-		if (nau8825_clock_check(nau8825, substream->stream,
-			params_rate(params), osr)) {
-			nau8825_sema_release(nau8825);
-			return -EINVAL;
-		}
+	osr = nau8825_get_osr(nau8825, substream->stream);
+	if (!osr || !osr->osr)
+		goto error;
+	if (params_rate(params) * osr->osr > CLK_DA_AD_MAX)
+		goto error;
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		regmap_update_bits(nau8825->regmap, NAU8825_REG_CLK_DIVIDER,
 			NAU8825_CLK_DAC_SRC_MASK,
-			osr_dac_sel[osr].clk_src << NAU8825_CLK_DAC_SRC_SFT);
-	} else {
-		regmap_read(nau8825->regmap, NAU8825_REG_ADC_RATE, &osr);
-		osr &= NAU8825_ADC_SYNC_DOWN_MASK;
-		if (nau8825_clock_check(nau8825, substream->stream,
-			params_rate(params), osr)) {
-			nau8825_sema_release(nau8825);
-			return -EINVAL;
-		}
+			osr->clk_src << NAU8825_CLK_DAC_SRC_SFT);
+	else
 		regmap_update_bits(nau8825->regmap, NAU8825_REG_CLK_DIVIDER,
 			NAU8825_CLK_ADC_SRC_MASK,
-			osr_adc_sel[osr].clk_src << NAU8825_CLK_ADC_SRC_SFT);
-	}
+			osr->clk_src << NAU8825_CLK_ADC_SRC_SFT);
 
 	/* make BCLK and LRC divde configuration if the codec as master. */
 	regmap_read(nau8825->regmap, NAU8825_REG_I2S_PCM_CTRL2, &ctrl_val);
@@ -1321,10 +1328,8 @@ static int nau8825_hw_params(struct snd_pcm_substream *substream,
 			bclk_div = 1;
 		else if (bclk_fs <= 128)
 			bclk_div = 0;
-		else {
-			nau8825_sema_release(nau8825);
-			return -EINVAL;
-		}
+		else
+			goto error;
 		regmap_update_bits(nau8825->regmap, NAU8825_REG_I2S_PCM_CTRL2,
 			NAU8825_I2S_LRC_DIV_MASK | NAU8825_I2S_BLK_DIV_MASK,
 			((bclk_div + 1) << NAU8825_I2S_LRC_DIV_SFT) | bclk_div);
@@ -1344,17 +1349,18 @@ static int nau8825_hw_params(struct snd_pcm_substream *substream,
 		val_len |= NAU8825_I2S_DL_32;
 		break;
 	default:
-		nau8825_sema_release(nau8825);
-		return -EINVAL;
+		goto error;
 	}
 
 	regmap_update_bits(nau8825->regmap, NAU8825_REG_I2S_PCM_CTRL1,
 		NAU8825_I2S_DL_MASK, val_len);
+	err = 0;
 
+ error:
 	/* Release the semaphore. */
 	nau8825_sema_release(nau8825);
 
-	return 0;
+	return err;
 }
 
 static int nau8825_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
@@ -1516,6 +1522,7 @@ static int nau8825_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
 }
 
 static const struct snd_soc_dai_ops nau8825_dai_ops = {
+	.startup	= nau8825_dai_startup,
 	.hw_params	= nau8825_hw_params,
 	.set_fmt	= nau8825_set_dai_fmt,
 	.set_tdm_slot	= nau8825_set_tdm_slot,
@@ -1537,7 +1544,7 @@ static struct snd_soc_dai_driver nau8825_dai = {
 	.capture = {
 		.stream_name	 = "Capture",
 		.channels_min	 = 1,
-		.channels_max	 = 1,
+		.channels_max	 = 2,   /* Only 1 channel of data */
 		.rates		 = NAU8825_RATES,
 		.formats	 = NAU8825_FORMATS,
 	},
@@ -1679,6 +1686,9 @@ static void nau8825_setup_auto_irq(struct nau8825 *nau8825)
 
 	/* Enable internal VCO needed for interruptions */
 	nau8825_configure_sysclk(nau8825, NAU8825_CLK_INTERNAL, 0);
+	/* Raise up the internal clock for jack detection */
+	regmap_update_bits(regmap, NAU8825_REG_CLK_DIVIDER,
+			   NAU8825_CLK_MCLK_SRC_MASK, 0);
 
 	/* Enable ADC needed for interruptions */
 	regmap_update_bits(regmap, NAU8825_REG_ENA_CTRL,
@@ -1724,6 +1734,121 @@ static int nau8825_button_decode(int value)
 		buttons |= SND_JACK_BTN_5;
 
 	return buttons;
+}
+
+static int nau8825_high_imped_detection(struct nau8825 *nau8825)
+{
+	struct regmap *regmap = nau8825->regmap;
+	struct snd_soc_dapm_context *dapm = nau8825->dapm;
+	unsigned int adc_mg1, adc_mg2;
+
+	/* Initial phase */
+	regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+			   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 | NAU8825_SPKR_DWN1R |
+			   NAU8825_SPKR_DWN1L, NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2);
+	regmap_update_bits(regmap, NAU8825_REG_ANALOG_CONTROL_1,
+			   NAU8825_TESTDACIN_MASK, NAU8825_TESTDACIN_GND);
+	regmap_write(regmap, NAU8825_REG_TRIM_SETTINGS, 0x6);
+	regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+			   NAU8825_MICBIAS_LOWNOISE_MASK | NAU8825_MICBIAS_VOLTAGE_MASK,
+			   NAU8825_MICBIAS_LOWNOISE_EN);
+	regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+			   NAU8825_SAR_INPUT_MASK | NAU8825_SAR_TRACKING_GAIN_MASK |
+			   NAU8825_SAR_HV_SEL_MASK | NAU8825_SAR_RES_SEL_MASK |
+			   NAU8825_SAR_COMPARE_TIME_MASK | NAU8825_SAR_SAMPLING_TIME_MASK,
+			   NAU8825_SAR_HV_SEL_VDDMIC | NAU8825_SAR_RES_SEL_70K);
+
+	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
+	snd_soc_dapm_force_enable_pin(dapm, "SAR");
+	snd_soc_dapm_sync(dapm);
+
+	/* Configure settings for first reading of SARADC */
+	regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+			   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 | NAU8825_SPKR_DWN1R |
+			   NAU8825_SPKR_DWN1L, NAU8825_SPKR_ENGND2);
+	regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+			   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_JKR2,
+			   NAU8825_MICBIAS_JKR2);
+	regmap_read(regmap, NAU8825_REG_SARDOUT_RAM_STATUS, &adc_mg1);
+
+	/* Configure settings for second reading of SARADC */
+	regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+			   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_JKR2, 0);
+	regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+			   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 | NAU8825_SPKR_DWN1R |
+			   NAU8825_SPKR_DWN1L, NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 |
+			   NAU8825_SPKR_DWN1R | NAU8825_SPKR_DWN1L);
+	regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+			   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 | NAU8825_SPKR_DWN1R |
+			   NAU8825_SPKR_DWN1L, NAU8825_SPKR_ENGND1);
+	regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+			   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_JKR2,
+			   NAU8825_MICBIAS_JKSLV);
+	regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+			   NAU8825_SAR_INPUT_MASK, NAU8825_SAR_INPUT_JKSLV);
+	regmap_read(regmap, NAU8825_REG_SARDOUT_RAM_STATUS, &adc_mg2);
+
+	/* Disable phase */
+	snd_soc_dapm_disable_pin(dapm, "SAR");
+	snd_soc_dapm_disable_pin(dapm, "MICBIAS");
+	snd_soc_dapm_sync(dapm);
+
+	regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+			   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_LOWNOISE_MASK |
+			   NAU8825_MICBIAS_VOLTAGE_MASK, nau8825->micbias_voltage);
+	regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+			   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 | NAU8825_SPKR_DWN1R |
+			   NAU8825_SPKR_DWN1L, NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2 |
+			   NAU8825_SPKR_DWN1R | NAU8825_SPKR_DWN1L);
+	regmap_update_bits(regmap, NAU8825_REG_ANALOG_CONTROL_1,
+			   NAU8825_TESTDACIN_MASK, NAU8825_TESTDACIN_GND);
+	regmap_write(regmap, NAU8825_REG_TRIM_SETTINGS, 0);
+	regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+			   NAU8825_SAR_TRACKING_GAIN_MASK | NAU8825_SAR_HV_SEL_MASK,
+			   nau8825->sar_voltage << NAU8825_SAR_TRACKING_GAIN_SFT);
+	regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+			   NAU8825_SAR_COMPARE_TIME_MASK | NAU8825_SAR_SAMPLING_TIME_MASK,
+			   (nau8825->sar_compare_time << NAU8825_SAR_COMPARE_TIME_SFT) |
+			   (nau8825->sar_sampling_time << NAU8825_SAR_SAMPLING_TIME_SFT));
+	dev_dbg(nau8825->dev, "adc_mg1:%x, adc_mg2:%x\n", adc_mg1, adc_mg2);
+
+	/* Confirmation phase */
+	if (adc_mg1 > adc_mg2) {
+		dev_dbg(nau8825->dev, "OMTP (micgnd1) mic connected\n");
+
+		/* Unground MICGND1 */
+		regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+				   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2,
+				   NAU8825_SPKR_ENGND2);
+		/* Attach 2kOhm Resistor from MICBIAS to MICGND1 */
+		regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+				   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_JKR2,
+				   NAU8825_MICBIAS_JKR2);
+		/* Attach SARADC to MICGND1 */
+		regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+				   NAU8825_SAR_INPUT_MASK,
+				   NAU8825_SAR_INPUT_JKR2);
+	} else if (adc_mg1 < adc_mg2) {
+		dev_dbg(nau8825->dev, "CTIA (micgnd2) mic connected\n");
+
+		/* Unground MICGND2 */
+		regmap_update_bits(regmap, NAU8825_REG_HSD_CTRL,
+				   NAU8825_SPKR_ENGND1 | NAU8825_SPKR_ENGND2,
+				   NAU8825_SPKR_ENGND1);
+		/* Attach 2kOhm Resistor from MICBIAS to MICGND2 */
+		regmap_update_bits(regmap, NAU8825_REG_MIC_BIAS,
+				   NAU8825_MICBIAS_JKSLV | NAU8825_MICBIAS_JKR2,
+				   NAU8825_MICBIAS_JKSLV);
+		/* Attach SARADC to MICGND2 */
+		regmap_update_bits(regmap, NAU8825_REG_SAR_CTRL,
+				   NAU8825_SAR_INPUT_MASK,
+				   NAU8825_SAR_INPUT_JKSLV);
+	} else {
+		dev_err(nau8825->dev, "Jack broken.\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int nau8825_jack_insert(struct nau8825 *nau8825)
@@ -1787,11 +1912,22 @@ static int nau8825_jack_insert(struct nau8825 *nau8825)
 		snd_soc_dapm_sync(dapm);
 		break;
 	case 3:
-		/* detect error case */
-		dev_err(nau8825->dev, "detection error; disable mic function\n");
-		type = SND_JACK_HEADPHONE;
+		/* Detection failure case */
+		dev_warn(nau8825->dev,
+			 "Detection failure. Try the manually mechanism for jack type checking.\n");
+		if (!nau8825_high_imped_detection(nau8825)) {
+			type = SND_JACK_HEADSET;
+			snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
+			snd_soc_dapm_force_enable_pin(dapm, "SAR");
+			snd_soc_dapm_sync(dapm);
+		} else
+			type = SND_JACK_HEADPHONE;
 		break;
 	}
+
+	/* Update to the default divider of internal clock for power saving */
+	regmap_update_bits(regmap, NAU8825_REG_CLK_DIVIDER,
+			   NAU8825_CLK_MCLK_SRC_MASK, 0xf);
 
 	/* Leaving HPOL/R grounded after jack insert by default. They will be
 	 * ungrounded as part of the widget power up sequence at the beginning
