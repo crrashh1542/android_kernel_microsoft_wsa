@@ -1105,9 +1105,8 @@ static void iwl_init_he_hw_capab(struct iwl_trans *trans,
 
 	memcpy(iftype_data, iwl_he_eht_capa, sizeof(iwl_he_eht_capa));
 
-	ieee80211_sband_set_iftypes_data(sband, iftype_data);
-	ieee80211_sband_set_num_iftypes_data(sband,
-					     ARRAY_SIZE(iwl_he_eht_capa));
+	_ieee80211_set_sband_iftype_data(sband, iftype_data,
+					 ARRAY_SIZE(iwl_he_eht_capa));
 
 	for (i = 0; i < ieee80211_sband_get_num_iftypes_data(sband); i++)
 		iwl_nvm_fixup_sband_iftd(trans, data, sband, &iftype_data[i],

@@ -1067,6 +1067,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	supp_he = false;
 	supp_eht = false;
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		const struct ieee80211_sband_iftype_data *iftd;
 		struct ieee80211_supported_band *sband;
 
 		sband = local->hw.wiphy->bands[band];
@@ -1113,12 +1114,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		supp_ht = supp_ht || sband->ht_cap.ht_supported;
 		supp_vht = supp_vht || sband->vht_cap.vht_supported;
 
-		for (i = 0; i < ieee80211_sband_get_num_iftypes_data(sband); i++) {
-			const struct ieee80211_sband_iftype_data *iftd;
-
-			iftd = ieee80211_sband_get_iftypes_data_entry(sband,
-								      i);
-
+		for_each_sband_iftype_data(sband, i, iftd) {
 			supp_he = supp_he || iftd->he_cap.has_he;
 			supp_eht = supp_eht || cfg_eht_cap_has_eht(iftd);
 		}

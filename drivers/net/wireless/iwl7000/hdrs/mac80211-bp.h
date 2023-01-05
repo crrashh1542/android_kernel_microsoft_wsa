@@ -663,22 +663,10 @@ struct ieee80211_sband_iftype_data {
 	struct ieee80211_sta_he_cap he_cap;
 };
 
-static inline void
-ieee80211_sband_set_num_iftypes_data(struct ieee80211_supported_band *sband,
-				     u16 n)
-{
-}
-
 static inline u16
 ieee80211_sband_get_num_iftypes_data(struct ieee80211_supported_band *sband)
 {
 	return 0;
-}
-
-static inline void
-ieee80211_sband_set_iftypes_data(struct ieee80211_supported_band *sband,
-				 const struct ieee80211_sband_iftype_data *data)
-{
 }
 
 static inline struct ieee80211_sband_iftype_data *
@@ -703,24 +691,10 @@ ieee80211_get_sband_iftype_data(const struct ieee80211_supported_band *sband,
 	return NULL;
 }
 #else  /* CFG80211_VERSION < KERNEL_VERSION(4,19,0) */
-static inline void
-ieee80211_sband_set_num_iftypes_data(struct ieee80211_supported_band *sband,
-				     u16 n)
-{
-	sband->n_iftype_data = n;
-}
-
 static inline u16
 ieee80211_sband_get_num_iftypes_data(struct ieee80211_supported_band *sband)
 {
 	return sband->n_iftype_data;
-}
-
-static inline void
-ieee80211_sband_set_iftypes_data(struct ieee80211_supported_band *sband,
-				 const struct ieee80211_sband_iftype_data *data)
-{
-	sband->iftype_data = data;
 }
 
 static inline const struct ieee80211_sband_iftype_data *
@@ -2406,6 +2380,29 @@ static inline void backport_netif_napi_add(struct net_device *dev,
 }
 #define netif_napi_add LINUX_BACKPORT(netif_napi_add)
 #endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+static inline void
+_ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
+				 const struct ieee80211_sband_iftype_data *iftd,
+				 u16 n_iftd)
+{
+#if CFG80211_VERSION >= KERNEL_VERSION(4,19,0)
+	sband->iftype_data = iftd;
+	sband->n_iftype_data = n_iftd;
+#endif
+}
+
+#if CFG80211_VERSION < KERNEL_VERSION(4,19,0)
+#define for_each_sband_iftype_data(sband, i, iftd)	\
+	for (; 0 ;)
+#else
+#define for_each_sband_iftype_data(sband, i, iftd)	\
+	for (i = 0, iftd = &(sband)->iftype_data[i];	\
+	     i < (sband)->n_iftype_data;		\
+	     i++, iftd = &(sband)->iftype_data[i])
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,19,0) */
+#endif /* CFG80211_VERSION < KERNEL_VERSION(6,3,0) */
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 #define cfg80211_req_link_disabled(req, link)	0
