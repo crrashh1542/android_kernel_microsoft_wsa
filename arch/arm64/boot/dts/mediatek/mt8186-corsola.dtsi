@@ -2044,6 +2044,10 @@
 	status = "okay";
 };
 
+&watchdog {
+	mediatek,reset-by-toprgu;
+};
+
 &xhci0 {
 	status = "okay";
 
