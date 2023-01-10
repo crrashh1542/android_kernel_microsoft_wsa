@@ -1659,7 +1659,7 @@ static int iwl_mvm_add_int_sta_common(struct iwl_mvm *mvm,
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.sta_id = sta->sta_id;
 
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) >= 12 &&
+	if (iwl_mvm_has_new_station_api(mvm->fw) &&
 	    sta->type == IWL_STA_AUX_ACTIVITY)
 		cmd.mac_id_n_color = cpu_to_le32(mac_id);
 	else

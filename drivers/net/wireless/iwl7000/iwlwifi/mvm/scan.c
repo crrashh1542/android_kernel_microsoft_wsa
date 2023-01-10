@@ -646,7 +646,7 @@ static void iwl_mvm_scan_fill_tx_cmd(struct iwl_mvm *mvm,
 							   NL80211_BAND_2GHZ,
 							   no_cck);
 
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) < 12) {
+	if (!iwl_mvm_has_new_station_api(mvm->fw)) {
 		tx_cmd[0].sta_id = mvm->aux_sta.sta_id;
 		tx_cmd[1].sta_id = mvm->aux_sta.sta_id;
 
@@ -1085,7 +1085,7 @@ static void iwl_mvm_fill_scan_config_v1(struct iwl_mvm *mvm, void *config,
 	memcpy(&cfg->mac_addr, &mvm->addresses[0].addr, ETH_ALEN);
 
 	/* This function should not be called when using ADD_STA ver >=12 */
-	WARN_ON_ONCE(iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) >= 12);
+	WARN_ON_ONCE(iwl_mvm_has_new_station_api(mvm->fw));
 
 	cfg->bcast_sta_id = mvm->aux_sta.sta_id;
 	cfg->channel_flags = channel_flags;
@@ -1136,7 +1136,7 @@ static void iwl_mvm_fill_scan_config_v2(struct iwl_mvm *mvm, void *config,
 	memcpy(&cfg->mac_addr, &mvm->addresses[0].addr, ETH_ALEN);
 
 	/* This function should not be called when using ADD_STA ver >=12 */
-	WARN_ON_ONCE(iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) >= 12);
+	WARN_ON_ONCE(iwl_mvm_has_new_station_api(mvm->fw));
 
 	cfg->bcast_sta_id = mvm->aux_sta.sta_id;
 	cfg->channel_flags = channel_flags;
@@ -1251,7 +1251,7 @@ int iwl_mvm_config_scan(struct iwl_mvm *mvm)
 
 	memset(&cfg, 0, sizeof(cfg));
 
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) < 12) {
+	if (!iwl_mvm_has_new_station_api(mvm->fw)) {
 		cfg.bcast_sta_id = mvm->aux_sta.sta_id;
 	} else if (iwl_fw_lookup_cmd_ver(mvm->fw, SCAN_CFG_CMD, 0) < 5) {
 		/*

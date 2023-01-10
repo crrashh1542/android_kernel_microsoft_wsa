@@ -1792,7 +1792,7 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	 * internal aux station for all aux activities that don't
 	 * requires a dedicated data queue.
 	 */
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) < 12) {
+	if (!iwl_mvm_has_new_station_api(mvm->fw)) {
 		 /*
 		  * In old version the aux station uses mac id like other
 		  * station and not lmac id
@@ -1996,7 +1996,7 @@ int iwl_mvm_load_d3_fw(struct iwl_mvm *mvm)
 		RCU_INIT_POINTER(mvm->fw_id_to_link_sta[i], NULL);
 	}
 
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 99) < 12) {
+	if (!iwl_mvm_has_new_station_api(mvm->fw)) {
 		/*
 		 * Add auxiliary station for scanning.
 		 * Newer versions of this command implies that the fw uses
