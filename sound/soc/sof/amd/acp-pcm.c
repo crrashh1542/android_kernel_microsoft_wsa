@@ -165,9 +165,41 @@ snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_subst
 	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
 	struct snd_soc_component *scomp = sdev->component;
 	enum acp_pcm_types pcm_id = PCM_NONE;
+	struct acp_dsp_stream *stream;
 	struct snd_sof_pcm *spcm;
 	u32 pos, buffersize;
 	u64 bytescount;
+
+	stream = substream->runtime->private_data;
+	spcm = snd_sof_find_spcm_dai(scomp, rtd);
+	pcm_id = get_id_from_list(spcm->pcm.pcm_name);
+
+	bytescount = acp_get_byte_count(sdev, substream, pcm_id);
+	if (bytescount < 0)
+		return -EINVAL;
+	if (!(strcmp(spcm->pcm.pcm_name, "Low Latency")) ||
+	    !(strcmp(spcm->pcm.pcm_name, "Media Playback MUX 1")))
+		bytescount = bytescount >> 2;
+
+	bytescount = bytescount - stream->bytescount;
+	buffersize = frames_to_bytes(substream->runtime, substream->runtime->buffer_size);
+	pos = do_div(bytescount, buffersize);
+
+	return bytes_to_frames(substream->runtime, pos);
+}
+EXPORT_SYMBOL_NS(acp_pcm_pointer, SND_SOC_SOF_AMD_COMMON);
+
+int acp_pcm_trigger(struct snd_sof_dev *sdev,
+		    struct snd_pcm_substream *substream, int cmd)
+{
+	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_component *scomp = sdev->component;
+	enum acp_pcm_types pcm_id = PCM_NONE;
+	struct acp_dsp_stream *stream;
+	struct snd_sof_pcm *spcm;
+	u64 bytescount;
+
+	stream = substream->runtime->private_data;
 
 	spcm = snd_sof_find_spcm_dai(scomp, rtd);
 	pcm_id = get_id_from_list(spcm->pcm.pcm_name);
@@ -179,9 +211,8 @@ snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_subst
 	    !(strcmp(spcm->pcm.pcm_name, "Media Playback MUX 1")))
 		bytescount = bytescount >> 2;
 
-	buffersize = frames_to_bytes(substream->runtime, substream->runtime->buffer_size);
-	pos = do_div(bytescount, buffersize);
+	stream->bytescount = bytescount;
 
-	return bytes_to_frames(substream->runtime, pos);
+	return 0;
 }
-EXPORT_SYMBOL_NS(acp_pcm_pointer, SND_SOC_SOF_AMD_COMMON);
+EXPORT_SYMBOL_NS(acp_pcm_trigger, SND_SOC_SOF_AMD_COMMON);
