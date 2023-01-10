@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -1795,7 +1795,7 @@ static void iwl_mvm_decode_eht_phy_data(struct iwl_mvm *mvm,
 
 	/* TODO: what about IWL_RX_PHY_DATA0_EHT_BW320_SLOT */
 
-	if (le32_get_bits(data0, IWL_RX_PHY_DATA0_EHT_SIGA_CRC_OK))
+	if (!le32_get_bits(data0, IWL_RX_PHY_DATA0_EHT_SIGA_CRC_OK))
 		usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BAD_USIG_CRC);
 
 	usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_PHY_VER_KNOWN);
