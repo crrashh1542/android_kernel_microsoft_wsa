@@ -673,6 +673,9 @@ static void iwl_mvm_mld_vif_cfg_changed_station(struct iwl_mvm *mvm,
 
 			/* FIXME: need to decide about misbehaving AP handling */
 			iwl_mvm_power_vif_assoc(mvm, vif);
+
+			if (IWL_MVM_TWT_TESTMODE)
+				iwl_mvm_set_twt_testmode(mvm);
 		} else if (iwl_mvm_mld_vif_have_valid_ap_sta(mvmvif)) {
 			iwl_mvm_mei_host_disassociated(mvm);
 

@@ -2195,7 +2195,7 @@ static u8 iwl_mvm_he_get_ppe_val(u8 *ppe, u8 ppe_pos_bit)
 	return res;
 }
 
-static void iwl_mvm_set_twt_testmode(struct iwl_mvm *mvm)
+void iwl_mvm_set_twt_testmode(struct iwl_mvm *mvm)
 {
 	struct iwl_dhc_twt_control *dhc_twt_control;
 	struct iwl_dhc_cmd *dhc_cmd;
