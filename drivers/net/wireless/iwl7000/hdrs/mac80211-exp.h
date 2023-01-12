@@ -19,8 +19,6 @@
 #define kstrtobool __iwl7000_kstrtobool
 #define kstrtobool_from_user __iwl7000_kstrtobool_from_user
 #endif /* < 4.6.0 */
-#define __alloc_bucket_spinlocks __iwl7000___alloc_bucket_spinlocks
-#define free_bucket_spinlocks __iwl7000_free_bucket_spinlocks
 #if CFG80211_VERSION < KERNEL_VERSION(5,6,0)
 #define ieee80211_get_vht_max_nss __iwl7000_ieee80211_get_vht_max_nss
 #endif
@@ -69,24 +67,6 @@
 #define ieee80211_rate_control_unregister __iwl7000_ieee80211_rate_control_unregister
 #define ieee80211_get_tx_rates __iwl7000_ieee80211_get_tx_rates
 #define rate_control_set_rates __iwl7000_rate_control_set_rates
-#ifdef CONFIG_PROVE_LOCKING
-#define lockdep_rht_mutex_is_held __iwl7000_lockdep_rht_mutex_is_held
-#define lockdep_rht_bucket_is_held __iwl7000_lockdep_rht_bucket_is_held
-#endif
-#define rhashtable_insert_slow __iwl7000_rhashtable_insert_slow
-#define rhashtable_walk_enter __iwl7000_rhashtable_walk_enter
-#define rhashtable_walk_exit __iwl7000_rhashtable_walk_exit
-#define rhashtable_walk_start_check __iwl7000_rhashtable_walk_start_check
-#define rhashtable_walk_next __iwl7000_rhashtable_walk_next
-#define rhashtable_walk_peek __iwl7000_rhashtable_walk_peek
-#define rhashtable_walk_stop __iwl7000_rhashtable_walk_stop
-#define rhashtable_init __iwl7000_rhashtable_init
-#define rhltable_init __iwl7000_rhltable_init
-#define rhashtable_free_and_destroy __iwl7000_rhashtable_free_and_destroy
-#define rhashtable_destroy __iwl7000_rhashtable_destroy
-#define __rht_bucket_nested __iwl7000___rht_bucket_nested
-#define rht_bucket_nested __iwl7000_rht_bucket_nested
-#define rht_bucket_nested_insert __iwl7000_rht_bucket_nested_insert
 #define ieee80211_sta_ps_transition __iwl7000_ieee80211_sta_ps_transition
 #define ieee80211_sta_pspoll __iwl7000_ieee80211_sta_pspoll
 #define ieee80211_sta_uapsd_trigger __iwl7000_ieee80211_sta_uapsd_trigger
