@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018 Intel Corporation
+ * Copyright (C) 2005-2014, 2018, 2022 Intel Corporation
  */
 #ifndef __user_infc_h__
 #define __user_infc_h__
@@ -32,5 +32,7 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 int iwl_xvt_user_cmd_execute(struct iwl_testmode *testmode, u32 cmd,
 			     struct iwl_tm_data *data_in,
 			     struct iwl_tm_data *data_out, bool *supported_cmd);
+
+void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt);
 
 #endif

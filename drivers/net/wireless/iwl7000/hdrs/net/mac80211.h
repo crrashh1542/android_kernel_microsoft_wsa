@@ -534,6 +534,7 @@ struct ieee80211_fils_discovery {
  * This structure keeps information about a BSS (and an association
  * to that BSS) that can change during the lifetime of the BSS.
  *
+ * @vif: reference to owning VIF
  * @addr: (link) address used locally
  * @link_id: link ID, or 0 for non-MLO
  * @htc_trig_based_pkt_ext: default PE in 4us units, if BSS supports HE
@@ -657,6 +658,8 @@ struct ieee80211_fils_discovery {
  * @color_change_color: the bss color that will be used after the change.
  */
 struct ieee80211_bss_conf {
+	struct ieee80211_vif *vif;
+
 	const u8 *bssid;
 	unsigned int link_id;
 	u8 addr[ETH_ALEN] __aligned(2);
@@ -1751,6 +1754,7 @@ enum ieee80211_offload_flags {
  * @ps: power-save mode (STA only). This flag is NOT affected by
  *	offchannel/dynamic_ps operations.
  * @aid: association ID number, valid only when @assoc is true
+ * @eml_cap: EML capabilities as described in P802.11be_D2.2 Figure 9-1002k.
  * @arp_addr_list: List of IPv4 addresses for hardware ARP filtering. The
  *	may filter ARP queries targeted for other addresses than listed here.
  *	The driver must allow ARP queries targeted for all address listed here
@@ -1773,6 +1777,7 @@ struct ieee80211_vif_cfg {
 	bool ibss_creator;
 	bool ps;
 	u16 aid;
+	u16 eml_cap;
 
 	__be32 arp_addr_list[IEEE80211_BSS_ARP_ADDR_LIST_LEN];
 	int arp_addr_cnt;
@@ -1910,6 +1915,10 @@ static inline bool lockdep_vif_mutex_held(struct ieee80211_vif *vif)
 #define link_conf_dereference_protected(vif, link_id)		\
 	rcu_dereference_protected((vif)->link_conf[link_id],	\
 				  lockdep_vif_mutex_held(vif))
+
+#define link_conf_dereference_check(vif, link_id)		\
+	rcu_dereference_check((vif)->link_conf[link_id],	\
+			      lockdep_vif_mutex_held(vif))
 
 /**
  * enum ieee80211_key_flags - key flags
@@ -2172,6 +2181,7 @@ struct ieee80211_sta_aggregates {
  * All link specific info for a STA link for a non MLD STA(single)
  * or a MLD STA(multiple entries) are stored here.
  *
+ * @sta: reference to owning STA
  * @addr: MAC address of the Link STA. For non-MLO STA this is same as the addr
  *	in ieee80211_sta. For MLO Link STA this addr can be same or different
  *	from addr in ieee80211_sta (representing MLD STA addr)
@@ -2192,6 +2202,8 @@ struct ieee80211_sta_aggregates {
  *
  */
 struct ieee80211_link_sta {
+	struct ieee80211_sta *sta;
+
 	u8 addr[ETH_ALEN];
 	u8 link_id;
 	enum ieee80211_smps_mode smps_mode;
@@ -2303,6 +2315,10 @@ static inline bool lockdep_sta_mutex_held(struct ieee80211_sta *pubsta)
 #define link_sta_dereference_protected(sta, link_id)		\
 	rcu_dereference_protected((sta)->link[link_id],		\
 				  lockdep_sta_mutex_held(sta))
+
+#define link_sta_dereference_check(sta, link_id)		\
+	rcu_dereference_check((sta)->link[link_id],		\
+			      lockdep_sta_mutex_held(sta))
 
 #define for_each_sta_active_link(vif, sta, link_sta, link_id)			\
 	for (link_id = 0; link_id < ARRAY_SIZE((sta)->link); link_id++)		\
@@ -3778,10 +3794,23 @@ struct ieee80211_prep_tx_info {
  *	the station. See @sta_pre_rcu_remove if needed.
  *	This callback can sleep.
  *
+ * @link_add_debugfs: Drivers can use this callback to add debugfs files
+ *	when a link is added to a mac80211 vif. This callback should be within
+ *	a CPTCFG_MAC80211_DEBUGFS conditional. This callback can sleep.
+ *	For non-MLO the callback will be called once for the default bss_conf
+ *	with the vif's directory rather than a separate subdirectory.
+ *
  * @sta_add_debugfs: Drivers can use this callback to add debugfs files
  *	when a station is added to mac80211's station list. This callback
  *	should be within a CPTCFG_MAC80211_DEBUGFS conditional. This
  *	callback can sleep.
+ *
+ * @link_sta_add_debugfs: Drivers can use this callback to add debugfs files
+ *	when a link is added to a mac80211 station. This callback
+ *	should be within a CPTCFG_MAC80211_DEBUGFS conditional. This
+ *	callback can sleep.
+ *	For non-MLO the callback will be called once for the deflink with the
+ *	station's directory rather than a separate subdirectory.
  *
  * @sta_notify: Notifies low level driver about power state transition of an
  *	associated station, AP,  IBSS/WDS/mesh peer etc. For a VIF operating
@@ -4252,10 +4281,18 @@ struct ieee80211_ops {
 	int (*sta_remove)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			  struct ieee80211_sta *sta);
 #ifdef CPTCFG_MAC80211_DEBUGFS
+	void (*link_add_debugfs)(struct ieee80211_hw *hw,
+				 struct ieee80211_vif *vif,
+				 struct ieee80211_bss_conf *link_conf,
+				 struct dentry *dir);
 	void (*sta_add_debugfs)(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta,
 				struct dentry *dir);
+	void (*link_sta_add_debugfs)(struct ieee80211_hw *hw,
+				     struct ieee80211_vif *vif,
+				     struct ieee80211_link_sta *link_sta,
+				     struct dentry *dir);
 #endif
 	void (*sta_notify)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			enum sta_notify_cmd, struct ieee80211_sta *sta);
@@ -7189,5 +7226,46 @@ static inline bool ieee80211_is_tx_data(struct sk_buff *skb)
 	return info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP ||
 	       ieee80211_is_data(hdr->frame_control);
 }
+
+/**
+ * ieee80211_set_active_links - set active links in client mode
+ * @vif: interface to set active links on
+ * @active_links: the new active links bitmap
+ *
+ * This changes the active links on an interface. The interface
+ * must be in client mode (in AP mode, all links are always active),
+ * and @active_links must be a subset of the vif's valid_links.
+ *
+ * If a link is switched off and another is switched on at the same
+ * time (e.g. active_links going from 0x1 to 0x10) then you will get
+ * a sequence of calls like
+ *  - change_vif_links(0x11)
+ *  - unassign_vif_chanctx(link_id=0)
+ *  - change_sta_links(0x11) for each affected STA (the AP)
+ *    (TDLS connections on now inactive links should be torn down)
+ *  - remove group keys on the old link (link_id 0)
+ *  - add new group keys (GTK/IGTK/BIGTK) on the new link (link_id 4)
+ *  - change_sta_links(0x10) for each affected STA (the AP)
+ *  - assign_vif_chanctx(link_id=4)
+ *  - change_vif_links(0x10)
+ *
+ * Note: This function acquires some mac80211 locks and must not
+ *	 be called with any driver locks held that could cause a
+ *	 lock dependency inversion. Best call it without locks.
+ */
+int ieee80211_set_active_links(struct ieee80211_vif *vif, u16 active_links);
+
+/**
+ * ieee80211_set_active_links_async - asynchronously set active links
+ * @vif: interface to set active links on
+ * @active_links: the new active links bitmap
+ *
+ * See ieee80211_set_active_links() for more information, the only
+ * difference here is that the link change is triggered async and
+ * can be called in any context, but the link switch will only be
+ * completed after it returns.
+ */
+void ieee80211_set_active_links_async(struct ieee80211_vif *vif,
+				      u16 active_links);
 
 #endif /* MAC80211_H */

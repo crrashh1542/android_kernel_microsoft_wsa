@@ -366,6 +366,9 @@ static void sta_remove_link(struct sta_info *sta, unsigned int link_id,
 	if (unhash)
 		link_sta_info_hash_del(sta->local, link_sta);
 
+	if (test_sta_flag(sta, WLAN_STA_INSERTED))
+		ieee80211_link_sta_debugfs_remove(link_sta);
+
 	if (link_sta != &sta->deflink)
 		alloc = container_of(link_sta, typeof(*alloc), info);
 
@@ -511,6 +514,7 @@ static void sta_info_add_link(struct sta_info *sta,
 	link_info->sta = sta;
 	link_info->link_id = link_id;
 	link_info->pub = link_sta;
+	link_info->pub->sta = &sta->sta;
 	link_sta->link_id = link_id;
 	rcu_assign_pointer(sta->link[link_id], link_info);
 	rcu_assign_pointer(sta->sta.link[link_id], link_sta);
@@ -537,7 +541,7 @@ __sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 	sta->sdata = sdata;
 
 	if (sta_info_alloc_link(local, &sta->deflink, gfp))
-		return NULL;
+		goto free;
 
 	if (link_id >= 0) {
 		sta_info_add_link(sta, link_id, &sta->deflink,
@@ -876,6 +880,26 @@ static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
 
 	ieee80211_sta_debugfs_add(sta);
 	rate_control_add_sta_debugfs(sta);
+	if (sta->sta.valid_links) {
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(sta->link); i++) {
+			struct link_sta_info *link_sta;
+
+			link_sta = rcu_dereference_protected(sta->link[i],
+							     lockdep_is_held(&local->sta_mtx));
+
+			if (!link_sta)
+				continue;
+
+			ieee80211_link_sta_debugfs_add(link_sta);
+			if (sdata->vif.active_links & BIT(i))
+				ieee80211_link_sta_debugfs_drv_add(link_sta);
+		}
+	} else {
+		ieee80211_link_sta_debugfs_add(&sta->deflink);
+		ieee80211_link_sta_debugfs_drv_add(&sta->deflink);
+	}
 
 	sinfo->generation = local->sta_generation;
 	cfg80211_new_sta(sdata->dev, sta->sta.addr, sinfo, GFP_KERNEL);
@@ -2129,22 +2153,30 @@ void ieee80211_sta_register_airtime(struct ieee80211_sta *pubsta, u8 tid,
 }
 EXPORT_SYMBOL(ieee80211_sta_register_airtime);
 
-void ieee80211_sta_recalc_aggregates(struct ieee80211_sta *pubsta)
+void __ieee80211_sta_recalc_aggregates(struct sta_info *sta, u16 active_links)
 {
-	struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
-	struct ieee80211_link_sta *link_sta;
-	int link_id, i;
 	bool first = true;
+	int link_id;
 
-	if (!pubsta->valid_links || !pubsta->mlo) {
-		pubsta->cur = &pubsta->deflink.agg;
+	if (!sta->sta.valid_links || !sta->sta.mlo) {
+		sta->sta.cur = &sta->sta.deflink.agg;
 		return;
 	}
 
 	rcu_read_lock();
-	for_each_sta_active_link(&sta->sdata->vif, pubsta, link_sta, link_id) {
+	for (link_id = 0; link_id < ARRAY_SIZE((sta)->link); link_id++) {
+		struct ieee80211_link_sta *link_sta;
+		int i;
+
+		if (!(active_links & BIT(link_id)))
+			continue;
+
+		link_sta = rcu_dereference(sta->sta.link[link_id]);
+		if (!link_sta)
+			continue;
+
 		if (first) {
-			sta->cur = pubsta->deflink.agg;
+			sta->cur = sta->sta.deflink.agg;
 			first = false;
 			continue;
 		}
@@ -2163,7 +2195,14 @@ void ieee80211_sta_recalc_aggregates(struct ieee80211_sta *pubsta)
 	}
 	rcu_read_unlock();
 
-	pubsta->cur = &sta->cur;
+	sta->sta.cur = &sta->cur;
+}
+
+void ieee80211_sta_recalc_aggregates(struct ieee80211_sta *pubsta)
+{
+	struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
+
+	__ieee80211_sta_recalc_aggregates(sta, sta->sdata->vif.active_links);
 }
 EXPORT_SYMBOL(ieee80211_sta_recalc_aggregates);
 
@@ -2413,9 +2452,9 @@ static inline u64 sta_get_tidstats_msdu(struct ieee80211_sta_rx_stats *rxstats,
 	u64 value;
 
 	do {
-		start = u64_stats_fetch_begin(&rxstats->syncp);
+		start = u64_stats_fetch_begin_irq(&rxstats->syncp);
 		value = rxstats->msdu[tid];
-	} while (u64_stats_fetch_retry(&rxstats->syncp, start));
+	} while (u64_stats_fetch_retry_irq(&rxstats->syncp, start));
 
 	return value;
 }
@@ -2483,9 +2522,9 @@ static inline u64 sta_get_stats_bytes(struct ieee80211_sta_rx_stats *rxstats)
 	u64 value;
 
 	do {
-		start = u64_stats_fetch_begin(&rxstats->syncp);
+		start = u64_stats_fetch_begin_irq(&rxstats->syncp);
 		value = rxstats->bytes;
-	} while (u64_stats_fetch_retry(&rxstats->syncp, start));
+	} while (u64_stats_fetch_retry_irq(&rxstats->syncp, start));
 
 	return value;
 }
@@ -2850,6 +2889,8 @@ int ieee80211_sta_allocate_link(struct sta_info *sta, unsigned int link_id)
 
 	sta_info_add_link(sta, link_id, &alloc->info, &alloc->sta);
 
+	ieee80211_link_sta_debugfs_add(&alloc->info);
+
 	return 0;
 }
 
@@ -2884,10 +2925,8 @@ int ieee80211_sta_activate_link(struct sta_info *sta, unsigned int link_id)
 
 	sta->sta.valid_links = new_links;
 
-	if (!test_sta_flag(sta, WLAN_STA_INSERTED)) {
-		ret = 0;
+	if (!test_sta_flag(sta, WLAN_STA_INSERTED))
 		goto hash;
-	}
 
 	/* Ensure the values are updated for the driver,
 	 * redone by sta_remove_link on failure.

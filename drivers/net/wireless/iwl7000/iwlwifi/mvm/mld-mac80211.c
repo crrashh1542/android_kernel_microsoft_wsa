@@ -14,7 +14,6 @@ static int iwl_mvm_mld_mac_add_interface(struct ieee80211_hw *hw,
 	mutex_lock(&mvm->mutex);
 
 	mvmvif->mvm = mvm;
-	RCU_INIT_POINTER(mvmvif->deflink.probe_resp_data, NULL);
 
 	/*
 	 * Not much to do here. The stack will not allow interface
@@ -169,12 +168,6 @@ static void iwl_mvm_mld_mac_remove_interface(struct ieee80211_hw *hw,
 		mvm->csme_vif = NULL;
 	}
 
-	probe_data = rcu_dereference_protected(mvmvif->deflink.probe_resp_data,
-					       lockdep_is_held(&mvm->mutex));
-	RCU_INIT_POINTER(mvmvif->deflink.probe_resp_data, NULL);
-	if (probe_data)
-		kfree_rcu(probe_data, rcu_head);
-
 	if (mvm->bf_allowed_vif == mvmvif) {
 		mvm->bf_allowed_vif = NULL;
 		vif->driver_flags &= ~(IEEE80211_VIF_BEACON_FILTER |
@@ -222,6 +215,12 @@ static void iwl_mvm_mld_mac_remove_interface(struct ieee80211_hw *hw,
 	iwl_mvm_mld_mac_ctxt_remove(mvm, vif);
 
 	RCU_INIT_POINTER(mvm->vif_id_to_mac[mvmvif->id], NULL);
+
+	probe_data = rcu_dereference_protected(mvmvif->deflink.probe_resp_data,
+					       lockdep_is_held(&mvm->mutex));
+	RCU_INIT_POINTER(mvmvif->deflink.probe_resp_data, NULL);
+	if (probe_data)
+		kfree_rcu(probe_data, rcu_head);
 
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
 		mvm->monitor_on = false;
@@ -275,6 +274,31 @@ static int __iwl_mvm_mld_assign_vif_chanctx(struct iwl_mvm *mvm,
 	ret = iwl_mvm_link_changed(mvm, vif, link_conf, 0, false);
 	if (ret)
 		goto out;
+
+	/*
+	 * Initialize rate control for the AP station, since we might be
+	 * doing a link switch here - we cannot initialize it before since
+	 * this needs the phy context assigned (and in FW?), and we cannot
+	 * do it later because it needs to be initialized as soon as we're
+	 * able to TX on the link, i.e. when active.
+	 *
+	 * Firmware restart isn't quite correct yet for MLO, but we don't
+	 * need to do it in that case anyway since it will happen from the
+	 * normal station state callback.
+	 */
+	if (mvmvif->ap_sta &&
+	    !test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status)) {
+		struct ieee80211_link_sta *link_sta;
+
+		rcu_read_lock();
+		link_sta = rcu_dereference(mvmvif->ap_sta->link[link_id]);
+
+		if (!WARN_ON_ONCE(!link_sta))
+			iwl_mvm_rs_rate_init(mvm, vif, mvmvif->ap_sta,
+					     link_conf, link_sta,
+					     phy_ctxt->channel->band);
+		rcu_read_unlock();
+	}
 
 	/* then activate */
 	ret = iwl_mvm_link_changed(mvm, vif, link_conf,
@@ -488,7 +512,7 @@ static int iwl_mvm_mld_mac_sta_state(struct ieee80211_hw *hw,
 				     enum ieee80211_sta_state old_state,
 				     enum ieee80211_sta_state new_state)
 {
-	struct iwl_mvm_sta_state_ops callbacks = {
+	static const struct iwl_mvm_sta_state_ops callbacks = {
 		.add_sta = iwl_mvm_mld_add_sta,
 		.update_sta = iwl_mvm_mld_update_sta,
 		.rm_sta = iwl_mvm_mld_rm_sta,
@@ -576,7 +600,7 @@ static void iwl_mvm_mld_vif_delete_all_stas(struct iwl_mvm *mvm,
 			continue;
 
 		iwl_mvm_sec_key_remove_ap(mvm, vif, link, i);
-		ret = iwl_mvm_mld_rm_sta_id(mvm, vif, link->ap_sta_id);
+		ret = iwl_mvm_mld_rm_sta_id(mvm, link->ap_sta_id);
 		if (ret)
 			IWL_ERR(mvm, "failed to remove AP station\n");
 
@@ -695,8 +719,12 @@ iwl_mvm_mld_link_info_changed_ap_ibss(struct iwl_mvm *mvm,
 	if (!mvmvif->ap_ibss_active)
 		return;
 
+	if (link_conf->he_support)
+		link_changes |= LINK_CONTEXT_MODIFY_HE_PARAMS;
+
 	if (changes & (BSS_CHANGED_ERP_CTS_PROT | BSS_CHANGED_HT |
-		       BSS_CHANGED_BANDWIDTH | BSS_CHANGED_QOS) &&
+		       BSS_CHANGED_BANDWIDTH | BSS_CHANGED_QOS |
+		       BSS_CHANGED_HE_BSS_COLOR) &&
 		       iwl_mvm_link_changed(mvm, vif, link_conf,
 					    link_changes, true))
 		IWL_ERR(mvm, "failed to update MAC %pM\n", vif->addr);
@@ -776,7 +804,7 @@ iwl_mvm_mld_switch_vif_chanctx(struct ieee80211_hw *hw,
 			       int n_vifs,
 			       enum ieee80211_chanctx_switch_mode mode)
 {
-	struct iwl_mvm_switch_vif_chanctx_ops ops = {
+	static const struct iwl_mvm_switch_vif_chanctx_ops ops = {
 		.__assign_vif_chanctx = __iwl_mvm_mld_assign_vif_chanctx,
 		.__unassign_vif_chanctx = __iwl_mvm_mld_unassign_vif_chanctx,
 	};
@@ -870,7 +898,7 @@ static int iwl_mvm_mld_roc(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   struct ieee80211_channel *channel, int duration,
 			   enum ieee80211_roc_type type)
 {
-	struct iwl_mvm_roc_ops ops = {
+	static const struct iwl_mvm_roc_ops ops = {
 		.add_aux_sta_for_hs20 = iwl_mvm_mld_add_aux_sta,
 		.switch_phy_ctxt = iwl_mvm_link_switch_phy_ctx,
 	};
@@ -899,21 +927,27 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 		for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 			struct ieee80211_bss_conf *link_conf;
 
-			/* FIXME: allow use of sdata_dereference()? */
-			link_conf = rcu_dereference_protected(vif->link_conf[i], 1);
+			link_conf = link_conf_dereference_protected(vif, i);
 			if (link_conf &&
 			    rcu_access_pointer(link_conf->chanctx_conf))
 				n_active++;
 		}
 
-		if (n_active > 1)
+		if (vif->type == NL80211_IFTYPE_AP) {
+			if (n_active > mvm->fw->ucode_capa.num_beacons)
+				return -EOPNOTSUPP;
+		} else if (n_active > 1) {
 			return -EOPNOTSUPP;
+		}
 	}
 
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 		int r;
 
-		if (!(new_links & BIT(i)))
+		if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
+			break;
+
+		if (!(added & BIT(i)))
 			continue;
 		new_link[i] = kzalloc(sizeof(*new_link[i]), GFP_KERNEL);
 		if (!new_link[i]) {
@@ -957,7 +991,10 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 			if (WARN_ON(!link_conf))
 				continue;
 
-			mvmvif->link[i] = new_link[i];
+			if (!test_bit(IWL_MVM_STATUS_IN_HW_RESTART,
+				      &mvm->status))
+				mvmvif->link[i] = new_link[i];
+			new_link[i] = NULL;
 			err = iwl_mvm_add_link(mvm, vif, link_conf);
 			if (err)
 				goto out_err;
@@ -973,9 +1010,8 @@ iwl_mvm_mld_change_vif_links(struct ieee80211_hw *hw,
 out_err:
 	/* we really don't have a good way to roll back here ... */
 	mutex_unlock(&mvm->mutex);
-	return err;
+
 free:
-	/* nor to free the unused ones ... this is a mess for now, sorry */
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++)
 		kfree(new_link[i]);
 	return err;
@@ -1087,7 +1123,7 @@ const struct ieee80211_ops iwl_mvm_mld_hw_ops = {
 	.add_nan_func = iwl_mvm_add_nan_func,
 	.del_nan_func = iwl_mvm_del_nan_func,
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
-	.sta_add_debugfs = iwl_mvm_sta_add_debugfs,
+	.link_sta_add_debugfs = iwl_mvm_link_sta_add_debugfs,
 #endif
 	.set_hw_timestamp = iwl_mvm_set_hw_timestamp,
 

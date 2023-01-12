@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2022 Intel Corporation
+ * Copyright (C) 2022 - 2023 Intel Corporation
  */
 #include <linux/kernel.h>
 #include <net/mac80211.h>
@@ -52,10 +52,10 @@ static u32 iwl_mvm_get_sec_sta_mask(struct iwl_mvm *mvm,
 	return iwl_mvm_sta_fw_id_mask(mvm, sta, keyconf->link_id);
 }
 
-static u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
-				 struct ieee80211_vif *vif,
-				 struct ieee80211_sta *sta,
-				 struct ieee80211_key_conf *keyconf)
+u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
+			  struct ieee80211_vif *vif,
+			  struct ieee80211_sta *sta,
+			  struct ieee80211_key_conf *keyconf)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	u32 flags = 0;
@@ -98,6 +98,59 @@ static u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
 	return flags;
 }
 
+struct iwl_mvm_sta_key_update_data {
+	struct ieee80211_sta *sta;
+	u32 old_sta_mask;
+	u32 new_sta_mask;
+	int err;
+};
+
+static void iwl_mvm_mld_update_sta_key(struct ieee80211_hw *hw,
+				       struct ieee80211_vif *vif,
+				       struct ieee80211_sta *sta,
+				       struct ieee80211_key_conf *key,
+				       void *_data)
+{
+	u32 cmd_id = WIDE_ID(DATA_PATH_GROUP, SEC_KEY_CMD);
+	struct iwl_mvm_sta_key_update_data *data = _data;
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	struct iwl_sec_key_cmd cmd = {
+		.action = cpu_to_le32(FW_CTXT_ACTION_MODIFY),
+		.u.modify.old_sta_mask = cpu_to_le32(data->old_sta_mask),
+		.u.modify.new_sta_mask = cpu_to_le32(data->new_sta_mask),
+		.u.modify.key_id = cpu_to_le32(key->keyidx),
+		.u.modify.key_flags =
+			cpu_to_le32(iwl_mvm_get_sec_flags(mvm, vif, sta, key)),
+	};
+	int err;
+
+	/* only need to do this for pairwise keys (link_id == -1) */
+	if (sta != data->sta || key->link_id >= 0)
+		return;
+
+	err = iwl_mvm_send_cmd_pdu(mvm, cmd_id, CMD_ASYNC, sizeof(cmd), &cmd);
+
+	if (err)
+		data->err = err;
+}
+
+int iwl_mvm_mld_update_sta_keys(struct iwl_mvm *mvm,
+				struct ieee80211_vif *vif,
+				struct ieee80211_sta *sta,
+				u32 old_sta_mask,
+				u32 new_sta_mask)
+{
+	struct iwl_mvm_sta_key_update_data data = {
+		.sta = sta,
+		.old_sta_mask = old_sta_mask,
+		.new_sta_mask = new_sta_mask,
+	};
+
+	ieee80211_iter_keys_rcu(mvm->hw, vif, iwl_mvm_mld_update_sta_key,
+				&data);
+	return data.err;
+}
+
 static int __iwl_mvm_sec_key_del(struct iwl_mvm *mvm, u32 sta_mask,
 				 u32 key_flags, u32 keyidx, u32 flags)
 {
@@ -112,13 +165,9 @@ static int __iwl_mvm_sec_key_del(struct iwl_mvm *mvm, u32 sta_mask,
 	return iwl_mvm_send_cmd_pdu(mvm, cmd_id, flags, sizeof(cmd), &cmd);
 }
 
-int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
-			struct ieee80211_vif *vif,
-			struct ieee80211_sta *sta,
-			struct ieee80211_key_conf *keyconf)
+int iwl_mvm_mld_send_key(struct iwl_mvm *mvm, u32 sta_mask, u32 key_flags,
+			 struct ieee80211_key_conf *keyconf)
 {
-	u32 sta_mask = iwl_mvm_get_sec_sta_mask(mvm, vif, sta, keyconf);
-	u32 key_flags = iwl_mvm_get_sec_flags(mvm, vif, sta, keyconf);
 	u32 cmd_id = WIDE_ID(DATA_PATH_GROUP, SEC_KEY_CMD);
 	struct iwl_sec_key_cmd cmd = {
 		.action = cpu_to_le32(FW_CTXT_ACTION_ADD),
@@ -127,9 +176,14 @@ int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
 		.u.add.key_flags = cpu_to_le32(key_flags),
 		.u.add.tx_seq = cpu_to_le64(atomic64_read(&keyconf->tx_pn)),
 	};
+	int max_key_len = sizeof(cmd.u.add.key);
 	int ret;
 
-	if (WARN_ON(keyconf->keylen > sizeof(cmd.u.add.key)))
+	if (keyconf->cipher == WLAN_CIPHER_SUITE_WEP40 ||
+	    keyconf->cipher == WLAN_CIPHER_SUITE_WEP104)
+		max_key_len -= IWL_SEC_WEP_KEY_OFFSET;
+
+	if (WARN_ON(keyconf->keylen > max_key_len))
 		return -EINVAL;
 
 	if (WARN_ON(!sta_mask))
@@ -169,6 +223,17 @@ int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
 	}
 
 	return ret;
+}
+
+int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
+			struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta,
+			struct ieee80211_key_conf *keyconf)
+{
+	u32 sta_mask = iwl_mvm_get_sec_sta_mask(mvm, vif, sta, keyconf);
+	u32 key_flags = iwl_mvm_get_sec_flags(mvm, vif, sta, keyconf);
+
+	return iwl_mvm_mld_send_key(mvm, sta_mask, key_flags, keyconf);
 }
 
 static int _iwl_mvm_sec_key_del(struct iwl_mvm *mvm,

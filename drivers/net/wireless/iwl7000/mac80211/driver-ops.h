@@ -465,6 +465,22 @@ static inline void drv_sta_remove(struct ieee80211_local *local,
 }
 
 #ifdef CPTCFG_MAC80211_DEBUGFS
+static inline void drv_link_add_debugfs(struct ieee80211_local *local,
+					struct ieee80211_sub_if_data *sdata,
+					struct ieee80211_bss_conf *link_conf,
+					struct dentry *dir)
+{
+	might_sleep();
+
+	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return;
+
+	if (local->ops->link_add_debugfs)
+		local->ops->link_add_debugfs(&local->hw, &sdata->vif,
+					     link_conf, dir);
+}
+
 static inline void drv_sta_add_debugfs(struct ieee80211_local *local,
 				       struct ieee80211_sub_if_data *sdata,
 				       struct ieee80211_sta *sta,
@@ -479,6 +495,22 @@ static inline void drv_sta_add_debugfs(struct ieee80211_local *local,
 	if (local->ops->sta_add_debugfs)
 		local->ops->sta_add_debugfs(&local->hw, &sdata->vif,
 					    sta, dir);
+}
+
+static inline void drv_link_sta_add_debugfs(struct ieee80211_local *local,
+					    struct ieee80211_sub_if_data *sdata,
+					    struct ieee80211_link_sta *link_sta,
+					    struct dentry *dir)
+{
+	might_sleep();
+
+	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return;
+
+	if (local->ops->link_sta_add_debugfs)
+		local->ops->link_sta_add_debugfs(&local->hw, &sdata->vif,
+						 link_sta, dir);
 }
 #endif
 

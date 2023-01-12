@@ -310,9 +310,11 @@ static inline u16 ieee80211_sn_sub(u16 sn1, u16 sn2)
 struct ieee80211_hdr {
 	__le16 frame_control;
 	__le16 duration_id;
-	u8 addr1[ETH_ALEN];
-	u8 addr2[ETH_ALEN];
-	u8 addr3[ETH_ALEN];
+	struct_group(addrs,
+		u8 addr1[ETH_ALEN];
+		u8 addr2[ETH_ALEN];
+		u8 addr3[ETH_ALEN];
+	);
 	__le16 seq_ctrl;
 	u8 addr4[ETH_ALEN];
 } __packed __aligned(2);
@@ -1349,8 +1351,11 @@ struct ieee80211_mgmt {
 /* Supported rates membership selectors */
 #define BSS_MEMBERSHIP_SELECTOR_HT_PHY	127
 #define BSS_MEMBERSHIP_SELECTOR_VHT_PHY	126
-#define BSS_MEMBERSHIP_SELECTOR_HE_PHY	122
+#define BSS_MEMBERSHIP_SELECTOR_GLK	125
+#define BSS_MEMBERSHIP_SELECTOR_EPS	124
 #define BSS_MEMBERSHIP_SELECTOR_SAE_H2E 123
+#define BSS_MEMBERSHIP_SELECTOR_HE_PHY	122
+#define BSS_MEMBERSHIP_SELECTOR_EHT_PHY	121
 
 /* mgmt header + 1 byte category code */
 #define IEEE80211_MIN_ACTION_SIZE offsetof(struct ieee80211_mgmt, u.action.u)
@@ -4571,18 +4576,17 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
 
 	switch (u16_get_bits(control, IEEE80211_ML_CONTROL_TYPE)) {
 	case IEEE80211_ML_CONTROL_TYPE_BASIC:
-		common += sizeof(struct ieee80211_mle_basic_common_info);
-		break;
 	case IEEE80211_ML_CONTROL_TYPE_PREQ:
-		common += sizeof(struct ieee80211_mle_preq_common_info);
+	case IEEE80211_ML_CONTROL_TYPE_TDLS:
+		/*
+		 * The length is the first octet pointed by mle->variable so no
+		 * need to add anything
+		 */
 		break;
 	case IEEE80211_ML_CONTROL_TYPE_RECONF:
 		if (control & IEEE80211_MLC_RECONF_PRES_MLD_MAC_ADDR)
 			common += ETH_ALEN;
 		return common;
-	case IEEE80211_ML_CONTROL_TYPE_TDLS:
-		common += sizeof(struct ieee80211_mle_tdls_common_info);
-		break;
 	case IEEE80211_ML_CONTROL_TYPE_PRIO_ACCESS:
 		if (control & IEEE80211_MLC_PRIO_ACCESS_PRES_AP_MLD_MAC_ADDR)
 			common += ETH_ALEN;
@@ -4592,7 +4596,41 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
 		return 0;
 	}
 
-	return common + mle->variable[0];
+	return sizeof(*mle) + common + mle->variable[0];
+}
+
+/**
+ * ieee80211_mle_get_eml_cap - returns the EML capability
+ * @data: pointer to the multi link EHT IE
+ *
+ * The element is assumed to be big enough. This must be checked by
+ * ieee80211_mle_size_ok().
+ * If the EML capability can't be found (the type is not basic, or
+ * the EML capability presence bit is clear), 0 will be returned.
+ */
+static inline u16 ieee80211_mle_get_eml_cap(const u8 *data)
+{
+	const struct ieee80211_multi_link_elem *mle = (const void *)data;
+	u16 control = le16_to_cpu(mle->control);
+	const u8 *common = mle->variable;
+
+	if (u16_get_bits(control, IEEE80211_ML_CONTROL_TYPE) != IEEE80211_ML_CONTROL_TYPE_BASIC)
+		return 0;
+
+	/* common points now at the beginning of ieee80211_mle_basic_common_info */
+	common += sizeof(struct ieee80211_mle_basic_common_info);
+
+	if (!(control & IEEE80211_MLC_BASIC_PRES_EML_CAPA))
+		return 0;
+
+	if (control & IEEE80211_MLC_BASIC_PRES_LINK_ID)
+		common += 1;
+	if (control & IEEE80211_MLC_BASIC_PRES_BSS_PARAM_CH_CNT)
+		common += 1;
+	if (control & IEEE80211_MLC_BASIC_PRES_MED_SYNC_DELAY)
+		common += 2;
+
+	return get_unaligned_le16(common);
 }
 
 /**
@@ -4600,7 +4638,7 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
  * @data: pointer to the element data
  * @len: length of the containing element
  */
-static inline bool ieee80211_mle_size_ok(const u8 *data, u8 len)
+static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 {
 	const struct ieee80211_multi_link_elem *mle = (const void *)data;
 	u8 fixed = sizeof(*mle);
@@ -4665,6 +4703,7 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, u8 len)
 
 enum ieee80211_mle_subelems {
 	IEEE80211_MLE_SUBELEM_PER_STA_PROFILE		= 0,
+	IEEE80211_MLE_SUBELEM_FRAGMENT		        = 254,
 };
 
 #define IEEE80211_MLE_STA_CONTROL_LINK_ID			0x000f
@@ -4682,6 +4721,46 @@ struct ieee80211_mle_per_sta_profile {
 	u8 sta_info_len;
 	u8 variable[];
 } __packed;
+
+/**
+ * ieee80211_mle_sta_prof_size_ok - validate multi-link element sta profile size
+ * @data: pointer to the sub element data
+ * @len: length of the containing sub element
+ */
+static inline bool ieee80211_mle_sta_prof_size_ok(const u8 *data, size_t len)
+{
+	const struct ieee80211_mle_per_sta_profile *prof = (const void *)data;
+	u16 control;
+	u8 fixed = sizeof(*prof);
+	u8 info_len = 1;
+
+	if (len < fixed)
+		return false;
+
+	control = le16_to_cpu(prof->control);
+
+	if (control & IEEE80211_MLE_STA_CONTROL_STA_MAC_ADDR_PRESENT)
+		info_len += 6;
+	if (control & IEEE80211_MLE_STA_CONTROL_BEACON_INT_PRESENT)
+		info_len += 2;
+	if (control & IEEE80211_MLE_STA_CONTROL_TSF_OFFS_PRESENT)
+		info_len += 8;
+	if (control & IEEE80211_MLE_STA_CONTROL_DTIM_INFO_PRESENT)
+		info_len += 2;
+	if (control & IEEE80211_MLE_STA_CONTROL_BSS_PARAM_CHANGE_CNT_PRESENT)
+		info_len += 1;
+
+	if (control & IEEE80211_MLE_STA_CONTROL_COMPLETE_PROFILE &&
+	    control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE) {
+		if (control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE)
+			info_len += 2;
+		else
+			info_len += 1;
+	}
+
+	return prof->sta_info_len >= info_len &&
+	       fixed + prof->sta_info_len <= len;
+}
 
 #define for_each_mle_subelement(_elem, _data, _len)			\
 	if (ieee80211_mle_size_ok(_data, _len))				\
