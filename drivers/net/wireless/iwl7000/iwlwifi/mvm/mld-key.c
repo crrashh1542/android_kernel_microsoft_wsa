@@ -297,8 +297,11 @@ static int _iwl_mvm_sec_key_del(struct iwl_mvm *mvm,
 		if (WARN_ON(!mvm_link))
 			return -EINVAL;
 
-		if (mvm_link->igtk == keyconf)
+		if (mvm_link->igtk == keyconf) {
+			/* no longer in HW - mark for later */
+			mvm_link->igtk->hw_key_idx = STA_KEY_IDX_INVALID;
 			mvm_link->igtk = NULL;
+		}
 	}
 
 	ret = __iwl_mvm_sec_key_del(mvm, sta_mask, key_flags, keyconf->keyidx,
