@@ -1,7 +1,7 @@
 /*
  * ChromeOS backport definitions
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 #include <linux/if_ether.h>
 #include <net/cfg80211.h>
@@ -2228,6 +2228,9 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
 	cfg80211_mgmt_tx_status(wdev, status->cookie, status->buf, status->len,
 				status->ack, gfp);
 }
+#endif /* CFG80211_VERSION < KERNEL_VERSION(5,19,0) */
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
 
 struct cfg80211_set_hw_timestamp {
 	const u8 *macaddr;
@@ -2252,8 +2255,6 @@ ieee80211_chanwidth_rate_flags(enum nl80211_chan_width width)
 }
 
 #define cfg80211_ch_switch_notify(dev, chandef, link_id) cfg80211_ch_switch_notify(dev, chandef)
-#define cfg80211_beacon_data_link_id(params)	0
-#define link_sta_params_mld_mac(params)	NULL
 #define link_sta_params_link_id(params)	-1
 #define link_sta_params_link_mac(params)	NULL
 #define WIPHY_FLAG_SUPPORTS_MLO 0
@@ -2327,10 +2328,7 @@ bp_ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 }
 #endif /* >= 5.8 */
 
-#define cfg80211_req_link_id(req)		-1
 #define cfg80211_req_ap_mld_addr(req)		NULL
-#define cfg80211_req_link_bss(req, link)	NULL
-#define cfg80211_req_link_elems_len(req, link)	0
 
 static inline const struct wiphy_iftype_ext_capab *
 cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
@@ -2351,27 +2349,32 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_mgmt_tx_params_link_id(params)			-1
 #define cfg80211_mgmt_tx_params_link_id_mask(params)		0
 #else /* CFG80211 < 5.20 */
-#define cfg80211_beacon_data_link_id(params)	(params->link_id)
 #define link_sta_params_link_id(params) ((params)->link_sta_params.link_id)
 #define link_sta_params_link_mac(params) ((params)->link_sta_params.link_mac)
 #define cfg80211_disassoc_ap_addr(req)	((req)->ap_addr)
-#define cfg80211_req_link_id(req)		((req)->link_id)
 #define cfg80211_req_ap_mld_addr(req)		((req)->ap_mld_addr)
-#define cfg80211_req_link_bss(req, link)	((req)->links[link].bss
-#define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len
 #define cfg80211_ext_capa_eml_capabilities(ift_ext_capa)	(ift_ext_capa)->eml_capabilities
 #define cfg80211_ext_capa_mld_capa_and_ops(ift_ext_capa)	(ift_ext_capa)->mld_capa_and_ops
 #define cfg80211_mgmt_tx_params_link_id(params)	((params)->link_id)
 #define cfg80211_mgmt_tx_params_link_id_mask(params) BIT((params)->link_id)
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
+#define link_sta_params_mld_mac(params)		NULL
+#define cfg80211_beacon_data_link_id(params)	0
+#define cfg80211_req_link_bss(req, link)	NULL
+#define cfg80211_req_link_id(req)		-1
+#define cfg80211_req_link_elems_len(req, link)	0
 #define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
 #else
+#define cfg80211_beacon_data_link_id(params)	(params->link_id)
+#define cfg80211_req_link_bss(req, link)	((req)->links[link].bss
+#define cfg80211_req_link_id(req)		((req)->link_id)
+#define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len
 #define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,0,0) && \
+#if CFG80211_VERSION < KERNEL_VERSION(6,2,0) && \
     !defined(cfg80211_rx_control_port)
 static inline bool
 iwl7000_cfg80211_rx_control_port(struct net_device *dev, struct sk_buff *skb,
@@ -2383,7 +2386,7 @@ iwl7000_cfg80211_rx_control_port(struct net_device *dev, struct sk_buff *skb,
 #define cfg80211_rx_control_port iwl7000_cfg80211_rx_control_port
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
 #define cfg80211_txq_params_link_id(params)			0
 #define cfg80211_bss_params_link_id(params)			-1
 #else

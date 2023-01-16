@@ -5426,8 +5426,9 @@ static void ieee80211_rx_mgmt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 
 		resp.links[link_id].bss = assoc_data->link[link_id].bss;
 		resp.links[link_id].addr = link->conf->addr;
+#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
 		resp.links[link_id].status = assoc_data->link[link_id].status;
-
+#endif
 		/* get uapsd queues configuration - same for all links */
 		resp.uapsd_queues = 0;
 		for (ac = 0; ac < IEEE80211_NUM_ACS; ac++)

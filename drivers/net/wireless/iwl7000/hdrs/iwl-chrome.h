@@ -4,7 +4,7 @@
  *
  * ChromeOS backport definitions
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 #include <linux/version.h>
@@ -420,9 +420,11 @@ static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
 #endif /* LINUX_VERSION_IS_LESS(4,14,0) */
 
 /* avoid conflicts with other headers */
+#if LINUX_VERSION_IS_LESS(6,1,0)
 #ifdef is_signed_type
 #undef is_signed_type
 #endif
+#endif /* LINUX_VERSION_IS_LESS(6,1,0) */
 
 #ifndef offsetofend
 /**
