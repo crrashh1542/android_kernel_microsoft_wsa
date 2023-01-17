@@ -772,6 +772,7 @@ static void iwl_mvm_init_modparams(struct iwl_mvm *mvm)
 #define IWL_DBG_CFG(t, n)			/* nothing */
 #define IWL_DBG_CFG_STR(n)			/* nothing */
 #define IWL_DBG_CFG_NODEF(t, n)			/* nothing */
+#define IWL_DBG_CFG_DEF(t, n, v)		/* nothing */
 #define IWL_DBG_CFG_BIN(n)			/* nothing */
 #define IWL_DBG_CFG_BINA(n, max)		/* nothing */
 #define IWL_DBG_CFG_RANGE(t, n, min, max)	/* nothing */
@@ -785,6 +786,7 @@ static void iwl_mvm_init_modparams(struct iwl_mvm *mvm)
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
+#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
@@ -1597,6 +1599,9 @@ void iwl_mvm_stop_device(struct iwl_mvm *mvm)
 static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 {
 	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	void *iftype_free = NULL;
+#endif
 	int i;
 
 	if (mvm->mei_registered) {
@@ -1669,7 +1674,16 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 	if (mvm->mei_registered)
 		iwl_mei_unregister_complete();
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mvm->trans->dbg_cfg.eml_capa_override >= 0)
+		iftype_free = (void *)(uintptr_t)mvm->hw->wiphy->iftype_ext_capab;
+#endif
+
 	ieee80211_free_hw(mvm->hw);
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	kfree(iftype_free);
+#endif
 }
 
 struct iwl_async_handler_entry {

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2013-2015, 2018-2022 Intel Corporation
+ * Copyright (C) 2013-2015, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  */
 #if !defined(__IWL_DBG_CFG_H__) || defined(DBG_CFG_REINCLUDE)
@@ -25,6 +25,7 @@ struct iwl_dbg_cfg {
 
 #define IWL_DBG_CFG(type, name)		type name;
 #define IWL_DBG_CFG_NODEF(type, name)	type name;
+#define IWL_DBG_CFG_DEF(type, name, v)	type name;
 #define IWL_DBG_CFG_BIN(name)		struct iwl_dbg_cfg_bin name;
 #define IWL_DBG_CFG_STR(name)	const char *name;
 #define IWL_DBG_CFG_BINA(name, max)	struct iwl_dbg_cfg_bin name[max]; \
@@ -183,6 +184,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(bool, MVM_MEI_REPORT_RFKILL)
 	IWL_DBG_CFG(u8, MVM_MIN_BEACON_INTERVAL_TU)
 	IWL_DBG_CFG_RANGE(u8, MVM_ADAPTIVE_DWELL_NUM_APS_OVERRIDE, 0, 10)
+	IWL_DBG_CFG_DEF(int, eml_capa_override, -1)
 #endif /* CPTCFG_IWLMVM */
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	IWL_DBG_CFG_NODEF(u32, dnt_out_mode)
@@ -291,6 +293,7 @@ struct iwl_dbg_cfg {
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
+#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE

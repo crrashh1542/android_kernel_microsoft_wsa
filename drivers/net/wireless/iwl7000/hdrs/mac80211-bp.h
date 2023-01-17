@@ -2345,6 +2345,7 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
        return NULL;
 }
 #define cfg80211_ext_capa_eml_capabilities(ift_ext_capa)	0
+#define cfg80211_ext_capa_set_eml_capabilities(if_ext_capa, v)	do {} while (0)
 #define cfg80211_ext_capa_mld_capa_and_ops(ift_ext_capa)	0
 #define cfg80211_mgmt_tx_params_link_id(params)			-1
 #define cfg80211_mgmt_tx_params_link_id_mask(params)		0
@@ -2354,6 +2355,7 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_disassoc_ap_addr(req)	((req)->ap_addr)
 #define cfg80211_req_ap_mld_addr(req)		((req)->ap_mld_addr)
 #define cfg80211_ext_capa_eml_capabilities(ift_ext_capa)	(ift_ext_capa)->eml_capabilities
+#define cfg80211_ext_capa_set_eml_capabilities(if_ext_capa, v)	(ift_ext_capa)->eml_capabilities = (v)
 #define cfg80211_ext_capa_mld_capa_and_ops(ift_ext_capa)	(ift_ext_capa)->mld_capa_and_ops
 #define cfg80211_mgmt_tx_params_link_id(params)	((params)->link_id)
 #define cfg80211_mgmt_tx_params_link_id_mask(params) BIT((params)->link_id)

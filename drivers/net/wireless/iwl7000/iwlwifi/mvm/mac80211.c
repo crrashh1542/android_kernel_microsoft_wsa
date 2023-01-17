@@ -863,6 +863,28 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	hw->wiphy->available_antennas_tx = iwl_mvm_get_valid_tx_ant(mvm);
 	hw->wiphy->available_antennas_rx = iwl_mvm_get_valid_rx_ant(mvm);
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	/* do this late so we don't need to worry about many error paths */
+	if (mvm->trans->dbg_cfg.eml_capa_override >= 0 &&
+	    hw->wiphy->iftype_ext_capab) {
+		struct wiphy_iftype_ext_capab *capa;
+
+		capa = kmemdup(hw->wiphy->iftype_ext_capab,
+			       sizeof(*capa) * hw->wiphy->num_iftype_ext_capab,
+			       GFP_KERNEL);
+		if (!capa)
+			return -ENOMEM;
+
+		for (i = 0; i < hw->wiphy->num_iftype_ext_capab; i++)
+			cfg80211_ext_capa_set_eml_capabilities(capa,
+							       mvm->trans->dbg_cfg.eml_capa_override);
+
+#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
+		hw->wiphy->iftype_ext_capab = capa;
+#endif
+	}
+#endif
+
 	ret = ieee80211_register_hw(mvm->hw);
 	if (ret) {
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
@@ -870,6 +892,19 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 #endif
 		iwl_mvm_leds_exit(mvm);
 	}
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mvm->trans->dbg_cfg.eml_capa_override >= 0 &&
+	    hw->wiphy->iftype_ext_capab && ret) {
+		kfree(hw->wiphy->iftype_ext_capab);
+#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
+		hw->wiphy->num_iftype_ext_capab = 0;
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
+		hw->wiphy->iftype_ext_capab = NULL;
+#endif
+	}
+#endif
 
 	return ret;
 }
