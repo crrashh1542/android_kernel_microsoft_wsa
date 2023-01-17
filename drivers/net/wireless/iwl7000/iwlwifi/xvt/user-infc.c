@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -798,6 +798,8 @@ static u16 iwl_xvt_get_offload_assist(struct ieee80211_hdr *hdr)
 	*/
 	if (hdrlen % 4 && !amsdu)
 		offload_assist |= BIT(TX_CMD_OFFLD_PAD);
+
+	offload_assist |= (hdrlen / 2) << TX_CMD_OFFLD_MH_SIZE;
 
 	return offload_assist;
 }
