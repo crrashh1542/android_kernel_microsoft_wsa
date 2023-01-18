@@ -326,8 +326,17 @@ void iwl_send_dbg_dump_complete_cmd(struct iwl_fw_runtime *fwrt,
 				    u32 timepoint,
 				    u32 timepoint_data);
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+#define IWL_FW_CHECK_FAILED(_obj, _fmt, ...)				\
+	do {								\
+		IWL_ERR(_obj, _fmt, __VA_ARGS__);			\
+		if ((_obj)->trans->dbg_cfg.FW_MISBEHAVE_NMI)		\
+			iwl_force_nmi((_obj)->trans);			\
+	} while (0)
+#else
 #define IWL_FW_CHECK_FAILED(_obj, _fmt, ...)				\
 	IWL_ERR_LIMIT(_obj, _fmt, __VA_ARGS__)
+#endif
 
 #define IWL_FW_CHECK(_obj, _cond, _fmt, ...)				\
 	({								\

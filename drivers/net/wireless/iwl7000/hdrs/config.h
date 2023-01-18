@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2018-2022 Intel Corporation
+ * Copyright(c) 2018-2023 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -29,6 +29,7 @@
 #define CPTCFG_IWLWIFI_DEBUG 1
 #define CPTCFG_IWLWIFI_NUM_CHANNELS 2
 #define CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES 1
+#define CPTCFG_IWLWIFI_FW_MISBEHAVE_NMI_DEFAULT 0
 #define CPTCFG_IWLWIFI_DISALLOW_OLDER_FW 1
 #define CPTCFG_IWLWIFI_NUM_STA_INTERFACES 1
 #define CPTCFG_REJECT_NONUPSTREAM_NL80211 1
