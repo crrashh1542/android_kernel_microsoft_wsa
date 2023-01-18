@@ -400,7 +400,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 #endif
 
 	/* Set this early since we need to have it for the check below */
-	if (mvm->mld_api_is_used &&
+	if (mvm->mld_api_is_used && !iwlwifi_mod_params.disable_11ax &&
 	    mvm->trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_BZ)
 		hw->wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
 
