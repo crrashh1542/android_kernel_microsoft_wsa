@@ -714,10 +714,7 @@ static int cam_lrme_mgr_hw_dump(void *hw_mgr_priv, void *hw_dump_args)
 		sizeof(struct cam_lrme_hw_dump_args));
 	dump_args->offset = lrme_dump_args.offset;
 
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
-	if (rc)
-		CAM_ERR(CAM_LRME, "Cpu put failed handle %u",
-			dump_args->buf_handle);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 

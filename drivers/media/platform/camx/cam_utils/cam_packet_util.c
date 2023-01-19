@@ -161,9 +161,7 @@ int cam_packet_util_get_kmd_buffer(struct cam_packet *packet,
 	kmd_buf->used_bytes = 0;
 
 rel_kmd_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
-		CAM_WARN(CAM_UTIL, "Put KMD Buf failed for: 0x%x",
-			cmd_desc->mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 
 	return rc;
 }
@@ -250,6 +248,8 @@ int cam_packet_util_process_patches(struct cam_packet *packet,
 				patch_desc[i].src_buf_hdl,
 				patch_desc[i].src_offset,
 				(uint32_t)src_buf_size);
+			cam_mem_put_cpu_buf((int32_t)
+				patch_desc[i].dst_buf_hdl);
 			return -EINVAL;
 		}
 
@@ -266,6 +266,8 @@ int cam_packet_util_process_patches(struct cam_packet *packet,
 				patch_desc[i].src_buf_hdl,
 				patch_desc[i].src_offset,
 				(uint32_t)dst_buf_len);
+			cam_mem_put_cpu_buf((int32_t)
+				patch_desc[i].dst_buf_hdl);
 			return -EINVAL;
 		}
 
@@ -279,9 +281,7 @@ int cam_packet_util_process_patches(struct cam_packet *packet,
 			"patch is done for dst %pK with src %pK value %llx",
 			dst_cpu_addr, src_buf_iova_addr,
 			*((uint64_t *)dst_cpu_addr));
-		if (cam_mem_put_cpu_buf(patch_desc[i].dst_buf_hdl))
-			CAM_WARN(CAM_UTIL, "unable to put dst buf address:0x%x",
-				patch_desc[i].dst_buf_hdl);
+		cam_mem_put_cpu_buf(patch_desc[i].dst_buf_hdl);
 
 		if (pf_dump_flag) {
 			CAM_INFO(CAM_UTIL,
@@ -387,9 +387,7 @@ int cam_packet_util_process_generic_cmd_buffer(
 	}
 
 rel_cmd_buf:
-	if (cam_mem_put_cpu_buf(cmd_buf->mem_handle))
-		CAM_WARN(CAM_UTIL, "unable to put dst buf address: 0x%x",
-			cmd_buf->mem_handle);
+	cam_mem_put_cpu_buf(cmd_buf->mem_handle);
 
 	return rc;
 }

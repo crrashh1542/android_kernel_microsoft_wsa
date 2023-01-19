@@ -186,9 +186,7 @@ static int cam_jpeg_mgr_process_irq(void *priv, void *data)
 
 	list_add_tail(&p_cfg_req->list, &hw_mgr->free_req_list);
 
-	if (cam_mem_put_cpu_buf(mem_hdl))
-		CAM_WARN(CAM_JPEG, "unable to put info for cmd buf: 0x%x",
-			mem_hdl);
+	cam_mem_put_cpu_buf(mem_hdl);
 	return rc;
 }
 
@@ -494,17 +492,15 @@ static int cam_jpeg_mgr_process_cmd(void *priv, void *data)
 		goto rel_cpu_buf;
 	}
 	p_cfg_req->submit_timestamp = cam_common_util_get_curr_timestamp();
-	if (cam_mem_put_cpu_buf(
-		config_args->hw_update_entries[CAM_JPEG_CHBASE].handle))
-		CAM_WARN(CAM_JPEG, "unable to put info for cmd buf: 0x%x",
-			config_args->hw_update_entries[CAM_JPEG_CHBASE].handle);
+	cam_mem_put_cpu_buf(
+		config_args->hw_update_entries[CAM_JPEG_CHBASE].handle);
 
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
 	return rc;
 
 rel_cpu_buf:
-	if (cam_mem_put_cpu_buf(
-		config_args->hw_update_entries[CAM_JPEG_CHBASE].handle))
+	cam_mem_put_cpu_buf(
+		config_args->hw_update_entries[CAM_JPEG_CHBASE].handle);
 		CAM_WARN(CAM_JPEG, "unable to put info for cmd buf: 0x%x",
 			config_args->hw_update_entries[CAM_JPEG_CHBASE].handle);
 end_callcb:
@@ -1154,9 +1150,7 @@ hw_dump:
 	}
 	dump_args->offset = jpeg_dump_args.offset;
 end:
-	if (cam_mem_put_cpu_buf(dump_args->buf_handle))
-		CAM_ERR(CAM_JPEG, "Cpu put failed handle %u",
-			dump_args->buf_handle);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
 	return rc;
 }

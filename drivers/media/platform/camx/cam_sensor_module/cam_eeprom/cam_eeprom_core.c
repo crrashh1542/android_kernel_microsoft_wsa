@@ -697,17 +697,13 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 			}
 		}
 		e_ctrl->cal_data.num_map = num_map + 1;
-		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-			CAM_WARN(CAM_EEPROM, "Failed to put cpu buf: 0x%x",
-				cmd_desc[i].mem_handle);
+		cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	}
 
 	return rc;
 
 rel_cmd_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-		CAM_WARN(CAM_EEPROM, "Failed to put cpu buf: 0x%x",
-			cmd_desc[i].mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 
 	return rc;
 }
@@ -778,9 +774,7 @@ static int32_t cam_eeprom_get_cal_data(struct cam_eeprom_ctrl_t *e_ctrl,
 				e_ctrl->cal_data.num_data);
 			memcpy(read_buffer, e_ctrl->cal_data.mapdata,
 					e_ctrl->cal_data.num_data);
-			if (cam_mem_put_cpu_buf(io_cfg->mem_handle[0]))
-				CAM_WARN(CAM_EEPROM, "Fail in put buffer: 0x%x",
-					io_cfg->mem_handle[0]);
+			cam_mem_put_cpu_buf(io_cfg->mem_handle[0]);
 		} else {
 			CAM_ERR(CAM_EEPROM, "Invalid direction");
 			rc = -EINVAL;
@@ -790,9 +784,7 @@ static int32_t cam_eeprom_get_cal_data(struct cam_eeprom_ctrl_t *e_ctrl,
 	return rc;
 
 rel_cmd_buf:
-	if (cam_mem_put_cpu_buf(io_cfg->mem_handle[0]))
-		CAM_WARN(CAM_EEPROM, "Fail in put buffer : 0x%x",
-			io_cfg->mem_handle[0]);
+	cam_mem_put_cpu_buf(io_cfg->mem_handle[0]);
 
 	return rc;
 }
@@ -919,9 +911,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		break;
 	}
 
-	if (cam_mem_put_cpu_buf(dev_config.packet_handle))
-		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%llx",
-			 dev_config.packet_handle);
+	cam_mem_put_cpu_buf(dev_config.packet_handle);
 
 	return rc;
 
@@ -939,9 +929,7 @@ error:
 	e_ctrl->cal_data.num_map = 0;
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 release_buf:
-	if (cam_mem_put_cpu_buf(dev_config.packet_handle))
-		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%llx",
-			 dev_config.packet_handle);
+	cam_mem_put_cpu_buf(dev_config.packet_handle);
 
 	return rc;
 }
@@ -1174,4 +1162,3 @@ release_mutex:
 
 	return rc;
 }
-

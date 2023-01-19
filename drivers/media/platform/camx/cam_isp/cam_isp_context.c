@@ -303,10 +303,7 @@ static void cam_isp_ctx_dump_req(struct cam_isp_ctx_req *req_isp,
 			}
 put:
 			if (need_put) {
-				if (cam_mem_put_cpu_buf(req_isp->cfg[i].handle))
-					CAM_WARN(CAM_ISP,
-						"Failed to put cpu buf: 0x%x",
-						req_isp->cfg[i].handle);
+				cam_mem_put_cpu_buf(req_isp->cfg[i].handle);
 				need_put = false;
 				continue;
 			}
@@ -330,9 +327,7 @@ put:
 			} else {
 				cam_cdm_util_dump_cmd_buf(buf_start, buf_end);
 			}
-			if (cam_mem_put_cpu_buf(req_isp->cfg[i].handle))
-				CAM_WARN(CAM_ISP, "Failed to put cpu buf: 0x%x",
-					req_isp->cfg[i].handle);
+			cam_mem_put_cpu_buf(req_isp->cfg[i].handle);
 		}
 	}
 }
@@ -2406,9 +2401,7 @@ hw_dump:
 			dump_info->offset = dump_args.offset;
 		}
 end:
-		if (cam_mem_put_cpu_buf(dump_info->buf_handle))
-			CAM_ERR(CAM_ISP, "Cpu put failed handle %u",
-				dump_info->buf_handle);
+		cam_mem_put_cpu_buf(dump_info->buf_handle);
 	}
 	return rc;
 }
@@ -3453,9 +3446,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	if (rc)
 		goto put_ref;
 
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_ISP, "Can not put packet address : 0x%llx",
-			cmd->packet_handle);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 
 	CAM_DBG(CAM_REQ,
 		"Preprocessing Config req_id %lld successful on ctx %u",
@@ -3470,9 +3461,7 @@ put_ref:
 				req_isp->fence_map_out[i].sync_id);
 	}
 free_cpu_buf:
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_ISP, "Can not put packet address: 0x%llx",
-			cmd->packet_handle);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
