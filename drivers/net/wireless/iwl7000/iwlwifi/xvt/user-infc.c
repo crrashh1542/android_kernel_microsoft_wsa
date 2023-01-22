@@ -1438,6 +1438,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 	struct iwl_xvt_tx_mod_task_data *task_data =
 		(struct iwl_xvt_tx_mod_task_data *)data;
 	struct tx_meta_data *xvt_tx;
+	struct completion *completion = task_data->completion;
 
 	xvt = task_data->xvt;
 	xvt_tx = &xvt->tx_meta_data[task_data->lmac_id];
@@ -1491,7 +1492,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 
 	xvt_tx->tx_task_operating = false;
 	kfree(data);
-	kthread_complete_and_exit(task_data->completion, err);
+	kthread_complete_and_exit(completion, err);
 }
 
 static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
