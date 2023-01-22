@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2021-2022 Intel Corporation
+ * Copyright(c) 2021-2023 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -226,7 +226,7 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans, u8 **data, size_t *len)
 
 	*len = package_size - sizeof(*package);
 	*data = kmemdup(package->data, *len, GFP_KERNEL);
-	if (!data)
+	if (!*data)
 		return -ENOMEM;
 	kfree(package);
 
