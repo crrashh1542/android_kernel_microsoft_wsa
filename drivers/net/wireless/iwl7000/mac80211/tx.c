@@ -589,24 +589,8 @@ ieee80211_select_link_key(struct ieee80211_tx_data *tx)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)tx->skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(tx->skb);
-	enum {
-		USE_NONE,
-		USE_MGMT_KEY,
-		USE_MCAST_KEY,
-	} which_key = USE_NONE;
 	struct ieee80211_link_data *link;
 	unsigned int link_id;
-
-	if (ieee80211_is_group_privacy_action(tx->skb))
-		which_key = USE_MCAST_KEY;
-	else if (ieee80211_is_mgmt(hdr->frame_control) &&
-		 is_multicast_ether_addr(hdr->addr1) &&
-		 ieee80211_is_robust_mgmt_frame(tx->skb))
-		which_key = USE_MGMT_KEY;
-	else if (is_multicast_ether_addr(hdr->addr1))
-		which_key = USE_MCAST_KEY;
-	else
-		return NULL;
 
 	link_id = u32_get_bits(info->control.flags, IEEE80211_TX_CTRL_MLO_LINK);
 	if (link_id == IEEE80211_LINK_UNSPECIFIED) {
@@ -617,14 +601,14 @@ ieee80211_select_link_key(struct ieee80211_tx_data *tx)
 			return NULL;
 	}
 
-	switch (which_key) {
-	case USE_NONE:
-		break;
-	case USE_MGMT_KEY:
-		return rcu_dereference(link->default_mgmt_key);
-	case USE_MCAST_KEY:
+	if (ieee80211_is_group_privacy_action(tx->skb))
 		return rcu_dereference(link->default_multicast_key);
-	}
+	else if (ieee80211_is_mgmt(hdr->frame_control) &&
+		 is_multicast_ether_addr(hdr->addr1) &&
+		 ieee80211_is_robust_mgmt_frame(tx->skb))
+		return rcu_dereference(link->default_mgmt_key);
+	else if (is_multicast_ether_addr(hdr->addr1))
+		return rcu_dereference(link->default_multicast_key);
 
 	return NULL;
 }
@@ -2331,6 +2315,10 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 	u16 len_rthdr;
 	int hdrlen;
 
+	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	if (unlikely(!ieee80211_sdata_running(sdata)))
+		goto fail;
+
 	memset(info, 0, sizeof(*info));
 	info->flags = IEEE80211_TX_CTL_REQ_TX_STATUS |
 		      IEEE80211_TX_CTL_INJECTED;
@@ -2390,8 +2378,6 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 	 * This is necessary, for example, for old hostapd versions that
 	 * don't use nl80211-based management TX/RX.
 	 */
-	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-
 	list_for_each_entry_rcu(tmp_sdata, &local->interfaces, list) {
 		if (!ieee80211_sdata_running(tmp_sdata))
 			continue;
@@ -4208,7 +4194,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 	struct sk_buff *next;
 	int len = skb->len;
 
-	if (unlikely(skb->len < ETH_HLEN)) {
+	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
 		kfree_skb(skb);
 		return;
 	}
@@ -4605,7 +4591,7 @@ netdev_tx_t ieee80211_subif_start_xmit_8023(struct sk_buff *skb,
 	struct ieee80211_key *key;
 	struct sta_info *sta;
 
-	if (unlikely(skb->len < ETH_HLEN)) {
+	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
 		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -5983,6 +5969,9 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 	skb_reset_network_header(skb);
 	skb_reset_mac_header(skb);
 
+	if (local->hw.queues < IEEE80211_NUM_ACS)
+		goto start_xmit;
+
 	/* update QoS header to prioritize control port frames if possible,
 	 * priorization also happens for control port frames send over
 	 * AF_PACKET
@@ -5990,6 +5979,7 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 	rcu_read_lock();
 	err = ieee80211_lookup_ra_sta(sdata, skb, &sta);
 	if (err) {
+		dev_kfree_skb(skb);
 		rcu_read_unlock();
 		return err;
 	}
@@ -6004,11 +5994,12 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 		 * for MLO STA, the SA should be the AP MLD address, but
 		 * the link ID has been selected already
 		 */
-		if (sta->sta.mlo)
+		if (sta && sta->sta.mlo)
 			memcpy(ehdr->h_source, sdata->vif.addr, ETH_ALEN);
 	}
 	rcu_read_unlock();
 
+start_xmit:
 	/* mutex lock is only needed for incrementing the cookie counter */
 	mutex_lock(&local->mtx);
 

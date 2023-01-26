@@ -101,6 +101,7 @@ struct iwl_mvm_scan_params {
 	bool scan_6ghz;
 	bool enable_6ghz_passive;
 	bool respect_p2p_go, respect_p2p_go_hb;
+	u8 bssid[ETH_ALEN] __aligned(2);
 };
 
 static inline void *iwl_mvm_get_scan_req_umac_data(struct iwl_mvm *mvm)
@@ -762,7 +763,7 @@ iwl_mvm_build_scan_probe(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 
 	frame->frame_control = cpu_to_le16(IEEE80211_STYPE_PROBE_REQ);
 	eth_broadcast_addr(frame->da);
-	eth_broadcast_addr(frame->bssid);
+	ether_addr_copy(frame->bssid, params->bssid);
 	frame->seq_ctrl = 0;
 
 	pos = frame->u.probe_req.variable;
@@ -2675,7 +2676,7 @@ static int iwl_mvm_build_scan_cmd(struct iwl_mvm *mvm,
 	u8 scan_ver;
 
 	lockdep_assert_held(&mvm->mutex);
-	memset(mvm->scan_cmd, 0, ksize(mvm->scan_cmd));
+	memset(mvm->scan_cmd, 0, mvm->scan_cmd_size);
 
 	if (!fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_UMAC_SCAN)) {
 		hcmd->id = SCAN_OFFLOAD_REQUEST_CMD;
@@ -2841,6 +2842,7 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	params.pass_all = true;
 	params.n_match_sets = 0;
 	params.match_sets = NULL;
+	ether_addr_copy(params.bssid, req->bssid);
 
 	params.scan_plans = &scan_plan;
 	params.n_scan_plans = 1;
@@ -2938,6 +2940,7 @@ int iwl_mvm_sched_scan_start(struct iwl_mvm *mvm,
 	params.pass_all =  iwl_mvm_scan_pass_all(mvm, req);
 	params.n_match_sets = req->n_match_sets;
 	params.match_sets = req->match_sets;
+	eth_broadcast_addr(params.bssid);
 	if (!req->n_scan_plans)
 		return -EINVAL;
 
@@ -3153,7 +3156,7 @@ static int iwl_mvm_scan_stop_wait(struct iwl_mvm *mvm, int type)
 				     1 * HZ);
 }
 
-static int iwl_scan_req_umac_get_size(u8 scan_ver)
+static size_t iwl_scan_req_umac_get_size(u8 scan_ver)
 {
 	switch (scan_ver) {
 	case 12:
@@ -3166,7 +3169,7 @@ static int iwl_scan_req_umac_get_size(u8 scan_ver)
 	return 0;
 }
 
-int iwl_mvm_scan_size(struct iwl_mvm *mvm)
+size_t iwl_mvm_scan_size(struct iwl_mvm *mvm)
 {
 	int base_size, tail_size;
 	u8 scan_ver = iwl_fw_lookup_cmd_ver(mvm->fw, SCAN_REQ_UMAC,

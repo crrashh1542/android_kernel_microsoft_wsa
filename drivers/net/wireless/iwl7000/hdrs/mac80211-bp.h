@@ -533,6 +533,10 @@ static inline const u8 *cfg80211_find_ext_ie(u8 ext_eid, const u8 *ies, int len)
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,10,0) */
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+#define NL80211_EXT_FEATURE_POWERED_ADDR_CHANGE -1
+#endif /* CFG80211_VERSION < KERNEL_VERSION(6,1,0) */
+
 #if CFG80211_VERSION >= KERNEL_VERSION(4,11,0) || \
      CFG80211_VERSION < KERNEL_VERSION(4,9,0)
 static inline
@@ -873,6 +877,13 @@ static inline void timer_setup(struct timer_list *timer,
 static inline u32 get_random_u32(void)
 {
 	return get_random_int();
+}
+#endif
+
+#if LINUX_VERSION_IS_LESS(6,1,0)
+static inline u16 get_random_u16(void)
+{
+	return get_random_int() & 0xffff;
 }
 #endif
 
@@ -1726,12 +1737,24 @@ cfg80211_iftd_set_he_6ghz_capa(struct ieee80211_sband_iftype_data *iftd,
 static inline void
 LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
 						  struct cfg80211_chan_def *chandef,
-						  u8 count, bool quiet)
+						  unsigned int link_id, u8 count,
+						  bool quiet)
 {
 	cfg80211_ch_switch_started_notify(dev, chandef, count);
 }
 #define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
-#endif /* < 5.11 */
+
+#elif CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+static inline void
+LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
+						  struct cfg80211_chan_def *chandef,
+						  unsigned int link_id, u8 count,
+						  bool quiet)
+{
+	cfg80211_ch_switch_started_notify(dev, chandef, count, quiet);
+}
+#define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
+#endif /* < 6.1.0 */
 
 #ifndef ETH_TLEN
 #define ETH_TLEN	2		/* Octets in ethernet type field */
@@ -2247,6 +2270,7 @@ struct iwl7000_cfg80211_rx_assoc_resp {
 	struct {
 		const u8 *addr;
 		struct cfg80211_bss *bss;
+		u16 status;
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
 };
 
@@ -2361,6 +2385,18 @@ iwl7000_cfg80211_rx_control_port(struct net_device *dev, struct sk_buff *skb,
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
 #define cfg80211_txq_params_link_id(params)			0
+#define cfg80211_bss_params_link_id(params)			-1
 #else
 #define cfg80211_txq_params_link_id(params)			(params)->link_id
+#define cfg80211_bss_params_link_id(params)			((params)->link_id)
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+static inline void backport_netif_napi_add(struct net_device *dev,
+					   struct napi_struct *napi,
+					   int (*poll)(struct napi_struct *, int))
+{
+	netif_napi_add(dev, napi, poll, NAPI_POLL_WEIGHT);
+}
+#define netif_napi_add LINUX_BACKPORT(netif_napi_add)
 #endif

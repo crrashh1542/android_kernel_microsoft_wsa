@@ -222,7 +222,7 @@ static int iwl_dbg_tlv_alloc_region(struct iwl_trans *trans,
 	if (type == IWL_FW_INI_REGION_DEVICE_MEMORY &&
 	    reg->sub_type == IWL_FW_INI_REGION_DEVICE_MEMORY_SUBTYPE_HW_SMEM) {
 		IWL_DEBUG_FW(trans, "WRT: skipping HW-SMEM region\n");
-		return -EOPNOTSUPP;
+		return 0;
 	}
 #endif
 	if (type == IWL_FW_INI_REGION_INTERNAL_BUFFER) {
@@ -392,7 +392,7 @@ void iwl_dbg_tlv_del_timers(struct iwl_trans *trans)
 	struct iwl_dbg_tlv_timer_node *node, *tmp;
 
 	list_for_each_entry_safe(node, tmp, timer_list, list) {
-		timer_shutdown_sync(&node->timer);
+		del_timer_sync(&node->timer);
 		list_del(&node->list);
 		kfree(node);
 	}
@@ -753,7 +753,8 @@ static int iwl_dbg_tlv_update_dram(struct iwl_fw_runtime *fwrt,
 
 	if (le32_to_cpu(fwrt->trans->dbg.fw_mon_cfg[alloc_id].buf_location) !=
 			IWL_FW_INI_LOCATION_DRAM_PATH) {
-		IWL_DEBUG_FW(fwrt, "DRAM_PATH is not supported alloc_id %u\n", alloc_id);
+		IWL_DEBUG_FW(fwrt, "WRT: alloc_id %u location is not in DRAM_PATH\n",
+			     alloc_id);
 		return -1;
 	}
 
@@ -813,11 +814,15 @@ static void iwl_dbg_tlv_update_drams(struct iwl_fw_runtime *fwrt)
 
 	for (i = IWL_FW_INI_ALLOCATION_ID_DBGC1;
 	     i < IWL_FW_INI_ALLOCATION_NUM; i++) {
+		if (fwrt->trans->dbg.fw_mon_cfg[i].buf_location ==
+				IWL_FW_INI_LOCATION_INVALID)
+			continue;
+
 		ret = iwl_dbg_tlv_update_dram(fwrt, i, dram_info);
 		if (!ret)
 			dram_alloc = true;
 		else
-			IWL_WARN(fwrt,
+			IWL_INFO(fwrt,
 				 "WRT: Failed to set DRAM buffer for alloc id %d, ret=%d\n",
 				 i, ret);
 	}

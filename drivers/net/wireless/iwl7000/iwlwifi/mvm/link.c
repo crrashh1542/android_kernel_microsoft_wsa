@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2022 Intel Corporation
+ * Copyright (C) 2022 - 2023 Intel Corporation
  */
 #include "mvm.h"
 #include "time-event.h"
@@ -61,8 +61,11 @@ int iwl_mvm_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	if (link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID) {
 		link_info->fw_link_id = iwl_mvm_get_free_fw_link_id(mvm,
 								    mvmvif);
-		if (link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID)
+		if (link_info->fw_link_id >= ARRAY_SIZE(mvm->link_id_to_link_conf))
 			return -EINVAL;
+
+		rcu_assign_pointer(mvm->link_id_to_link_conf[link_info->fw_link_id],
+				   link_conf);
 	}
 
 	/* Update SF - Disable if needed. if this fails, SF might still be on
@@ -73,6 +76,7 @@ int iwl_mvm_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 
 	cmd.link_id = cpu_to_le32(link_info->fw_link_id);
 	cmd.mac_id = cpu_to_le32(mvmvif->id);
+	cmd.spec_link_id = link_conf->link_id;
 	/* P2P-Device already has a valid PHY context during add */
 	phyctxt = link_info->phy_ctxt;
 	if (phyctxt)
@@ -123,11 +127,13 @@ int iwl_mvm_link_changed(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 				if (mvmvif->link[i]->phy_ctxt)
 					count++;
 
-			/* FIXME: IWL_MVM_FW_MAX_ACTIVE_LINKS_NUM should be
-			 * defined per HW
-			 */
-			if (count >= IWL_MVM_FW_MAX_ACTIVE_LINKS_NUM)
-				return -EINVAL;
+			if (vif->type == NL80211_IFTYPE_AP) {
+				if (count > mvm->fw->ucode_capa.num_beacons)
+					return -EOPNOTSUPP;
+			/* this should be per HW or such */
+			} else if (count >= IWL_MVM_FW_MAX_ACTIVE_LINKS_NUM) {
+				return -EOPNOTSUPP;
+			}
 		}
 
 		/* Catch early if driver tries to activate or deactivate a link
@@ -186,7 +192,7 @@ int iwl_mvm_link_changed(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 					link_conf->dtim_period);
 
 	if (!link_conf->he_support || iwlwifi_mod_params.disable_11ax ||
-	    !vif->cfg.assoc) {
+	    (vif->type == NL80211_IFTYPE_STATION && !vif->cfg.assoc)) {
 		changes &= ~LINK_CONTEXT_MODIFY_HE_PARAMS;
 		goto send_cmd;
 	}
@@ -261,9 +267,10 @@ int iwl_mvm_remove_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	int ret;
 
 	if (WARN_ON(!link_info ||
-		    link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID))
+		    link_info->fw_link_id >= ARRAY_SIZE(mvm->link_id_to_link_conf)))
 		return -EINVAL;
 
+	RCU_INIT_POINTER(mvm->link_id_to_link_conf[link_info->fw_link_id], NULL);
 	cmd.link_id = cpu_to_le32(link_info->fw_link_id);
 	iwl_mvm_release_fw_link_id(mvm, link_info->fw_link_id);
 	link_info->fw_link_id = IWL_MVM_FW_LINK_ID_INVALID;

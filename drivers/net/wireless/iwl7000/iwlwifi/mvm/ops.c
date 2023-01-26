@@ -240,7 +240,6 @@ void iwl_mvm_update_link_smps(struct ieee80211_vif *vif,
 	enum ieee80211_smps_mode mode = IEEE80211_SMPS_AUTOMATIC;
 
 	if (mvm->fw_static_smps_request &&
-	    link_conf &&
 	    link_conf->chandef.width == NL80211_CHAN_WIDTH_160 &&
 	    link_conf->he_support)
 		mode = IEEE80211_SMPS_STATIC;
@@ -489,7 +488,6 @@ static const struct iwl_hcmd_names iwl_mvm_legacy_names[] = {
 	HCMD_NAME(ADD_STA_KEY),
 	HCMD_NAME(ADD_STA),
 	HCMD_NAME(REMOVE_STA),
-	HCMD_NAME(FW_GET_ITEM_CMD),
 	HCMD_NAME(TX_CMD),
 	HCMD_NAME(SCD_QUEUE_CFG),
 	HCMD_NAME(TXPATH_FLUSH),
@@ -554,7 +552,6 @@ static const struct iwl_hcmd_names iwl_mvm_legacy_names[] = {
 	HCMD_NAME(REPLY_BEACON_FILTERING_CMD),
 	HCMD_NAME(D3_CONFIG_CMD),
 	HCMD_NAME(PROT_OFFLOAD_CONFIG_CMD),
-	HCMD_NAME(OFFLOADS_QUERY_CMD),
 	HCMD_NAME(MATCH_FOUND_NOTIFICATION),
 	HCMD_NAME(DTS_MEASUREMENT_NOTIFICATION),
 	HCMD_NAME(WOWLAN_PATTERNS),
@@ -589,15 +586,20 @@ static const struct iwl_hcmd_names iwl_mvm_system_names[] = {
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mvm_mac_conf_names[] = {
+	HCMD_NAME(LOW_LATENCY_CMD),
 	HCMD_NAME(CHANNEL_SWITCH_TIME_EVENT_CMD),
 	HCMD_NAME(SESSION_PROTECTION_CMD),
+	HCMD_NAME(CANCEL_CHANNEL_SWITCH_CMD),
 	HCMD_NAME(MAC_CONFIG_CMD),
 	HCMD_NAME(LINK_CONFIG_CMD),
 	HCMD_NAME(STA_CONFIG_CMD),
 	HCMD_NAME(AUX_STA_CMD),
 	HCMD_NAME(STA_REMOVE_CMD),
 	HCMD_NAME(STA_DISABLE_TX_CMD),
+	HCMD_NAME(CHANNEL_SWITCH_ERROR_NOTIF),
+	HCMD_NAME(MISSED_VAP_NOTIF),
 	HCMD_NAME(SESSION_PROTECTION_NOTIF),
+	HCMD_NAME(PROBE_RESPONSE_DATA_NOTIF),
 	HCMD_NAME(CHANNEL_SWITCH_START_NOTIF),
 };
 
@@ -620,6 +622,8 @@ static const struct iwl_hcmd_names iwl_mvm_data_path_names[] = {
 	HCMD_NAME(DQA_ENABLE_CMD),
 	HCMD_NAME(UPDATE_MU_GROUPS_CMD),
 	HCMD_NAME(TRIGGER_RX_QUEUES_NOTIF_CMD),
+	HCMD_NAME(WNM_PLATFORM_PTM_REQUEST_CMD),
+	HCMD_NAME(WNM_80211V_TIMING_MEASUREMENT_CONFIG_CMD),
 	HCMD_NAME(STA_HE_CTXT_CMD),
 	HCMD_NAME(RLC_CONFIG_CMD),
 	HCMD_NAME(RFH_QUEUE_CONFIG_CMD),
@@ -638,8 +642,13 @@ static const struct iwl_hcmd_names iwl_mvm_data_path_names[] = {
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mvm_debug_names[] = {
+	HCMD_NAME(LMAC_RD_WR),
+	HCMD_NAME(UMAC_RD_WR),
+	HCMD_NAME(HOST_EVENT_CFG),
 	HCMD_NAME(DBGC_SUSPEND_RESUME),
 	HCMD_NAME(BUFFER_ALLOCATION),
+	HCMD_NAME(GET_TAS_STATUS),
+	HCMD_NAME(FW_DUMP_COMPLETE_CMD),
 	HCMD_NAME(MFU_ASSERT_DUMP_NTF),
 };
 
@@ -1500,6 +1509,7 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	mvm->scan_cmd = kmalloc(scan_size, GFP_KERNEL);
 	if (!mvm->scan_cmd)
 		goto out_free;
+	mvm->scan_cmd_size = scan_size;
 
 	/* invalidate ids to prevent accidental removal of sta_id 0 */
 	mvm->aux_sta.sta_id = IWL_MVM_INVALID_STA;
@@ -2126,6 +2136,9 @@ void iwl_mvm_nic_restart(struct iwl_mvm *mvm, bool fw_error)
 static void iwl_mvm_nic_error(struct iwl_op_mode *op_mode, bool sync)
 {
 	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
+
+	if (mvm->pldr_sync)
+		return;
 
 	if (!test_bit(STATUS_TRANS_DEAD, &mvm->trans->status) &&
 	    !test_and_clear_bit(IWL_MVM_STATUS_SUPPRESS_ERROR_LOG_ONCE,

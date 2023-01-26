@@ -394,6 +394,7 @@ struct ieee80211_mgd_auth_data {
 	bool done, waiting;
 	bool peer_confirmed;
 	bool timeout_started;
+	int link_id;
 
 	u8 ap_addr[ETH_ALEN] __aligned(2);
 
@@ -416,6 +417,8 @@ struct ieee80211_mgd_assoc_data {
 		u8 *elems; /* pointing to inside ie[] below */
 
 		ieee80211_conn_flags_t conn_flags;
+
+		u16 status;
 	} link[IEEE80211_MLD_MAX_NUM_LINKS];
 
 	u8 ap_addr[ETH_ALEN] __aligned(2);
@@ -998,6 +1001,10 @@ struct ieee80211_link_data {
 	struct ieee80211_tx_queue_params tx_conf[IEEE80211_NUM_ACS];
 
 	struct ieee80211_bss_conf *conf;
+
+#ifdef CPTCFG_MAC80211_DEBUGFS
+	struct dentry *debugfs_dir;
+#endif
 };
 
 struct ieee80211_sub_if_data {
@@ -1083,6 +1090,10 @@ struct ieee80211_sub_if_data {
 
 	struct ieee80211_link_data deflink;
 	struct ieee80211_link_data __rcu *link[IEEE80211_MLD_MAX_NUM_LINKS];
+
+	/* for ieee80211_set_active_links_async() */
+	struct work_struct activate_links_work;
+	u16 desired_active_links;
 
 #ifdef CPTCFG_MAC80211_DEBUGFS
 	struct {
@@ -1714,6 +1725,17 @@ struct ieee802_11_elems {
 	u8 tx_pwr_env_num;
 	u8 eht_cap_len;
 
+	/* mult-link element can be de-fragmented and thus u8 is not sufficient */
+	size_t multi_link_len;
+
+	/*
+	 * store the per station profile pointer and length in case that the
+	 * parsing also handled Multi-Link element parsing for a specific link
+	 * ID.
+	 */
+	struct ieee80211_mle_per_sta_profile *prof;
+	size_t sta_prof_len;
+
 	/* whether a parse error occurred while retrieving these elements */
 	bool parse_error;
 
@@ -2215,7 +2237,9 @@ static inline void ieee80211_tx_skb(struct ieee80211_sub_if_data *sdata,
  *	represent a non-transmitting BSS in which case the data
  *	for that non-transmitting BSS is returned
  * @link_id: the link ID to parse elements for, if a STA profile
- *	is present in the multi-link element, or -1 to ignore
+ *	is present in the multi-link element, or -1 to ignore;
+ *	note that the code currently assumes parsing an association
+ *	(or re-association) response frame if this is given
  * @from_ap: frame is received from an AP (currently used only
  *	for EHT capabilities parsing)
  */
@@ -2484,7 +2508,8 @@ int ieee80211_chanctx_refcount(struct ieee80211_local *local,
 void ieee80211_recalc_smps_chanctx(struct ieee80211_local *local,
 				   struct ieee80211_chanctx *chanctx);
 void ieee80211_recalc_chanctx_min_def(struct ieee80211_local *local,
-				      struct ieee80211_chanctx *ctx);
+				      struct ieee80211_chanctx *ctx,
+				      struct ieee80211_link_data *rsvd_for);
 bool ieee80211_is_radar_required(struct ieee80211_local *local);
 
 void ieee80211_dfs_cac_timer(unsigned long data);

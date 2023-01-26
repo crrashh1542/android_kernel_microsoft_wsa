@@ -2691,6 +2691,8 @@ static void rs_drv_get_rate(void *mvm_r, struct ieee80211_sta *sta,
 		return;
 
 	lq_sta = mvm_sta;
+
+	spin_lock(&lq_sta->pers.lock);
 	iwl_mvm_hwrate_to_tx_rate_v1(lq_sta->last_rate_n_flags,
 				     info->band, &info->control.rates[0]);
 	info->control.rates[0].count = 1;
@@ -2705,6 +2707,7 @@ static void rs_drv_get_rate(void *mvm_r, struct ieee80211_sta *sta,
 		iwl_mvm_hwrate_to_tx_rate_v1(last_ucode_rate, info->band,
 					     &txrc->reported_rate);
 	}
+	spin_unlock(&lq_sta->pers.lock);
 }
 
 static void *rs_drv_alloc_sta(void *mvm_rate, struct ieee80211_sta *sta,
@@ -3015,9 +3018,9 @@ static void rs_drv_rate_update(void *mvm_r,
 	for (tid = 0; tid < IWL_MAX_TID_COUNT; tid++)
 		ieee80211_stop_tx_ba_session(sta, tid);
 
-	iwl_mvm_rs_rate_init(mvm, sta,
+	iwl_mvm_rs_rate_init(mvm, mvmsta->vif, sta,
 			     &mvmsta->vif->bss_conf, &sta->deflink,
-			     sband->band, true);
+			     sband->band);
 }
 
 static void __iwl_mvm_rs_tx_status(struct iwl_mvm *mvm,
@@ -4100,13 +4103,16 @@ static const struct rate_control_ops rs_mvm_ops_drv = {
 	.capa = RATE_CTRL_CAPA_VHT_EXT_NSS_BW,
 };
 
-void iwl_mvm_rs_rate_init(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
+void iwl_mvm_rs_rate_init(struct iwl_mvm *mvm,
+			  struct ieee80211_vif *vif,
+			  struct ieee80211_sta *sta,
 			  struct ieee80211_bss_conf *link_conf,
 			  struct ieee80211_link_sta *link_sta,
-			  enum nl80211_band band, bool update)
+			  enum nl80211_band band)
 {
 	if (iwl_mvm_has_tlc_offload(mvm)) {
-		rs_fw_rate_init(mvm, sta, link_conf, link_sta, band, update);
+		iwl_mvm_rs_fw_rate_init(mvm, vif, sta, link_conf,
+					link_sta, band);
 	} else {
 		struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
 

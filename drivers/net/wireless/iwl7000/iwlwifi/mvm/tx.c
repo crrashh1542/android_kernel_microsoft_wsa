@@ -187,7 +187,7 @@ static u32 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 	if (mvm->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_BZ ||
 	    (mvm->trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_BZ &&
 	     CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
-	     mvm->trans->hw_rev_step <= SILICON_B_STEP))
+	     mvm->trans->hw_rev_step == SILICON_A_STEP))
 		return iwl_mvm_tx_csum_pre_bz(mvm, skb, info, amsdu);
 	return iwl_mvm_tx_csum_bz(mvm, skb, amsdu);
 }
@@ -311,6 +311,54 @@ static u32 iwl_mvm_get_tx_ant(struct iwl_mvm *mvm,
 	return BIT(mvm->mgmt_last_antenna_idx) << RATE_MCS_ANT_POS;
 }
 
+static u32 iwl_mvm_get_inject_tx_rate(struct iwl_mvm *mvm,
+				      struct ieee80211_tx_info *info)
+{
+	struct ieee80211_tx_rate *rate = &info->control.rates[0];
+	u32 result;
+
+	/*
+	 * we only care about legacy/HT/VHT so far, so we can
+	 * build in v1 and use iwl_new_rate_from_v1()
+	 */
+
+	if (rate->flags & IEEE80211_TX_RC_VHT_MCS) {
+		u8 mcs = ieee80211_rate_get_vht_mcs(rate);
+		u8 nss = ieee80211_rate_get_vht_nss(rate);
+
+		result = RATE_MCS_VHT_MSK_V1;
+		result |= u32_encode_bits(mcs, RATE_VHT_MCS_RATE_CODE_MSK);
+		result |= u32_encode_bits(nss, RATE_MCS_NSS_MSK);
+		if (rate->flags & IEEE80211_TX_RC_SHORT_GI)
+			result |= RATE_MCS_SGI_MSK_V1;
+		if (rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+			result |= u32_encode_bits(1, RATE_MCS_CHAN_WIDTH_MSK_V1);
+		else if (rate->flags & IEEE80211_TX_RC_80_MHZ_WIDTH)
+			result |= u32_encode_bits(2, RATE_MCS_CHAN_WIDTH_MSK_V1);
+		else if (rate->flags & IEEE80211_TX_RC_160_MHZ_WIDTH)
+			result |= u32_encode_bits(3, RATE_MCS_CHAN_WIDTH_MSK_V1);
+	} else if (rate->flags & IEEE80211_TX_RC_MCS) {
+		result = RATE_MCS_HT_MSK_V1;
+		result |= u32_encode_bits(rate->idx,
+					  RATE_HT_MCS_RATE_CODE_MSK_V1 |
+					  RATE_HT_MCS_NSS_MSK_V1);
+		if (rate->flags & IEEE80211_TX_RC_SHORT_GI)
+			result |= RATE_MCS_SGI_MSK_V1;
+		if (rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+			result |= u32_encode_bits(1, RATE_MCS_CHAN_WIDTH_MSK_V1);
+		if (info->flags & IEEE80211_TX_CTL_LDPC)
+			result |= RATE_MCS_LDPC_MSK_V1;
+		if (u32_get_bits(info->flags, IEEE80211_TX_CTL_STBC))
+			result |= RATE_MCS_STBC_MSK;
+	} else {
+		return 0;
+	}
+
+	if (iwl_fw_lookup_notif_ver(mvm->fw, LONG_GROUP, TX_CMD, 0) > 6)
+		return iwl_new_rate_from_v1(result);
+	return result;
+}
+
 static u32 iwl_mvm_get_tx_rate(struct iwl_mvm *mvm,
 			       struct ieee80211_tx_info *info,
 			       struct ieee80211_sta *sta, __le16 fc)
@@ -320,8 +368,15 @@ static u32 iwl_mvm_get_tx_rate(struct iwl_mvm *mvm,
 	u32 rate_flags = 0;
 	bool is_cck;
 
-	/* info->control is only relevant for non HW rate control */
-	if (!ieee80211_hw_check(mvm->hw, HAS_RATE_CONTROL)) {
+	if (unlikely(info->control.flags & IEEE80211_TX_CTRL_RATE_INJECT)) {
+		u32 result = iwl_mvm_get_inject_tx_rate(mvm, info);
+
+		if (result)
+			return result;
+		rate_idx = info->control.rates[0].idx;
+	} else if (!ieee80211_hw_check(mvm->hw, HAS_RATE_CONTROL)) {
+		/* info->control is only relevant for non HW rate control */
+
 		/* HT rate doesn't make sense for a non data frame */
 		WARN_ONCE(info->control.rates[0].flags & IEEE80211_TX_RC_MCS &&
 			  !ieee80211_is_data(fc),
@@ -403,7 +458,8 @@ void iwl_mvm_set_tx_cmd_rate(struct iwl_mvm *mvm, struct iwl_tx_cmd *tx_cmd,
 	 * table is controlled by LINK_QUALITY commands
 	 */
 
-	if (ieee80211_is_data(fc) && sta) {
+	if (likely(ieee80211_is_data(fc) && sta &&
+		   !(info->control.flags & IEEE80211_TX_CTRL_RATE_INJECT))) {
 		struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
 
 		if (mvmsta->sta_state >= IEEE80211_STA_AUTHORIZED) {
@@ -607,11 +663,10 @@ static void iwl_mvm_skb_prepare_status(struct sk_buff *skb,
 }
 
 static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
+				      struct iwl_mvm_vif_link_info *link,
 				      struct ieee80211_tx_info *info,
 				      struct ieee80211_hdr *hdr)
 {
-	struct iwl_mvm_vif *mvmvif =
-		iwl_mvm_vif_from_mac80211(info->control.vif);
 	__le16 fc = hdr->frame_control;
 
 	switch (info->control.vif->type) {
@@ -630,15 +685,15 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 		if (ieee80211_is_mgmt(fc) &&
 		    (!ieee80211_is_bufferable_mmpdu(fc) ||
 		     ieee80211_is_deauth(fc) || ieee80211_is_disassoc(fc)))
-			return mvm->probe_queue;
+			return link->mgmt_queue;
 
 		if (!ieee80211_has_order(fc) && !ieee80211_is_probe_req(fc) &&
 		    is_multicast_ether_addr(hdr->addr1))
-			return mvmvif->deflink.cab_queue;
+			return link->cab_queue;
 
 		WARN_ONCE(info->control.vif->type != NL80211_IFTYPE_ADHOC,
 			  "fc=0x%02x", le16_to_cpu(fc));
-		return mvm->probe_queue;
+		return link->mgmt_queue;
 	case NL80211_IFTYPE_P2P_DEVICE:
 		if (ieee80211_is_mgmt(fc))
 			return mvm->p2p_dev_queue;
@@ -760,7 +815,8 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 			else
 				sta_id = link->mcast_sta.sta_id;
 
-			queue = iwl_mvm_get_ctrl_vif_queue(mvm, &info, hdr);
+			queue = iwl_mvm_get_ctrl_vif_queue(mvm, link, &info,
+							   hdr);
 		} else if (info.control.vif->type == NL80211_IFTYPE_MONITOR) {
 			queue = mvm->snif_queue;
 			sta_id = mvm->snif_sta.sta_id;
@@ -808,10 +864,11 @@ unsigned int iwl_mvm_max_amsdu_size(struct iwl_mvm *mvm,
 				    struct ieee80211_sta *sta, unsigned int tid)
 {
 	struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
-	enum nl80211_band band = mvmsta->vif->bss_conf.chandef.chan->band;
 	u8 ac = tid_to_mac80211_ac[tid];
+	enum nl80211_band band;
 	unsigned int txf;
-	int lmac = iwl_mvm_get_lmac_id(mvm->fw, band);
+	unsigned int val;
+	int lmac;
 
 	/* For HE redirect to trigger based fifos */
 	if (sta->deflink.he_cap.has_he && !WARN_ON(!iwl_mvm_has_new_tx_api(mvm)))
@@ -825,7 +882,37 @@ unsigned int iwl_mvm_max_amsdu_size(struct iwl_mvm *mvm,
 	 * We also want to have the start of the next packet inside the
 	 * fifo to be able to send bursts.
 	 */
-	return min_t(unsigned int, mvmsta->max_amsdu_len,
+	val = mvmsta->max_amsdu_len;
+
+	if (hweight16(sta->valid_links) <= 1) {
+		if (sta->valid_links) {
+			struct ieee80211_bss_conf *link_conf;
+			unsigned int link = ffs(sta->valid_links) - 1;
+
+			rcu_read_lock();
+			link_conf = rcu_dereference(mvmsta->vif->link_conf[link]);
+			if (WARN_ON(!link_conf))
+				band = NL80211_BAND_2GHZ;
+			else
+				band = link_conf->chandef.chan->band;
+			rcu_read_unlock();
+		} else {
+			band = mvmsta->vif->bss_conf.chandef.chan->band;
+		}
+
+		lmac = iwl_mvm_get_lmac_id(mvm->fw, band);
+	} else if (fw_has_capa(&mvm->fw->ucode_capa,
+			       IWL_UCODE_TLV_CAPA_CDB_SUPPORT)) {
+		/* for real MLO restrict to both LMACs if they exist */
+		lmac = IWL_LMAC_5G_INDEX;
+		val = min_t(unsigned int, val,
+			    mvm->fwrt.smem_cfg.lmac[lmac].txfifo_size[txf] - 256);
+		lmac = IWL_LMAC_24G_INDEX;
+	} else {
+		lmac = IWL_LMAC_24G_INDEX;
+	}
+
+	return min_t(unsigned int, val,
 		     mvm->fwrt.smem_cfg.lmac[lmac].txfifo_size[txf] - 256);
 }
 
@@ -1234,6 +1321,7 @@ int iwl_mvm_tx_skb_sta(struct iwl_mvm *mvm, struct sk_buff *skb,
 	struct sk_buff_head mpdus_skbs;
 	unsigned int payload_len;
 	int ret;
+	struct sk_buff *orig_skb = skb;
 
 	if (WARN_ON_ONCE(!mvmsta))
 		return -1;
@@ -1265,8 +1353,17 @@ int iwl_mvm_tx_skb_sta(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 		ret = iwl_mvm_tx_mpdu(mvm, skb, &info, sta);
 		if (ret) {
+			/* Free skbs created as part of TSO logic that have not yet been dequeued */
 			__skb_queue_purge(&mpdus_skbs);
-			return ret;
+			/* skb here is not necessarily same as skb that entered this method,
+			 * so free it explicitly.
+			 */
+			if (skb == orig_skb)
+				ieee80211_free_txskb(mvm->hw, skb);
+			else
+				kfree_skb(skb);
+			/* there was error, but we consumed skb one way or another, so return 0 */
+			return 0;
 		}
 	}
 
