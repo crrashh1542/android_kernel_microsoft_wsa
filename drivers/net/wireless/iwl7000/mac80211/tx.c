@@ -5,7 +5,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  *
  * Transmit and frame generation functions.
  */
@@ -3893,7 +3893,7 @@ begin:
 encap_out:
 	IEEE80211_SKB_CB(skb)->control.vif = vif;
 
-	if (tx.sta &&
+	if (vif && tx.sta &&
 	    wiphy_ext_feature_isset(local->hw.wiphy, NL80211_EXT_FEATURE_AQL)) {
 		bool ampdu = txq->ac != IEEE80211_AC_VO;
 		u32 airtime;
