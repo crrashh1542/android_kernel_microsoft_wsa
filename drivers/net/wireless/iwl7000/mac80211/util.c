@@ -3906,6 +3906,14 @@ bool ieee80211_chandef_he_6ghz_oper(struct ieee80211_sub_if_data *sdata,
 					      NL80211_BAND_6GHZ);
 	he_chandef.chan = ieee80211_get_channel(sdata->local->hw.wiphy, freq);
 
+	if (WARN_ON_ONCE(!he_chandef.chan)) {
+		sdata_info(sdata,
+			   "HE 6GHz invalid chan (on %d channel) freq:%d sband:%p, expect issues\n",
+			   he_6ghz_oper->primary, freq,
+			   sdata->local->hw.wiphy->bands[NL80211_BAND_6GHZ]);
+		return false;
+	}
+
 	switch (u8_get_bits(he_6ghz_oper->control,
 			    IEEE80211_HE_6GHZ_OPER_CTRL_REG_INFO)) {
 	case IEEE80211_6GHZ_CTRL_REG_LPI_AP:
