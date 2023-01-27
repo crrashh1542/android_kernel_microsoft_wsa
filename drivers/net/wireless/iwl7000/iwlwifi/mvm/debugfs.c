@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -1077,8 +1077,7 @@ static ssize_t iwl_dbgfs_tas_get_status_read(struct file *file,
 		pos += scnprintf(pos, endpos - pos, "\tStatic Status: %sabled\n",
 				 rsp->tas_status_mac[i].static_status ? "En" : "Dis");
 		pos += scnprintf(pos, endpos - pos, "\tStatic Disabled Reason: ");
-		if (rsp->tas_status_mac[i].static_dis_reason >= 0 &&
-		    rsp->tas_status_mac[i].static_dis_reason < TAS_DISABLED_REASON_MAX)
+		if (rsp->tas_status_mac[i].static_dis_reason < TAS_DISABLED_REASON_MAX)
 			pos += scnprintf(pos, endpos - pos, "%s (%d)\n",
 					 tas_dis_reason[rsp->tas_status_mac[i].static_dis_reason],
 					 rsp->tas_status_mac[i].static_dis_reason);
