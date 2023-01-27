@@ -4539,6 +4539,23 @@ static int hci_disconnect_all_sync(struct hci_dev *hdev, u8 reason)
 	return 0;
 }
 
+static void hci_disable_all_adv(struct hci_dev *hdev)
+{
+	struct adv_info *adv, *n;
+
+	if (!ext_adv_capable(hdev))
+		return;
+
+	hci_dev_lock(hdev);
+
+	list_for_each_entry_safe(adv, n, &hdev->adv_instances, list)
+		adv->enabled = false;
+
+	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+
+	hci_dev_unlock(hdev);
+}
+
 /* This function perform power off HCI command sequence as follows:
  *
  * Clear Advertising
@@ -4561,9 +4578,7 @@ static int hci_power_off_sync(struct hci_dev *hdev)
 			return err;
 	}
 
-	err = hci_clear_adv_sync(hdev, NULL, false);
-	if (err)
-		return err;
+	hci_disable_all_adv(hdev);
 
 	err = hci_stop_discovery_sync(hdev);
 	if (err)
