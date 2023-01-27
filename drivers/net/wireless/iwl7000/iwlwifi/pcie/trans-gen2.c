@@ -12,54 +12,6 @@
 
 #define FW_RESET_TIMEOUT (CPTCFG_IWL_TIMEOUT_FACTOR * HZ / 5)
 
-#ifdef CPTCFG_IWLWIFI_REX_PLATFORM_WORKAROUND
-#define IWL_CNVI_FUSE_FORCE 0xA26D98
-#define IWL_CNVI_FUSE_FORCE_CLK_MASK 0xf00
-
-static int iwl_pcie_ma_gf_clock_workaround(struct iwl_trans *trans)
-{
-	unsigned long timeout = jiffies + 30 * HZ;
-	u32 val;
-
-	if (CSR_HW_REV_TYPE(trans->hw_rev) != IWL_CFG_MAC_TYPE_MA)
-		return 0;
-
-	if (CSR_HW_RFID_TYPE(trans->hw_rf_id) !=
-	    CSR_HW_RFID_TYPE(CSR_HW_RF_ID_TYPE_GF))
-		return 0;
-
-	while (time_is_after_jiffies(timeout)) {
-		int ret;
-		u32 val;
-
-		val = iwl_read_umac_prph_no_grab(trans, WFPM_CTRL_REG);
-		val |= WFPM_AUX_CTL_AUX_IF_MAC_OWNER_MSK;
-		iwl_write_umac_prph_no_grab(trans, WFPM_CTRL_REG, val);
-
-		val = iwl_read_prph_no_grab(trans, IWL_CNVI_FUSE_FORCE);
-		if ((val & IWL_CNVI_FUSE_FORCE_CLK_MASK) ==
-				IWL_CNVI_FUSE_FORCE_CLK_MASK)
-			return 0;
-
-		iwl_clear_bit(trans, CSR_GP_CNTRL,
-			      CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
-
-		ret = iwl_trans_sw_reset(trans, true);
-		if (ret)
-			return ret;
-
-		msleep(300);
-
-		ret = iwl_finish_nic_init(trans);
-		if (ret)
-			return ret;
-	}
-
-	IWL_ERR(trans, "failed to wait for clock setup - continue anyway\n");
-	return 0;
-}
-#endif
-
 /*
  * Start up NIC's basic functionality after it has been reset
  * (e.g. after platform boot, or shutdown via iwl_pcie_apm_stop())
@@ -98,12 +50,6 @@ int iwl_pcie_gen2_apm_init(struct iwl_trans *trans)
 	ret = iwl_finish_nic_init(trans);
 	if (ret)
 		return ret;
-
-#ifdef CPTCFG_IWLWIFI_REX_PLATFORM_WORKAROUND
-	ret = iwl_pcie_ma_gf_clock_workaround(trans);
-	if (ret)
-		return ret;
-#endif
 
 	set_bit(STATUS_DEVICE_ENABLED, &trans->status);
 
