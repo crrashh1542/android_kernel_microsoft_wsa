@@ -105,9 +105,10 @@ struct iwl_umac_error_event_table {
 
 static bool iwl_fwrt_if_errorid_other_cpu(u32 err_id)
 {
+	err_id &= 0xFF;
+
 	if ((err_id >= FW_ASSERT_LMAC_FATAL && err_id <= RT_NMI_INTERRUPT_OTHER_LMAC_FATAL) ||
 	    err_id == FW_ASSERT_NMI_UNKNOWN)
-
 		return  true;
 	return false;
 }
