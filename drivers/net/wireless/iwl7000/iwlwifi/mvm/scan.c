@@ -2324,11 +2324,12 @@ static int iwl_mvm_scan_umac(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 }
 
 static void
-iwl_mvm_scan_umac_fill_general_p_v11(struct iwl_mvm *mvm,
+iwl_mvm_scan_umac_fill_general_p_v12(struct iwl_mvm *mvm,
 				     struct iwl_mvm_scan_params *params,
 				     struct ieee80211_vif *vif,
 				     struct iwl_scan_general_params_v11 *gp,
-				     u16 gen_flags, u8 gen_flags2)
+				     u16 gen_flags, u8 gen_flags2,
+				     u32 version)
 {
 	struct iwl_mvm_vif *scan_vif = iwl_mvm_vif_from_mac80211(vif);
 
@@ -2345,7 +2346,15 @@ iwl_mvm_scan_umac_fill_general_p_v11(struct iwl_mvm *mvm,
 	if (gen_flags & IWL_UMAC_SCAN_GEN_FLAGS_V2_FRAGMENTED_LMAC2)
 		gp->num_of_fragments[SCAN_HB_LMAC_IDX] = IWL_SCAN_NUM_OF_FRAGS;
 
-	gp->scan_start_mac_id = scan_vif->id;
+	if (version < 12) {
+		gp->scan_start_mac_or_link_id = scan_vif->id;
+	} else {
+		if (!vif->active_links)
+			gp->scan_start_mac_or_link_id = 0;
+		else
+			gp->scan_start_mac_or_link_id =
+				ffs(vif->active_links) - 1;
+	}
 }
 
 static void
@@ -2445,9 +2454,9 @@ static int iwl_mvm_scan_umac_v12(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	cmd->uid = cpu_to_le32(uid);
 
 	gen_flags = iwl_mvm_scan_umac_flags_v2(mvm, params, vif, type);
-	iwl_mvm_scan_umac_fill_general_p_v11(mvm, params, vif,
+	iwl_mvm_scan_umac_fill_general_p_v12(mvm, params, vif,
 					     &scan_p->general_params,
-					     gen_flags, 0);
+					     gen_flags, 0, 12);
 
 	ret = iwl_mvm_fill_scan_sched_params(params,
 					     scan_p->periodic_params.schedule,
@@ -2467,8 +2476,8 @@ static int iwl_mvm_scan_umac_v14_and_above(struct iwl_mvm *mvm,
 					   struct iwl_mvm_scan_params *params,
 					   int type, int uid, u32 version)
 {
-	struct iwl_scan_req_umac_v15 *cmd = mvm->scan_cmd;
-	struct iwl_scan_req_params_v15 *scan_p = &cmd->scan_params;
+	struct iwl_scan_req_umac_v16 *cmd = mvm->scan_cmd;
+	struct iwl_scan_req_params_v16 *scan_p = &cmd->scan_params;
 	struct iwl_scan_channel_params_v6 *cp = &scan_p->channel_params;
 	struct iwl_scan_probe_params_v4 *pb = &scan_p->probe_params;
 	int ret;
@@ -2488,9 +2497,9 @@ static int iwl_mvm_scan_umac_v14_and_above(struct iwl_mvm *mvm,
 	else
 		gen_flags2 = 0;
 
-	iwl_mvm_scan_umac_fill_general_p_v11(mvm, params, vif,
+	iwl_mvm_scan_umac_fill_general_p_v12(mvm, params, vif,
 					     &scan_p->general_params,
-					     gen_flags, gen_flags2);
+					     gen_flags, gen_flags2, version);
 
 	ret = iwl_mvm_fill_scan_sched_params(params,
 					     scan_p->periodic_params.schedule,
@@ -2544,6 +2553,13 @@ static int iwl_mvm_scan_umac_v15(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 				 int uid)
 {
 	return iwl_mvm_scan_umac_v14_and_above(mvm, vif, params, type, uid, 15);
+}
+
+static int iwl_mvm_scan_umac_v16(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
+				 struct iwl_mvm_scan_params *params, int type,
+				 int uid)
+{
+	return iwl_mvm_scan_umac_v14_and_above(mvm, vif, params, type, uid, 16);
 }
 
 static int iwl_mvm_num_scans(struct iwl_mvm *mvm)
@@ -2661,6 +2677,7 @@ struct iwl_scan_umac_handler {
 
 static const struct iwl_scan_umac_handler iwl_scan_umac_handlers[] = {
 	/* set the newest version first to shorten the list traverse time */
+	IWL_SCAN_UMAC_HANDLER(16),
 	IWL_SCAN_UMAC_HANDLER(15),
 	IWL_SCAN_UMAC_HANDLER(14),
 	IWL_SCAN_UMAC_HANDLER(12),
@@ -3163,7 +3180,8 @@ static size_t iwl_scan_req_umac_get_size(u8 scan_ver)
 		return sizeof(struct iwl_scan_req_umac_v12);
 	case 14:
 	case 15:
-		return sizeof(struct iwl_scan_req_umac_v15);
+	case 16:
+		return sizeof(struct iwl_scan_req_umac_v16);
 	}
 
 	return 0;
