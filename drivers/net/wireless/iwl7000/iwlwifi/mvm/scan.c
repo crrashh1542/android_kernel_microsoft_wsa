@@ -2349,11 +2349,20 @@ iwl_mvm_scan_umac_fill_general_p_v12(struct iwl_mvm *mvm,
 	if (version < 12) {
 		gp->scan_start_mac_or_link_id = scan_vif->id;
 	} else {
-		if (!vif->active_links)
+		/*
+		 * Use one of the active link (if any). In the future it would
+		 * be possible that the link ID would be part of the scan
+		 * request coming from upper layers so we would need to use it.
+		 */
+		if (!vif->active_links) {
 			gp->scan_start_mac_or_link_id = 0;
-		else
-			gp->scan_start_mac_or_link_id =
-				ffs(vif->active_links) - 1;
+		} else {
+			u8 link_id = ffs(vif->active_links) - 1;
+			struct iwl_mvm_vif_link_info *link_info =
+				scan_vif->link[link_id];
+
+			gp->scan_start_mac_or_link_id = link_info->fw_link_id;
+		}
 	}
 }
 
