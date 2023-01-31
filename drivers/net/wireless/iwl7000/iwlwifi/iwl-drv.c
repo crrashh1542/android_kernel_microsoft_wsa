@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -185,7 +185,7 @@ static bool iwl_drv_xvt_mode_supported(enum iwl_fw_type fw_type, int mode_idx)
 int iwl_drv_switch_op_mode(struct iwl_drv *drv, const char *new_op_name)
 {
 	struct iwlwifi_opmode_table *new_op = NULL;
-	int idx;
+	int idx, ret;
 
 	/* Searching for wanted op_mode*/
 	for (idx = 0; idx < ARRAY_SIZE(iwlwifi_opmode_table); idx++) {
@@ -218,26 +218,24 @@ int iwl_drv_switch_op_mode(struct iwl_drv *drv, const char *new_op_name)
 	/* Recording new op mode state */
 	drv->xvt_mode_on = (idx == XVT_OP_MODE);
 
-	/* Stopping the current op mode */
-	_iwl_op_mode_stop(drv);
-
-	/* Changing operation mode */
 	mutex_lock(&iwlwifi_opmode_table_mtx);
+	_iwl_op_mode_stop(drv);
 	list_move_tail(&drv->list, &new_op->drv);
-	mutex_unlock(&iwlwifi_opmode_table_mtx);
 
-	/* Starting the new op mode */
 	if (new_op->ops) {
 		drv->op_mode = _iwl_op_mode_start(drv, new_op);
 		if (!drv->op_mode) {
 			IWL_ERR(drv, "Error switching op modes\n");
-			return -EINVAL;
+			ret = -EINVAL;
+		} else {
+			ret = 0;
 		}
 	} else {
-		return request_module("%s", new_op->name);
+		ret = request_module("%s", new_op->name);
 	}
+	mutex_unlock(&iwlwifi_opmode_table_mtx);
 
-	return 0;
+	return ret;
 }
 IWL_EXPORT_SYMBOL(iwl_drv_switch_op_mode);
 
@@ -1636,6 +1634,9 @@ _iwl_op_mode_start(struct iwl_drv *drv, struct iwlwifi_opmode_table *op)
 	struct iwl_op_mode *op_mode = NULL;
 	int retry, max_retry = !!iwlwifi_mod_params.fw_restart * IWL_MAX_INIT_RETRY;
 
+	/* also protects start/stop from racing against each other */
+	lockdep_assert_held(&iwlwifi_opmode_table_mtx);
+
 	for (retry = 0; retry <= max_retry; retry++) {
 
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
@@ -1663,6 +1664,9 @@ _iwl_op_mode_start(struct iwl_drv *drv, struct iwlwifi_opmode_table *op)
 
 static void _iwl_op_mode_stop(struct iwl_drv *drv)
 {
+	/* also protects start/stop from racing against each other */
+	lockdep_assert_held(&iwlwifi_opmode_table_mtx);
+
 	/* op_mode can be NULL if its start failed */
 	if (drv->op_mode) {
 		iwl_op_mode_stop(drv->op_mode);
@@ -1979,11 +1983,6 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	}
 	mutex_unlock(&iwlwifi_opmode_table_mtx);
 
-	/*
-	 * Complete the firmware request last so that
-	 * a driver unbind (stop) doesn't run while we
-	 * are doing the start() above.
-	 */
 	complete(&drv->request_firmware_complete);
 
 	/*
@@ -2092,11 +2091,12 @@ void iwl_drv_stop(struct iwl_drv *drv)
 {
 	wait_for_completion(&drv->request_firmware_complete);
 
+	mutex_lock(&iwlwifi_opmode_table_mtx);
+
 	_iwl_op_mode_stop(drv);
 
 	iwl_dealloc_ucode(drv);
 
-	mutex_lock(&iwlwifi_opmode_table_mtx);
 	/*
 	 * List is empty (this item wasn't added)
 	 * when firmware loading failed -- in that
