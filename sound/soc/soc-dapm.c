@@ -149,7 +149,7 @@ static int dapm_down_seq[] = {
 
 static void dapm_assert_locked(struct snd_soc_dapm_context *dapm)
 {
-	if (dapm->card && dapm->card->instantiated)
+	if (snd_soc_card_is_instantiated(dapm->card))
 		lockdep_assert_held(&dapm->card->dapm_mutex);
 }
 
@@ -1305,7 +1305,7 @@ int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
 				      enum snd_soc_dapm_direction))
 {
 	struct snd_soc_card *card = dai->component->card;
-	struct snd_soc_dapm_widget *w;
+	struct snd_soc_dapm_widget *w = snd_soc_dai_get_widget(dai, stream);
 	LIST_HEAD(widgets);
 	int paths;
 	int ret;
@@ -1313,12 +1313,10 @@ int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
 	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_RUNTIME);
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		w = dai->playback_widget;
 		invalidate_paths_ep(w, SND_SOC_DAPM_DIR_OUT);
 		paths = is_connected_output_ep(w, &widgets,
 				custom_stop_condition);
 	} else {
-		w = dai->capture_widget;
 		invalidate_paths_ep(w, SND_SOC_DAPM_DIR_IN);
 		paths = is_connected_input_ep(w, &widgets,
 				custom_stop_condition);
@@ -2629,7 +2627,7 @@ int snd_soc_dapm_sync_unlocked(struct snd_soc_dapm_context *dapm)
 	 * Suppress early reports (eg, jacks syncing their state) to avoid
 	 * silly DAPM runs during card startup.
 	 */
-	if (!dapm->card || !dapm->card->instantiated)
+	if (!snd_soc_card_is_instantiated(dapm->card))
 		return 0;
 
 	return dapm_power_widgets(dapm->card, SND_SOC_DAPM_STREAM_NOP);
@@ -2925,7 +2923,7 @@ static int snd_soc_dapm_add_path(struct snd_soc_dapm_context *dapm,
 		dapm_mark_dirty(widgets[dir], "Route added");
 	}
 
-	if (dapm->card->instantiated && path->connect)
+	if (snd_soc_card_is_instantiated(dapm->card) && path->connect)
 		dapm_path_invalidate(path);
 
 	return 0;
@@ -4254,7 +4252,7 @@ int snd_soc_dapm_new_dai_widgets(struct snd_soc_dapm_context *dapm,
 			return PTR_ERR(w);
 
 		w->priv = dai;
-		dai->playback_widget = w;
+		snd_soc_dai_set_widget_playback(dai, w);
 	}
 
 	if (dai->driver->capture.stream_name) {
@@ -4270,7 +4268,7 @@ int snd_soc_dapm_new_dai_widgets(struct snd_soc_dapm_context *dapm,
 			return PTR_ERR(w);
 
 		w->priv = dai;
-		dai->capture_widget = w;
+		snd_soc_dai_set_widget_capture(dai, w);
 	}
 
 	return 0;
@@ -4364,16 +4362,16 @@ static void dapm_connect_dai_pair(struct snd_soc_card *card,
 	int stream;
 
 	if (dai_link->params) {
-		playback_cpu = cpu_dai->capture_widget;
-		capture_cpu = cpu_dai->playback_widget;
+		playback_cpu	= snd_soc_dai_get_widget_capture(cpu_dai);
+		capture_cpu	= snd_soc_dai_get_widget_playback(cpu_dai);
 	} else {
-		playback_cpu = cpu_dai->playback_widget;
-		capture_cpu = cpu_dai->capture_widget;
+		playback_cpu	= snd_soc_dai_get_widget_playback(cpu_dai);
+		capture_cpu	= snd_soc_dai_get_widget_capture(cpu_dai);
 	}
 
 	/* connect BE DAI playback if widgets are valid */
 	stream = SNDRV_PCM_STREAM_PLAYBACK;
-	codec = codec_dai->playback_widget;
+	codec = snd_soc_dai_get_widget(codec_dai, stream);
 
 	if (playback_cpu && codec) {
 		if (dai_link->params && !rtd->c2c_widget[stream]) {
@@ -4392,7 +4390,7 @@ static void dapm_connect_dai_pair(struct snd_soc_card *card,
 capture:
 	/* connect BE DAI capture if widgets are valid */
 	stream = SNDRV_PCM_STREAM_CAPTURE;
-	codec = codec_dai->capture_widget;
+	codec = snd_soc_dai_get_widget(codec_dai, stream);
 
 	if (codec && capture_cpu) {
 		if (dai_link->params && !rtd->c2c_widget[stream]) {
