@@ -2406,3 +2406,9 @@ static inline void backport_netif_napi_add(struct net_device *dev,
 }
 #define netif_napi_add LINUX_BACKPORT(netif_napi_add)
 #endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#define cfg80211_req_link_disabled(req, link)	0
+#else
+#define cfg80211_req_link_disabled(req, link)	((req)->links[link].disabled)
+#endif
