@@ -1336,7 +1336,7 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		      BSS_CHANGED_TWT;
 	int i, err;
 	int prev_beacon_int;
-	unsigned int link_id = cfg80211_beacon_data_link_id(&params->beacon);
+	unsigned int link_id = cfg80211_beacon_data_link_id((&params->beacon));
 	struct ieee80211_link_data *link;
 	struct ieee80211_bss_conf *link_conf;
 

@@ -2349,7 +2349,12 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_ext_capa_mld_capa_and_ops(ift_ext_capa)	0
 #define cfg80211_mgmt_tx_params_link_id(params)			-1
 #define cfg80211_mgmt_tx_params_link_id_mask(params)		0
-#else /* CFG80211 < 5.20 */
+#define link_sta_params_mld_mac(params)		NULL
+#define cfg80211_beacon_data_link_id(params)	0
+#define cfg80211_req_link_bss(req, link)	NULL
+#define cfg80211_req_link_id(req)		-1
+#define cfg80211_req_link_elems_len(req, link)	0
+#else /* CFG80211 < 6.0 */
 #define link_sta_params_link_id(params) ((params)->link_sta_params.link_id)
 #define link_sta_params_link_mac(params) ((params)->link_sta_params.link_mac)
 #define cfg80211_disassoc_ap_addr(req)	((req)->ap_addr)
@@ -2359,20 +2364,16 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_ext_capa_mld_capa_and_ops(ift_ext_capa)	(ift_ext_capa)->mld_capa_and_ops
 #define cfg80211_mgmt_tx_params_link_id(params)	((params)->link_id)
 #define cfg80211_mgmt_tx_params_link_id_mask(params) BIT((params)->link_id)
+#define link_sta_params_mld_mac(params)		(params->link_sta_params.mld_mac)
+#define cfg80211_beacon_data_link_id(params)	(params->link_id)
+#define cfg80211_req_link_bss(req, link)	((req)->links[link].bss)
+#define cfg80211_req_link_id(req)		((req)->link_id)
+#define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len)
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
-#define link_sta_params_mld_mac(params)		NULL
-#define cfg80211_beacon_data_link_id(params)	0
-#define cfg80211_req_link_bss(req, link)	NULL
-#define cfg80211_req_link_id(req)		-1
-#define cfg80211_req_link_elems_len(req, link)	0
 #define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
 #else
-#define cfg80211_beacon_data_link_id(params)	(params->link_id)
-#define cfg80211_req_link_bss(req, link)	((req)->links[link].bss
-#define cfg80211_req_link_id(req)		((req)->link_id)
-#define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len
 #define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
