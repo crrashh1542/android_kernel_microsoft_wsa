@@ -1034,16 +1034,17 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 				  IEEE80211_EHT_PHY_CAP3_CODEBOOK_7_5_MU_FDBK |
 				  IEEE80211_EHT_PHY_CAP3_TRIG_MU_BF_PART_BW_FDBK);
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[4] &=
-			~(IEEE80211_EHT_PHY_CAP4_PART_BW_DL_MU_MIMO |
+		~(IEEE80211_EHT_PHY_CAP4_PART_BW_DL_MU_MIMO |
 				  IEEE80211_EHT_PHY_CAP4_POWER_BOOST_FACT_SUPP);
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[5] &=
-			~IEEE80211_EHT_PHY_CAP5_NON_TRIG_CQI_FEEDBACK;
+		~IEEE80211_EHT_PHY_CAP5_NON_TRIG_CQI_FEEDBACK;
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[6] &=
-			~(IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK |
+		~(IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK |
 				  IEEE80211_EHT_PHY_CAP6_EHT_DUP_6GHZ_SUPP);
-
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 		if (!trans->dbg_cfg.eht_disable_extra_ltf)
-			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[5] |=
+#endif
+		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[5] |=
 				IEEE80211_EHT_PHY_CAP5_SUPP_EXTRA_EHT_LTF;
 	}
 
