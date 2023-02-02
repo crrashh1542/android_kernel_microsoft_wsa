@@ -130,8 +130,7 @@ done:
 }
 
 int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
-				const u8 *data,
-				size_t len,
+				const u8 *data, size_t len,
 				struct iwl_pnvm_image *pnvm_data)
 {
 	const struct iwl_ucode_tlv *tlv;
@@ -188,14 +187,15 @@ int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 	return -ENOENT;
 }
 
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans, u8 **data, size_t *len)
+u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 {
 	struct pnvm_sku_package *package;
 	unsigned long package_size;
 	efi_status_t status;
+	u8 *data;
 
 	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
 	/*
 	 * TODO: we hardcode a maximum length here, because reading
@@ -206,7 +206,7 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans, u8 **data, size_t *len)
 
 	package = kmalloc(package_size, GFP_KERNEL);
 	if (!package)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	status = efi.get_variable(IWL_UEFI_REDUCED_POWER_NAME, &IWL_EFI_VAR_GUID,
 				  NULL, &package_size, package);
@@ -215,7 +215,7 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans, u8 **data, size_t *len)
 			     "Reduced Power UEFI variable not found 0x%lx (len %lu)\n",
 			     status, package_size);
 		kfree(package);
-		return -ENOENT;
+		return ERR_PTR(-ENOENT);
 	}
 
 	IWL_DEBUG_FW(trans, "Read reduced power from UEFI with size %lu\n",
@@ -225,12 +225,12 @@ int iwl_uefi_get_reduced_power(struct iwl_trans *trans, u8 **data, size_t *len)
 		     package->rev, package->total_size, package->n_skus);
 
 	*len = package_size - sizeof(*package);
-	*data = kmemdup(package->data, *len, GFP_KERNEL);
-	if (!*data)
-		return -ENOMEM;
+	data = kmemdup(package->data, *len, GFP_KERNEL);
+	if (!data)
+		return ERR_PTR(-ENOMEM);
 	kfree(package);
 
-	return 0;
+	return data;
 }
 
 static int iwl_uefi_step_parse(struct uefi_cnv_common_step_data *common_step_data,

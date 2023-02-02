@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright(c) 2021-2022 Intel Corporation
+ * Copyright(c) 2021-2023 Intel Corporation
  */
 #ifndef __iwl_fw_uefi__
 #define __iwl_fw_uefi__
@@ -50,40 +50,32 @@ struct uefi_cnv_common_step_data {
  */
 #if defined(CONFIG_EFI) && LINUX_VERSION_IS_GEQ(5,4,0)
 void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len);
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
-			       u8 **data,
-			       size_t *len);
+u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len);
 int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
-				const u8 *data,
-				size_t len,
+				const u8 *data, size_t len,
 				struct iwl_pnvm_image *pnvm_data);
 void iwl_uefi_get_step_table(struct iwl_trans *trans);
 #else /* CONFIG_EFI */
-static inline
-void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
+static inline void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
-static inline
-int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
-				const u8 *data,
-				size_t len,
-				struct iwl_pnvm_image *pnvm_data)
+static inline int
+iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
+			    const u8 *data, size_t len,
+			    struct iwl_pnvm_image *pnvm_data)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline
-int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
-			       u8 **data,
-			       size_t *len)
+static inline u8 *
+iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 {
-	return -EOPNOTSUPP;
+	return ERR_PTR(-EOPNOTSUPP);
 }
 
-static inline
-void iwl_uefi_get_step_table(struct iwl_trans *trans)
+static inline void iwl_uefi_get_step_table(struct iwl_trans *trans)
 {
 }
 #endif /* CONFIG_EFI */

@@ -323,8 +323,9 @@ reduce_tables:
 
 	if (!trans->reduce_power_loaded) {
 		memset(&pnvm_data, 0, sizeof(pnvm_data));
-		ret = iwl_uefi_get_reduced_power(trans, &data, &length);
-		if (ret) {
+		data = iwl_uefi_get_reduced_power(trans, &length);
+		if (IS_ERR(data)) {
+			ret = PTR_ERR(data);
 			trans->failed_to_load_reduce_power_image = true;
 			goto notification;
 		}
