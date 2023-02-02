@@ -72,6 +72,7 @@
  *   - base_jit_alloc_info_11_5
  *   - kbase_ioctl_mem_jit_init_10_2
  *   - kbase_ioctl_mem_jit_init_11_5
+ * - CPU mappings of USER_BUFFER imported memory handles must be cached.
  */
 
 #define BASE_UK_VERSION_MAJOR 1
