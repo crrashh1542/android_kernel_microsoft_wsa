@@ -799,8 +799,8 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 			struct iwl_mvm_vif_link_info *link;
 
 			if (link_id == IEEE80211_LINK_UNSPECIFIED) {
-				if (info.control.vif->valid_links)
-					link_id = ffs(info.control.vif->valid_links) - 1;
+				if (info.control.vif->active_links)
+					link_id = ffs(info.control.vif->active_links) - 1;
 				else
 					link_id = 0;
 			}
