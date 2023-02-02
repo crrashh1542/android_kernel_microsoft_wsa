@@ -273,7 +273,7 @@ static u8 *iwl_get_pnvm_image(struct iwl_trans *trans_p, size_t *len)
 static void iwl_pnvm_load_pnvm_to_trans(struct iwl_trans *trans,
 					const struct iwl_ucode_capabilities *capa)
 {
-	struct iwl_pnvm_image pnvm_data = {};
+	struct iwl_pnvm_image *pnvm_data;
 	u8 *data = NULL;
 	size_t length;
 	int ret;
@@ -291,28 +291,33 @@ static void iwl_pnvm_load_pnvm_to_trans(struct iwl_trans *trans,
 		return;
 	}
 
-	ret = iwl_pnvm_parse(trans, data, length, &pnvm_data);
+	pnvm_data = kzalloc(sizeof(*pnvm_data), GFP_KERNEL);
+	if (!pnvm_data)
+		goto free;
+
+	ret = iwl_pnvm_parse(trans, data, length, pnvm_data);
 	if (ret) {
 		trans->fail_to_parse_pnvm_image = true;
 		goto free;
 	}
 
-	ret = iwl_trans_load_pnvm(trans, &pnvm_data, capa);
+	ret = iwl_trans_load_pnvm(trans, pnvm_data, capa);
 	if (ret)
 		goto free;
-	IWL_INFO(trans, "loaded PNVM version %08x\n", pnvm_data.version);
+	IWL_INFO(trans, "loaded PNVM version %08x\n", pnvm_data->version);
 
 set:
 	iwl_trans_set_pnvm(trans, capa);
 free:
 	kfree(data);
+	kfree(pnvm_data);
 }
 
 static void
 iwl_pnvm_load_reduce_power_to_trans(struct iwl_trans *trans,
 				    const struct iwl_ucode_capabilities *capa)
 {
-	struct iwl_pnvm_image pnvm_data = {};
+	struct iwl_pnvm_image *pnvm_data;
 	u8 *data = NULL;
 	size_t length;
 	int ret;
@@ -329,13 +334,17 @@ iwl_pnvm_load_reduce_power_to_trans(struct iwl_trans *trans,
 		return;
 	}
 
-	ret = iwl_uefi_reduce_power_parse(trans, data, length, &pnvm_data);
+	pnvm_data = kzalloc(sizeof(*pnvm_data), GFP_KERNEL);
+	if (!pnvm_data)
+		goto free;
+
+	ret = iwl_uefi_reduce_power_parse(trans, data, length, pnvm_data);
 	if (ret) {
 		trans->failed_to_load_reduce_power_image = true;
 		goto free;
 	}
 
-	ret = iwl_trans_load_reduce_power(trans, &pnvm_data, capa);
+	ret = iwl_trans_load_reduce_power(trans, pnvm_data, capa);
 	if (ret) {
 		IWL_DEBUG_FW(trans,
 			     "Failed to load reduce power table %d\n",
@@ -348,6 +357,7 @@ set:
 	iwl_trans_set_reduce_power(trans, capa);
 free:
 	kfree(data);
+	kfree(pnvm_data);
 }
 
 int iwl_pnvm_load(struct iwl_trans *trans,
