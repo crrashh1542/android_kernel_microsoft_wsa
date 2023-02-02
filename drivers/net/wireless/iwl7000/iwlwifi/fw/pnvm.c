@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2020-2022 Intel Corporation
+ * Copyright(c) 2020-2023 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -305,7 +305,9 @@ int iwl_pnvm_load(struct iwl_trans *trans,
 		}
 
 		ret = iwl_trans_load_pnvm(trans, &pnvm_data, capa);
-		/* data can be free only after we finish using pnvm_data */
+		/* can only free data after pvnm_data use, but
+		 * pnvm_data.version used below is not a pointer
+		 */
 		kfree(data);
 		if (ret)
 			goto reduce_tables;
