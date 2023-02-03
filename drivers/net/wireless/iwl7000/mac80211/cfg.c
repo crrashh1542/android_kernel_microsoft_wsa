@@ -5240,6 +5240,9 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.join_ocb = ieee80211_join_ocb,
 	.leave_ocb = ieee80211_leave_ocb,
 	.change_bss = ieee80211_change_bss,
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+	.inform_bss = ieee80211_inform_bss,
+#endif
 	.set_txq_params = ieee80211_set_txq_params,
 	.set_monitor_channel = ieee80211_set_monitor_channel,
 	.suspend = ieee80211_suspend,
