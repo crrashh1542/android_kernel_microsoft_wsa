@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2021-2022 Intel Corporation
+ * Copyright (C) 2021-2023 Intel Corporation
  */
 
 #include <net/mac80211.h>
@@ -208,7 +208,7 @@ int rs_pretty_print_rate(char *buf, int bufsz, const u32 rate)
 
 		return scnprintf(buf, bufsz, "Legacy | ANT: %s Rate: %s Mbps",
 				 iwl_rs_pretty_ant(ant),
-				 index == IWL_RATE_INVALID ? "BAD" :
+				 index > IWL_LAST_NON_HT_RATE ? "BAD" :
 				 iwl_rate_mcs(index)->mbps);
 	}
 
