@@ -273,7 +273,7 @@ static u8 *iwl_get_pnvm_image(struct iwl_trans *trans_p, size_t *len)
 static void iwl_pnvm_load_pnvm_to_trans(struct iwl_trans *trans,
 					const struct iwl_ucode_capabilities *capa)
 {
-	struct iwl_pnvm_image *pnvm_data;
+	struct iwl_pnvm_image *pnvm_data = NULL;
 	u8 *data = NULL;
 	size_t length;
 	int ret;
@@ -317,7 +317,7 @@ static void
 iwl_pnvm_load_reduce_power_to_trans(struct iwl_trans *trans,
 				    const struct iwl_ucode_capabilities *capa)
 {
-	struct iwl_pnvm_image *pnvm_data;
+	struct iwl_pnvm_image *pnvm_data = NULL;
 	u8 *data = NULL;
 	size_t length;
 	int ret;
