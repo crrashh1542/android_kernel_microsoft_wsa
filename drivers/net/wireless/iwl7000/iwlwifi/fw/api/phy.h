@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2012-2014, 2019-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2019-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -41,6 +41,11 @@ enum iwl_phy_ops_subcmd_ids {
 	 * @PER_PLATFORM_ANT_GAIN_CMD: &union iwl_ppag_table_cmd
 	 */
 	PER_PLATFORM_ANT_GAIN_CMD = 0x07,
+
+	/**
+	 * @REVERT_UMC_POWER_CMD: &struct revert_umc_power_cmd
+	 */
+	REVERT_UMC_POWER_CMD = 0xb,
 
 	/**
 	 * @CT_KILL_NOTIFICATION: &struct ct_kill_notif
@@ -226,5 +231,16 @@ struct temp_report_ths_cmd {
 	__le32 num_temps;
 	__le16 thresholds[IWL_MAX_DTS_TRIPS];
 } __packed; /* GRP_PHY_TEMP_REPORTING_THRESHOLDS_CMD */
+
+/**
+ * struct revert_umc_power_cmd - reverts Tx power table to old configuration
+ *
+ * @oem_revert_umc_tx_power: 1->revert TX power to old config, 0->Do not revert
+ * @reserved: reserved
+ */
+struct revert_umc_power_cmd {
+	u8 oem_revert_umc_tx_power;
+	u8 reserved[3];
+} __packed; /* PHY_REVERT_UMC_POWER_CMD_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_phy_h__ */
