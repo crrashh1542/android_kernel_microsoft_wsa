@@ -1277,12 +1277,13 @@ static void intel_dsi_get_config(struct intel_encoder *encoder,
 		pclk = vlv_dsi_get_pclk(encoder, pipe_config);
 	}
 
-	pipe_config->port_clock = pclk;
-
-	/* FIXME definitely not right for burst/cmd mode/pixel overlap */
-	pipe_config->hw.adjusted_mode.crtc_clock = pclk;
 	if (intel_dsi->dual_link)
-		pipe_config->hw.adjusted_mode.crtc_clock *= 2;
+		pclk *= 2;
+
+	if (pclk) {
+		pipe_config->hw.adjusted_mode.crtc_clock = pclk;
+		pipe_config->port_clock = pclk;
+	}
 }
 
 /* return txclkesc cycles in terms of divider and duration in us */
