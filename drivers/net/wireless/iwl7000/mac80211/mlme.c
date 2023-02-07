@@ -2890,8 +2890,11 @@ static void ieee80211_set_associated(struct ieee80211_sub_if_data *sdata,
 		struct ieee80211_link_data *link;
 
 		if (!cbss ||
-		    !(BIT(link_id) & ieee80211_vif_usable_links(&sdata->vif)) ||
 		    assoc_data->link[link_id].status != WLAN_STATUS_SUCCESS)
+			continue;
+
+		if (ieee80211_vif_is_mld(&sdata->vif) &&
+		    !(ieee80211_vif_usable_links(&sdata->vif) & BIT(link_id)))
 			continue;
 
 		link = sdata_dereference(sdata->link[link_id], sdata);
