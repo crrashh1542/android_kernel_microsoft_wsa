@@ -2414,6 +2414,12 @@ _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 #if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 #define cfg80211_req_link_disabled(req, link)	0
 #define NL80211_RRF_NO_EHT 0
+static inline void
+cfg80211_cqm_links_state_change_notify(struct net_device *dev,
+				       u16 removed_links)
+{
+}
+
 #else
 #define cfg80211_req_link_disabled(req, link)	((req)->links[link].disabled)
 #endif
