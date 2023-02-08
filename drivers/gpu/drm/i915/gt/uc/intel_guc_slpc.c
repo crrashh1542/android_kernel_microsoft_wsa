@@ -137,6 +137,17 @@ static int guc_action_slpc_set_param(struct intel_guc *guc, u8 id, u32 value)
 	return ret > 0 ? -EPROTO : ret;
 }
 
+static int guc_action_slpc_unset_param(struct intel_guc *guc, u8 id)
+{
+	u32 request[] = {
+		GUC_ACTION_HOST2GUC_PC_SLPC_REQUEST,
+		SLPC_EVENT(SLPC_EVENT_PARAMETER_UNSET, 1),
+		id,
+	};
+
+	return intel_guc_send(guc, request, ARRAY_SIZE(request));
+}
+
 static bool slpc_is_running(struct intel_guc_slpc *slpc)
 {
 	return slpc_get_state(slpc) == SLPC_GLOBAL_STATE_RUNNING;
@@ -188,6 +199,16 @@ static int slpc_set_param(struct intel_guc_slpc *slpc, u8 id, u32 value)
 				 id, value, ERR_PTR(ret));
 
 	return ret;
+}
+
+static int slpc_unset_param(struct intel_guc_slpc *slpc,
+			    u8 id)
+{
+	struct intel_guc *guc = slpc_to_guc(slpc);
+
+	GEM_BUG_ON(id >= SLPC_MAX_PARAM);
+
+	return guc_action_slpc_unset_param(guc, id);
 }
 
 static int slpc_force_min_freq(struct intel_guc_slpc *slpc, u32 freq)
@@ -470,16 +491,6 @@ int intel_guc_slpc_set_min_freq(struct intel_guc_slpc *slpc, u32 val)
 
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref) {
 
-		/* Ignore efficient freq if lower min freq is requested */
-		ret = slpc_set_param(slpc,
-				     SLPC_PARAM_IGNORE_EFFICIENT_FREQUENCY,
-				     val < slpc->rp1_freq);
-		if (unlikely(ret)) {
-			i915_probe_error(i915, "Failed to toggle efficient freq (%pe)\n",
-					 ERR_PTR(ret));
-			return ret;
-		}
-
 		ret = slpc_set_param(slpc,
 				     SLPC_PARAM_GLOBAL_MIN_GT_UNSLICE_FREQ_MHZ,
 				     val);
@@ -573,16 +584,36 @@ static int slpc_set_softlimits(struct intel_guc_slpc *slpc)
 	if (unlikely(ret))
 		return ret;
 
-	if (!slpc->min_freq_softlimit) {
-		ret = intel_guc_slpc_get_min_freq(slpc, &slpc->min_freq_softlimit);
-		if (unlikely(ret))
-			return ret;
-	} else if (slpc->min_freq_softlimit != slpc->min_freq) {
+	if (!slpc->min_freq_softlimit)
+		slpc->min_freq_softlimit = slpc->min_freq;
+	else if (slpc->min_freq_softlimit != slpc->min_freq)
 		return intel_guc_slpc_set_min_freq(slpc,
 						   slpc->min_freq_softlimit);
-	}
 
 	return 0;
+}
+
+static int slpc_ignore_eff_freq(struct intel_guc_slpc *slpc, bool ignore)
+{
+	int ret = 0;
+
+	if (ignore) {
+		ret = slpc_set_param(slpc,
+				     SLPC_PARAM_IGNORE_EFFICIENT_FREQUENCY,
+				     ignore);
+		if (!ret)
+			return slpc_set_param(slpc,
+					      SLPC_PARAM_GLOBAL_MIN_GT_UNSLICE_FREQ_MHZ,
+					      slpc->min_freq);
+	} else {
+		ret = slpc_unset_param(slpc,
+				       SLPC_PARAM_IGNORE_EFFICIENT_FREQUENCY);
+		if (!ret)
+			return slpc_unset_param(slpc,
+						SLPC_PARAM_GLOBAL_MIN_GT_UNSLICE_FREQ_MHZ);
+	}
+
+	return ret;
 }
 
 static int slpc_use_fused_rp0(struct intel_guc_slpc *slpc)
@@ -643,6 +674,14 @@ int intel_guc_slpc_enable(struct intel_guc_slpc *slpc)
 	intel_guc_pm_intrmsk_enable(to_gt(i915));
 
 	slpc_get_rp_values(slpc);
+
+	/* Ignore efficient freq and set min to platform min */
+	ret = slpc_ignore_eff_freq(slpc, true);
+	if (unlikely(ret)) {
+		i915_probe_error(i915, "Failed to set SLPC min to RPn (%pe)\n",
+				 ERR_PTR(ret));
+		return ret;
+	}
 
 	/* Set SLPC max limit to RP0 */
 	ret = slpc_use_fused_rp0(slpc);
