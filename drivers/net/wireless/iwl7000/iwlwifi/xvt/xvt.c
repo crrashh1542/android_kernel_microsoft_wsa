@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
 #include <linux/module.h>
@@ -1127,7 +1127,7 @@ void iwl_xvt_lari_cfg(struct iwl_xvt *xvt)
 {
 	int ret;
 	u32 value;
-	struct iwl_lari_config_change_cmd_v6 cmd = {};
+	struct iwl_lari_config_change_cmd_v7 cmd = {};
 
 	cmd.config_bitmap = iwl_acpi_get_lari_config_bitmap(&xvt->fwrt);
 
@@ -1137,15 +1137,25 @@ void iwl_xvt_lari_cfg(struct iwl_xvt *xvt)
 	if (!ret)
 		cmd.oem_unii4_allow_bitmap = cpu_to_le32(value);
 
+	ret = iwl_acpi_get_dsm_u32(xvt->fwrt.dev, 0,
+				   DSM_FUNC_ENERGY_DETECTION_THRESHOLD,
+				   &iwl_guid, &value);
+	if (!ret)
+		cmd.edt_bitmap = cpu_to_le32(value);
+
 	if (cmd.config_bitmap ||
 	    cmd.oem_uhb_allow_bitmap ||
-	    cmd.oem_unii4_allow_bitmap) {
+	    cmd.oem_unii4_allow_bitmap ||
+	    cmd.edt_bitmap) {
 		size_t cmd_size;
 		u8 cmd_ver = iwl_fw_lookup_cmd_ver(xvt->fw,
 						   WIDE_ID(REGULATORY_AND_NVM_GROUP,
 							   LARI_CONFIG_CHANGE), 1);
 
 		switch (cmd_ver) {
+		case 7:
+			cmd_size = sizeof(struct iwl_lari_config_change_cmd_v7);
+			break;
 		case 6:
 			cmd_size = sizeof(struct iwl_lari_config_change_cmd_v6);
 			break;
@@ -1175,6 +1185,9 @@ void iwl_xvt_lari_cfg(struct iwl_xvt *xvt)
 				le32_to_cpu(cmd.oem_unii4_allow_bitmap),
 				le32_to_cpu(cmd.chan_state_active_bitmap),
 				cmd_ver);
+		IWL_DEBUG_RADIO(xvt,
+				"sending LARI_CONFIG_CHANGE, edt_bitmap=0x%x\n",
+				le32_to_cpu(cmd.edt_bitmap));
 
 		ret = iwl_xvt_send_cmd_pdu(xvt,
 					   WIDE_ID(REGULATORY_AND_NVM_GROUP,
