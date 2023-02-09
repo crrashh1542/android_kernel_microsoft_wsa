@@ -4855,9 +4855,8 @@ static bool ieee80211_prepare_and_rx_handle(struct ieee80211_rx_data *rx,
 		hdr = (void *)rx->skb->data;
 	}
 
-	if (unlikely(link_sta &&
-		     !ieee80211_is_probe_resp(hdr->frame_control) &&
-		     !ieee80211_is_beacon(hdr->frame_control))) {
+	if (unlikely(link_sta && !ieee80211_is_probe_resp(hdr->frame_control) &&
+		     is_unicast_ether_addr(hdr->addr1))) {
 		/* translate to MLD addresses */
 		if (ether_addr_equal(link->conf->addr, hdr->addr1))
 			ether_addr_copy(hdr->addr1, rx->sdata->vif.addr);
