@@ -214,7 +214,7 @@ int intel_pxp_tee_cmd_create_arb_session(struct intel_pxp *pxp,
 	return ret;
 }
 
-void intel_pxp_tee_end_arb_fw_session(struct intel_pxp *pxp, u32 session_id)
+void intel_pxp_tee_end_one_fw_session(struct intel_pxp *pxp, u32 session_id, bool is_alive)
 {
 	struct drm_i915_private *i915 = pxp_to_gt(pxp)->i915;
 	struct pxp_inv_stream_key_in msg_in = {0};
@@ -244,9 +244,19 @@ try_again:
 	if (ret)
 		drm_err(&i915->drm, "Failed to send tee msg for inv-stream-key-%d, ret=[%d]\n",
 			session_id, ret);
-	else if (msg_out.header.status != 0x0)
+	else if (msg_out.header.status != 0x0 && is_alive)
 		drm_warn(&i915->drm, "PXP firmware failed inv-stream-key-%d with status 0x%08x\n",
 			 session_id, msg_out.header.status);
+}
+
+void intel_pxp_tee_end_all_fw_sessions(struct intel_pxp *pxp, u32 sessions_mask)
+{
+	int n;
+
+	for (n = 0; n < INTEL_PXP_MAX_HWDRM_SESSIONS; ++n) {
+		intel_pxp_tee_end_one_fw_session(pxp, n, (sessions_mask & 0x1) ? true : false);
+		sessions_mask = (sessions_mask >> 1);
+	}
 }
 
 int intel_pxp_tee_ioctl_io_message(struct intel_pxp *pxp,
