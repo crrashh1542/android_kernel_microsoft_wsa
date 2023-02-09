@@ -273,6 +273,13 @@ int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
 	if (mvm_link)
 		mvm_link->igtk = keyconf;
 
+	/*
+	 * We don't really need this, but need it to be not invalid,
+	 * and if we switch links multiple times it might go to be
+	 * invalid when removed.
+	 */
+	keyconf->hw_key_idx = 0;
+
 	return 0;
 }
 
