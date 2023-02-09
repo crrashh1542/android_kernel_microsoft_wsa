@@ -5,13 +5,11 @@
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
 #include <net/mac80211.h>
-#include <linux/dmi.h>
 
 #include "iwl-debug.h"
 #include "iwl-io.h"
 #include "iwl-prph.h"
 #include "iwl-csr.h"
-#include "fw/api/phy.h"
 #include "mvm.h"
 #include "fw/api/rs.h"
 #include "fw/img.h"
@@ -1246,53 +1244,3 @@ int iwl_mvm_send_csi_cmd(struct iwl_mvm *mvm)
 	return iwl_mvm_send_cmd_pdu(mvm, id, 0, size, &cfg);
 }
 #endif /* CPTCFG_IWLMVM_VENDOR_CMDS */
-
-static void iwl_mvm_send_revert_umc_power_cmd(struct iwl_mvm *mvm, u8 revert)
-{
-	struct revert_umc_power_cmd revert_cmd = {
-		.oem_revert_umc_tx_power = revert,
-	};
-	struct iwl_host_cmd cmd = {
-		.id = WIDE_ID(PHY_OPS_GROUP, REVERT_UMC_POWER_CMD),
-		.len = { sizeof(revert_cmd), },
-		.data = { &revert_cmd, },
-		.flags = 0,
-	};
-	int err;
-
-	err = iwl_mvm_send_cmd(mvm, &cmd);
-
-	if (err)
-		IWL_ERR(mvm, "revert_umc_power command failed: %d\n", err);
-}
-
-void iwl_mvm_revert_umc_power(struct iwl_mvm *mvm)
-{
-	IWL_DEBUG_FW(mvm, "REVERT_UMC_POWER_CMD version: %d\n",
-		     iwl_fw_lookup_cmd_ver(mvm->fw,
-					   WIDE_ID(PHY_OPS_GROUP,
-						   REVERT_UMC_POWER_CMD),
-						   IWL_FW_CMD_VER_UNKNOWN));
-
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, WIDE_ID(PHY_OPS_GROUP,
-						   REVERT_UMC_POWER_CMD),
-						   IWL_FW_CMD_VER_UNKNOWN) != 1)
-		return;
-
-	IWL_DEBUG_RADIO(mvm, "RFID[0x%x]\n", CSR_HW_RFID_TYPE(mvm->trans->hw_rf_id));
-	if (CSR_HW_RFID_TYPE(mvm->trans->hw_rf_id) ==
-	    CSR_HW_RFID_TYPE(CSR_HW_RF_ID_TYPE_GF)) {
-		IWL_DEBUG_FW(mvm, "Checking vendor [%s] for revert umc power\n",
-			     dmi_get_system_info(DMI_SYS_VENDOR));
-		if (iwl_mvm_is_vendor_in_revert_umc_power_list()) {
-			IWL_DEBUG_FW(mvm,
-				     "NIC and vendor match for REVERT_UMC_POWER_CMD sending 1\n");
-			iwl_mvm_send_revert_umc_power_cmd(mvm, 1);
-		} else {
-			IWL_DEBUG_FW(mvm,
-				     "NIC match but no vendor match for REVERT_UMC_POWER_CMD sending 0\n");
-			iwl_mvm_send_revert_umc_power_cmd(mvm, 0);
-		}
-	}
-}
-

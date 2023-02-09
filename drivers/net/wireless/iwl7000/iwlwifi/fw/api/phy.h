@@ -43,11 +43,6 @@ enum iwl_phy_ops_subcmd_ids {
 	PER_PLATFORM_ANT_GAIN_CMD = 0x07,
 
 	/**
-	 * @REVERT_UMC_POWER_CMD: &struct revert_umc_power_cmd
-	 */
-	REVERT_UMC_POWER_CMD = 0xb,
-
-	/**
 	 * @CT_KILL_NOTIFICATION: &struct ct_kill_notif
 	 */
 	CT_KILL_NOTIFICATION = 0xFE,
@@ -231,16 +226,5 @@ struct temp_report_ths_cmd {
 	__le32 num_temps;
 	__le16 thresholds[IWL_MAX_DTS_TRIPS];
 } __packed; /* GRP_PHY_TEMP_REPORTING_THRESHOLDS_CMD */
-
-/**
- * struct revert_umc_power_cmd - reverts Tx power table to old configuration
- *
- * @oem_revert_umc_tx_power: 1->revert TX power to old config, 0->Do not revert
- * @reserved: reserved
- */
-struct revert_umc_power_cmd {
-	u8 oem_revert_umc_tx_power;
-	u8 reserved[3];
-} __packed; /* PHY_REVERT_UMC_POWER_CMD_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_phy_h__ */

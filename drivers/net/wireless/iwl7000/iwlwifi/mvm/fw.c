@@ -1490,21 +1490,6 @@ void iwl_mvm_get_acpi_tables(struct iwl_mvm *mvm)
 
 	iwl_acpi_get_phy_filters(&mvm->fwrt, &mvm->phy_filters);
 }
-
-static const struct dmi_system_id dmi_revert_umc_power_list[] = {
-	{ .ident = "LENOVO",
-	  .matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		},
-	},
-	{}
-};
-
-bool iwl_mvm_is_vendor_in_revert_umc_power_list(void)
-{
-	return dmi_check_system(dmi_revert_umc_power_list);
-}
-
 #else /* CONFIG_ACPI */
 
 int iwl_mvm_sar_select_profile(struct iwl_mvm *mvm, int prof_a, int prof_b)
@@ -1547,11 +1532,6 @@ static u8 iwl_mvm_eval_dsm_rfi(struct iwl_mvm *mvm)
 
 void iwl_mvm_get_acpi_tables(struct iwl_mvm *mvm)
 {
-}
-
-bool iwl_mvm_is_vendor_in_revert_umc_power_list(void)
-{
-	return false;
 }
 
 #endif /* CONFIG_ACPI */
@@ -1954,8 +1934,6 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 #endif
 
 	iwl_mvm_mei_device_state(mvm, true);
-
-	iwl_mvm_revert_umc_power(mvm);
 
 	IWL_DEBUG_INFO(mvm, "RT uCode started.\n");
 	return 0;
