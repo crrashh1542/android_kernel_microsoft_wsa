@@ -1452,6 +1452,12 @@ int ieee80211_get_vht_max_nss(struct ieee80211_vht_cap *cap,
 			      unsigned int max_vht_nss);
 #endif
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+ssize_t cfg80211_defragment_element(const struct element *elem, const u8 *ies,
+				    size_t ieslen, u8 *data, size_t data_len,
+				    u8 frag_id);
+#endif
+
 #if CFG80211_VERSION < KERNEL_VERSION(5,8,0)
 #define NL80211_EXT_FEATURE_BEACON_PROTECTION_CLIENT -1
 #endif
