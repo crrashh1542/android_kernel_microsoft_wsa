@@ -234,6 +234,7 @@ static inline void iwl_fw_cancel_timestamp(struct iwl_fw_runtime *fwrt)
 	cancel_delayed_work_sync(&fwrt->timestamp.wk);
 }
 
+int iwl_fw_send_timestamp_marker_cmd(struct iwl_fw_runtime *fwrt);
 void iwl_fw_trigger_timestamp(struct iwl_fw_runtime *fwrt, u32 delay);
 
 static inline void iwl_fw_suspend_timestamp(struct iwl_fw_runtime *fwrt)
