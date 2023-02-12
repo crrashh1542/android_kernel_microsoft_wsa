@@ -392,7 +392,11 @@ void iwl_dbg_tlv_del_timers(struct iwl_trans *trans)
 	struct iwl_dbg_tlv_timer_node *node, *tmp;
 
 	list_for_each_entry_safe(node, tmp, timer_list, list) {
+#if LINUX_VERSION_IS_GEQ(6,2,1)
+		timer_shutdown_sync(&node->timer);
+#else
 		del_timer_sync(&node->timer);
+#endif
 		list_del(&node->list);
 		kfree(node);
 	}
