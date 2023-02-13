@@ -214,7 +214,7 @@ int intel_pxp_tee_cmd_create_arb_session(struct intel_pxp *pxp,
 	return ret;
 }
 
-void intel_pxp_tee_end_one_fw_session(struct intel_pxp *pxp, u32 session_id, bool is_alive)
+static void intel_pxp_tee_end_one_fw_session(struct intel_pxp *pxp, u32 session_id, bool is_alive)
 {
 	struct drm_i915_private *i915 = pxp_to_gt(pxp)->i915;
 	struct pxp_inv_stream_key_in msg_in = {0};
