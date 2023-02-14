@@ -266,8 +266,8 @@ static void t7xx_init_netdev_napi(struct t7xx_ccmni_ctrl *ctlb)
 
 	for (i = 0; i < RXQ_NUM; i++) {
 		ctlb->napi[i] = &ctlb->hif_ctrl->rxq[i].napi;
-		netif_napi_add_weight(&ctlb->dummy_dev, ctlb->napi[i], t7xx_dpmaif_napi_rx_poll,
-				      NIC_NAPI_POLL_BUDGET);
+		netif_napi_add(&ctlb->dummy_dev, ctlb->napi[i], t7xx_dpmaif_napi_rx_poll,
+			       NIC_NAPI_POLL_BUDGET);
 	}
 }
 
