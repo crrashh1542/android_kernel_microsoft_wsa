@@ -116,3 +116,11 @@ config USB_AUTOSUSPEND_DELAY
 	  The default value Linux has always had is 2 seconds.  Change
 	  this value if you want a different delay and cannot modify
 	  the command line or module parameter.
+
+config USB_HUB_ERROR_REPORTING
+	bool "Enables uevent based error reporting from the hub driver"
+	default n
+	help
+	  When enabled, will cause the hub driver to send a uevent when
+	  an important driver function returns an error. The uevent will
+	  include the error code returned by the hub driver function.
