@@ -2,6 +2,7 @@
 /*
  * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 #ifndef __IWL_CONFIG_H__
 #define __IWL_CONFIG_H__
@@ -427,6 +428,7 @@ struct iwl_cfg {
 #define IWL_CFG_MAC_TYPE_MA		0x44
 #define IWL_CFG_MAC_TYPE_BZ		0x46
 #define IWL_CFG_MAC_TYPE_GL		0x47
+#define IWL_CFG_MAC_TYPE_SC		0x48
 
 #define IWL_CFG_RF_TYPE_TH		0x105
 #define IWL_CFG_RF_TYPE_TH1		0x108
@@ -438,6 +440,7 @@ struct iwl_cfg {
 #define IWL_CFG_RF_TYPE_MR		0x110
 #define IWL_CFG_RF_TYPE_MS		0x111
 #define IWL_CFG_RF_TYPE_FM		0x112
+#define IWL_CFG_RF_TYPE_WH		0x113
 
 #define IWL_CFG_RF_ID_TH		0x1
 #define IWL_CFG_RF_ID_TH1		0x1
@@ -535,6 +538,7 @@ extern const char iwl_ax221_name[];
 extern const char iwl_ax231_name[];
 extern const char iwl_ax411_name[];
 extern const char iwl_bz_name[];
+extern const char iwl_sc_name[];
 #if IS_ENABLED(CPTCFG_IWLMVM)
 extern const struct iwl_cfg iwl7260_2ac_cfg;
 extern const struct iwl_cfg iwl7260_2ac_cfg_high_temp;
@@ -638,6 +642,16 @@ extern const struct iwl_cfg iwl_cfg_bnj_c0_hr_b0;
 extern const struct iwl_cfg iwl_cfg_bnj_b0_fm_b0;
 extern const struct iwl_cfg iwl_cfg_bnj_c0_fm_c0;
 extern const struct iwl_cfg iwl_cfg_bnj_b0_fm4_b0;
+extern const struct iwl_cfg iwl_cfg_bnj_a0_wh_a0;
+extern const struct iwl_cfg iwl_cfg_bnj_b0_wh_a0;
+extern const struct iwl_cfg iwl_cfg_bnj_c0_wh_a0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_fm_b0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_fm_c0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_hr_a0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_hr_b0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_gf_a0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_gf4_a0;
+extern const struct iwl_cfg iwl_cfg_sc_a0_wh_a0;
 #endif /* CPTCFG_IWLMVM */
 
 #endif /* __IWL_CONFIG_H__ */
