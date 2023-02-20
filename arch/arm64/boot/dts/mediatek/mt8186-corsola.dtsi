@@ -1875,6 +1875,7 @@
 &scp {
 	status = "okay";
 
+	firmware-name = "mediatek/mt8186/scp.img";
 	memory-region = <&scp_mem_reserved>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&scp_pins>;
