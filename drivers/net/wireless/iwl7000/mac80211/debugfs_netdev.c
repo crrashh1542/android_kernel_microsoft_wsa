@@ -127,41 +127,41 @@ static const struct file_operations name##_ops = {			\
 	.llseek = generic_file_llseek,					\
 }
 
-#define _IEEE80211_IF_FILE_R_FN(name)					\
+#define _IEEE80211_IF_FILE_R_FN(name, type)				\
 static ssize_t ieee80211_if_read_##name(struct file *file,		\
 					char __user *userbuf,		\
 					size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(const void *, char *, int) =			\
-		(ssize_t (*)(const void *, char *, int))		\
-		ieee80211_if_fmt_##name;				\
+	ssize_t (*fn)(const void *, char *, int) = (void *)		\
+		((ssize_t (*)(const type, char *, int))			\
+		 ieee80211_if_fmt_##name);				\
 	return ieee80211_if_read(file->private_data,			\
 				 userbuf, count, ppos, fn);		\
 }
 
-#define _IEEE80211_IF_FILE_W_FN(name)					\
+#define _IEEE80211_IF_FILE_W_FN(name, type)				\
 static ssize_t ieee80211_if_write_##name(struct file *file,		\
 					 const char __user *userbuf,	\
 					 size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(void *, const char *, int) =			\
-		(ssize_t (*)(void *, const char *, int))		\
-		ieee80211_if_parse_##name;				\
+	ssize_t (*fn)(void *, const char *, int) = (void *)		\
+		((ssize_t (*)(type, const char *, int))			\
+		 ieee80211_if_parse_##name);				\
 	return ieee80211_if_write(file->private_data, userbuf, count,	\
 				  ppos, fn);				\
 }
 
 #define IEEE80211_IF_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_FILE_W(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name,		\
 			       ieee80211_if_write_##name)
 
@@ -171,7 +171,7 @@ static ssize_t ieee80211_if_write_##name(struct file *file,		\
 
 /* Same but with a link_ prefix in the ops variable name and different type */
 #define IEEE80211_IF_LINK_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_LINK_FILE_W(name)					\
@@ -179,8 +179,8 @@ static ssize_t ieee80211_if_write_##name(struct file *file,		\
 	_IEEE80211_IF_FILE_OPS(link_##name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_LINK_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_link_data *)	\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name,	\
 			       ieee80211_if_write_##name)
 
