@@ -2051,6 +2051,7 @@ enum nl80211_eht_gi {
 };
 
 #define RATE_INFO_BW_320 (RATE_INFO_BW_HE_RU + 1)
+#define NL80211_RRF_NO_320MHZ 0
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,18,0) */
 
 #if LINUX_VERSION_IS_LESS(5,15,0)
@@ -2412,6 +2413,7 @@ _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 #define cfg80211_req_link_disabled(req, link)	0
+#define NL80211_RRF_NO_EHT 0
 #else
 #define cfg80211_req_link_disabled(req, link)	((req)->links[link].disabled)
 #endif
