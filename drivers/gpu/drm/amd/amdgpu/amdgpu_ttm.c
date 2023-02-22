@@ -69,6 +69,8 @@ static int amdgpu_ttm_backend_bind(struct ttm_device *bdev,
 static void amdgpu_ttm_backend_unbind(struct ttm_device *bdev,
 				      struct ttm_tt *ttm);
 
+int amdgpu_try_dma_buf_mmap(struct file *filp, struct vm_area_struct *vma);
+
 static int amdgpu_ttm_init_on_chip(struct amdgpu_device *adev,
 				    unsigned int type,
 				    uint64_t size_in_page)
@@ -1954,6 +1956,14 @@ static int amdgpu_ttm_prepare_job(struct amdgpu_device *adev,
 		}
 	}
 	return 0;
+}
+
+int amdgpu_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	if (amdgpu_try_dma_buf_mmap(filp, vma) == 0)
+		return 0;
+
+	return drm_gem_mmap(filp, vma);
 }
 
 int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
