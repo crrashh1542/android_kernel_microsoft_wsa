@@ -286,6 +286,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(bool, he_smps_disabled)
 	IWL_DBG_CFG_NODEF(bool, ht_dynamic_smps)
 	IWL_DBG_CFG_NODEF(bool, amsdu_in_ampdu_disabled)
+	IWL_DBG_CFG_NODEF(bool, disable_eml)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */
