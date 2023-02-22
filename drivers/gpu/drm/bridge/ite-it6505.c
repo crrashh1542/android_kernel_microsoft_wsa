@@ -2168,6 +2168,9 @@ static void it6505_link_train_ok(struct it6505 *it6505)
 	it6505_set_bits(it6505, REG_DATA_MUTE_CTRL, EN_VID_MUTE, 0x00);
 	it6505_set_bits(it6505, REG_INFOFRAME_CTRL,
 			EN_VID_CTRL_PKT, EN_VID_CTRL_PKT);
+
+	if (it6505->hdcp_desired)
+		it6505_start_hdcp(it6505);
 }
 
 static void it6505_link_step_train_process(struct it6505 *it6505)
@@ -3144,10 +3147,8 @@ static int it6505_connector_atomic_check(struct it6505 *it6505,
 		    it6505->link_state == LINK_OK)
 			it6505_start_hdcp(it6505);
 	} else {
-		if (it6505->hdcp_status == HDCP_AUTH_IDLE) {
-			DRM_DEV_DEBUG_DRIVER(dev, "invalid to set hdcp enabled");
-			return -EINVAL;
-		}
+		DRM_DEV_DEBUG_DRIVER(dev, "invalid to set hdcp enabled");
+		return -EINVAL;
 	}
 
 	return 0;
