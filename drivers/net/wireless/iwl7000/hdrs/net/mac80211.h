@@ -1722,6 +1722,7 @@ struct ieee80211_channel_switch {
  *	this is not pure P2P vif.
  * @IEEE80211_VIF_DISABLE_SMPS_OVERRIDE: disable user configuration of
  *	SMPS mode via debugfs.
+ * @IEEE80211_VIF_DISABLE_EML: disable EML in EHT
  */
 enum ieee80211_vif_flags {
 	IEEE80211_VIF_BEACON_FILTER		= BIT(0),
@@ -1729,8 +1730,8 @@ enum ieee80211_vif_flags {
 	IEEE80211_VIF_SUPPORTS_UAPSD		= BIT(2),
 	IEEE80211_VIF_GET_NOA_UPDATE		= BIT(3),
 	IEEE80211_VIF_DISABLE_SMPS_OVERRIDE	= BIT(4),
+	IEEE80211_VIF_DISABLE_EML		= BIT(5),
 };
-
 
 /**
  * enum ieee80211_offload_flags - virtual interface offload flags
