@@ -274,4 +274,12 @@ struct cam_isp_hw_cmd_args {
 int cam_isp_hw_mgr_init(struct device_node *of_node,
 	struct cam_hw_mgr_intf *hw_mgr, int *iommu_hdl);
 
+/**
+ * cam_isp_hw_mgr_deinit()
+ *
+ * @brief:              De-initialization function for the ISP hardware manager
+ *
+ */
+void cam_isp_hw_mgr_deinit(void);
+
 #endif /* __CAM_ISP_HW_MGR_INTF_H__ */

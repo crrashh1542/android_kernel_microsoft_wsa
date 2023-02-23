@@ -230,6 +230,15 @@ struct cam_ife_hw_mgr {
 int cam_ife_hw_mgr_init(struct cam_hw_mgr_intf *hw_mgr_intf, int *iommu_hdl);
 
 /**
+ * cam_ife_hw_mgr_deinit()
+ *
+ * @brief:              De-initialize the IFE hardware manager. This is the
+ *                      exit functinon for the IFE HW manager.
+ *
+ */
+void cam_ife_hw_mgr_deinit(void);
+
+/**
  * cam_ife_mgr_do_tasklet_buf_done()
  *
  * @brief:              Main tasklet handle function for the buf done event

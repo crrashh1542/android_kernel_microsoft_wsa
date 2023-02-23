@@ -115,6 +115,8 @@ static int cam_isp_dev_remove(struct platform_device *pdev)
 	if (rc)
 		CAM_ERR(CAM_ISP, "Unregister failed");
 
+	cam_isp_hw_mgr_deinit();
+
 	return 0;
 }
 
