@@ -434,8 +434,8 @@ static void load_fw_image_section(struct kbase_device *kbdev, const u8 *data,
 			memset(p + copy_len, 0, zi_len);
 		}
 
-		kbase_sync_single_for_device(kbdev, kbase_dma_addr_from_tagged(phys[page_num]),
-					     PAGE_SIZE, DMA_TO_DEVICE);
+		kbase_sync_single_for_device(kbdev, kbase_dma_addr(page),
+				PAGE_SIZE, DMA_TO_DEVICE);
 		kunmap_atomic(p);
 	}
 }
@@ -682,8 +682,8 @@ static int parse_memory_setup_entry(struct kbase_device *kbdev,
 	} else {
 		if (!reuse_pages) {
 			ret = kbase_mem_pool_alloc_pages(
-				kbase_mem_pool_group_select(kbdev, KBASE_MEM_GROUP_CSF_FW,
-							    is_small_page),
+				kbase_mem_pool_group_select(
+					kbdev, KBASE_MEM_GROUP_CSF_FW, is_small_page),
 				num_pages_aligned, phys, false);
 		}
 	}
@@ -1265,13 +1265,13 @@ static inline void access_firmware_memory_common(struct kbase_device *kbdev,
 
 	if (read) {
 		kbase_sync_single_for_device(kbdev,
-			kbase_dma_addr_from_tagged(interface->phys[page_num]) + offset_in_page,
+			kbase_dma_addr(target_page) + offset_in_page,
 			sizeof(u32), DMA_BIDIRECTIONAL);
 		*value = *addr;
 	} else {
 		*addr = *value;
 		kbase_sync_single_for_device(kbdev,
-			kbase_dma_addr_from_tagged(interface->phys[page_num]) + offset_in_page,
+			kbase_dma_addr(target_page) + offset_in_page,
 			sizeof(u32), DMA_BIDIRECTIONAL);
 	}
 
@@ -2819,8 +2819,9 @@ int kbase_csf_firmware_mcu_shared_mapping_init(
 	if (!page_list)
 		goto page_list_alloc_error;
 
-	ret = kbase_mem_pool_alloc_pages(&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW], num_pages,
-					 phys, false);
+	ret = kbase_mem_pool_alloc_pages(
+		&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW],
+		num_pages, phys, false);
 	if (ret <= 0)
 		goto phys_mem_pool_alloc_error;
 

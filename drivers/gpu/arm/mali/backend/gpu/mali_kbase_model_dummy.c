@@ -1373,6 +1373,7 @@ u8 midgard_model_write_reg(void *h, u32 addr, u32 value)
 		case GPU_COMMAND_PRFCNT_SAMPLE:
 			midgard_model_dump_prfcnt();
 			dummy->prfcnt_sample_completed = 1;
+			break;
 #endif /* !MALI_USE_CSF */
 		default:
 			break;

@@ -265,8 +265,10 @@ void kbase_context_common_term(struct kbase_context *kctx)
 
 int kbase_context_mem_pool_group_init(struct kbase_context *kctx)
 {
-	return kbase_mem_pool_group_init(&kctx->mem_pools, kctx->kbdev,
-					 &kctx->kbdev->mem_pool_defaults, &kctx->kbdev->mem_pools);
+	return kbase_mem_pool_group_init(&kctx->mem_pools,
+		kctx->kbdev,
+		&kctx->kbdev->mem_pool_defaults,
+		&kctx->kbdev->mem_pools);
 }
 
 void kbase_context_mem_pool_group_term(struct kbase_context *kctx)

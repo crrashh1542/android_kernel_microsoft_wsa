@@ -193,8 +193,8 @@ static const enum base_hw_issue *kbase_hw_get_issues_for_new_id(
 		    { GPU_ID2_VERSION_MAKE(0, 1, 1), base_hw_issues_tNAx_r0p1 },
 		    { U32_MAX, NULL } } },
 
-		/* Workaround for G-57 on MT819X */
-		{ GPU_ID2_PRODUCT_TNAX_MT819X,
+		/* Workaround for G-57 on MT81XX */
+		{ GPU_ID2_PRODUCT_TNAX_MT81XX,
 		  { { GPU_ID2_VERSION_MAKE(0, 0, 0), base_hw_issues_tNAx_r0p0 },
 		    { GPU_ID2_VERSION_MAKE(0, 1, 0), base_hw_issues_tNAx_r0p1 },
 		    { U32_MAX, NULL } } },
@@ -264,7 +264,7 @@ static const enum base_hw_issue *kbase_hw_get_issues_for_new_id(
 	};
 
 	/* Replacing gpu_id with orig_gpu_id to identify the special G-57 on
-	 * MT819X, and reconfigure its base hw issues.
+	 * MT81XX, and reconfigure its base hw issues.
 	 */
 	u32 gpu_id = kbdev->gpu_props.props.raw_props.orig_gpu_id;
 	const u32 product_model = gpu_id & GPU_ID2_PRODUCT_MODEL;

@@ -263,7 +263,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	if (kbdev->current_voltages[0] < volts[0]) {
 		err = set_voltages(kbdev, volts, true);
 		if (err) {
-			dev_err(kbdev->dev, "Failed to increase voltage: %d\n");
+			dev_err(kbdev->dev, "Failed to increase voltage: %d\n", err);
 			return err;
 		}
 	}
@@ -281,7 +281,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	if (kbdev->current_voltages[0] > volts[0]) {
 		err = set_voltages(kbdev, volts, false);
 		if (err) {
-			dev_err(kbdev->dev, "Failed to decrease voltage: %d\n");
+			dev_err(kbdev->dev, "Failed to decrease voltage: %d\n", err);
 			return err;
 		}
 	}

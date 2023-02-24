@@ -436,40 +436,36 @@ struct kbase_pm_device_data {
 
 /**
  * struct kbase_mem_pool - Page based memory pool for kctx/kbdev
- * @kbdev:                     Kbase device where memory is used
- * @cur_size:                  Number of free pages currently in the pool (may exceed
- *                             @max_size in some corner cases)
- * @max_size:                  Maximum number of free pages in the pool
- * @order:                     order = 0 refers to a pool of 4 KB pages
- *                             order = 9 refers to a pool of 2 MB pages (2^9 * 4KB = 2 MB)
- * @group_id:                  A memory group ID to be passed to a platform-specific
- *                             memory group manager, if present. Immutable.
- *                             Valid range is 0..(MEMORY_GROUP_MANAGER_NR_GROUPS-1).
- * @pool_lock:                 Lock protecting the pool - must be held when modifying
- *                             @cur_size and @page_list
- * @page_list:                 List of free pages in the pool
- * @reclaim:                   Shrinker for kernel reclaim of free pages
- * @isolation_in_progress_cnt: Number of pages in pool undergoing page isolation.
- *                             This is used to avoid race condition between pool termination
- *                             and page isolation for page migration.
- * @next_pool:                 Pointer to next pool where pages can be allocated when this
- *                             pool is empty. Pages will spill over to the next pool when
- *                             this pool is full. Can be NULL if there is no next pool.
- * @dying:                     true if the pool is being terminated, and any ongoing
- *                             operations should be abandoned
- * @dont_reclaim:              true if the shrinker is forbidden from reclaiming memory from
- *                             this pool, eg during a grow operation
+ * @kbdev:        Kbase device where memory is used
+ * @cur_size:     Number of free pages currently in the pool (may exceed
+ *                @max_size in some corner cases)
+ * @max_size:     Maximum number of free pages in the pool
+ * @order:        order = 0 refers to a pool of 4 KB pages
+ *                order = 9 refers to a pool of 2 MB pages (2^9 * 4KB = 2 MB)
+ * @group_id:     A memory group ID to be passed to a platform-specific
+ *                memory group manager, if present. Immutable.
+ *                Valid range is 0..(MEMORY_GROUP_MANAGER_NR_GROUPS-1).
+ * @pool_lock:    Lock protecting the pool - must be held when modifying
+ *                @cur_size and @page_list
+ * @page_list:    List of free pages in the pool
+ * @reclaim:      Shrinker for kernel reclaim of free pages
+ * @next_pool:    Pointer to next pool where pages can be allocated when this
+ *                pool is empty. Pages will spill over to the next pool when
+ *                this pool is full. Can be NULL if there is no next pool.
+ * @dying:        true if the pool is being terminated, and any ongoing
+ *                operations should be abandoned
+ * @dont_reclaim: true if the shrinker is forbidden from reclaiming memory from
+ *                this pool, eg during a grow operation
  */
 struct kbase_mem_pool {
 	struct kbase_device *kbdev;
-	size_t cur_size;
-	size_t max_size;
-	u8 order;
-	u8 group_id;
-	spinlock_t pool_lock;
-	struct list_head page_list;
-	struct shrinker reclaim;
-	atomic_t isolation_in_progress_cnt;
+	size_t              cur_size;
+	size_t              max_size;
+	u8                  order;
+	u8                  group_id;
+	spinlock_t          pool_lock;
+	struct list_head    page_list;
+	struct shrinker     reclaim;
 
 	struct kbase_mem_pool *next_pool;
 
@@ -639,30 +635,6 @@ struct kbase_process {
 
 	struct rb_node kprcs_node;
 	struct rb_root dma_buf_root;
-};
-
-/**
- * struct kbase_mem_migrate - Object representing an instance for managing
- *                            page migration.
- *
- * @mapping:          Pointer to address space struct used for page migration.
- * @free_pages_list:  List of deferred pages to free. Mostly used when page migration
- *                    is enabled. Pages in memory pool that require migrating
- *                    will be freed instead. However page cannot be freed
- *                    right away as Linux will need to release the page lock.
- *                    Therefore page will be added to this list and freed later.
- * @free_pages_lock:  This lock should be held when adding or removing pages
- *                    from @free_pages_list.
- * @free_pages_workq: Work queue to process the work items queued to free
- *                    pages in @free_pages_list.
- * @free_pages_work:  Work item to free pages in @free_pages_list.
- */
-struct kbase_mem_migrate {
-	struct address_space *mapping;
-	struct list_head free_pages_list;
-	spinlock_t free_pages_lock;
-	struct workqueue_struct *free_pages_workq;
-	struct work_struct free_pages_work;
 };
 
 /**
@@ -979,7 +951,6 @@ struct kbase_mem_migrate {
  * @pcm_dev:                The priority control manager device.
  * @oom_notifier_block:     notifier_block containing kernel-registered out-of-
  *                          memory handler.
- * @mem_migrate:            Per device object for managing page migration.
  */
 struct kbase_device {
 	u32 hw_quirks_sc;
@@ -1279,8 +1250,6 @@ struct kbase_device {
 
 	struct notifier_block oom_notifier_block;
 
-
-	struct kbase_mem_migrate mem_migrate;
 };
 
 /**

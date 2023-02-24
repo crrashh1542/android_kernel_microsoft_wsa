@@ -663,9 +663,6 @@ static int kbase_open(struct inode *inode, struct file *filp)
 	if (!kbdev)
 		return -ENODEV;
 
-	/* Set address space operation for page migration */
-	kbase_mem_migrate_set_address_space_ops(kbdev, filp);
-
 	/* Device-wide firmware load is moved here from probing to comply with
 	 * Android GKI vendor guideline.
 	 */

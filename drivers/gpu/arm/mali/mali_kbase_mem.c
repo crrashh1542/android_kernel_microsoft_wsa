@@ -1423,7 +1423,6 @@ int kbase_mem_init(struct kbase_device *kbdev)
 
 	memdev = &kbdev->memdev;
 
-	kbase_mem_migrate_init(kbdev);
 	kbase_mem_pool_group_config_set_max_size(&kbdev->mem_pool_defaults,
 		KBASE_MEM_POOL_MAX_SIZE_KCTX);
 
@@ -1486,7 +1485,8 @@ int kbase_mem_init(struct kbase_device *kbdev)
 		kbase_mem_pool_group_config_set_max_size(&mem_pool_defaults,
 			KBASE_MEM_POOL_MAX_SIZE_KBDEV);
 
-		err = kbase_mem_pool_group_init(&kbdev->mem_pools, kbdev, &mem_pool_defaults, NULL);
+		err = kbase_mem_pool_group_init(&kbdev->mem_pools, kbdev,
+			&mem_pool_defaults, NULL);
 	}
 
 	return err;
@@ -1511,8 +1511,6 @@ void kbase_mem_term(struct kbase_device *kbdev)
 		dev_warn(kbdev->dev, "%s: %d pages in use!\n", __func__, pages);
 
 	kbase_mem_pool_group_term(&kbdev->mem_pools);
-
-	kbase_mem_migrate_term(kbdev);
 
 	WARN_ON(kbdev->total_gpu_pages);
 	WARN_ON(!RB_EMPTY_ROOT(&kbdev->process_root));
@@ -2027,8 +2025,7 @@ void kbase_sync_single(struct kbase_context *kctx,
 		BUG_ON(!cpu_page);
 		BUG_ON(offset + size > PAGE_SIZE);
 
-		dma_addr = kbase_dma_addr_from_tagged(t_cpu_pa) + offset;
-
+		dma_addr = kbase_dma_addr(cpu_page) + offset;
 		if (sync_fn == KBASE_SYNC_TO_CPU)
 			dma_sync_single_for_cpu(kctx->kbdev->dev, dma_addr,
 					size, DMA_BIDIRECTIONAL);
@@ -2039,20 +2036,19 @@ void kbase_sync_single(struct kbase_context *kctx,
 		void *src = NULL;
 		void *dst = NULL;
 		struct page *gpu_page;
-		dma_addr_t dma_addr;
 
 		if (WARN(!gpu_pa, "No GPU PA found for infinite cache op"))
 			return;
 
 		gpu_page = pfn_to_page(PFN_DOWN(gpu_pa));
-		dma_addr = kbase_dma_addr_from_tagged(t_gpu_pa) + offset;
 
 		if (sync_fn == KBASE_SYNC_TO_DEVICE) {
 			src = ((unsigned char *)kmap(cpu_page)) + offset;
 			dst = ((unsigned char *)kmap(gpu_page)) + offset;
 		} else if (sync_fn == KBASE_SYNC_TO_CPU) {
-			dma_sync_single_for_cpu(kctx->kbdev->dev, dma_addr, size,
-						DMA_BIDIRECTIONAL);
+			dma_sync_single_for_cpu(kctx->kbdev->dev,
+					kbase_dma_addr(gpu_page) + offset,
+					size, DMA_BIDIRECTIONAL);
 			src = ((unsigned char *)kmap(gpu_page)) + offset;
 			dst = ((unsigned char *)kmap(cpu_page)) + offset;
 		}
@@ -2061,8 +2057,9 @@ void kbase_sync_single(struct kbase_context *kctx,
 		kunmap(gpu_page);
 		kunmap(cpu_page);
 		if (sync_fn == KBASE_SYNC_TO_DEVICE)
-			dma_sync_single_for_device(kctx->kbdev->dev, dma_addr, size,
-						   DMA_BIDIRECTIONAL);
+			dma_sync_single_for_device(kctx->kbdev->dev,
+					kbase_dma_addr(gpu_page) + offset,
+					size, DMA_BIDIRECTIONAL);
 	}
 }
 
@@ -2490,8 +2487,11 @@ int kbase_alloc_phy_pages_helper(struct kbase_mem_phy_alloc *alloc,
 	if (nr_left >= (SZ_2M / SZ_4K)) {
 		int nr_lp = nr_left / (SZ_2M / SZ_4K);
 
-		res = kbase_mem_pool_alloc_pages(&kctx->mem_pools.large[alloc->group_id],
-						 nr_lp * (SZ_2M / SZ_4K), tp, true);
+		res = kbase_mem_pool_alloc_pages(
+			&kctx->mem_pools.large[alloc->group_id],
+			 nr_lp * (SZ_2M / SZ_4K),
+			 tp,
+			 true);
 
 		if (res > 0) {
 			nr_left -= res;
@@ -2590,8 +2590,9 @@ no_new_partial:
 #endif
 
 	if (nr_left) {
-		res = kbase_mem_pool_alloc_pages(&kctx->mem_pools.small[alloc->group_id], nr_left,
-						 tp, false);
+		res = kbase_mem_pool_alloc_pages(
+			&kctx->mem_pools.small[alloc->group_id],
+			nr_left, tp, false);
 		if (res <= 0)
 			goto alloc_failed;
 	}

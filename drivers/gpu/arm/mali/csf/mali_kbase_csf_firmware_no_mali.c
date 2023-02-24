@@ -1504,8 +1504,9 @@ int kbase_csf_firmware_mcu_shared_mapping_init(
 	if (!page_list)
 		goto page_list_alloc_error;
 
-	ret = kbase_mem_pool_alloc_pages(&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW], num_pages,
-					 phys, false);
+	ret = kbase_mem_pool_alloc_pages(
+		&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW],
+		num_pages, phys, false);
 	if (ret <= 0)
 		goto phys_mem_pool_alloc_error;
 

@@ -37,7 +37,6 @@
 #include "mali_kbase_defs.h"
 /* Required for kbase_mem_evictable_unmake */
 #include "mali_kbase_mem_linux.h"
-#include "mali_kbase_mem_migrate.h"
 
 static inline void kbase_process_page_usage_inc(struct kbase_context *kctx,
 		int pages);
@@ -184,89 +183,7 @@ struct kbase_mem_phy_alloc {
 };
 
 /**
- * enum kbase_page_status - Status of a page used for page migration.
- *
- * @MEM_POOL: Stable state. Page is located in a memory pool and can safely
- *            be migrated.
- * @ALLOCATE_IN_PROGRESS: Transitory state. A page is set to this status as
- *                        soon as it leaves a memory pool.
- * @SPILL_IN_PROGRESS: Transitory state. Corner case where pages in a memory
- *                     pool of a dying context are being moved to the device
- *                     memory pool.
- * @ALLOCATED_MAPPED: Stable state. Page has been allocated, mapped to GPU
- *                    and has reference to kbase_mem_phy_alloc object.
- * @MULTI_MAPPED: Stable state. This state is used to manage all use cases
- *                where a page may have "unusual" mappings.
- * @PT_MAPPED: Stable state. Similar to ALLOCATED_MAPPED, but page doesn't
- *             reference kbase_mem_phy_alloc object. Used as a page in MMU
- *             page table.
- * @FREE_IN_PROGRESS: Transitory state. A page is set to this status as soon as
- *                    the driver manages to acquire a lock on the page while
- *                    unmapping it. This status means that a memory release is
- *                    happening and it's still not complete.
- * @FREE_ISOLATED_IN_PROGRESS: Transitory state. This is a very particular corner case.
- *                             A page is isolated while it is in ALLOCATED_MAPPED or
- *                             PT_MAPPED state, but then the driver tries to destroy the
- *                             allocation.
- *
- * Pages can only be migrated in stable states.
- */
-enum kbase_page_status {
-	MEM_POOL = 0,
-	ALLOCATE_IN_PROGRESS,
-	SPILL_IN_PROGRESS,
-	ALLOCATED_MAPPED,
-	MULTI_MAPPED,
-	PT_MAPPED,
-	FREE_IN_PROGRESS,
-	FREE_ISOLATED_IN_PROGRESS,
-};
-
-/**
- * struct kbase_page_metadata - Metadata for each page in kbase
- *
- * @kbdev:         Pointer to kbase device.
- * @dma_addr:      DMA address mapped to page.
- * @migrate_lock:  A spinlock to protect the private metadata.
- * @status:        Status to keep track if page can be migrated at any
- *                 given moment. MSB will indicate if page is isolated.
- *                 Protected by @migrate_lock.
- * @data:          Member in union valid based on @status.
- *
- * Each 4KB page will have a reference to this struct in the private field.
- * This will be used to keep track of information required for Linux page
- * migration functionality as well as address for DMA mapping.
- */
-struct kbase_page_metadata {
-	dma_addr_t dma_addr;
-	spinlock_t migrate_lock;
-	u8 status;
-
-	union {
-		struct {
-			struct kbase_mem_pool *pool;
-			/* Pool could be terminated after page is isolated and therefore
-			 * won't be able to get reference to kbase device.
-			 */
-			struct kbase_device *kbdev;
-		} mem_pool;
-		struct {
-			struct kbase_mem_phy_alloc *phy_alloc;
-			struct kbase_va_region *reg;
-			struct kbase_mmu_table *mmut;
-			struct page *pgd;
-			u64 vpfn;
-			size_t page_array_index;
-		} mapped;
-		struct {
-			struct kbase_mmu_table *mmut;
-			struct page *pgd;
-			u16 entry_info;
-		} pt_mapped;
-	} data;
-};
-
-/* The top bit of kbase_alloc_import_user_buf::current_mapping_usage_count is
+ * The top bit of kbase_alloc_import_user_buf::current_mapping_usage_count is
  * used to signify that a buffer was pinned when it was imported. Since the
  * reference count is limited by the number of atoms that can be submitted at
  * once there should be no danger of overflowing into this bit.
@@ -1035,9 +952,12 @@ static inline size_t kbase_mem_pool_config_get_max_size(
  *
  * Return: 0 on success, negative -errno on error
  */
-int kbase_mem_pool_init(struct kbase_mem_pool *pool, const struct kbase_mem_pool_config *config,
-			unsigned int order, int group_id, struct kbase_device *kbdev,
-			struct kbase_mem_pool *next_pool);
+int kbase_mem_pool_init(struct kbase_mem_pool *pool,
+		const struct kbase_mem_pool_config *config,
+		unsigned int order,
+		int group_id,
+		struct kbase_device *kbdev,
+		struct kbase_mem_pool *next_pool);
 
 /**
  * kbase_mem_pool_term - Destroy a memory pool
@@ -1133,7 +1053,7 @@ void kbase_mem_pool_free_locked(struct kbase_mem_pool *pool, struct page *p,
  * this lock, it should use kbase_mem_pool_alloc_pages_locked() instead.
  */
 int kbase_mem_pool_alloc_pages(struct kbase_mem_pool *pool, size_t nr_4k_pages,
-			       struct tagged_addr *pages, bool partial_allowed);
+		struct tagged_addr *pages, bool partial_allowed);
 
 /**
  * kbase_mem_pool_alloc_pages_locked - Allocate pages from memory pool
@@ -1283,16 +1203,6 @@ void kbase_mem_pool_mark_dying(struct kbase_mem_pool *pool);
  * Return: A new page or NULL if no memory
  */
 struct page *kbase_mem_alloc_page(struct kbase_mem_pool *pool);
-
-/**
- * kbase_mem_pool_free_page - Free a page from a memory pool.
- * @pool:  Memory pool to free a page from
- * @p:     Page to free
- *
- * This will free any associated data stored for the page and release
- * the page back to the kernel.
- */
-void kbase_mem_pool_free_page(struct kbase_mem_pool *pool, struct page *p);
 
 /**
  * kbase_region_tracker_init - Initialize the region tracker data structure
@@ -1784,7 +1694,7 @@ void kbase_free_phy_pages_helper_locked(struct kbase_mem_phy_alloc *alloc,
 		struct kbase_mem_pool *pool, struct tagged_addr *pages,
 		size_t nr_pages_to_free);
 
-static inline void kbase_set_dma_addr_as_priv(struct page *p, dma_addr_t dma_addr)
+static inline void kbase_set_dma_addr(struct page *p, dma_addr_t dma_addr)
 {
 	SetPagePrivate(p);
 	if (sizeof(dma_addr_t) > sizeof(p->private)) {
@@ -1800,7 +1710,7 @@ static inline void kbase_set_dma_addr_as_priv(struct page *p, dma_addr_t dma_add
 	}
 }
 
-static inline dma_addr_t kbase_dma_addr_as_priv(struct page *p)
+static inline dma_addr_t kbase_dma_addr(struct page *p)
 {
 	if (sizeof(dma_addr_t) > sizeof(p->private))
 		return ((dma_addr_t)page_private(p)) << PAGE_SHIFT;
@@ -1808,32 +1718,9 @@ static inline dma_addr_t kbase_dma_addr_as_priv(struct page *p)
 	return (dma_addr_t)page_private(p);
 }
 
-static inline void kbase_clear_dma_addr_as_priv(struct page *p)
+static inline void kbase_clear_dma_addr(struct page *p)
 {
 	ClearPagePrivate(p);
-}
-
-static inline struct kbase_page_metadata *kbase_page_private(struct page *p)
-{
-	return (struct kbase_page_metadata *)page_private(p);
-}
-
-static inline dma_addr_t kbase_dma_addr(struct page *p)
-{
-	if (kbase_page_migration_enabled)
-		return kbase_page_private(p)->dma_addr;
-
-	return kbase_dma_addr_as_priv(p);
-}
-
-static inline dma_addr_t kbase_dma_addr_from_tagged(struct tagged_addr tagged_pa)
-{
-	phys_addr_t pa = as_phys_addr_t(tagged_pa);
-	struct page *page = pfn_to_page(PFN_DOWN(pa));
-	dma_addr_t dma_addr =
-		is_huge(tagged_pa) ? kbase_dma_addr_as_priv(page) : kbase_dma_addr(page);
-
-	return dma_addr;
 }
 
 /**
