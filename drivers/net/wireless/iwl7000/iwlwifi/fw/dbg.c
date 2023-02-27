@@ -3182,7 +3182,8 @@ int iwl_fw_send_timestamp_marker_cmd(struct iwl_fw_runtime *fwrt)
 	};
 	struct iwl_mvm_marker_rsp *resp;
 	int cmd_ver = iwl_fw_lookup_cmd_ver(fwrt->fw,
-					    WIDE_ID(LONG_GROUP, MARKER_CMD), 1);
+					    WIDE_ID(LONG_GROUP, MARKER_CMD),
+					    IWL_FW_CMD_VER_UNKNOWN);
 	int ret;
 
 	if (cmd_ver == 1) {
@@ -3196,6 +3197,7 @@ int iwl_fw_send_timestamp_marker_cmd(struct iwl_fw_runtime *fwrt)
 		IWL_DEBUG_INFO(fwrt,
 			       "Invalid version of Marker CMD. Ver = %d\n",
 			       cmd_ver);
+		return -EINVAL;
 	}
 
 	hcmd.data[0] = &marker;
