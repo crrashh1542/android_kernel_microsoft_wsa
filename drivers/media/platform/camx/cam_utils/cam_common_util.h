@@ -63,4 +63,26 @@ uint32_t cam_common_util_remove_duplicate_arr(int32_t *array,
  * @return:               void
  */
 ktime_t cam_common_util_get_curr_timestamp(void);
+
+/**
+ * @brief: Memory alloc and copy
+ *
+ * @from : Source address of memory
+ * @len    : Length of memory
+ *
+ * @return Address of destination address of memory.
+ */
+
+void *cam_common_mem_kdup(void *from, size_t len);
+
+/**
+ * @brief : Free the memory
+ *
+ * @memory: Address of memory
+ *
+ * @return Void.
+ */
+
+void cam_common_mem_free(void *memory);
+
 #endif /* _CAM_COMMON_UTIL_H_ */

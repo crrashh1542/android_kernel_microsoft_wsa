@@ -26,6 +26,7 @@
 #include "cam_sync_api.h"
 #include "cam_trace.h"
 #include "cam_debug_util.h"
+#include "cam_common_util.h"
 
 static uint cam_debug_ctx_req_list;
 module_param(cam_debug_ctx_req_list, uint, 0644);
@@ -162,11 +163,12 @@ static int cam_context_apply_req_to_hw(struct cam_ctx_request *req,
 
 	rc = ctx->hw_mgr_intf->hw_config(ctx->hw_mgr_intf->hw_mgr_priv, &cfg);
 	if (rc) {
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		spin_lock(&ctx->lock);
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->free_req_list);
 		spin_unlock(&ctx->lock);
-
 		if (cam_debug_ctx_req_list & ctx->dev_id)
 			CAM_INFO(CAM_CTXT,
 				"[%s][%d] : Moving req[%llu] from active_list to free_list",
@@ -222,12 +224,13 @@ static void cam_context_sync_callback(int32_t sync_obj, int status, void *data)
 		} else {
 			req->flushed = 0;
 			req->ctx = NULL;
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			mutex_unlock(&ctx->sync_mutex);
 			spin_lock(&ctx->lock);
 			list_del_init(&req->list);
 			list_add_tail(&req->list, &ctx->free_req_list);
 			spin_unlock(&ctx->lock);
-
 			if (cam_debug_ctx_req_list & ctx->dev_id)
 				CAM_INFO(CAM_CTXT,
 					"[%s][%d] : Moving req[%llu] from pending_list to free_list",
@@ -276,6 +279,8 @@ int32_t cam_context_config_dev_to_hw(
 	struct cam_hw_stream_setttings cfg;
 	uintptr_t packet_addr;
 	struct cam_packet *packet;
+	struct cam_packet *packet_local = NULL;
+	uint32_t header_size;
 
 	if (!ctx || !cmd) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, cmd);
@@ -308,15 +313,29 @@ int32_t cam_context_config_dev_to_hw(
 	if ((len < sizeof(struct cam_packet)) ||
 		(cmd->offset >= (len - sizeof(struct cam_packet)))) {
 		CAM_ERR(CAM_CTXT, "Not enough buf");
-		cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto free_cpu_buf;
 
 	}
 	packet = (struct cam_packet *) ((uint8_t *)packet_addr +
 		(uint32_t)cmd->offset);
+	header_size = packet->header.size;
+
+	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
+	if (!packet_local) {
+		CAM_ERR(CAM_CTXT, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
+
+	if (header_size != packet->header.size) {
+		CAM_ERR(CAM_CTXT, "Header size mismatch, reject packet");
+		rc = -EINVAL;
+		goto free_cpu_buf;
+	}
 
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.packet = packet;
+	cfg.packet = packet_local;
 	cfg.ctxt_to_hw_map = ctx->ctxt_to_hw_map;
 	cfg.priv = NULL;
 
@@ -330,8 +349,9 @@ int32_t cam_context_config_dev_to_hw(
 		rc = -EFAULT;
 	}
 
+free_cpu_buf:
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
-
+	cam_common_mem_free(packet_local);
 	return rc;
 }
 
@@ -343,9 +363,11 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	struct cam_hw_prepare_update_args cfg;
 	uintptr_t packet_addr;
 	struct cam_packet *packet;
+	struct cam_packet *packet_local = NULL;
 	size_t len = 0;
 	size_t remain_len = 0;
 	int32_t i = 0, j = 0;
+	uint32_t header_size;
 
 	if (!ctx || !cmd) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, cmd);
@@ -397,25 +419,39 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 		rc = -EINVAL;
 		goto free_cpu_buf;
 	}
-
+	memset(&req->pf_data, 0, sizeof(struct cam_hw_mgr_dump_pf_data));
 	remain_len -= (size_t)cmd->offset;
 	packet = (struct cam_packet *) ((uint8_t *)packet_addr +
 		(uint32_t)cmd->offset);
+	header_size = packet->header.size;
 
-	if (packet->header.request_id <= ctx->last_flush_req) {
-		CAM_ERR(CAM_CORE,
-			"request %lld has been flushed, reject packet",
-			packet->header.request_id);
+	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
+	if (!packet_local) {
+		CAM_ERR(CAM_CTXT, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
+
+	if (header_size != packet->header.size) {
+		CAM_ERR(CAM_CTXT, "Header size mismatch, reject packet");
 		rc = -EINVAL;
 		goto free_cpu_buf;
 	}
 
-	if (packet->header.request_id > ctx->last_flush_req)
+	if (packet_local->header.request_id <= ctx->last_flush_req) {
+		CAM_ERR(CAM_CORE,
+			"request %lld has been flushed, reject packet",
+			packet_local->header.request_id);
+		rc = -EINVAL;
+		goto free_cpu_buf;
+	}
+
+	if (packet_local->header.request_id > ctx->last_flush_req)
 		ctx->last_flush_req = 0;
 
 	/* preprocess the configuration */
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.packet = packet;
+	cfg.packet = packet_local;
 	cfg.remain_len = remain_len;
 	cfg.ctxt_to_hw_map = ctx->ctxt_to_hw_map;
 	cfg.max_hw_update_entries = CAM_CTX_CFG_MAX;
@@ -440,7 +476,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	req->num_out_map_entries = cfg.num_out_map_entries;
 	req->num_in_map_entries = cfg.num_in_map_entries;
 	atomic_set(&req->num_in_acked, 0);
-	req->request_id = packet->header.request_id;
+	req->request_id = packet_local->header.request_id;
 	req->status = 1;
 	req->req_priv = cfg.priv;
 
@@ -517,11 +553,11 @@ put_ref:
 free_cpu_buf:
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
+	cam_common_mem_free(packet_local);
 	spin_lock(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	req->ctx = NULL;
 	spin_unlock(&ctx->lock);
-
 	return rc;
 }
 
@@ -694,6 +730,8 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 		 * not be put on the free list. So put it on the free list here
 		 */
 		if (free_req) {
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			req->ctx = NULL;
 			spin_lock(&ctx->lock);
 			list_add_tail(&req->list, &ctx->free_req_list);
@@ -763,10 +801,12 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 			}
 		}
 
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
+		req->ctx = NULL;
 		spin_lock(&ctx->lock);
 		list_add_tail(&req->list, &ctx->free_req_list);
 		spin_unlock(&ctx->lock);
-		req->ctx = NULL;
 
 		if (cam_debug_ctx_req_list & ctx->dev_id)
 			CAM_INFO(CAM_CTXT,
