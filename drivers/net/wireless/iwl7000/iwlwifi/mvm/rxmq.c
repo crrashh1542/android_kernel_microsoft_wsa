@@ -1478,13 +1478,40 @@ static void iwl_mvm_decode_he_phy_data(struct iwl_mvm *mvm,
 	(_usig)->value |= LE32_DEC_ENC(in_value, dec_bits, _enc_bits); \
 } while (0)
 
-#define IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru) \
+#define __IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru) \
 	eht->data[(rt_data)] |= \
 		(cpu_to_le32 \
 		 (IEEE80211_RADIOTAP_EHT_DATA ## rt_data ## _RU_ALLOC_CC_ ## rt_ru ## _KNOWN) | \
 		 LE32_DEC_ENC(data ## fw_data, \
 			      IWL_RX_PHY_DATA ## fw_data ## _EHT_MU_EXT_RU_ALLOC_ ## fw_ru, \
 			      IEEE80211_RADIOTAP_EHT_DATA ## rt_data ## _RU_ALLOC_CC_ ## rt_ru))
+
+#define _IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru)	\
+	__IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru)
+
+#define IEEE80211_RADIOTAP_RU_DATA_1_1_1	1
+#define IEEE80211_RADIOTAP_RU_DATA_2_1_1	2
+#define IEEE80211_RADIOTAP_RU_DATA_1_1_2	2
+#define IEEE80211_RADIOTAP_RU_DATA_2_1_2	2
+#define IEEE80211_RADIOTAP_RU_DATA_1_2_1	3
+#define IEEE80211_RADIOTAP_RU_DATA_2_2_1	3
+#define IEEE80211_RADIOTAP_RU_DATA_1_2_2	3
+#define IEEE80211_RADIOTAP_RU_DATA_2_2_2	4
+
+#define IWL_RX_RU_DATA_A1			2
+#define IWL_RX_RU_DATA_A2			2
+#define IWL_RX_RU_DATA_B1			2
+#define IWL_RX_RU_DATA_B2			3
+#define IWL_RX_RU_DATA_C1			3
+#define IWL_RX_RU_DATA_C2			3
+#define IWL_RX_RU_DATA_D1			4
+#define IWL_RX_RU_DATA_D2			4
+
+#define IWL_MVM_ENC_EHT_RU(rt_ru, fw_ru)				\
+	_IWL_MVM_ENC_EHT_RU(IEEE80211_RADIOTAP_RU_DATA_ ## rt_ru,	\
+			    rt_ru,					\
+			    IWL_RX_RU_DATA_ ## fw_ru,			\
+			    fw_ru)
 
 static void iwl_mvm_decode_eht_ext_mu(struct iwl_mvm *mvm,
 				      struct iwl_mvm_rx_phy_data *phy_data,
@@ -1523,37 +1550,45 @@ static void iwl_mvm_decode_eht_ext_mu(struct iwl_mvm *mvm,
 			(data5, IWL_RX_PHY_DATA5_EHT_MU_NUM_USR_NON_OFDMA,
 			 IEEE80211_RADIOTAP_EHT_DATA7_NUM_OF_NON_OFDMA_USERS);
 
-		IWL_MVM_ENC_EHT_RU(1, 1_1_1, 2, A1);
-		if (phy_bw >= RATE_MCS_CHAN_WIDTH_80)
-			IWL_MVM_ENC_EHT_RU(2, 2_1_1, 3, C1);
-
-		if (phy_bw >= RATE_MCS_CHAN_WIDTH_160) {
-			IWL_MVM_ENC_EHT_RU(2, 1_1_2, 2, A2);
-			IWL_MVM_ENC_EHT_RU(2, 2_1_2, 3, C2);
-		}
+		/*
+		 * Hardware labels the content channels/RU allocation values
+		 * as follows:
+		 *           Content Channel 1		Content Channel 2
+		 *   20 MHz: A1
+		 *   40 MHz: A1				B1
+		 *   80 MHz: A1 C1			B1 D1
+		 *  160 MHz: A1 C1 A2 C2		B1 D1 B2 D2
+		 *  320 MHz: A1 C1 A2 C2 A3 C3 A4 C4	B1 D1 B2 D2 B3 D3 B4 D4
+		 *
+		 * However firmware can only give us A1-D2, so the higher
+		 * frequencies are missing.
+		 */
 
 		switch (phy_bw) {
-		case RATE_MCS_CHAN_WIDTH_40:
-			IWL_MVM_ENC_EHT_RU(2, 2_1_1, 2, B1);
-			break;
-		case RATE_MCS_CHAN_WIDTH_80:
-			IWL_MVM_ENC_EHT_RU(2, 1_1_2, 2, B1);
-			IWL_MVM_ENC_EHT_RU(2, 2_1_2, 4, D1);
-			break;
-		case RATE_MCS_CHAN_WIDTH_160:
-			IWL_MVM_ENC_EHT_RU(3, 1_2_1, 2, B1);
-			IWL_MVM_ENC_EHT_RU(3, 2_2_1, 4, D1);
-			IWL_MVM_ENC_EHT_RU(3, 1_2_2, 3, B2);
-			IWL_MVM_ENC_EHT_RU(4, 2_2_2, 4, D2);
-			break;
 		case RATE_MCS_CHAN_WIDTH_320:
-			IWL_MVM_ENC_EHT_RU(4, 1_2_3, 2, B1);
-			IWL_MVM_ENC_EHT_RU(4, 2_2_3, 4, D1);
-			IWL_MVM_ENC_EHT_RU(5, 1_2_4, 3, B2);
-			IWL_MVM_ENC_EHT_RU(5, 2_2_4, 4, D2);
+			/* additional values are missing in RX metadata */
+		case RATE_MCS_CHAN_WIDTH_160:
+			/* content channel 1 */
+			IWL_MVM_ENC_EHT_RU(1_2_1, A2);
+			IWL_MVM_ENC_EHT_RU(1_2_2, C2);
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_2_1, B2);
+			IWL_MVM_ENC_EHT_RU(2_2_2, D2);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_80:
+			/* content channel 1 */
+			IWL_MVM_ENC_EHT_RU(1_1_2, C1);
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_1_2, D1);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_40:
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_1_1, B1);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_20:
+			IWL_MVM_ENC_EHT_RU(1_1_1, A1);
 			break;
 		}
-
 	} else {
 		__le32 usig_a1 = phy_data->rx_vec[0];
 		__le32 usig_a2 = phy_data->rx_vec[1];
