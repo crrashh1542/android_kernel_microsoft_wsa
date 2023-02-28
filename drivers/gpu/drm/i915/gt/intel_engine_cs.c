@@ -13,6 +13,8 @@
 
 #include "i915_cmd_parser.h"
 #include "i915_drv.h"
+#include "i915_irq.h"
+#include "i915_reg.h"
 #include "intel_breadcrumbs.h"
 #include "intel_context.h"
 #include "intel_engine.h"
@@ -810,7 +812,7 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 	u16 vdbox_mask;
 	u16 vebox_mask;
 
-	info->engine_mask = RUNTIME_INFO(i915)->platform_engine_mask;
+	GEM_BUG_ON(!info->engine_mask);
 
 	if (GRAPHICS_VER(i915) < 11)
 		return info->engine_mask;
@@ -1618,11 +1620,11 @@ void intel_engine_get_instdone(const struct intel_engine_cs *engine,
 		for_each_ss_steering(iter, engine->gt, slice, subslice) {
 			instdone->sampler[slice][subslice] =
 				intel_gt_mcr_read(engine->gt,
-						  GEN7_SAMPLER_INSTDONE,
+						  GEN8_SAMPLER_INSTDONE,
 						  slice, subslice);
 			instdone->row[slice][subslice] =
 				intel_gt_mcr_read(engine->gt,
-						  GEN7_ROW_INSTDONE,
+						  GEN8_ROW_INSTDONE,
 						  slice, subslice);
 		}
 
@@ -1762,9 +1764,9 @@ bool intel_engine_irq_enable(struct intel_engine_cs *engine)
 		return false;
 
 	/* Caller disables interrupts */
-	spin_lock(&engine->gt->irq_lock);
+	spin_lock(engine->gt->irq_lock);
 	engine->irq_enable(engine);
-	spin_unlock(&engine->gt->irq_lock);
+	spin_unlock(engine->gt->irq_lock);
 
 	return true;
 }
@@ -1775,9 +1777,9 @@ void intel_engine_irq_disable(struct intel_engine_cs *engine)
 		return;
 
 	/* Caller disables interrupts */
-	spin_lock(&engine->gt->irq_lock);
+	spin_lock(engine->gt->irq_lock);
 	engine->irq_disable(engine);
-	spin_unlock(&engine->gt->irq_lock);
+	spin_unlock(engine->gt->irq_lock);
 }
 
 void intel_engines_reset_default_submission(struct intel_gt *gt)

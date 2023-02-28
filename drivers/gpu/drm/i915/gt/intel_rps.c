@@ -194,9 +194,9 @@ static void rps_enable_interrupts(struct intel_rps *rps)
 
 	rps_reset_ei(rps);
 
-	spin_lock_irq(&gt->irq_lock);
+	spin_lock_irq(gt->irq_lock);
 	gen6_gt_pm_enable_irq(gt, rps->pm_events);
-	spin_unlock_irq(&gt->irq_lock);
+	spin_unlock_irq(gt->irq_lock);
 
 	intel_uncore_write(gt->uncore,
 			   GEN6_PMINTRMSK, rps_pm_mask(rps, rps->last_freq));
@@ -217,14 +217,14 @@ static void rps_reset_interrupts(struct intel_rps *rps)
 {
 	struct intel_gt *gt = rps_to_gt(rps);
 
-	spin_lock_irq(&gt->irq_lock);
+	spin_lock_irq(gt->irq_lock);
 	if (GRAPHICS_VER(gt->i915) >= 11)
 		gen11_rps_reset_interrupts(rps);
 	else
 		gen6_rps_reset_interrupts(rps);
 
 	rps->pm_iir = 0;
-	spin_unlock_irq(&gt->irq_lock);
+	spin_unlock_irq(gt->irq_lock);
 }
 
 static void rps_disable_interrupts(struct intel_rps *rps)
@@ -234,9 +234,9 @@ static void rps_disable_interrupts(struct intel_rps *rps)
 	intel_uncore_write(gt->uncore,
 			   GEN6_PMINTRMSK, rps_pm_sanitize_mask(rps, ~0u));
 
-	spin_lock_irq(&gt->irq_lock);
+	spin_lock_irq(gt->irq_lock);
 	gen6_gt_pm_disable_irq(gt, GEN6_PM_RPS_EVENTS);
-	spin_unlock_irq(&gt->irq_lock);
+	spin_unlock_irq(gt->irq_lock);
 
 	intel_synchronize_irq(gt->i915);
 
@@ -430,7 +430,8 @@ static int __gen5_rps_set(struct intel_rps *rps, u8 val)
 
 	rgvswctl = intel_uncore_read16(uncore, MEMSWCTL);
 	if (rgvswctl & MEMCTL_CMD_STS) {
-		DRM_DEBUG("gpu busy, RCS change rejected\n");
+		drm_dbg(&rps_to_i915(rps)->drm,
+			"gpu busy, RCS change rejected\n");
 		return -EBUSY; /* still busy with another command */
 	}
 
@@ -1794,10 +1795,10 @@ static void rps_work(struct work_struct *work)
 	int new_freq, adj, min, max;
 	u32 pm_iir = 0;
 
-	spin_lock_irq(&gt->irq_lock);
+	spin_lock_irq(gt->irq_lock);
 	pm_iir = fetch_and_zero(&rps->pm_iir) & rps->pm_events;
 	client_boost = atomic_read(&rps->num_waiters);
-	spin_unlock_irq(&gt->irq_lock);
+	spin_unlock_irq(gt->irq_lock);
 
 	/* Make sure we didn't queue anything we're not going to process. */
 	if (!pm_iir && !client_boost)
@@ -1870,9 +1871,9 @@ static void rps_work(struct work_struct *work)
 	mutex_unlock(&rps->lock);
 
 out:
-	spin_lock_irq(&gt->irq_lock);
+	spin_lock_irq(gt->irq_lock);
 	gen6_gt_pm_unmask_irq(gt, rps->pm_events);
-	spin_unlock_irq(&gt->irq_lock);
+	spin_unlock_irq(gt->irq_lock);
 }
 
 void gen11_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
@@ -1880,7 +1881,7 @@ void gen11_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 	struct intel_gt *gt = rps_to_gt(rps);
 	const u32 events = rps->pm_events & pm_iir;
 
-	lockdep_assert_held(&gt->irq_lock);
+	lockdep_assert_held(gt->irq_lock);
 
 	if (unlikely(!events))
 		return;
@@ -1900,7 +1901,7 @@ void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 
 	events = pm_iir & rps->pm_events;
 	if (events) {
-		spin_lock(&gt->irq_lock);
+		spin_lock(gt->irq_lock);
 
 		GT_TRACE(gt, "irq events:%x\n", events);
 
@@ -1908,7 +1909,7 @@ void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 		rps->pm_iir |= events;
 
 		schedule_work(&rps->work);
-		spin_unlock(&gt->irq_lock);
+		spin_unlock(gt->irq_lock);
 	}
 
 	if (GRAPHICS_VER(gt->i915) >= 8)
@@ -1918,7 +1919,8 @@ void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 		intel_engine_cs_irq(gt->engine[VECS0], pm_iir >> 10);
 
 	if (pm_iir & PM_VEBOX_CS_ERROR_INTERRUPT)
-		DRM_DEBUG("Command parser error, pm_iir 0x%08x\n", pm_iir);
+		drm_dbg(&rps_to_i915(rps)->drm,
+			"Command parser error, pm_iir 0x%08x\n", pm_iir);
 }
 
 void gen5_rps_irq_handler(struct intel_rps *rps)
@@ -1984,7 +1986,9 @@ void intel_rps_init(struct intel_rps *rps)
 
 	/* Derive initial user preferences/limits from the hardware limits */
 	rps->max_freq_softlimit = rps->max_freq;
+	rps_to_gt(rps)->defaults.max_freq = rps->max_freq_softlimit;
 	rps->min_freq_softlimit = rps->min_freq;
+	rps_to_gt(rps)->defaults.min_freq = rps->min_freq_softlimit;
 
 	/* After setting max-softlimit, find the overclock max freq */
 	if (GRAPHICS_VER(i915) == 6 || IS_IVYBRIDGE(i915) || IS_HASWELL(i915)) {

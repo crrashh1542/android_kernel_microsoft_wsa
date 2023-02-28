@@ -29,6 +29,7 @@
 #include "intel_guc_submission.h"
 
 #include "i915_drv.h"
+#include "i915_reg.h"
 #include "i915_trace.h"
 
 /**
@@ -1537,8 +1538,8 @@ void intel_guc_submission_reset_prepare(struct intel_guc *guc)
 	__reset_guc_busyness_stats(guc);
 
 	/* Flush IRQ handler */
-	spin_lock_irq(&guc_to_gt(guc)->irq_lock);
-	spin_unlock_irq(&guc_to_gt(guc)->irq_lock);
+	spin_lock_irq(guc_to_gt(guc)->irq_lock);
+	spin_unlock_irq(guc_to_gt(guc)->irq_lock);
 
 	guc_flush_submissions(guc);
 	guc_flush_destroyed_contexts(guc);
