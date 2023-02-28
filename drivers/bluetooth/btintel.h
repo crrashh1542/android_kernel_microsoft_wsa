@@ -144,13 +144,6 @@ struct intel_offload_use_cases {
 #define INTEL_TLV_DEBUG_EXCEPTION	0x02
 #define INTEL_TLV_TEST_EXCEPTION	0xDE
 
-/* structure to store the PPAG data read from ACPI table */
-struct btintel_ppag {
-	u32	domain;
-	u32     mode;
-	struct hci_dev *hdev;
-};
-
 struct btintel_loc_aware_reg {
 	__le32 mcc;
 	__le32 sel;
