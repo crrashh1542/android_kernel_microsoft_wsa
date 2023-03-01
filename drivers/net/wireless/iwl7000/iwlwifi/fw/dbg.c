@@ -3242,3 +3242,27 @@ void iwl_fw_dbg_stop_restart_recording(struct iwl_fw_runtime *fwrt,
 #endif
 }
 IWL_EXPORT_SYMBOL(iwl_fw_dbg_stop_restart_recording);
+
+void iwl_fw_disable_dbg_asserts(struct iwl_fw_runtime *fwrt)
+{
+	struct iwl_fw_dbg_config_cmd cmd = {
+		.type = cpu_to_le32(DEBUG_TOKEN_CONFIG_TYPE),
+		.conf = cpu_to_le32(IWL_FW_DBG_CONFIG_TOKEN),
+	};
+	struct iwl_host_cmd hcmd = {
+		.id = WIDE_ID(LONG_GROUP, LDBG_CONFIG_CMD),
+		.data[0] = &cmd,
+		.len[0] = sizeof(cmd),
+	};
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	/* don't send this command when need debug asserts */
+	if (fwrt->trans->dbg_cfg.enable_dbg_asserts) {
+		IWL_DEBUG_INFO(fwrt, "Debug asserts enabled\n");
+		return;
+	}
+#endif
+
+	iwl_trans_send_cmd(fwrt->trans, &hcmd);
+}
+IWL_EXPORT_SYMBOL(iwl_fw_disable_dbg_asserts);
