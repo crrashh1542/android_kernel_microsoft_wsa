@@ -170,11 +170,14 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	uintptr_t                generic_ptr;
 	uintptr_t                generic_pkt_ptr;
 	struct cam_packet       *csl_packet = NULL;
+	struct cam_packet       *csl_packet_local = NULL;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
 	uint32_t                *cmd_buf = NULL;
+	uint32_t                *cmd_buf_local = NULL;
 	struct cam_csiphy_info  *cam_cmd_csiphy_info = NULL;
 	size_t                  len;
 	size_t                  remain_len;
+	uint32_t                header_size;
 
 	if (!cfg_dev || !csiphy_dev) {
 		CAM_ERR(CAM_CSIPHY, "Invalid Args");
@@ -201,8 +204,17 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	remain_len -= (size_t)cfg_dev->offset;
 	csl_packet = (struct cam_packet *)
 		(generic_pkt_ptr + (uint32_t)cfg_dev->offset);
+	header_size = csl_packet->header.size;
 
-	if (cam_packet_util_validate_packet(csl_packet,
+	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
+
+	if (!csl_packet_local) {
+		CAM_ERR(CAM_CSIPHY, "Alloc and copy fail");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
+	if (cam_packet_util_validate_packet(csl_packet_local,
 		remain_len)) {
 		CAM_ERR(CAM_CSIPHY, "Invalid packet params");
 		rc = -EINVAL;
@@ -210,8 +222,8 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	}
 
 	cmd_desc = (struct cam_cmd_buf_desc *)
-		((uint32_t *)&csl_packet->payload +
-		csl_packet->cmd_buf_offset / 4);
+		((uint32_t *)&csl_packet_local->payload +
+		csl_packet_local->cmd_buf_offset / 4);
 
 	rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
 		&generic_ptr, &len);
@@ -231,7 +243,15 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 
 	cmd_buf = (uint32_t *)generic_ptr;
 	cmd_buf += cmd_desc->offset / 4;
-	cam_cmd_csiphy_info = (struct cam_csiphy_info *)cmd_buf;
+
+	cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, cmd_desc->length);
+
+	if (!cmd_buf_local) {
+		CAM_ERR(CAM_CSIPHY, "Alloc and copy fail");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+	cam_cmd_csiphy_info = (struct cam_csiphy_info *)cmd_buf_local;
 
 	csiphy_dev->config_count++;
 	csiphy_dev->csiphy_info.lane_cnt += cam_cmd_csiphy_info->lane_cnt;
@@ -257,10 +277,16 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 			cam_cmd_csiphy_info, cfg_dev);
 
 	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
+	cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle);
+	cam_common_mem_free(csl_packet_local);
+	cam_common_mem_free(cmd_buf_local);
+	return rc;
 
 rel_pkt_buf:
 	cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle);
-
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
+	cam_common_mem_free(csl_packet_local);
+	cam_common_mem_free(cmd_buf_local);
 	return rc;
 }
 

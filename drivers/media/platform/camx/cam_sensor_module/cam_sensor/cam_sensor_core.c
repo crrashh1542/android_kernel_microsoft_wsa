@@ -93,6 +93,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	uintptr_t generic_ptr;
 	struct cam_control *ioctl_ctrl = NULL;
 	struct cam_packet *csl_packet = NULL;
+	struct cam_packet *csl_packet_local = NULL;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
 	struct i2c_settings_array *i2c_reg_settings = NULL;
 	size_t len_of_buff = 0;
@@ -100,6 +101,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	uint32_t *offset = NULL;
 	struct cam_config_dev_cmd config;
 	struct i2c_data_settings *i2c_data = NULL;
+	uint32_t header_size;
 
 	ioctl_ctrl = (struct cam_control *)arg;
 
@@ -136,8 +138,17 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	remain_len -= (size_t)config.offset;
 	csl_packet = (struct cam_packet *)(generic_ptr +
 		(uint32_t)config.offset);
+	header_size = csl_packet->header.size;
 
-	if (cam_packet_util_validate_packet(csl_packet,
+	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
+
+	if (!csl_packet_local) {
+		CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
+	if (cam_packet_util_validate_packet(csl_packet_local,
 		remain_len)) {
 		CAM_ERR(CAM_SENSOR, "Invalid packet params");
 		rc = -EINVAL;
@@ -145,23 +156,23 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 
 	}
 
-	if ((csl_packet->header.op_code & 0xFFFFFF) !=
+	if ((csl_packet_local->header.op_code & 0xFFFFFF) !=
 		CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG &&
-		csl_packet->header.request_id <= s_ctrl->last_flush_req
+		csl_packet_local->header.request_id <= s_ctrl->last_flush_req
 		&& s_ctrl->last_flush_req != 0) {
 		CAM_ERR(CAM_SENSOR,
 			"reject request %lld, last request to flush %d",
-			csl_packet->header.request_id, s_ctrl->last_flush_req);
+			csl_packet_local->header.request_id, s_ctrl->last_flush_req);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
 
-	if (csl_packet->header.request_id > s_ctrl->last_flush_req)
+	if (csl_packet_local->header.request_id > s_ctrl->last_flush_req)
 		s_ctrl->last_flush_req = 0;
 
 	i2c_data = &(s_ctrl->i2c_data);
-	CAM_DBG(CAM_SENSOR, "Header OpCode: %d", csl_packet->header.op_code);
-	switch (csl_packet->header.op_code & 0xFFFFFF) {
+	CAM_DBG(CAM_SENSOR, "Header OpCode: %d", csl_packet_local->header.op_code);
+	switch (csl_packet_local->header.op_code & 0xFFFFFF) {
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG: {
 		i2c_reg_settings = &i2c_data->init_settings;
 		i2c_reg_settings->request_id = 0;
@@ -204,22 +215,22 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		}
 
 		i2c_reg_settings =
-			&i2c_data->per_frame[csl_packet->header.request_id %
+			&i2c_data->per_frame[csl_packet_local->header.request_id %
 				MAX_PER_FRAME_ARRAY];
 		CAM_DBG(CAM_SENSOR, "Received Packet: %lld req: %lld",
-			csl_packet->header.request_id % MAX_PER_FRAME_ARRAY,
-			csl_packet->header.request_id);
+			csl_packet_local->header.request_id % MAX_PER_FRAME_ARRAY,
+			csl_packet_local->header.request_id);
 		if (i2c_reg_settings->is_settings_valid == 1) {
 			CAM_ERR(CAM_SENSOR,
 				"Already some pkt in offset req : %lld",
-				csl_packet->header.request_id);
+				csl_packet_local->header.request_id);
 			/*
 			 * Update req mgr even in case of failure.
 			 * This will help not to wait indefinitely
 			 * and freeze. If this log is triggered then
 			 * fix it.
 			 */
-			cam_sensor_update_req_mgr(s_ctrl, csl_packet);
+			cam_sensor_update_req_mgr(s_ctrl, csl_packet_local);
 			goto rel_pkt_buf;
 		}
 		break;
@@ -232,7 +243,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 			goto rel_pkt_buf;
 		}
 
-		cam_sensor_update_req_mgr(s_ctrl, csl_packet);
+		cam_sensor_update_req_mgr(s_ctrl, csl_packet_local);
 		goto rel_pkt_buf;
 	}
 	default:
@@ -241,8 +252,8 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		goto rel_pkt_buf;
 	}
 
-	offset = (uint32_t *)&csl_packet->payload;
-	offset += csl_packet->cmd_buf_offset / 4;
+	offset = (uint32_t *)&csl_packet_local->payload;
+	offset += csl_packet_local->cmd_buf_offset / 4;
 	cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 
 	rc = cam_sensor_i2c_command_parser(&s_ctrl->io_master_info,
@@ -252,16 +263,19 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		goto rel_pkt_buf;
 	}
 
-	if ((csl_packet->header.op_code & 0xFFFFFF) ==
+	if ((csl_packet_local->header.op_code & 0xFFFFFF) ==
 		CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE) {
 		i2c_reg_settings->request_id =
-			csl_packet->header.request_id;
-		cam_sensor_update_req_mgr(s_ctrl, csl_packet);
+			csl_packet_local->header.request_id;
+		cam_sensor_update_req_mgr(s_ctrl, csl_packet_local);
 	}
+	cam_mem_put_cpu_buf(config.packet_handle);
+	cam_common_mem_free(csl_packet_local);
+	return rc;
 
 rel_pkt_buf:
 	cam_mem_put_cpu_buf(config.packet_handle);
-
+	cam_common_mem_free(csl_packet_local);
 	return rc;
 }
 
@@ -438,13 +452,16 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 {
 	int rc = 0, i;
 	uint32_t *cmd_buf;
+	uint32_t *cmd_buf_local = NULL;
 	void *ptr;
 	size_t len;
 	struct cam_packet *pkt = NULL;
+	struct cam_packet *pkt_local = NULL;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
 	uintptr_t cmd_buf1 = 0;
 	uintptr_t packet = 0;
 	size_t    remain_len = 0;
+	uint32_t header_size;
 
 	rc = cam_mem_get_cpu_buf(handle,
 		&packet, &len);
@@ -459,29 +476,38 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
+	header_size = pkt->header.size;
+
+	pkt_local = (struct cam_packet *)cam_common_mem_kdup(pkt, header_size);
+
+	if (!pkt_local) {
+		CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
 
 	if ((len < sizeof(struct cam_packet)) ||
-		(pkt->cmd_buf_offset >= (len - sizeof(struct cam_packet)))) {
+		(pkt_local->cmd_buf_offset >= (len - sizeof(struct cam_packet)))) {
 		CAM_ERR(CAM_SENSOR, "Not enough buf provided");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
 
 	cmd_desc = (struct cam_cmd_buf_desc *)
-		((uint32_t *)&pkt->payload + pkt->cmd_buf_offset/4);
+		((uint32_t *)&pkt_local->payload + pkt_local->cmd_buf_offset/4);
 	if (cmd_desc == NULL) {
 		CAM_ERR(CAM_SENSOR, "command descriptor pos is invalid");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
-	if (pkt->num_cmd_buf != 2) {
+	if (pkt_local->num_cmd_buf != 2) {
 		CAM_ERR(CAM_SENSOR, "Expected More Command Buffers : %d",
-			 pkt->num_cmd_buf);
+			 pkt_local->num_cmd_buf);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
 
-	for (i = 0; i < pkt->num_cmd_buf; i++) {
+	for (i = 0; i < pkt_local->num_cmd_buf; i++) {
 		if (!(cmd_desc[i].length))
 			continue;
 		rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
@@ -495,18 +521,27 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 			CAM_ERR(CAM_SENSOR,
 				"offset past length of buffer");
 			rc = -EINVAL;
-			goto rel_pkt_buf;
+			goto rel_cmd_buf;
 		}
 		remain_len = len - cmd_desc[i].offset;
 		if (cmd_desc[i].length > remain_len) {
 			CAM_ERR(CAM_SENSOR,
 				"Not enough buffer provided for cmd");
 			rc = -EINVAL;
-			goto rel_pkt_buf;
+			goto rel_cmd_buf;
 		}
 		cmd_buf = (uint32_t *)cmd_buf1;
 		cmd_buf += cmd_desc[i].offset/4;
-		ptr = (void *) cmd_buf;
+
+		cmd_buf_local = cam_common_mem_kdup(cmd_buf, cmd_desc[i].length);
+
+		if (!cmd_buf_local) {
+			CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+			rc = -EINVAL;
+			goto rel_cmd_buf;
+		}
+
+		ptr = (void *) cmd_buf_local;
 
 		rc = cam_handle_cmd_buffers_for_probe(ptr, s_ctrl,
 			i, cmd_desc[i].length, remain_len);
@@ -517,17 +552,23 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 		}
 
 		cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
+		cam_common_mem_free(cmd_buf_local);
+		cmd_buf_local = NULL;
 	}
 
 	cam_mem_put_cpu_buf(handle);
 
+	cam_common_mem_free(pkt_local);
 	return rc;
 
 rel_cmd_buf:
 	cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
+	cam_common_mem_free(pkt_local);
+	cam_common_mem_free(cmd_buf_local);
+	return rc;
 rel_pkt_buf:
 	cam_mem_put_cpu_buf(handle);
-
+	cam_common_mem_free(pkt_local);
 	return rc;
 }
 
