@@ -2350,6 +2350,14 @@ hw_dump:
 				dump_info->buf_handle, buf_len, rc);
 			return rc;
 		}
+
+		if (buf_len <= dump_info->offset) {
+			CAM_WARN(CAM_ISP, "buf overshoot len %zu offset %zu",
+				buf_len, dump_info->offset);
+			rc = -ENOSPC;
+			goto end;
+		}
+
 		/* we take for isp sw information to be max as 2048*/
 		if ((buf_len - dump_info->offset) <
 			CAM_ISP_CTX_DUMP_MIN_LENGTH) {
@@ -2398,8 +2406,7 @@ hw_dump:
 			dump_info->offset = dump_args.offset;
 		}
 end:
-		rc  = cam_mem_put_cpu_buf(dump_info->buf_handle);
-		if (rc)
+		if (cam_mem_put_cpu_buf(dump_info->buf_handle))
 			CAM_ERR(CAM_ISP, "Cpu put failed handle %u",
 				dump_info->buf_handle);
 	}

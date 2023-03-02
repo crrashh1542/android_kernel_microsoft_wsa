@@ -1073,12 +1073,20 @@ static int cam_context_dump_context(struct cam_context *ctx,
 			dump_args->buf_handle, buf_len, rc);
 		return rc;
 	}
+	if (dump_args->offset >= buf_len) {
+		CAM_WARN(CAM_CTXT, "dump buffer overshoot offset %zu len %zu",
+			dump_args->offset, buf_len);
+		rc = -ENOSPC;
+		goto end;
+	}
+
 	remain_len = buf_len - dump_args->offset;
 	min_len =  2 * (sizeof(struct cam_context_dump_header) +
 		    CAM_CONTEXT_DUMP_TAG_MAX_LEN);
 	if (remain_len < min_len) {
 		CAM_ERR(CAM_CTXT, "dump buffer exhaust %d %d",
 			remain_len, min_len);
+		rc = -ENOSPC;
 		goto end;
 	}
 	dst = (char *)cpu_addr + dump_args->offset;
@@ -1106,8 +1114,7 @@ static int cam_context_dump_context(struct cam_context *ctx,
 	dump_args->offset += hdr->size +
 		sizeof(struct cam_context_dump_header);
 end:
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
-	if (rc)
+	if (cam_mem_put_cpu_buf(dump_args->buf_handle))
 		CAM_ERR(CAM_CTXT, "Cpu put failed handle %u",
 			dump_args->buf_handle);
 	return rc;

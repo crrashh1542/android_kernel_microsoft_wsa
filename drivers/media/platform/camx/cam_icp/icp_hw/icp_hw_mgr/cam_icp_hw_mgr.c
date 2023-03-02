@@ -4544,6 +4544,13 @@ hw_dump:
 			dump_args->buf_handle, icp_dump_args.buf_len, rc);
 		return rc;
 	}
+	if (icp_dump_args.buf_len <= dump_args->offset) {
+		CAM_WARN(CAM_ICP, "dump buffer overshoot len %zu offset %zu",
+			icp_dump_args.buf_len, dump_args->offset);
+		rc = -ENOSPC;
+		goto end;
+	}
+
 	remain_len = icp_dump_args.buf_len - dump_args->offset;
 	min_len = 2 * (sizeof(struct cam_icp_dump_header) +
 		    CAM_ICP_DUMP_TAG_MAX_LEN);
@@ -4574,7 +4581,9 @@ hw_dump:
 		sizeof(struct cam_icp_hw_dump_args));
 	dump_args->offset = icp_dump_args.offset;
 end:
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
+	if (cam_mem_put_cpu_buf(dump_args->buf_handle))
+		CAM_ERR(CAM_CTXT, "Cpu put failed handle %u",
+			dump_args->buf_handle);
 	return rc;
 }
 
@@ -5586,4 +5595,3 @@ void cam_icp_hw_mgr_deinit(void)
 {
 	crm_timer_cache_destroy();
 }
-

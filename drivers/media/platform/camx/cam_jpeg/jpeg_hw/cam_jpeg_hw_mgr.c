@@ -1112,6 +1112,14 @@ hw_dump:
 			dump_args->buf_handle, jpeg_dump_args.buf_len, rc);
 		goto end;
 	}
+
+	if (jpeg_dump_args.buf_len <= dump_args->offset) {
+		CAM_WARN(CAM_JPEG, "dump offset overshoot len %zu offset %zu",
+			jpeg_dump_args.buf_len, dump_args->offset);
+		rc = -ENOSPC;
+		goto end;
+	}
+
 	remain_len = jpeg_dump_args.buf_len - dump_args->offset;
 	min_len =  2 * (sizeof(struct cam_jpeg_hw_dump_header) +
 		    CAM_JPEG_HW_DUMP_TAG_MAX_LEN);
@@ -1146,8 +1154,7 @@ hw_dump:
 	}
 	dump_args->offset = jpeg_dump_args.offset;
 end:
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
-	if (rc)
+	if (cam_mem_put_cpu_buf(dump_args->buf_handle))
 		CAM_ERR(CAM_JPEG, "Cpu put failed handle %u",
 			dump_args->buf_handle);
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
