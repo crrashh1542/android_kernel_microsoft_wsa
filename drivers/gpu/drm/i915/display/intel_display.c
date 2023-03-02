@@ -78,6 +78,7 @@
 #include "g4x_hdmi.h"
 #include "hsw_ips.h"
 #include "i915_drv.h"
+#include "i915_reg.h"
 #include "i915_utils.h"
 #include "icl_dsi.h"
 #include "intel_acpi.h"
@@ -119,6 +120,7 @@
 #include "i9xx_plane.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
+#include "skl_watermark.h"
 #include "vlv_dsi.h"
 #include "vlv_dsi_pll.h"
 #include "vlv_dsi_regs.h"
@@ -620,7 +622,10 @@ void intel_disable_transcoder(const struct intel_crtc_state *old_crtc_state)
 	if (!IS_I830(dev_priv))
 		val &= ~PIPECONF_ENABLE;
 
-	if (DISPLAY_VER(dev_priv) >= 12)
+	if (DISPLAY_VER(dev_priv) >= 14)
+		intel_de_rmw(dev_priv, MTL_CHICKEN_TRANS(cpu_transcoder),
+			     FECSTALL_DIS_DPTSTREAM_DPTTG, 0);
+	else if (DISPLAY_VER(dev_priv) >= 12)
 		intel_de_rmw(dev_priv, CHICKEN_TRANS(cpu_transcoder),
 			     FECSTALL_DIS_DPTSTREAM_DPTTG, 0);
 
@@ -672,7 +677,7 @@ bool intel_plane_uses_fence(const struct intel_plane_state *plane_state)
 
 	return DISPLAY_VER(dev_priv) < 4 ||
 		(plane->fbc &&
-		 plane_state->view.gtt.type == I915_GGTT_VIEW_NORMAL);
+		 plane_state->view.gtt.type == I915_GTT_VIEW_NORMAL);
 }
 
 /*
@@ -885,7 +890,6 @@ static bool gpu_reset_clobbers_display(struct drm_i915_private *dev_priv)
 
 void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 {
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_modeset_acquire_ctx *ctx = &dev_priv->reset_ctx;
 	struct drm_atomic_state *state;
 	int ret;
@@ -913,10 +917,10 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 	 * Need mode_config.mutex so that we don't
 	 * trample ongoing ->detect() and whatnot.
 	 */
-	mutex_lock(&dev->mode_config.mutex);
+	mutex_lock(&dev_priv->drm.mode_config.mutex);
 	drm_modeset_acquire_init(ctx, 0);
 	while (1) {
-		ret = drm_modeset_lock_all_ctx(dev, ctx);
+		ret = drm_modeset_lock_all_ctx(&dev_priv->drm, ctx);
 		if (ret != -EDEADLK)
 			break;
 
@@ -926,7 +930,7 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 	 * Disabling the crtcs gracefully seems nicer. Also the
 	 * g33 docs say we should at least disable all the planes.
 	 */
-	state = drm_atomic_helper_duplicate_state(dev, ctx);
+	state = drm_atomic_helper_duplicate_state(&dev_priv->drm, ctx);
 	if (IS_ERR(state)) {
 		ret = PTR_ERR(state);
 		drm_err(&dev_priv->drm, "Duplicating state failed with %i\n",
@@ -934,7 +938,7 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 		return;
 	}
 
-	ret = drm_atomic_helper_disable_all(dev, ctx);
+	ret = drm_atomic_helper_disable_all(&dev_priv->drm, ctx);
 	if (ret) {
 		drm_err(&dev_priv->drm, "Suspending crtc's failed with %i\n",
 			ret);
@@ -1850,7 +1854,9 @@ static void hsw_set_frame_start_delay(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	i915_reg_t reg = CHICKEN_TRANS(crtc_state->cpu_transcoder);
+	enum transcoder transcoder = crtc_state->cpu_transcoder;
+	i915_reg_t reg = DISPLAY_VER(dev_priv) >= 14 ? MTL_CHICKEN_TRANS(transcoder) :
+			 CHICKEN_TRANS(transcoder);
 	u32 val;
 
 	val = intel_de_read(dev_priv, reg);
@@ -2670,7 +2676,7 @@ static int intel_crtc_compute_pipe_mode(struct intel_crtc_state *crtc_state)
 	intel_mode_from_crtc_timings(pipe_mode, pipe_mode);
 
 	if (DISPLAY_VER(i915) < 4) {
-		clock_limit = i915->max_cdclk_freq * 9 / 10;
+		clock_limit = i915->display.cdclk.max_cdclk_freq * 9 / 10;
 
 		/*
 		 * Enable double wide mode when the dot clock
@@ -2785,12 +2791,12 @@ static void intel_panel_sanitize_ssc(struct drm_i915_private *dev_priv)
 						       PCH_DREF_CONTROL) &
 			DREF_SSC1_ENABLE;
 
-		if (dev_priv->vbt.lvds_use_ssc != bios_lvds_use_ssc) {
+		if (dev_priv->display.vbt.lvds_use_ssc != bios_lvds_use_ssc) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "SSC %s by BIOS, overriding VBT which says %s\n",
 				    str_enabled_disabled(bios_lvds_use_ssc),
-				    str_enabled_disabled(dev_priv->vbt.lvds_use_ssc));
-			dev_priv->vbt.lvds_use_ssc = bios_lvds_use_ssc;
+				    str_enabled_disabled(dev_priv->display.vbt.lvds_use_ssc));
+			dev_priv->display.vbt.lvds_use_ssc = bios_lvds_use_ssc;
 		}
 	}
 }
@@ -4138,7 +4144,9 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 	}
 
 	if (!transcoder_is_dsi(pipe_config->cpu_transcoder)) {
-		tmp = intel_de_read(dev_priv, CHICKEN_TRANS(pipe_config->cpu_transcoder));
+		tmp = intel_de_read(dev_priv, DISPLAY_VER(dev_priv) >= 14 ?
+				    MTL_CHICKEN_TRANS(pipe_config->cpu_transcoder) :
+				    CHICKEN_TRANS(pipe_config->cpu_transcoder));
 
 		pipe_config->framestart_delay = REG_FIELD_GET(HSW_FRAME_START_DELAY_MASK, tmp) + 1;
 	} else {
@@ -4386,7 +4394,7 @@ static int i9xx_pll_refclk(struct drm_device *dev,
 	u32 dpll = pipe_config->dpll_hw_state.dpll;
 
 	if ((dpll & PLL_REF_INPUT_MASK) == PLLB_REF_INPUT_SPREADSPECTRUMIN)
-		return dev_priv->vbt.lvds_ssc_freq;
+		return dev_priv->display.vbt.lvds_ssc_freq;
 	else if (HAS_PCH_SPLIT(dev_priv))
 		return 120000;
 	else if (DISPLAY_VER(dev_priv) != 2)
@@ -4575,8 +4583,8 @@ static bool encoders_cloneable(const struct intel_encoder *a,
 			       const struct intel_encoder *b)
 {
 	/* masks could be asymmetric, so check both ways */
-	return a == b || (a->cloneable & (1 << b->type) &&
-			  b->cloneable & (1 << a->type));
+	return a == b || (a->cloneable & BIT(b->type) &&
+			  b->cloneable & BIT(a->type));
 }
 
 static bool check_single_encoder_cloning(struct intel_atomic_state *state,
@@ -4789,7 +4797,7 @@ static u16 skl_linetime_wm(const struct intel_crtc_state *crtc_state)
 
 	/* Display WA #1135: BXT:ALL GLK:ALL */
 	if ((IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) &&
-	    dev_priv->ipc_enabled)
+	    skl_watermark_ipc_enabled(dev_priv))
 		linetime_wm /= 2;
 
 	return min(linetime_wm, 0x1ff);
@@ -7371,7 +7379,7 @@ static void intel_atomic_helper_free_state(struct drm_i915_private *dev_priv)
 	struct intel_atomic_state *state, *next;
 	struct llist_node *freed;
 
-	freed = llist_del_all(&dev_priv->atomic_helper.free_list);
+	freed = llist_del_all(&dev_priv->display.atomic_helper.free_list);
 	llist_for_each_entry_safe(state, next, freed, freed)
 		drm_atomic_state_put(&state->base);
 }
@@ -7379,7 +7387,7 @@ static void intel_atomic_helper_free_state(struct drm_i915_private *dev_priv)
 static void intel_atomic_helper_free_state_worker(struct work_struct *work)
 {
 	struct drm_i915_private *dev_priv =
-		container_of(work, typeof(*dev_priv), atomic_helper.free_work);
+		container_of(work, typeof(*dev_priv), display.atomic_helper.free_work);
 
 	intel_atomic_helper_free_state(dev_priv);
 }
@@ -7671,7 +7679,7 @@ intel_atomic_commit_ready(struct i915_sw_fence *fence,
 	case FENCE_FREE:
 		{
 			struct intel_atomic_helper *helper =
-				&to_i915(state->base.dev)->atomic_helper;
+				&to_i915(state->base.dev)->display.atomic_helper;
 
 			if (llist_add(&state->freed, &helper->free_list))
 				schedule_work(&helper->free_work);
@@ -7774,12 +7782,12 @@ static int intel_atomic_commit(struct drm_device *dev,
 
 	i915_sw_fence_commit(&state->commit_ready);
 	if (nonblock && state->modeset) {
-		queue_work(dev_priv->modeset_wq, &state->base.commit_work);
+		queue_work(dev_priv->display.wq.modeset, &state->base.commit_work);
 	} else if (nonblock) {
-		queue_work(dev_priv->flip_wq, &state->base.commit_work);
+		queue_work(dev_priv->display.wq.flip, &state->base.commit_work);
 	} else {
 		if (state->modeset)
-			flush_workqueue(dev_priv->modeset_wq);
+			flush_workqueue(dev_priv->display.wq.modeset);
 		intel_atomic_commit_tail(state);
 	}
 
@@ -7885,7 +7893,7 @@ static bool intel_ddi_crt_present(struct drm_i915_private *dev_priv)
 	if (intel_de_read(dev_priv, DDI_BUF_CTL(PORT_A)) & DDI_A_4_LANES)
 		return false;
 
-	if (!dev_priv->vbt.int_crt_support)
+	if (!dev_priv->display.vbt.int_crt_support)
 		return false;
 
 	return true;
@@ -8020,7 +8028,7 @@ static void intel_setup_outputs(struct drm_i915_private *dev_priv)
 	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
 		bool has_edp, has_port;
 
-		if (IS_VALLEYVIEW(dev_priv) && dev_priv->vbt.int_crt_support)
+		if (IS_VALLEYVIEW(dev_priv) && dev_priv->display.vbt.int_crt_support)
 			intel_crt_init(dev_priv);
 
 		/*
@@ -8132,6 +8140,17 @@ static void intel_setup_outputs(struct drm_i915_private *dev_priv)
 	drm_helper_move_panel_connectors_to_head(&dev_priv->drm);
 }
 
+static int max_dotclock(struct drm_i915_private *i915)
+{
+	int max_dotclock = i915->max_dotclk_freq;
+
+	/* icl+ might use bigjoiner */
+	if (DISPLAY_VER(i915) >= 11)
+		max_dotclock *= 2;
+
+	return max_dotclock;
+}
+
 static enum drm_mode_status
 intel_mode_valid(struct drm_device *dev,
 		 const struct drm_display_mode *mode)
@@ -8168,6 +8187,13 @@ intel_mode_valid(struct drm_device *dev,
 			   DRM_MODE_FLAG_PIXMUX |
 			   DRM_MODE_FLAG_CLKDIV2))
 		return MODE_BAD;
+
+	/*
+	 * Reject clearly excessive dotclocks early to
+	 * avoid having to worry about huge integers later.
+	 */
+	if (mode->clock > max_dotclock(dev_priv))
+		return MODE_CLOCK_HIGH;
 
 	/* Transcoder timing limits */
 	if (DISPLAY_VER(dev_priv) >= 11) {
@@ -8356,11 +8382,11 @@ void intel_modeset_init_hw(struct drm_i915_private *i915)
 	if (!HAS_DISPLAY(i915))
 		return;
 
-	cdclk_state = to_intel_cdclk_state(i915->cdclk.obj.state);
+	cdclk_state = to_intel_cdclk_state(i915->display.cdclk.obj.state);
 
 	intel_update_cdclk(i915);
-	intel_cdclk_dump_config(i915, &i915->cdclk.hw, "Current CDCLK");
-	cdclk_state->logical = cdclk_state->actual = i915->cdclk.hw;
+	intel_cdclk_dump_config(i915, &i915->display.cdclk.hw, "Current CDCLK");
+	cdclk_state->logical = cdclk_state->actual = i915->display.cdclk.hw;
 }
 
 static int sanitize_watermarks_add_affected(struct drm_atomic_state *state)
@@ -8643,11 +8669,9 @@ int intel_modeset_init_noirq(struct drm_i915_private *i915)
 
 	intel_dmc_ucode_init(i915);
 
-	i915->modeset_wq = alloc_ordered_workqueue("i915_modeset", 0);
-	i915->flip_wq = alloc_workqueue("i915_flip", WQ_HIGHPRI |
-					WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
-
-	i915->window2_delay = 0; /* No DSB so no window2 delay */
+	i915->display.wq.modeset = alloc_ordered_workqueue("i915_modeset", 0);
+	i915->display.wq.flip = alloc_workqueue("i915_flip", WQ_HIGHPRI |
+						WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
 
 	intel_mode_config_init(i915);
 
@@ -8663,8 +8687,8 @@ int intel_modeset_init_noirq(struct drm_i915_private *i915)
 	if (ret)
 		goto cleanup_vga_client_pw_domain_dmc;
 
-	init_llist_head(&i915->atomic_helper.free_list);
-	INIT_WORK(&i915->atomic_helper.free_work,
+	init_llist_head(&i915->display.atomic_helper.free_list);
+	INIT_WORK(&i915->display.atomic_helper.free_work,
 		  intel_atomic_helper_free_state_worker);
 
 	intel_init_quirks(i915);
@@ -8724,7 +8748,7 @@ int intel_modeset_init_nogem(struct drm_i915_private *i915)
 
 	intel_hdcp_component_init(i915);
 
-	if (i915->max_cdclk_freq == 0)
+	if (i915->display.cdclk.max_cdclk_freq == 0)
 		intel_update_max_cdclk(i915);
 
 	/*
@@ -8788,7 +8812,7 @@ int intel_modeset_init(struct drm_i915_private *i915)
 	intel_hpd_init(i915);
 	intel_hpd_poll_disable(i915);
 
-	intel_init_ipc(i915);
+	skl_watermark_ipc_init(i915);
 
 	return 0;
 }
@@ -8919,7 +8943,7 @@ void intel_display_resume(struct drm_device *dev)
 	if (!ret)
 		ret = __intel_display_resume(i915, state, &ctx);
 
-	intel_enable_ipc(i915);
+	skl_watermark_ipc_update(i915);
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 
@@ -8954,11 +8978,11 @@ void intel_modeset_driver_remove(struct drm_i915_private *i915)
 	if (!HAS_DISPLAY(i915))
 		return;
 
-	flush_workqueue(i915->flip_wq);
-	flush_workqueue(i915->modeset_wq);
+	flush_workqueue(i915->display.wq.flip);
+	flush_workqueue(i915->display.wq.modeset);
 
-	flush_work(&i915->atomic_helper.free_work);
-	drm_WARN_ON(&i915->drm, !llist_empty(&i915->atomic_helper.free_list));
+	flush_work(&i915->display.atomic_helper.free_work);
+	drm_WARN_ON(&i915->drm, !llist_empty(&i915->display.atomic_helper.free_list));
 }
 
 /* part #2: call after irq uninstall */
@@ -8996,8 +9020,8 @@ void intel_modeset_driver_remove_noirq(struct drm_i915_private *i915)
 
 	intel_gmbus_teardown(i915);
 
-	destroy_workqueue(i915->flip_wq);
-	destroy_workqueue(i915->modeset_wq);
+	destroy_workqueue(i915->display.wq.flip);
+	destroy_workqueue(i915->display.wq.modeset);
 
 	intel_fbc_cleanup(i915);
 }

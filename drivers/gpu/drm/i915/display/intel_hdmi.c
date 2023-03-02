@@ -42,6 +42,7 @@
 
 #include "i915_debugfs.h"
 #include "i915_drv.h"
+#include "i915_reg.h"
 #include "intel_atomic.h"
 #include "intel_connector.h"
 #include "intel_ddi.h"
@@ -50,6 +51,7 @@
 #include "intel_dp.h"
 #include "intel_gmbus.h"
 #include "intel_hdcp.h"
+#include "intel_hdcp_regs.h"
 #include "intel_hdmi.h"
 #include "intel_lspcon.h"
 #include "intel_panel.h"
@@ -2359,12 +2361,12 @@ intel_hdmi_unset_edid(struct drm_connector *connector)
 	intel_hdmi->dp_dual_mode.type = DRM_DP_DUAL_MODE_NONE;
 	intel_hdmi->dp_dual_mode.max_tmds_clock = 0;
 
-	kfree(to_intel_connector(connector)->detect_edid);
+	drm_edid_free(to_intel_connector(connector)->detect_edid);
 	to_intel_connector(connector)->detect_edid = NULL;
 }
 
 static void
-intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector, bool has_edid)
+intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector)
 {
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct intel_hdmi *hdmi = intel_attached_hdmi(to_intel_connector(connector));
@@ -2380,16 +2382,10 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector, bool has_edid)
 	 * CONFIG1 pin, but no such luck on our hardware.
 	 *
 	 * The only method left to us is to check the VBT to see
-	 * if the port is a dual mode capable DP port. But let's
-	 * only do that when we sucesfully read the EDID, to avoid
-	 * confusing log messages about DP dual mode adaptors when
-	 * there's nothing connected to the port.
+	 * if the port is a dual mode capable DP port.
 	 */
 	if (type == DRM_DP_DUAL_MODE_UNKNOWN) {
-		/* An overridden EDID imply that we want this port for testing.
-		 * Make sure not to set limits for that port.
-		 */
-		if (has_edid && !connector->override_edid &&
+		if (!connector->force &&
 		    intel_bios_is_port_dp_dual_mode(dev_priv, port)) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Assuming DP dual mode adaptor presence based on VBT\n");
@@ -2426,7 +2422,8 @@ intel_hdmi_set_edid(struct drm_connector *connector)
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(to_intel_connector(connector));
 	intel_wakeref_t wakeref;
-	struct edid *edid;
+	const struct drm_edid *drm_edid;
+	const struct edid *edid;
 	bool connected = false;
 	struct i2c_adapter *i2c;
 
@@ -2434,27 +2431,33 @@ intel_hdmi_set_edid(struct drm_connector *connector)
 
 	i2c = intel_gmbus_get_adapter(dev_priv, intel_hdmi->ddc_bus);
 
-	edid = drm_get_edid(connector, i2c);
+	drm_edid = drm_edid_read_ddc(connector, i2c);
 
-	if (!edid && !intel_gmbus_is_forced_bit(i2c)) {
+	if (!drm_edid && !intel_gmbus_is_forced_bit(i2c)) {
 		drm_dbg_kms(&dev_priv->drm,
 			    "HDMI GMBUS EDID read failed, retry using GPIO bit-banging\n");
 		intel_gmbus_force_bit(i2c, true);
-		edid = drm_get_edid(connector, i2c);
+		drm_edid = drm_edid_read_ddc(connector, i2c);
 		intel_gmbus_force_bit(i2c, false);
 	}
 
-	intel_hdmi_dp_dual_mode_detect(connector, edid != NULL);
+	/* Below we depend on display info having been updated */
+	drm_edid_connector_update(connector, drm_edid);
 
-	intel_display_power_put(dev_priv, POWER_DOMAIN_GMBUS, wakeref);
+	to_intel_connector(connector)->detect_edid = drm_edid;
 
-	to_intel_connector(connector)->detect_edid = edid;
+	/* FIXME: Get rid of drm_edid_raw() */
+	edid = drm_edid_raw(drm_edid);
 	if (edid && edid->input & DRM_EDID_INPUT_DIGITAL) {
 		intel_hdmi->has_audio = drm_detect_monitor_audio(edid);
 		intel_hdmi->has_hdmi_sink = drm_detect_hdmi_monitor(edid);
 
+		intel_hdmi_dp_dual_mode_detect(connector);
+
 		connected = true;
 	}
+
+	intel_display_power_put(dev_priv, POWER_DOMAIN_GMBUS, wakeref);
 
 	cec_notifier_set_phys_addr_from_edid(intel_hdmi->cec_notifier, edid);
 
@@ -2520,13 +2523,8 @@ intel_hdmi_force(struct drm_connector *connector)
 
 static int intel_hdmi_get_modes(struct drm_connector *connector)
 {
-	struct edid *edid;
-
-	edid = to_intel_connector(connector)->detect_edid;
-	if (edid == NULL)
-		return 0;
-
-	return intel_connector_update_modes(connector, edid);
+	/* drm_edid_connector_update() done in ->detect() or ->force() */
+	return drm_edid_connector_add_modes(connector);
 }
 
 static struct i2c_adapter *
@@ -2965,9 +2963,8 @@ void intel_hdmi_init_connector(struct intel_digital_port *dig_port,
 				    ddc);
 	drm_connector_helper_add(connector, &intel_hdmi_connector_helper_funcs);
 
-	connector->interlace_allowed = 1;
-	connector->doublescan_allowed = 0;
-	connector->stereo_allowed = 1;
+	connector->interlace_allowed = true;
+	connector->stereo_allowed = true;
 
 	if (DISPLAY_VER(dev_priv) >= 10)
 		connector->ycbcr_420_allowed = true;

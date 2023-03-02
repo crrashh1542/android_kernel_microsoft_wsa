@@ -885,7 +885,7 @@ static void discard_ggtt_vma(struct i915_vma *vma)
 struct i915_vma *
 i915_gem_object_ggtt_pin_ww(struct drm_i915_gem_object *obj,
 			    struct i915_gem_ww_ctx *ww,
-			    const struct i915_ggtt_view *view,
+			    const struct i915_gtt_view *view,
 			    u64 size, u64 alignment, u64 flags)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
@@ -896,7 +896,7 @@ i915_gem_object_ggtt_pin_ww(struct drm_i915_gem_object *obj,
 	GEM_WARN_ON(!ww);
 
 	if (flags & PIN_MAPPABLE &&
-	    (!view || view->type == I915_GGTT_VIEW_NORMAL)) {
+	    (!view || view->type == I915_GTT_VIEW_NORMAL)) {
 		/*
 		 * If the required space is larger than the available
 		 * aperture, we will not able to find a slot for the
@@ -987,7 +987,7 @@ new_vma:
 
 struct i915_vma * __must_check
 i915_gem_object_ggtt_pin(struct drm_i915_gem_object *obj,
-			 const struct i915_ggtt_view *view,
+			 const struct i915_gtt_view *view,
 			 u64 size, u64 alignment, u64 flags)
 {
 	struct i915_gem_ww_ctx ww;
@@ -1035,7 +1035,7 @@ i915_gem_madvise_ioctl(struct drm_device *dev, void *data,
 
 	if (i915_gem_object_has_pages(obj) &&
 	    i915_gem_object_is_tiled(obj) &&
-	    i915->quirks & QUIRK_PIN_SWIZZLED_PAGES) {
+	    i915->gem_quirks & GEM_QUIRK_PIN_SWIZZLED_PAGES) {
 		if (obj->mm.madv == I915_MADV_WILLNEED) {
 			GEM_BUG_ON(!i915_gem_object_has_tiling_quirk(obj));
 			i915_gem_object_clear_tiling_quirk(obj);
@@ -1213,7 +1213,7 @@ void i915_gem_init_early(struct drm_i915_private *dev_priv)
 	i915_gem_init__mm(dev_priv);
 	i915_gem_init__contexts(dev_priv);
 
-	spin_lock_init(&dev_priv->fb_tracking.lock);
+	spin_lock_init(&dev_priv->display.fb_tracking.lock);
 }
 
 void i915_gem_cleanup_early(struct drm_i915_private *dev_priv)
@@ -1230,7 +1230,7 @@ int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file)
 	struct i915_drm_client *client;
 	int ret = -ENOMEM;
 
-	DRM_DEBUG("\n");
+	drm_dbg(&i915->drm, "\n");
 
 	file_priv = kzalloc(sizeof(*file_priv), GFP_KERNEL);
 	if (!file_priv)

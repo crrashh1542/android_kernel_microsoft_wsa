@@ -105,7 +105,7 @@ struct intel_fb_view {
 	 * In the normal view the FB object's backing store sg list is used
 	 * directly and hence the remap information here is not used.
 	 */
-	struct i915_ggtt_view gtt;
+	struct i915_gtt_view gtt;
 
 	/*
 	 * The GTT view (gtt.type) specific information for each FB color
@@ -291,7 +291,7 @@ struct intel_vbt_panel_data {
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
 
 	/* Feature bits */
-	unsigned int panel_type:4;
+	int panel_type;
 	unsigned int lvds_dither:1;
 	unsigned int bios_lvds_val; /* initial [PCH_]LVDS reg val in VBIOS */
 
@@ -330,7 +330,7 @@ struct intel_vbt_panel_data {
 		bool present;
 		bool active_low_pwm;
 		u8 min_brightness;	/* min_brightness/255 of max */
-		u8 controller;		/* brightness controller number */
+		s8 controller;		/* brightness controller number */
 		enum intel_backlight_type type;
 	} backlight;
 
@@ -351,6 +351,9 @@ struct intel_vbt_panel_data {
 };
 
 struct intel_panel {
+	/* Fixed EDID for eDP and LVDS. May hold ERR_PTR for invalid EDID. */
+	const struct drm_edid *fixed_edid;
+
 	struct list_head fixed_modes;
 
 	/* backlight */
@@ -591,9 +594,8 @@ struct intel_connector {
 	/* Panel info for eDP and LVDS */
 	struct intel_panel panel;
 
-	/* Cached EDID for eDP and LVDS. May hold ERR_PTR for invalid EDID. */
-	struct edid *edid;
-	struct edid *detect_edid;
+	/* Cached EDID for detect. */
+	const struct drm_edid *detect_edid;
 
 	/* Number of times hotplug detection was tried after an HPD interrupt */
 	int hotplug_retries;
@@ -1554,11 +1556,19 @@ struct intel_pps {
 	ktime_t panel_power_off_time;
 	intel_wakeref_t vdd_wakeref;
 
-	/*
-	 * Pipe whose power sequencer is currently locked into
-	 * this port. Only relevant on VLV/CHV.
-	 */
-	enum pipe pps_pipe;
+	union {
+		/*
+		 * Pipe whose power sequencer is currently locked into
+		 * this port. Only relevant on VLV/CHV.
+		 */
+		enum pipe pps_pipe;
+
+		/*
+		 * Power sequencer index. Only relevant on BXT+.
+		 */
+		int pps_idx;
+	};
+
 	/*
 	 * Pipe currently driving the port. Used for preventing
 	 * the use of the PPS for any pipe currentrly driving
@@ -1567,7 +1577,7 @@ struct intel_pps {
 	enum pipe active_pipe;
 	/*
 	 * Set if the sequencer may be reset due to a power transition,
-	 * requiring a reinitialization. Only relevant on BXT.
+	 * requiring a reinitialization. Only relevant on BXT+.
 	 */
 	bool pps_reset;
 	struct edp_power_seq pps_delays;
@@ -2040,15 +2050,16 @@ static inline bool
 intel_crtc_has_type(const struct intel_crtc_state *crtc_state,
 		    enum intel_output_type type)
 {
-	return crtc_state->output_types & (1 << type);
+	return crtc_state->output_types & BIT(type);
 }
+
 static inline bool
 intel_crtc_has_dp_encoder(const struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->output_types &
-		((1 << INTEL_OUTPUT_DP) |
-		 (1 << INTEL_OUTPUT_DP_MST) |
-		 (1 << INTEL_OUTPUT_EDP));
+		(BIT(INTEL_OUTPUT_DP) |
+		 BIT(INTEL_OUTPUT_DP_MST) |
+		 BIT(INTEL_OUTPUT_EDP));
 }
 
 static inline bool

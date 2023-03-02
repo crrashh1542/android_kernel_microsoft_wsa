@@ -27,6 +27,7 @@
 #include "display/intel_dp.h"
 
 #include "i915_drv.h"
+#include "i915_reg.h"
 #include "intel_atomic.h"
 #include "intel_crtc.h"
 #include "intel_de.h"
@@ -706,7 +707,7 @@ tgl_dc3co_exitline_compute_config(struct intel_dp *intel_dp,
 	if (crtc_state->enable_psr2_sel_fetch)
 		return;
 
-	if (!(dev_priv->dmc.allowed_dc_mask & DC_STATE_EN_DC3CO))
+	if (!(dev_priv->display.dmc.allowed_dc_mask & DC_STATE_EN_DC3CO))
 		return;
 
 	if (!dc3co_is_pipe_port_compatible(intel_dp, crtc_state))
@@ -2050,13 +2051,12 @@ static bool __psr_wait_for_idle_locked(struct intel_dp *intel_dp)
 static int intel_psr_fastset_force(struct drm_i915_private *dev_priv)
 {
 	struct drm_connector_list_iter conn_iter;
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_atomic_state *state;
 	struct drm_connector *conn;
 	int err = 0;
 
-	state = drm_atomic_state_alloc(dev);
+	state = drm_atomic_state_alloc(&dev_priv->drm);
 	if (!state)
 		return -ENOMEM;
 
@@ -2065,7 +2065,7 @@ static int intel_psr_fastset_force(struct drm_i915_private *dev_priv)
 
 retry:
 
-	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_connector_list_iter_begin(&dev_priv->drm, &conn_iter);
 	drm_for_each_connector_iter(conn, &conn_iter) {
 		struct drm_connector_state *conn_state;
 		struct drm_crtc_state *crtc_state;
