@@ -2383,7 +2383,7 @@ static inline void backport_netif_napi_add(struct net_device *dev,
 #define netif_napi_add LINUX_BACKPORT(netif_napi_add)
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 static inline void
 _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 				 const struct ieee80211_sband_iftype_data *iftd,
@@ -2404,9 +2404,7 @@ _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 	     i < (sband)->n_iftype_data;		\
 	     i++, iftd = &(sband)->iftype_data[i])
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,19,0) */
-#endif /* CFG80211_VERSION < KERNEL_VERSION(6,3,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 #define cfg80211_req_link_disabled(req, link)	0
 #define NL80211_RRF_NO_EHT 0
 static inline void
