@@ -5058,7 +5058,7 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 }
 #endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
 static int ieee80211_set_hw_timestamp(struct wiphy *wiphy,
 				      struct net_device *dev,
 				      struct cfg80211_set_hw_timestamp *hwts)
@@ -5376,7 +5376,7 @@ const struct cfg80211_ops mac80211_config_ops = {
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
 	.del_intf_link = ieee80211_del_intf_link,
 #endif
-#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
 	.set_hw_timestamp = ieee80211_set_hw_timestamp,
 #endif
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)

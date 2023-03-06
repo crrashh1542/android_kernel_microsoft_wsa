@@ -2211,13 +2211,14 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,19,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
-
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 struct cfg80211_set_hw_timestamp {
 	const u8 *macaddr;
 	bool enable;
 };
-
+#define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
+#else
+#define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
@@ -2350,12 +2351,6 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_req_link_bss(req, link)	((req)->links[link].bss)
 #define cfg80211_req_link_id(req)		((req)->link_id)
 #define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len)
-#endif
-
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
-#define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
-#else
-#define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,2,0) && \
