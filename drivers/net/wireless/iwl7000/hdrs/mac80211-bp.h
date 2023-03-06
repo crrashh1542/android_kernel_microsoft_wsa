@@ -2353,7 +2353,7 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len)
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0) && \
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0) && \
     !defined(cfg80211_rx_control_port)
 static inline bool
 iwl7000_cfg80211_rx_control_port(struct net_device *dev, struct sk_buff *skb,
