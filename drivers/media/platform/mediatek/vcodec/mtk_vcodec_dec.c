@@ -177,15 +177,6 @@ void mtk_vcodec_dec_set_default_params(struct mtk_vcodec_ctx *ctx)
 	q_data->coded_height = DFT_CFG_HEIGHT;
 	q_data->fmt = ctx->dev->vdec_pdata->default_cap_fmt;
 	q_data->field = V4L2_FIELD_NONE;
-	ctx->max_width = MTK_VDEC_MAX_W;
-	ctx->max_height = MTK_VDEC_MAX_H;
-
-	v4l_bound_align_image(&q_data->coded_width,
-				MTK_VDEC_MIN_W,
-				ctx->max_width, 4,
-				&q_data->coded_height,
-				MTK_VDEC_MIN_H,
-				ctx->max_height, 5, 6);
 
 	q_data->sizeimage[0] = q_data->coded_width * q_data->coded_height;
 	q_data->bytesperline[0] = q_data->coded_width;
@@ -499,13 +490,6 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	}
 	if (fmt == NULL)
 		return -EINVAL;
-
-	if (!(ctx->dev->dec_capability & VCODEC_CAPABILITY_4K_DISABLED) &&
-	    fmt->fourcc != V4L2_PIX_FMT_VP8_FRAME) {
-		mtk_v4l2_debug(3, "4K is enabled");
-		ctx->max_width = VCODEC_DEC_4K_CODED_WIDTH;
-		ctx->max_height = VCODEC_DEC_4K_CODED_HEIGHT;
-	}
 
 	q_data->fmt = fmt;
 	vidioc_try_fmt(ctx, f, q_data->fmt);

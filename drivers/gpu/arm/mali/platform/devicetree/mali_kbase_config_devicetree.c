@@ -44,7 +44,7 @@ void kbase_platform_unregister(void)
 }
 #endif
 
-#ifdef CONFIG_MALI_BIFROST_DVFS
+#ifdef CONFIG_MALI_DVFS
 #if MALI_USE_CSF
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 #else
@@ -53,7 +53,7 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation, u32 u
 {
 	return 1;
 }
-#endif /* CONFIG_MALI_BIFROST_DVFS */
+#endif /* CONFIG_MALI_DVFS */
 
 #ifdef CONFIG_OF
 const struct of_device_id kbase_dt_ids[] = {

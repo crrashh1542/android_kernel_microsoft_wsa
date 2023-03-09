@@ -535,7 +535,7 @@ static int soc_tplg_kcontrol_bind_io(struct snd_soc_tplg_ctl_hdr *hdr,
 		 * return an -EINVAL error and prevent the card from
 		 * being configured.
 		 */
-		if (IS_ENABLED(CONFIG_SND_CTL_VALIDATION) && sbe->max > 512)
+		if (sbe->max > 512)
 			k->access |= SNDRV_CTL_ELEM_ACCESS_SKIP_CHECK;
 
 		ext_ops = tplg->bytes_ext_ops;
@@ -1401,13 +1401,17 @@ static int soc_tplg_dapm_widget_create(struct soc_tplg *tplg,
 
 	template.num_kcontrols = le32_to_cpu(w->num_kcontrols);
 	kc = devm_kcalloc(tplg->dev, le32_to_cpu(w->num_kcontrols), sizeof(*kc), GFP_KERNEL);
-	if (!kc)
+	if (!kc) {
+		ret = -ENOMEM;
 		goto hdr_err;
+	}
 
 	kcontrol_type = devm_kcalloc(tplg->dev, le32_to_cpu(w->num_kcontrols), sizeof(unsigned int),
 				     GFP_KERNEL);
-	if (!kcontrol_type)
+	if (!kcontrol_type) {
+		ret = -ENOMEM;
 		goto hdr_err;
+	}
 
 	for (i = 0; i < le32_to_cpu(w->num_kcontrols); i++) {
 		control_hdr = (struct snd_soc_tplg_ctl_hdr *)tplg->pos;
@@ -1755,6 +1759,7 @@ static int soc_tplg_fe_link_create(struct soc_tplg *tplg,
 
 	/* enable DPCM */
 	link->dynamic = 1;
+	link->ignore_pmdown_time = 1;
 	link->dpcm_playback = le32_to_cpu(pcm->playback);
 	link->dpcm_capture = le32_to_cpu(pcm->capture);
 	if (pcm->flag_mask)

@@ -37,7 +37,7 @@ bob_kernel_module {
     ],
     enabled: false,
     mali_kutf_clk_rate_trace: {
-        kbuild_options: ["CONFIG_MALI_BIFROST_KUTF_CLK_RATE_TRACE=y"],
+        kbuild_options: ["CONFIG_MALI_KUTF_CLK_RATE_TRACE=y"],
         enabled: true,
     },
 }

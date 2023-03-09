@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -50,8 +50,8 @@ static u64 sub_alloc(struct kbase_csf_heap_context_allocator *const ctx_alloc)
 		MAX_TILER_HEAPS);
 
 	if (unlikely(heap_nr >= MAX_TILER_HEAPS)) {
-		dev_err(kctx->kbdev->dev,
-			"No free tiler heap contexts in the pool\n");
+		dev_dbg(kctx->kbdev->dev,
+			"No free tiler heap contexts in the pool");
 		return 0;
 	}
 
@@ -142,7 +142,14 @@ void kbase_csf_heap_context_allocator_term(
 
 	if (ctx_alloc->region) {
 		kbase_gpu_vm_lock(kctx);
-		ctx_alloc->region->flags &= ~KBASE_REG_NO_USER_FREE;
+		/*
+		 * We can't enforce (nor check) the no_user_free refcount
+		 * to be 0 here as other code regions can take such a reference.
+		 * Anyway, this isn't an issue as the region will eventually
+		 * be freed by the region tracker if its refcount didn't drop
+		 * to 0.
+		 */
+		kbase_va_region_no_user_free_put(kctx, ctx_alloc->region);
 		kbase_mem_free_region(kctx, ctx_alloc->region);
 		kbase_gpu_vm_unlock(kctx);
 	}
@@ -154,14 +161,15 @@ u64 kbase_csf_heap_context_allocator_alloc(
 	struct kbase_csf_heap_context_allocator *const ctx_alloc)
 {
 	struct kbase_context *const kctx = ctx_alloc->kctx;
-	u64 flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
-		BASE_MEM_PROT_CPU_WR | BASEP_MEM_NO_USER_FREE;
+	u64 flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR | BASE_MEM_PROT_CPU_WR |
+		    BASEP_MEM_NO_USER_FREE | BASE_MEM_PROT_CPU_RD;
 	u64 nr_pages = PFN_UP(HEAP_CTX_REGION_SIZE);
 	u64 heap_gpu_va = 0;
 
-#ifdef CONFIG_MALI_BIFROST_VECTOR_DUMP
-	flags |= BASE_MEM_PROT_CPU_RD;
-#endif
+	/* Calls to this function are inherently asynchronous, with respect to
+	 * MMU operations.
+	 */
+	const enum kbase_caller_mmu_sync_info mmu_sync_info = CALLER_MMU_ASYNC;
 
 	mutex_lock(&ctx_alloc->lock);
 
@@ -169,16 +177,15 @@ u64 kbase_csf_heap_context_allocator_alloc(
 	 * allocate it.
 	 */
 	if (!ctx_alloc->region) {
-		ctx_alloc->region = kbase_mem_alloc(kctx, nr_pages, nr_pages,
-					0, &flags, &ctx_alloc->gpu_va);
+		ctx_alloc->region = kbase_mem_alloc(kctx, nr_pages, nr_pages, 0, &flags,
+						    &ctx_alloc->gpu_va, mmu_sync_info);
 	}
 
 	/* If the pool still isn't allocated then an error occurred. */
-	if (unlikely(!ctx_alloc->region)) {
-		dev_err(kctx->kbdev->dev, "Failed to allocate a pool of tiler heap contexts\n");
-	} else {
+	if (unlikely(!ctx_alloc->region))
+		dev_dbg(kctx->kbdev->dev, "Failed to allocate a pool of tiler heap contexts");
+	else
 		heap_gpu_va = sub_alloc(ctx_alloc);
-	}
 
 	mutex_unlock(&ctx_alloc->lock);
 

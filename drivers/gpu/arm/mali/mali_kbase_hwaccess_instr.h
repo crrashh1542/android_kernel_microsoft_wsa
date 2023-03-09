@@ -128,14 +128,14 @@ int kbase_instr_hwcnt_clear(struct kbase_context *kctx);
 int kbase_instr_backend_init(struct kbase_device *kbdev);
 
 /**
- * kbase_instr_backend_init() - Terminate the instrumentation backend
+ * kbase_instr_backend_term() - Terminate the instrumentation backend
  * @kbdev:	Kbase device
  *
  * This function should be called during driver termination.
  */
 void kbase_instr_backend_term(struct kbase_device *kbdev);
 
-#ifdef CONFIG_MALI_BIFROST_PRFCNT_SET_SELECT_VIA_DEBUG_FS
+#ifdef CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 /**
  * kbase_instr_backend_debugfs_init() - Add a debugfs entry for the
  *                                      hardware counter set.
@@ -143,5 +143,28 @@ void kbase_instr_backend_term(struct kbase_device *kbdev);
  */
 void kbase_instr_backend_debugfs_init(struct kbase_device *kbdev);
 #endif
+
+/**
+ * kbase_instr_hwcnt_on_unrecoverable_error() - JM HWC instr backend function
+ *                                              called when unrecoverable errors
+ *                                              are detected.
+ * @kbdev: Kbase device
+ *
+ * This should be called on encountering errors that can only be recovered from
+ * with reset, or that may put HWC logic in state that could result in hang. For
+ * example, when HW becomes unresponsive.
+ *
+ * Caller requires kbdev->hwaccess_lock held.
+ */
+void kbase_instr_hwcnt_on_unrecoverable_error(struct kbase_device *kbdev);
+
+/**
+ * kbase_instr_hwcnt_on_before_reset() - JM HWC instr backend function to be
+ *                                       called immediately before a reset.
+ *                                       Takes us out of the unrecoverable
+ *                                       error state, if we were in it.
+ * @kbdev: Kbase device
+ */
+void kbase_instr_hwcnt_on_before_reset(struct kbase_device *kbdev);
 
 #endif /* _KBASE_HWACCESS_INSTR_H_ */

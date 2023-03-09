@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -27,7 +27,6 @@
 #include <gpu/mali_kbase_gpu_regmap.h>
 #include <mali_kbase.h>
 #include <mali_kbase_ctx_sched.h>
-#include <mali_kbase_dma_fence.h>
 #include <mali_kbase_kinstr_jm.h>
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_mem_pool_group.h>
@@ -36,11 +35,15 @@
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 #include <mali_kbase_debug_mem_view.h>
+#include <mali_kbase_debug_mem_zones.h>
+#include <mali_kbase_debug_mem_allocs.h>
 #include <mali_kbase_mem_pool_debugfs.h>
 
 void kbase_context_debugfs_init(struct kbase_context *const kctx)
 {
 	kbase_debug_mem_view_init(kctx);
+	kbase_debug_mem_zones_init(kctx);
+	kbase_debug_mem_allocs_init(kctx);
 	kbase_mem_pool_debugfs_init(kctx->kctx_dentry, kctx);
 	kbase_jit_debugfs_init(kctx);
 	kbasep_jd_debugfs_ctx_init(kctx);
@@ -110,6 +113,11 @@ static void kbase_context_flush_jobs(struct kbase_context *kctx)
 	flush_workqueue(kctx->jctx.job_done_wq);
 }
 
+/**
+ * kbase_context_free - Free kcontext at its destruction
+ *
+ * @kctx: kcontext to be freed
+ */
 static void kbase_context_free(struct kbase_context *kctx)
 {
 	kbase_timeline_post_kbase_context_destroy(kctx);
@@ -121,8 +129,6 @@ static const struct kbase_context_init context_init[] = {
 	{ NULL, kbase_context_free, NULL },
 	{ kbase_context_common_init, kbase_context_common_term,
 	  "Common context initialization failed" },
-	{ kbase_dma_fence_init, kbase_dma_fence_term,
-	  "DMA fence initialization failed" },
 	{ kbase_context_mem_pool_group_init, kbase_context_mem_pool_group_term,
 	  "Memory pool group initialization failed" },
 	{ kbase_mem_evictable_init, kbase_mem_evictable_deinit,
@@ -242,9 +248,9 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	 * Customer side that a hang could occur if context termination is
 	 * not blocked until the resume of GPU device.
 	 */
-#ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
 	atomic_inc(&kbdev->pm.gpu_users_waiting);
-#endif /* CONFIG_MALI_BIFROST_ARBITER_SUPPORT */
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 	while (kbase_pm_context_active_handle_suspend(
 		kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_INCREASE)) {
 		dev_dbg(kbdev->dev,
@@ -252,9 +258,9 @@ void kbase_destroy_context(struct kbase_context *kctx)
 		wait_event(kbdev->pm.resume_wait,
 			   !kbase_pm_is_suspending(kbdev));
 	}
-#ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
 	atomic_dec(&kbdev->pm.gpu_users_waiting);
-#endif /* CONFIG_MALI_BIFROST_ARBITER_SUPPORT */
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 
 	kbase_mem_pool_group_mark_dying(&kctx->mem_pools);
 

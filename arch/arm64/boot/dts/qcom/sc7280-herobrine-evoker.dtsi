@@ -6,6 +6,7 @@
  */
 
 #include "sc7280-herobrine.dtsi"
+#include "sc7280-herobrine-audio-rt5682-3mic.dtsi"
 
 /*
  * ADDITIONS TO FIXED REGULATORS DEFINED IN PARENT DEVICE TREE FILES
@@ -54,6 +55,7 @@ ts_i2c: &i2c13 {
 		reset-gpios = <&tlmm 54 GPIO_ACTIVE_LOW>;
 
 		vdd-supply = <&ts_avdd>;
+		mainboard-vddio-supply = <&ts_avccio>;
 	};
 };
 
@@ -319,7 +321,6 @@ ts_i2c: &i2c13 {
 			  "",				/* 170 */
 			  "MOS_BLE_UART_TX",
 			  "MOS_BLE_UART_RX",
-			  "",
 			  "",
 			  "";
 };

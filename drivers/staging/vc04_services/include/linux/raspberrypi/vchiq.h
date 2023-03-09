@@ -45,7 +45,7 @@ struct vchiq_header {
 	/* Size of message data. */
 	unsigned int size;
 
-	char data[0];           /* message */
+	char data[];           /* message */
 };
 
 struct vchiq_element {
@@ -82,7 +82,7 @@ struct vchiq_service_params_kernel {
 
 struct vchiq_instance;
 
-extern enum vchiq_status vchiq_initialise(struct vchiq_instance **pinstance);
+extern int vchiq_initialise(struct vchiq_instance **pinstance);
 extern enum vchiq_status vchiq_shutdown(struct vchiq_instance *instance);
 extern enum vchiq_status vchiq_connect(struct vchiq_instance *instance);
 extern enum vchiq_status vchiq_open_service(struct vchiq_instance *instance,

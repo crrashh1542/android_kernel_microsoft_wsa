@@ -18,7 +18,7 @@
 #
 #
 
-ifeq ($(CONFIG_MALI_BIFROST_KUTF_CLK_RATE_TRACE),y)
+ifeq ($(CONFIG_MALI_KUTF_CLK_RATE_TRACE),y)
 obj-m += mali_kutf_clk_rate_trace_test_portal.o
 
 mali_kutf_clk_rate_trace_test_portal-y := mali_kutf_clk_rate_trace_test.o

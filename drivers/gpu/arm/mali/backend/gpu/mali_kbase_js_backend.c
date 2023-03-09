@@ -50,12 +50,12 @@ static inline bool timer_callback_should_run(struct kbase_device *kbdev)
 	 */
 	nr_running_ctxs = atomic_read(&kbdev->js_data.nr_contexts_runnable);
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	if (kbdev->js_data.softstop_always) {
 		/* Debug support for allowing soft-stop on a single context */
 		return true;
 	}
-#endif				/* CONFIG_MALI_BIFROST_DEBUG */
+#endif				/* CONFIG_MALI_DEBUG */
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_9435)) {
 		/* Timeouts would have to be 4x longer (due to micro-
@@ -118,7 +118,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			if (!kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_5736)) {
 				u32 ticks = atom->ticks++;
 
-#if !defined(CONFIG_MALI_BIFROST_JOB_DUMP) && !defined(CONFIG_MALI_BIFROST_VECTOR_DUMP)
+#if !defined(CONFIG_MALI_JOB_DUMP) && !defined(CONFIG_MALI_VECTOR_DUMP)
 				u32 soft_stop_ticks, hard_stop_ticks,
 								gpu_reset_ticks;
 				if (atom->core_req & BASE_JD_REQ_ONLY_COMPUTE) {
@@ -211,8 +211,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#else				/* !CONFIG_MALI_BIFROST_JOB_DUMP */
-				/* NOTE: During CONFIG_MALI_BIFROST_JOB_DUMP, we use
+#else				/* !CONFIG_MALI_JOB_DUMP */
+				/* NOTE: During CONFIG_MALI_JOB_DUMP, we use
 				 * the alternate timeouts, which makes the hard-
 				 * stop and GPU reset timeout much longer. We
 				 * also ensure that we don't soft-stop at all.
@@ -221,7 +221,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least
 					 * js_devdata->soft_stop_ticks. We do
 					 * not soft-stop during
-					 * CONFIG_MALI_BIFROST_JOB_DUMP, however.
+					 * CONFIG_MALI_JOB_DUMP, however.
 					 */
 					dev_dbg(kbdev->dev, "Soft-stop");
 				} else if (ticks ==
@@ -250,7 +250,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#endif				/* !CONFIG_MALI_BIFROST_JOB_DUMP */
+#endif				/* !CONFIG_MALI_JOB_DUMP */
 			}
 		}
 	}

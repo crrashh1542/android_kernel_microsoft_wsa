@@ -71,7 +71,7 @@ KBASE_EXPORT_TEST_API(kbase_ipa_model_ops_find);
 
 const char *kbase_ipa_model_name_from_id(u32 gpu_id)
 {
-	const char* model_name =
+	const char *model_name =
 		kbase_ipa_counter_model_name_from_id(gpu_id);
 
 	if (!model_name)
@@ -324,7 +324,7 @@ int kbase_ipa_init(struct kbase_device *kbdev)
 		kbdev->ipa.configured_model = default_model;
 	}
 
-	kbdev->ipa.last_sample_time = ktime_get();
+	kbdev->ipa.last_sample_time = ktime_get_raw();
 
 end:
 	if (err)
@@ -478,7 +478,7 @@ static u32 get_static_power_locked(struct kbase_device *kbdev,
 }
 
 #if KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE
-#if defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                        \
+#if defined(CONFIG_MALI_PWRSOFT_765) ||                                        \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE
 static unsigned long kbase_get_static_power(struct devfreq *df,
 					    unsigned long voltage)
@@ -488,7 +488,7 @@ static unsigned long kbase_get_static_power(unsigned long voltage)
 {
 	struct kbase_ipa_model *model;
 	u32 power = 0;
-#if defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                        \
+#if defined(CONFIG_MALI_PWRSOFT_765) ||                                        \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE
 	struct kbase_device *kbdev = dev_get_drvdata(&df->dev);
 #else
@@ -505,7 +505,7 @@ static unsigned long kbase_get_static_power(unsigned long voltage)
 
 	mutex_unlock(&kbdev->ipa.lock);
 
-#if !(defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                      \
+#if !(defined(CONFIG_MALI_PWRSOFT_765) ||                                      \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
 	kbase_release_device(kbdev);
 #endif
@@ -537,6 +537,16 @@ static void opp_translate_freq_voltage(struct kbase_device *kbdev,
 				       unsigned long *freqs,
 				       unsigned long *volts)
 {
+#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+	/* An arbitrary voltage and frequency value can be chosen for testing
+	 * in no mali configuration which may not match with any OPP level.
+	 */
+	freqs[KBASE_IPA_BLOCK_TYPE_TOP_LEVEL] = nominal_freq;
+	volts[KBASE_IPA_BLOCK_TYPE_TOP_LEVEL] = nominal_voltage;
+
+	freqs[KBASE_IPA_BLOCK_TYPE_SHADER_CORES] = nominal_freq;
+	volts[KBASE_IPA_BLOCK_TYPE_SHADER_CORES] = nominal_voltage;
+#else
 	u64 core_mask;
 	unsigned int i;
 
@@ -554,10 +564,11 @@ static void opp_translate_freq_voltage(struct kbase_device *kbdev,
 		volts[KBASE_IPA_BLOCK_TYPE_SHADER_CORES] =
 			volts[KBASE_IPA_BLOCK_TYPE_TOP_LEVEL];
 	}
+#endif
 }
 
 #if KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE
-#if defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                        \
+#if defined(CONFIG_MALI_PWRSOFT_765) ||                                        \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE
 static unsigned long kbase_get_dynamic_power(struct devfreq *df,
 					     unsigned long freq,
@@ -573,7 +584,7 @@ static unsigned long kbase_get_dynamic_power(unsigned long freq,
 	u32 power_coeffs[KBASE_IPA_BLOCK_TYPE_NUM] = {0};
 	u32 power = 0;
 	int err = 0;
-#if defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                        \
+#if defined(CONFIG_MALI_PWRSOFT_765) ||                                        \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE
 	struct kbase_device *kbdev = dev_get_drvdata(&df->dev);
 #else
@@ -599,7 +610,7 @@ static unsigned long kbase_get_dynamic_power(unsigned long freq,
 
 		/* Here unlike kbase_get_real_power(), shader core frequency is
 		 * used for the scaling as simple power model is used to obtain
-		 * the value of dynamic coefficient (which is is a fixed value
+		 * the value of dynamic coefficient (which is a fixed value
 		 * retrieved from the device tree).
 		 */
 		power += kbase_scale_dynamic_power(
@@ -613,7 +624,7 @@ static unsigned long kbase_get_dynamic_power(unsigned long freq,
 
 	mutex_unlock(&kbdev->ipa.lock);
 
-#if !(defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                      \
+#if !(defined(CONFIG_MALI_PWRSOFT_765) ||                                      \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
 	kbase_release_device(kbdev);
 #endif
@@ -725,7 +736,7 @@ struct devfreq_cooling_power kbase_ipa_power_model_ops = {
 	.get_static_power = &kbase_get_static_power,
 	.get_dynamic_power = &kbase_get_dynamic_power,
 #endif /* KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE */
-#if defined(CONFIG_MALI_BIFROST_PWRSOFT_765) ||                                        \
+#if defined(CONFIG_MALI_PWRSOFT_765) ||                                        \
 	KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE
 	.get_real_power = &kbase_get_real_power,
 #endif
@@ -739,7 +750,7 @@ void kbase_ipa_reset_data(struct kbase_device *kbdev)
 
 	mutex_lock(&kbdev->ipa.lock);
 
-	now = ktime_get();
+	now = ktime_get_raw();
 	diff = ktime_sub(now, kbdev->ipa.last_sample_time);
 	elapsed_time = ktime_to_ms(diff);
 
@@ -754,7 +765,7 @@ void kbase_ipa_reset_data(struct kbase_device *kbdev)
 		if (model != kbdev->ipa.fallback_model)
 			model->ops->reset_counter_data(model);
 
-		kbdev->ipa.last_sample_time = ktime_get();
+		kbdev->ipa.last_sample_time = ktime_get_raw();
 	}
 
 	mutex_unlock(&kbdev->ipa.lock);

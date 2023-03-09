@@ -18,7 +18,7 @@
 #
 #
 
-ifeq ($(CONFIG_MALI_BIFROST_KUTF),y)
+ifeq ($(CONFIG_MALI_KUTF),y)
 obj-m += kutf.o
 
 kutf-y := \

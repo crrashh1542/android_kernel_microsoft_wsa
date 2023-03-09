@@ -354,19 +354,6 @@ struct i915_ggtt {
 
 	bool do_idle_maps;
 
-	/**
-	 * @pte_lost: Are ptes lost on resume?
-	 *
-	 * Whether the system was recently restored from hibernate and
-	 * thus may have lost pte content.
-	 */
-	bool pte_lost;
-
-	/**
-	 * @probed_pte: Probed pte value on suspend. Re-checked on resume.
-	 */
-	u64 probed_pte;
-
 	int mtrr;
 
 	/** Bit 6 swizzling required for X tiling */
@@ -602,17 +589,6 @@ bool i915_ggtt_resume_vm(struct i915_address_space *vm);
 void i915_ggtt_suspend(struct i915_ggtt *gtt);
 void i915_ggtt_resume(struct i915_ggtt *ggtt);
 
-/**
- * i915_ggtt_mark_pte_lost - Mark ggtt ptes as lost or clear such a marking
- * @i915 The device private.
- * @val whether the ptes should be marked as lost.
- *
- * In some cases pte content is retained across suspend, but typically lost
- * across hibernate. Typically they should be marked as lost on
- * hibernation restore and such marking cleared on suspend.
- */
-void i915_ggtt_mark_pte_lost(struct drm_i915_private *i915, bool val);
-
 void
 fill_page_dma(struct drm_i915_gem_object *p, const u64 val, unsigned int count);
 
@@ -670,7 +646,7 @@ void ppgtt_unbind_vma(struct i915_address_space *vm,
 
 void gtt_write_workarounds(struct intel_gt *gt);
 
-void setup_private_pat(struct intel_uncore *uncore);
+void setup_private_pat(struct intel_gt *gt);
 
 int i915_vm_alloc_pt_stash(struct i915_address_space *vm,
 			   struct i915_vm_pt_stash *stash,

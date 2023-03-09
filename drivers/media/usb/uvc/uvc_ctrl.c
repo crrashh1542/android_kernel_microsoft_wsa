@@ -1475,6 +1475,9 @@ static void uvc_ctrl_status_event_work(struct work_struct *work)
 
 	uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
 
+	if (atomic_read(&dev->flush_status))
+		return;
+
 	/* Resubmit the URB. */
 	w->urb->interval = dev->int_ep->desc.bInterval;
 	ret = usb_submit_urb(w->urb, GFP_KERNEL);
@@ -2410,6 +2413,8 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		/* Region of interest(ROI) auto control */
 		/* Chicony Electronics Co., Ltd HD User Facing */
 		{ { USB_DEVICE(0x04f2, 0xb667) }, 21 },
+		/* Chicony Electronics Co., Ltd 720p HD Camera */
+		{ { USB_DEVICE(0x04f2, 0xb6b4) }, 21 },
 		/* Chicony Electronics Co., Ltd Integrated Camera */
 		{ { USB_DEVICE(0x04f2, 0xb6d8) }, 21 },
 		/* Chicony Electronics Co., Ltd HD User Facing */
@@ -2436,6 +2441,12 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		{ { USB_DEVICE(0x0bda, 0x5539) }, 21 },
 		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
 		{ { USB_DEVICE(0x0bda, 0x565c) }, 21 },
+		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
+		{ { USB_DEVICE(0x0bda, 0x5676) }, 21 },
+		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
+		{ { USB_DEVICE(0x0bda, 0x567e) }, 21 },
+		/* Lenovo Integrated Camera */
+		{ { USB_DEVICE(0x30c9, 0x0093) }, 21 },
 	};
 
 	const struct uvc_ctrl_blacklist *blacklist;

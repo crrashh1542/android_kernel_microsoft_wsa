@@ -54,7 +54,16 @@ struct rb_entry {
 /**
  * struct slot_rb - Slot ringbuffer
  * @entries:		Ringbuffer entries
- * @last_kctx_tagged:	The last context to submit a job on this slot
+ * @last_kctx_tagged:	The last context that submitted a job to the slot's
+ *			HEAD_NEXT register. The value is a tagged variant so
+ *			must not be dereferenced. It is used in operation to
+ *			track when shader core L1 caches might contain a
+ *			previous context's data, and so must only be set to
+ *			SLOT_RB_NULL_TAG_VAL after reset/powerdown of the
+ *			cores. In slot job submission, if there is a kctx
+ *			change, and the relevant katom is configured with
+ *			BASE_JD_REQ_SKIP_CACHE_START, a L1 read only cache
+ *			maintenace operation is enforced.
  * @read_idx:		Current read index of buffer
  * @write_idx:		Current write index of buffer
  * @job_chain_flag:	Flag used to implement jobchain disambiguation

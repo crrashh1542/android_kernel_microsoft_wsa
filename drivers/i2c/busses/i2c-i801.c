@@ -1257,6 +1257,7 @@ static const struct {
 	 */
 	{ "Latitude 5480",      0x29 },
 	{ "Vostro V131",        0x1d },
+	{ "Vostro 5568",        0x29 },
 };
 
 static void register_dell_lis3lv02d_i2c_device(struct i801_priv *priv)
@@ -1892,6 +1893,7 @@ static struct pci_driver i801_driver = {
 	.shutdown	= i801_shutdown,
 	.driver		= {
 		.pm	= &i801_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

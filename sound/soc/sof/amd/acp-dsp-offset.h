@@ -52,7 +52,7 @@
 #define ACP6X_I2S_PIN_CONFIG			0x1440
 
 /* Registers offsets from ACP_PGFSM block */
-#define ACP3X_PGFSM_BASE			0x1414
+#define ACP3X_PGFSM_BASE			0x141C
 #define ACP6X_PGFSM_BASE                        0x1024
 #define PGFSM_CONTROL_OFFSET			0x0
 #define PGFSM_STATUS_OFFSET			0x4
@@ -85,6 +85,10 @@
 
 #define ACP_SCRATCH_REG_0			0x10000
 #define ACP6X_DSP_FUSION_RUNSTALL		0x0644
+
+/* Cache window registers */
+#define ACP_DSP0_CACHE_OFFSET0			0x0420
+#define ACP_DSP0_CACHE_SIZE0			0x0424
 
 #define ACP_I2S_RX_LINEARPOSITIONCNTR_HIGH	0x2018
 #define ACP_I2S_RX_LINEARPOSITIONCNTR_LOW	0x201C

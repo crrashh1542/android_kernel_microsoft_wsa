@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2017-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2017-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -44,8 +44,9 @@ static inline u32 kbase_ipa_read_hwcnt(
 	u32 offset)
 {
 	u8 *p = (u8 *)model_data->dump_buf.dump_buf;
+	u64 val = *(u64 *)&p[offset];
 
-	return *(u32 *)&p[offset];
+	return (val > U32_MAX) ? U32_MAX : (u32)val;
 }
 
 static inline s64 kbase_ipa_add_saturate(s64 a, s64 b)

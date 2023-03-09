@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2017, 2020-2021 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2017, 2020-2022 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -18,10 +18,10 @@
 #
 #
 
-menuconfig MALI_BIFROST_KUTF
+menuconfig MALI_KUTF
 	bool "Build Mali Kernel Unit Test Framework modules"
-	depends on MALI_BIFROST && MALI_BIFROST_DEBUG
-	default y if MALI_BIFROST_DEBUG
+	depends on MALI && MALI_DEBUG
+	default y if MALI_DEBUG
 	help
 	  This option will build the Mali testing framework modules.
 
@@ -29,9 +29,9 @@ menuconfig MALI_BIFROST_KUTF
 	   - kutf.ko
 	   - kutf_test.ko
 
-config MALI_BIFROST_KUTF_IRQ_TEST
+config MALI_KUTF_IRQ_TEST
 	bool "Build Mali KUTF IRQ test module"
-	depends on MALI_BIFROST_KUTF
+	depends on MALI_KUTF
 	default y
 	help
 	  This option will build the IRQ latency measurement test module.
@@ -40,9 +40,9 @@ config MALI_BIFROST_KUTF_IRQ_TEST
 	  Modules:
 	    - mali_kutf_irq_test.ko
 
-config MALI_BIFROST_KUTF_CLK_RATE_TRACE
+config MALI_KUTF_CLK_RATE_TRACE
 	bool "Build Mali KUTF Clock rate trace test module"
-	depends on MALI_BIFROST_KUTF
+	depends on MALI_KUTF
 	default y
 	help
 	  This option will build the clock rate trace portal test module.
@@ -52,6 +52,18 @@ config MALI_BIFROST_KUTF_CLK_RATE_TRACE
 	  Modules:
 	    - mali_kutf_clk_rate_trace_test_portal.ko
 
+config MALI_KUTF_MGM_INTEGRATION_TEST
+	bool "Build Mali KUTF MGM integration test module"
+	depends on MALI_KUTF
+	default y
+	help
+	  This option will build the MGM integration test module.
+	  It can test the implementation of PTE translation for specific
+	  group ids.
 
-comment "Enable MALI_BIFROST_DEBUG for KUTF modules support"
-	depends on MALI_BIFROST && !MALI_BIFROST_DEBUG && MALI_BIFROST_KUTF
+	  Modules:
+	    - mali_kutf_mgm_integration_test.ko
+
+
+comment "Enable MALI_DEBUG for KUTF modules support"
+	depends on MALI && !MALI_DEBUG && MALI_KUTF

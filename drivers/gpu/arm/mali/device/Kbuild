@@ -22,7 +22,7 @@ mali_kbase-y += \
     device/mali_kbase_device.o \
     device/mali_kbase_device_hw.o
 
-ifeq ($(CONFIG_MALI_BIFROST_CSF_SUPPORT),y)
+ifeq ($(CONFIG_MALI_CSF_SUPPORT),y)
     mali_kbase-y += \
         device/backend/mali_kbase_device_csf.o \
         device/backend/mali_kbase_device_hw_csf.o

@@ -939,14 +939,24 @@ static void _iface_stat_set_active(struct iface_stat *entry,
 		IF_DEBUG("qtaguid: %s(%s): "
 			 "enable tracking. rfcnt=%d\n", __func__,
 			 entry->ifname,
-			 __this_cpu_read(*net_dev->pcpu_refcnt));
+#ifdef CONFIG_PCPU_DEV_REFCNT
+			 __this_cpu_read(*net_dev->pcpu_refcnt)
+#else
+			 refcount_read(&net_dev->dev_refcnt)
+#endif
+			 );
 	} else {
 		entry->active = false;
 		entry->net_dev = NULL;
 		IF_DEBUG("qtaguid: %s(%s): "
 			 "disable tracking. rfcnt=%d\n", __func__,
 			 entry->ifname,
-			 __this_cpu_read(*net_dev->pcpu_refcnt));
+#ifdef CONFIG_PCPU_DEV_REFCNT
+			 __this_cpu_read(*net_dev->pcpu_refcnt)
+#else
+			 refcount_read(&net_dev->dev_refcnt)
+#endif
+			 );
 	}
 }
 

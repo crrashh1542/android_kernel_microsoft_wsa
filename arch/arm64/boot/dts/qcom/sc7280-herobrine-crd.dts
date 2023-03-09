@@ -373,6 +373,5 @@ ap_ts_pen_1v8: &i2c13 {
 			  "MOS_BLE_UART_TX",
 			  "MOS_BLE_UART_RX",
 			  "",
-			  "",
 			  "";
 };

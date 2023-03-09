@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2015-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -126,6 +126,7 @@ static void kbase_mem_pool_sync_page(struct kbase_mem_pool *pool,
 		struct page *p)
 {
 	struct device *dev = pool->kbdev->dev;
+
 	dma_sync_single_for_device(dev, kbase_dma_addr(p),
 			(PAGE_SIZE << pool->order), DMA_BIDIRECTIONAL);
 }
@@ -322,6 +323,9 @@ static unsigned long kbase_mem_pool_reclaim_count_objects(struct shrinker *s,
 	kbase_mem_pool_lock(pool);
 	if (pool->dont_reclaim && !pool->dying) {
 		kbase_mem_pool_unlock(pool);
+		/* Tell shrinker to skip reclaim
+		 * even though freeable pages are available
+		 */
 		return 0;
 	}
 	pool_size = kbase_mem_pool_size(pool);
@@ -341,7 +345,10 @@ static unsigned long kbase_mem_pool_reclaim_scan_objects(struct shrinker *s,
 	kbase_mem_pool_lock(pool);
 	if (pool->dont_reclaim && !pool->dying) {
 		kbase_mem_pool_unlock(pool);
-		return 0;
+		/* Tell shrinker that reclaim can't be made and
+		 * do not attempt again for this reclaim context.
+		 */
+		return SHRINK_STOP;
 	}
 
 	pool_dbg(pool, "reclaim scan %ld:\n", sc->nr_to_scan);
@@ -548,6 +555,7 @@ int kbase_mem_pool_alloc_pages(struct kbase_mem_pool *pool, size_t nr_4k_pages,
 	nr_from_pool = min(nr_pages_internal, kbase_mem_pool_size(pool));
 	while (nr_from_pool--) {
 		int j;
+
 		p = kbase_mem_pool_remove_locked(pool);
 		if (pool->order) {
 			pages[i++] = as_tagged_tag(page_to_phys(p),

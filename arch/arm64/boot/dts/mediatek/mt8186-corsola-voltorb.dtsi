@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2022 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-steelix.dtsi"
+#include "mt6315.dtsi"
+
+/ {
+	/delete-node/ gpio-keys;
+
+	max98360a: max98360a {
+		status = "okay";
+
+		compatible = "maxim,max98360a";
+		sdmode-gpios = <&pio 150 0>;
+		#sound-dai-cells = <0>;
+	};
+};
+
+&keyboard_controller {
+	linux,keymap = <
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)
+		MATRIX_KEY(0x03, 0x04, KEY_SYSRQ)
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)
+		MATRIX_KEY(0x02, 0x09, KEY_MUTE)
+		MATRIX_KEY(0x01, 0x09, KEY_VOLUMEDOWN)
+		MATRIX_KEY(0x00, 0x04, KEY_VOLUMEUP)
+		CROS_STD_MAIN_KEYMAP
+	>;
+};
+
+&touchscreen {
+	status = "disabled";
+};
+
+&cpu6 {
+	proc-supply = <&mt6315_6_vbuck1>;
+	sram-supply = <&mt6366_vsram_proc11_reg>;
+};
+
+&cpu7 {
+	proc-supply = <&mt6315_6_vbuck1>;
+	sram-supply = <&mt6366_vsram_proc11_reg>;
+};
+
+&opp1_14 {
+	opp-hz = /bits/ 64 <2050000000>;
+	opp-microvolt = <1118750>;
+};
+
+&opp1_15 {
+	opp-hz = /bits/ 64 <2200000000>;
+};
+
+&rt1019p{
+	status = "disabled";
+};
+
+&sound {
+	status = "okay";
+
+	compatible = "mediatek,mt8186-mt6366-rt5682s-max98360-sound";
+
+	playback-codecs {
+		sound-dai = <&it6505dptx>,<&max98360a>;
+	};
+};

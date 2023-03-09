@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -26,6 +26,7 @@
 #include <mali_kbase.h>
 #include <mali_kbase_config_defaults.h>
 #include <linux/clk.h>
+#include <linux/pm_opp.h>
 #include <asm/div64.h>
 #include "backend/gpu/mali_kbase_clk_rate_trace_mgr.h"
 
@@ -51,7 +52,7 @@ get_clk_rate_trace_callbacks(__maybe_unused struct kbase_device *kbdev)
 	/* base case */
 	struct kbase_clk_rate_trace_op_conf *callbacks =
 		(struct kbase_clk_rate_trace_op_conf *)CLK_RATE_TRACE_OPS;
-#if defined(CONFIG_MALI_BIFROST_ARBITER_SUPPORT) && defined(CONFIG_OF)
+#if defined(CONFIG_MALI_ARBITER_SUPPORT) && defined(CONFIG_OF)
 	const void *arbiter_if_node;
 
 	if (WARN_ON(!kbdev) || WARN_ON(!kbdev->dev))

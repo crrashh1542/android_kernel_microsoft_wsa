@@ -14,6 +14,7 @@
 
 #include <dt-bindings/sound/tlv320adc3xxx.h>
 #include <linux/clk.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/io.h>
@@ -886,7 +887,9 @@ static const struct gpio_chip adc3xxx_gpio_chip = {
 
 static void adc3xxx_free_gpio(struct adc3xxx *adc3xxx)
 {
+#ifdef CONFIG_GPIOLIB
 	gpiochip_remove(&adc3xxx->gpio_chip);
+#endif
 }
 
 static void adc3xxx_init_gpio(struct adc3xxx *adc3xxx)
@@ -1194,11 +1197,18 @@ static const struct snd_soc_component_driver soc_component_dev_adc3xxx = {
 	.num_dapm_routes	= ARRAY_SIZE(adc3xxx_intercon),
 };
 
-static int adc3xxx_i2c_probe(struct i2c_client *i2c,
-			     const struct i2c_device_id *id)
+static const struct i2c_device_id adc3xxx_i2c_id[] = {
+	{ "tlv320adc3001", ADC3001 },
+	{ "tlv320adc3101", ADC3101 },
+	{}
+};
+MODULE_DEVICE_TABLE(i2c, adc3xxx_i2c_id);
+
+static int adc3xxx_i2c_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
 	struct adc3xxx *adc3xxx = NULL;
+	const struct i2c_device_id *id;
 	int ret;
 
 	adc3xxx = devm_kzalloc(dev, sizeof(struct adc3xxx), GFP_KERNEL);
@@ -1251,6 +1261,7 @@ static int adc3xxx_i2c_probe(struct i2c_client *i2c,
 
 	i2c_set_clientdata(i2c, adc3xxx);
 
+	id = i2c_match_id(adc3xxx_i2c_id, i2c);
 	adc3xxx->type = id->driver_data;
 
 	/* Reset codec chip */
@@ -1293,20 +1304,13 @@ static const struct of_device_id tlv320adc3xxx_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, tlv320adc3xxx_of_match);
 
-static const struct i2c_device_id adc3xxx_i2c_id[] = {
-	{ "tlv320adc3001", ADC3001 },
-	{ "tlv320adc3101", ADC3101 },
-	{}
-};
-MODULE_DEVICE_TABLE(i2c, adc3xxx_i2c_id);
-
 static struct i2c_driver adc3xxx_i2c_driver = {
 	.driver = {
 		   .name = "tlv320adc3xxx-codec",
 		   .of_match_table = tlv320adc3xxx_of_match,
 		  },
-	.probe = adc3xxx_i2c_probe,
-	.remove = adc3xxx_i2c_remove,
+	.probe_new = adc3xxx_i2c_probe,
+	.remove = __exit_p(adc3xxx_i2c_remove),
 	.id_table = adc3xxx_i2c_id,
 };
 

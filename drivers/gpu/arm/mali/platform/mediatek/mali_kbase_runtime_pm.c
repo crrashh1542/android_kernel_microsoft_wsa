@@ -251,7 +251,7 @@ int mtk_mfgsys_init(struct kbase_device *kbdev)
 			dev_err(kbdev->dev, "Failed to set reg %d voltage: %d\n", i, err);
 			return err;
 		}
-#if IS_ENABLED(CONFIG_MALI_BIFROST_DEVFREQ) || IS_ENABLED(CONFIG_MALI_VALHALL_DEVFREQ)
+#if IS_ENABLED(CONFIG_MALI_DEVFREQ)
 		kbdev->current_voltages[i] = volt;
 #endif
 	}

@@ -634,8 +634,6 @@ struct ath10k_hw_params {
 	bool use_fw_tx_credits;
 
 	bool delay_unmap_buffer;
-
-	u32 start_retry;
 };
 
 struct htt_rx_desc;

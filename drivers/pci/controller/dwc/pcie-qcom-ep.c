@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/mfd/syscon.h>
+#include <linux/phy/pcie.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
@@ -241,6 +242,10 @@ static int qcom_pcie_perst_deassert(struct dw_pcie *pci)
 	ret = phy_init(pcie_ep->phy);
 	if (ret)
 		goto err_disable_clk;
+
+	ret = phy_set_mode_ext(pcie_ep->phy, PHY_MODE_PCIE, PHY_MODE_PCIE_EP);
+	if (ret)
+		goto err_phy_exit;
 
 	ret = phy_power_on(pcie_ep->phy);
 	if (ret)

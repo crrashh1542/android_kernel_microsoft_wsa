@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -51,6 +51,7 @@ static void kbase_report_gpu_fault(struct kbase_device *kbdev, int multiple)
 		address);
 	if (multiple)
 		dev_warn(kbdev->dev, "There were multiple GPU faults - some have not been reported\n");
+
 }
 
 void kbase_gpu_interrupt(struct kbase_device *kbdev, u32 val)
@@ -62,11 +63,19 @@ void kbase_gpu_interrupt(struct kbase_device *kbdev, u32 val)
 	if (val & RESET_COMPLETED)
 		kbase_pm_reset_done(kbdev);
 
+	/* Defer clearing CLEAN_CACHES_COMPLETED to kbase_clean_caches_done.
+	 * We need to acquire hwaccess_lock to avoid a race condition with
+	 * kbase_gpu_cache_flush_and_busy_wait
+	 */
+	KBASE_KTRACE_ADD(kbdev, CORE_GPU_IRQ_CLEAR, NULL, val & ~CLEAN_CACHES_COMPLETED);
+	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_CLEAR), val & ~CLEAN_CACHES_COMPLETED);
+
+	/* kbase_instr_hwcnt_sample_done frees the HWCNT pipeline to request another
+	 * sample. Therefore this must be called after clearing the IRQ to avoid a
+	 * race between clearing and the next sample raising the IRQ again.
+	 */
 	if (val & PRFCNT_SAMPLE_COMPLETED)
 		kbase_instr_hwcnt_sample_done(kbdev);
-
-	KBASE_KTRACE_ADD(kbdev, CORE_GPU_IRQ_CLEAR, NULL, val);
-	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_CLEAR), val);
 
 	/* kbase_pm_check_transitions (called by kbase_pm_power_changed) must
 	 * be called after the IRQ has been cleared. This is because it might
@@ -96,3 +105,39 @@ void kbase_gpu_interrupt(struct kbase_device *kbdev, u32 val)
 
 	KBASE_KTRACE_ADD(kbdev, CORE_GPU_IRQ_DONE, NULL, val);
 }
+
+#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
+void kbase_reg_write(struct kbase_device *kbdev, u32 offset, u32 value)
+{
+	WARN_ON(!kbdev->pm.backend.gpu_powered);
+
+	writel(value, kbdev->reg + offset);
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	if (unlikely(kbdev->io_history.enabled))
+		kbase_io_history_add(&kbdev->io_history, kbdev->reg + offset,
+				     value, 1);
+#endif /* CONFIG_DEBUG_FS */
+	dev_dbg(kbdev->dev, "w: reg %08x val %08x", offset, value);
+}
+KBASE_EXPORT_TEST_API(kbase_reg_write);
+
+u32 kbase_reg_read(struct kbase_device *kbdev, u32 offset)
+{
+	u32 val;
+
+	WARN_ON(!kbdev->pm.backend.gpu_powered);
+
+	val = readl(kbdev->reg + offset);
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	if (unlikely(kbdev->io_history.enabled))
+		kbase_io_history_add(&kbdev->io_history, kbdev->reg + offset,
+				     val, 0);
+#endif /* CONFIG_DEBUG_FS */
+	dev_dbg(kbdev->dev, "r: reg %08x val %08x", offset, val);
+
+	return val;
+}
+KBASE_EXPORT_TEST_API(kbase_reg_read);
+#endif /* !IS_ENABLED(CONFIG_MALI_NO_MALI) */

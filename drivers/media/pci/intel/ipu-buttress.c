@@ -984,6 +984,32 @@ int ipu_buttress_tsc_read(struct ipu_device *isp, u64 *val)
 }
 EXPORT_SYMBOL_GPL(ipu_buttress_tsc_read);
 
+int ipu_buttress_isys_freq_set(void *data, u64 val)
+{
+	struct ipu_device *isp = data;
+	int rval;
+
+	if (val < BUTTRESS_MIN_FORCE_IS_FREQ ||
+	    val > BUTTRESS_MAX_FORCE_IS_FREQ)
+		return -EINVAL;
+
+	rval = pm_runtime_get_sync(&isp->isys->dev);
+	if (rval < 0) {
+		pm_runtime_put(&isp->isys->dev);
+		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", rval);
+		return rval;
+	}
+
+	do_div(val, BUTTRESS_IS_FREQ_STEP);
+	if (val)
+		ipu_buttress_set_isys_ratio(isp, val);
+
+	pm_runtime_put(&isp->isys->dev);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ipu_buttress_isys_freq_set);
+
 #ifdef CONFIG_DEBUG_FS
 
 static int ipu_buttress_reg_open(struct inode *inode, struct file *file)
@@ -1105,31 +1131,6 @@ static int ipu_buttress_isys_freq_get(void *data, u64 *val)
 
 	*val = IPU_IS_FREQ_RATIO_BASE *
 	    (reg_val & IPU_BUTTRESS_IS_FREQ_CTL_DIVISOR_MASK);
-
-	return 0;
-}
-
-static int ipu_buttress_isys_freq_set(void *data, u64 val)
-{
-	struct ipu_device *isp = data;
-	int rval;
-
-	if (val < BUTTRESS_MIN_FORCE_IS_FREQ ||
-	    val > BUTTRESS_MAX_FORCE_IS_FREQ)
-		return -EINVAL;
-
-	rval = pm_runtime_get_sync(&isp->isys->dev);
-	if (rval < 0) {
-		pm_runtime_put(&isp->isys->dev);
-		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", rval);
-		return rval;
-	}
-
-	do_div(val, BUTTRESS_IS_FREQ_STEP);
-	if (val)
-		ipu_buttress_set_isys_ratio(isp, val);
-
-	pm_runtime_put(&isp->isys->dev);
 
 	return 0;
 }

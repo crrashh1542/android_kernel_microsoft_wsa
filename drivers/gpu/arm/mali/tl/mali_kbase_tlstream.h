@@ -30,7 +30,7 @@
 #define PACKET_SIZE        4096 /* bytes */
 
 /* The number of packets used by one timeline stream. */
-#if defined(CONFIG_MALI_BIFROST_JOB_DUMP) || defined(CONFIG_MALI_BIFROST_VECTOR_DUMP)
+#if defined(CONFIG_MALI_JOB_DUMP) || defined(CONFIG_MALI_VECTOR_DUMP)
 	#define PACKET_COUNT       64
 #else
 	#define PACKET_COUNT       32
