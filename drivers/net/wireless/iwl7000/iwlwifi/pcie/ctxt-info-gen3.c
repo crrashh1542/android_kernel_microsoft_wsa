@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 #include "iwl-trans.h"
 #include "iwl-fh.h"
@@ -461,7 +461,7 @@ int iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
 	int ret = 0;
 
 	/* only allocate the DRAM if not allocated yet */
-	if (!trans->reduce_power_loaded)
+	if (trans->reduce_power_loaded)
 		return 0;
 
 	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
