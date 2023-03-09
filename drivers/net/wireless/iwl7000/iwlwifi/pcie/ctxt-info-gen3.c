@@ -421,9 +421,11 @@ static void iwl_pcie_set_pnvm_segments(struct iwl_trans *trans)
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	dma_addr_t address = trans_pcie->pnvm_data.prph_scrath_mem_desc.physical;
+	struct iwl_dram_data *mem_desc =
+		&trans_pcie->pnvm_data.prph_scrath_mem_desc;
 
-	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr = cpu_to_le64(address);
+	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr = cpu_to_le64(mem_desc->physical);
+	prph_sc_ctrl->pnvm_cfg.pnvm_size = cpu_to_le32(mem_desc->size);
 }
 
 static void iwl_pcie_set_continuous_pnvm(struct iwl_trans *trans)
