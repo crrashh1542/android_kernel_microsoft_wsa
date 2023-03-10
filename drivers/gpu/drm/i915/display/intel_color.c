@@ -501,6 +501,13 @@ static void icl_color_commit_noarm(const struct intel_crtc_state *crtc_state)
 
 static void ilk_color_commit_noarm(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+
+	/* TODO: Revert and apply upstream fix per http://b/272776823 */
+	if (DISPLAY_VER(dev_priv) == 9)
+		return;
+
 	ilk_load_csc_matrix(crtc_state);
 }
 
@@ -554,6 +561,11 @@ static void skl_color_commit_arm(const struct intel_crtc_state *crtc_state)
 
 	intel_de_write(dev_priv, GAMMA_MODE(crtc->pipe),
 		       crtc_state->gamma_mode);
+
+
+	/* TODO: Revert and apply upstream fix per http://b/272776823 */
+	if (DISPLAY_VER(dev_priv) == 9)
+		ilk_load_csc_matrix(crtc_state);
 
 	intel_de_write_fw(dev_priv, PIPE_CSC_MODE(crtc->pipe),
 			  crtc_state->csc_mode);
