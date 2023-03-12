@@ -38,6 +38,7 @@
 #define VIRTIO_BALLOON_F_PAGE_POISON	  4 /* Guest is using page poisoning */
 #define VIRTIO_BALLOON_F_REPORTING	  5 /* Page reporting virtqueue */
 #define VIRTIO_BALLOON_F_RESPONSIVE_HOST  6 /* Host monitors memory pressure */
+#define VIRTIO_BALLOON_F_EVENTS_VQ	  7 /* Event virtqueue */
 
 /* Size of a PFN in the balloon interface. */
 #define VIRTIO_BALLOON_PFN_SHIFT 12
@@ -116,5 +117,23 @@ struct virtio_balloon_stat {
 	__virtio16 tag;
 	__virtio64 val;
 } __attribute__((packed));
+
+#define VIRTIO_BALLOON_EVENT_PRESSURE		1
+#define VIRTIO_BALLOON_EVENT_PUFF_FAILURE	2
+
+struct virtio_balloon_event_header {
+	__virtio32 type;
+};
+
+/* VIRTIO_BALLOON_EVENT_PRESSURE */
+struct virtio_balloon_event_pressure {
+	struct virtio_balloon_event_header hdr;
+	struct virtio_balloon_stat stats[];
+} __attribute__((packed));
+
+/* VIRTIO_BALLOON_EVENT_PUFF_FAILURE */
+struct virtio_balloon_event_puff_failure {
+	struct virtio_balloon_event_header hdr;
+};
 
 #endif /* _LINUX_VIRTIO_BALLOON_H */
