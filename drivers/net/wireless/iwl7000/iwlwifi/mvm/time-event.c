@@ -824,6 +824,10 @@ void iwl_mvm_stop_session_protection(struct iwl_mvm *mvm,
 	iwl_mvm_remove_time_event(mvm, mvmvif, te_data);
 }
 
+#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
+static int session_prot_fail_dump_num = 3;
+#endif
+
 void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 				      struct iwl_rx_cmd_buffer *rxb)
 {
@@ -872,6 +876,23 @@ void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 			spin_lock_bh(&mvm->time_event_lock);
 			iwl_mvm_te_clear_data(mvm, te_data);
 			spin_unlock_bh(&mvm->time_event_lock);
+#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
+			/*
+			 * We failed to complete the association, increase the
+			 * debug level so that we'll get more information when
+			 * the userspace will retry to associate.
+			 */
+			iwl_debug_session_prot(true);
+			if (session_prot_fail_dump_num) {
+				session_prot_fail_dump_num--;
+				IWL_ERR(mvm,
+					"Restarting the firmware to collect logs, %d more dumps\n",
+					session_prot_fail_dump_num);
+				iwl_dbg_tlv_time_point(&mvm->fwrt,
+						       IWL_FW_INI_TIME_POINT_USER_TRIGGER,
+						       NULL);
+			}
+#endif
 		}
 
 		goto out_unlock;

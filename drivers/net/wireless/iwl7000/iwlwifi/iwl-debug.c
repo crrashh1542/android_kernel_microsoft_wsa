@@ -93,4 +93,10 @@ void __iwl_dbg(struct device *dev,
 	va_end(args);
 }
 IWL_EXPORT_SYMBOL(__iwl_dbg);
+
+#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
+u32 iwlwifi_debug_session_prot_debug_level;
+IWL_EXPORT_SYMBOL(iwlwifi_debug_session_prot_debug_level);
+#endif
+
 #endif
