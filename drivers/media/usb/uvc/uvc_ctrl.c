@@ -2487,8 +2487,12 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		{ { USB_DEVICE(0x0bda, 0x5676) }, 21 },
 		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
 		{ { USB_DEVICE(0x0bda, 0x567e) }, 21 },
+		/* Syntek Integrated Camera */
+		{ { USB_DEVICE(0x174f, 0x244f) }, 21 },
 		/* Lenovo Integrated Camera */
 		{ { USB_DEVICE(0x30c9, 0x0093) }, 21 },
+		/* Acer, Inc Integrated Camera */
+		{ { USB_DEVICE(0x5986, 0x1179) }, 21 },
 	};
 
 	const struct uvc_ctrl_blacklist *blacklist;
