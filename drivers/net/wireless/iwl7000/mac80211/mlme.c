@@ -3087,6 +3087,9 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 	memset(sdata->vif.bss_conf.tx_pwr_env, 0,
 	       sizeof(sdata->vif.bss_conf.tx_pwr_env));
 
+	memset(&sdata->u.mgd.t2l_map_info, 0,
+	       sizeof(sdata->u.mgd.t2l_map_info));
+	wiphy_delayed_work_cancel(sdata->local->hw.wiphy, &ifmgd->t2l_map_work);
 	ieee80211_vif_set_links(sdata, 0, 0);
 }
 
@@ -5943,6 +5946,188 @@ static void ieee80211_ml_reconfiguration(struct ieee80211_sub_if_data *sdata,
 	schedule_delayed_work(&sdata->u.mgd.ml_reconf_work, TU_TO_JIFFIES(delay));
 }
 
+static void ieee80211_tid_to_link_map_work(struct wiphy *wiphy,
+					   struct wiphy_work *work)
+{
+	u16 new_active_links, new_dormant_links;
+	struct ieee80211_sub_if_data *sdata =
+		container_of(work, struct ieee80211_sub_if_data,
+			     u.mgd.t2l_map_work.work);
+
+	new_active_links = sdata->u.mgd.t2l_map_info.map &
+			   sdata->vif.valid_links;
+	new_dormant_links = ~sdata->u.mgd.t2l_map_info.map &
+			    sdata->vif.valid_links;
+	if (!new_active_links) {
+		ieee80211_disconnect(&sdata->vif, false);
+		return;
+	}
+
+	new_active_links = BIT(ffs(new_active_links) - 1);
+	ieee80211_set_active_links(&sdata->vif, new_active_links);
+	ieee80211_vif_set_links(sdata, sdata->vif.valid_links,
+				new_dormant_links);
+	sdata_lock(sdata);
+	sdata->u.mgd.t2l_map_info.active = true;
+	sdata->u.mgd.t2l_map_info.switch_time = 0;
+	sdata_unlock(sdata);
+}
+
+static u16 ieee80211_get_t2l_map(u8 bm_size, u8 *data)
+{
+	if (bm_size == 1)
+		return *data;
+	else
+		return get_unaligned_le16(data);
+}
+
+static int
+ieee80211_parse_adv_t2l(struct ieee80211_sub_if_data *sdata,
+			const struct ieee80211_t2l_map_elem *t2l_map,
+			struct ieee80211_adv_t2l_map_info *t2l_map_info)
+{
+	/* The element size was already validated in
+	 * ieee80211_tid_to_link_map_size_ok()
+	 */
+	u8 control, link_map_presence, map_size, tid;
+	u8 *pos;
+
+	memset(t2l_map_info, 0, sizeof(*t2l_map_info));
+	pos = (void *)t2l_map->optional;
+	control	= t2l_map->control;
+
+	if ((control & IEEE80211_T2L_MAP_CONTROL_DEF_LINK_MAP) ||
+	    !(control & IEEE80211_T2L_MAP_CONTROL_SWITCH_TIME_PRESENT))
+		return 0;
+
+	if ((control & IEEE80211_T2L_MAP_CONTROL_DIRECTION) !=
+	    IEEE80211_T2L_MAP_DIRECTION_BOTH) {
+		sdata_info(sdata, "Invalid advertised T2L map direction\n");
+		return -EINVAL;
+	}
+
+	link_map_presence = *pos;
+	pos++;
+
+	t2l_map_info->switch_time = get_unaligned_le16(pos);
+	pos += 2;
+
+	if (control & IEEE80211_T2L_MAP_CONTROL_EXPECTED_DUR_PRESENT) {
+		t2l_map_info->duration = pos[0] | pos[1] << 8 | pos[2] << 16;
+		pos += 3;
+	}
+
+	if (control & IEEE80211_T2L_MAP_CONTROL_LINK_MAP_SIZE)
+		map_size = 1;
+	else
+		map_size = 2;
+
+	/* According to Draft P802.11be_D3.0 clause 35.3.7.1.7, an AP MLD shall
+	 * not advertise a TID-to-link mapping that does not map all TIDs to the
+	 * same link set, reject frame if not all links have mapping
+	 */
+	if (link_map_presence != 0xff) {
+		sdata_info(sdata,
+			   "Invalid advertised T2L mapping presence indicator\n");
+		return -EINVAL;
+	}
+
+	t2l_map_info->map = ieee80211_get_t2l_map(map_size, pos);
+	if (!t2l_map_info->map) {
+		sdata_info(sdata,
+			   "Invalid advertised T2L map for TID 0\n");
+		return -EINVAL;
+	}
+
+	pos += map_size;
+
+	for (tid = 1; tid < 8; tid++) {
+		u16 map = ieee80211_get_t2l_map(map_size, pos);
+
+		if (map != t2l_map_info->map) {
+			sdata_info(sdata, "Invalid advertised T2L map for tid %d\n",
+				   tid);
+			return -EINVAL;
+		}
+
+		pos += map_size;
+	}
+	return 0;
+}
+
+static void ieee80211_process_adv_t2l_map(struct ieee80211_sub_if_data *sdata,
+					  struct ieee802_11_elems *elems,
+					  u64 beacon_ts)
+{
+	u8 i;
+	int ret;
+
+	sdata_assert_lock(sdata);
+
+	if (!ieee80211_vif_is_mld(&sdata->vif))
+		return;
+
+	if (!elems->t2l_map_num) {
+		if (sdata->u.mgd.t2l_map_info.switch_time) {
+			/* if a planned TID-to-link mapping was cancelled -
+			 * abort it
+			 */
+			wiphy_delayed_work_cancel(sdata->local->hw.wiphy,
+						  &sdata->u.mgd.t2l_map_work);
+		} else if (sdata->u.mgd.t2l_map_info.active) {
+			/* if no TID-to-link element, set to default mapping in
+			 * which all TIDs are mapped to all setup links
+			 */
+			ret = ieee80211_vif_set_links(sdata,
+						      sdata->vif.valid_links,
+						      0);
+			if (ret) {
+				sdata_info(sdata, "Failed setting valid/dormant links\n");
+				return;
+			}
+		}
+		memset(&sdata->u.mgd.t2l_map_info, 0,
+		       sizeof(sdata->u.mgd.t2l_map_info));
+		return;
+	}
+
+	for (i = 0; i < elems->t2l_map_num; i++) {
+		struct ieee80211_adv_t2l_map_info t2l_map_info;
+		u32 res;
+
+		res = ieee80211_parse_adv_t2l(sdata, elems->t2l_map[i],
+					      &t2l_map_info);
+
+		if (res) {
+			__ieee80211_disconnect(sdata);
+			return;
+		}
+
+		if (t2l_map_info.switch_time) {
+			u32 st_us, delay = 0;
+			u32 ts_l26 = beacon_ts & GENMASK(25, 0);
+
+			/* The t2l map switch time is indicated with a partial
+			 * TSF value, convert it to TSF and calc the delay
+			 * to the start time.
+			 */
+			st_us = ieee80211_tu_to_usec(t2l_map_info.switch_time);
+			if (st_us > ts_l26)
+				delay = st_us - ts_l26;
+			else
+				continue;
+
+			sdata->u.mgd.t2l_map_info = t2l_map_info;
+			wiphy_delayed_work_cancel(sdata->local->hw.wiphy,
+						  &sdata->u.mgd.t2l_map_work);
+			wiphy_delayed_work_queue(sdata->local->hw.wiphy,
+						 &sdata->u.mgd.t2l_map_work,
+						 usecs_to_jiffies(delay));
+			return;
+		}
+	}
+}
+
 static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 				     struct ieee80211_hdr *hdr, size_t len,
 				     struct ieee80211_rx_status *rx_status)
@@ -6277,6 +6462,8 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	}
 
 	ieee80211_ml_reconfiguration(sdata, elems);
+	ieee80211_process_adv_t2l_map(sdata, elems,
+				      le64_to_cpu(mgmt->u.beacon.timestamp));
 
 	ieee80211_link_info_change_notify(sdata, link, changed);
 free:
@@ -6912,6 +7099,8 @@ void ieee80211_sta_setup_sdata(struct ieee80211_sub_if_data *sdata)
 	timer_setup(&ifmgd->conn_mon_timer, ieee80211_sta_conn_mon_timer, 0);
 	INIT_DELAYED_WORK(&ifmgd->tx_tspec_wk,
 			  ieee80211_sta_handle_tspec_ac_params_wk);
+	wiphy_delayed_work_init(&ifmgd->t2l_map_work,
+				ieee80211_tid_to_link_map_work);
 
 	ifmgd->flags = 0;
 	ifmgd->powersave = sdata->wdev.ps;
@@ -7985,6 +8174,7 @@ void ieee80211_mgd_stop(struct ieee80211_sub_if_data *sdata)
 			  &ifmgd->csa_connection_drop_work);
 	cancel_delayed_work_sync(&ifmgd->tdls_peer_del_work);
 	cancel_delayed_work_sync(&ifmgd->ml_reconf_work);
+	wiphy_delayed_work_cancel(sdata->local->hw.wiphy, &ifmgd->t2l_map_work);
 
 	sdata_lock(sdata);
 	if (ifmgd->assoc_data)
