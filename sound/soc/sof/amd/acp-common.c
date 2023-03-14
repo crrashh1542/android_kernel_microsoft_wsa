@@ -188,7 +188,6 @@ struct snd_sof_dsp_ops sof_acp_common_ops = {
 	.pcm_close		= acp_pcm_close,
 	.pcm_hw_params		= acp_pcm_hw_params,
 	.pcm_pointer		= acp_pcm_pointer,
-	.pcm_trigger		= acp_pcm_trigger,
 
 	.hw_info		= SNDRV_PCM_INFO_MMAP |
 				  SNDRV_PCM_INFO_MMAP_VALID |
