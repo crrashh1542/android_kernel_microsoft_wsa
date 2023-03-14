@@ -408,6 +408,8 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 
 	mutex_lock(&pxp->session_mutex);
 
+	intel_pxp_tee_end_all_fw_sessions(pxp, active_sip_slots);
+
 	/* terminate the hw sessions */
 	ret = pxp_terminate_all_sessions(pxp);
 	if (ret) {
@@ -422,8 +424,6 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 	}
 
 	intel_uncore_write(gt->uncore, PXP_GLOBAL_TERMINATE, 1);
-
-	intel_pxp_tee_end_all_fw_sessions(pxp, active_sip_slots);
 
 out:
 	mutex_unlock(&pxp->session_mutex);
