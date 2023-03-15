@@ -73,6 +73,8 @@ rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
 
 mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
 
+obj-y += tests/
+
 ccflags-y += -DDEBUG
 
 mac80211-y += backports.o cfg-utils.o
