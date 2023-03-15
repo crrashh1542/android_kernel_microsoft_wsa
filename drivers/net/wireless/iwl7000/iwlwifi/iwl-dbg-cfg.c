@@ -243,7 +243,7 @@ static void iwl_dbg_cfg_parse_fw_dbg_preset(struct iwl_dbg_cfg *dbgcfg,
 
 	dbgcfg->FW_DBG_DOMAIN &= 0xffff;
 	if (preset != IWL_FW_INI_PRESET_DISABLE)
-		dbgcfg->FW_DBG_DOMAIN |= BIT(16 + preset);
+		dbgcfg->FW_DBG_DOMAIN |= BIT(IWL_FW_DBG_DOMAIN_POS + preset);
 
 	printk(KERN_INFO "iwlwifi debug config: FW_DBG_PRESET=%d => FW_DBG_DOMAIN=0x%x\n",
 	       preset, dbgcfg->FW_DBG_DOMAIN);
