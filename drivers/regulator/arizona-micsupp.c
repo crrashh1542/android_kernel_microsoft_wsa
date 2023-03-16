@@ -363,6 +363,7 @@ static struct platform_driver arizona_micsupp_driver = {
 	.probe = arizona_micsupp_probe,
 	.driver		= {
 		.name	= "arizona-micsupp",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

@@ -317,6 +317,7 @@ static struct i2c_driver max8952_pmic_driver = {
 	.probe		= max8952_pmic_probe,
 	.driver		= {
 		.name	= "max8952",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table = of_match_ptr(max8952_dt_match),
 	},
 	.id_table	= max8952_ids,

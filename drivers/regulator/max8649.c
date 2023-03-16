@@ -250,6 +250,7 @@ static struct i2c_driver max8649_driver = {
 	.probe		= max8649_regulator_probe,
 	.driver		= {
 		.name	= "max8649",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.id_table	= max8649_id,
 };
