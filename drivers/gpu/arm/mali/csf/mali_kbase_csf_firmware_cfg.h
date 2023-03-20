@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -32,11 +32,11 @@
  * kbase_csf_firmware_cfg_init - Create the sysfs directory for configuration
  *                               options present in firmware image.
  *
+ * @kbdev: Pointer to the Kbase device
+ *
  * This function would create a sysfs directory and populate it with a
  * sub-directory, that would contain a file per attribute, for every
  * configuration option parsed from firmware image.
- *
- * @kbdev: Pointer to the Kbase device
  *
  * Return: The initialization error code.
  */
@@ -55,20 +55,18 @@ void kbase_csf_firmware_cfg_term(struct kbase_device *kbdev);
  * kbase_csf_firmware_cfg_option_entry_parse() - Process a
  *                                               "configuration option" section.
  *
- * Read a "configuration option" section adding it to the
- * kbase_device:csf.firmware_config list.
- *
- * Return: 0 if successful, negative error code on failure
- *
  * @kbdev:     Kbase device structure
  * @fw:        Firmware image containing the section
  * @entry:     Pointer to the section
  * @size:      Size (in bytes) of the section
  * @updatable: Indicates if entry can be updated with FIRMWARE_CONFIG_UPDATE
+ *
+ * Read a "configuration option" section adding it to the
+ * kbase_device:csf.firmware_config list.
+ *
+ * Return: 0 if successful, negative error code on failure
  */
 int kbase_csf_firmware_cfg_option_entry_parse(struct kbase_device *kbdev,
-					      const struct firmware *fw,
-					      const u32 *entry,
-					      unsigned int size,
-					      bool updatable);
+					      const struct kbase_csf_mcu_fw *const fw,
+					      const u32 *entry, unsigned int size, bool updatable);
 #endif /* _KBASE_CSF_FIRMWARE_CFG_H_ */

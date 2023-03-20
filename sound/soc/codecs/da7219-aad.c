@@ -60,6 +60,9 @@ static void da7219_aad_btn_det_work(struct work_struct *work)
 	bool micbias_up = false;
 	int retries = 0;
 
+	/* Disable ground switch */
+	snd_soc_component_update_bits(component, 0xFB, 0x01, 0x00);
+
 	/* Drive headphones/lineout */
 	snd_soc_component_update_bits(component, DA7219_HP_L_CTRL,
 			    DA7219_HP_L_AMP_OE_MASK,
@@ -152,6 +155,9 @@ static void da7219_aad_hptest_work(struct work_struct *work)
 	} else {
 		tonegen_freq_hptest = cpu_to_le16(DA7219_AAD_HPTEST_RAMP_FREQ_INT_OSC);
 	}
+
+	/* Disable ground switch */
+	snd_soc_component_update_bits(component, 0xFB, 0x01, 0x00);
 
 	/* Ensure gain ramping at fastest rate */
 	gain_ramp_ctrl = snd_soc_component_read(component, DA7219_GAIN_RAMP_CTRL);
@@ -334,10 +340,38 @@ static void da7219_aad_hptest_work(struct work_struct *work)
 				    SND_JACK_HEADSET | SND_JACK_LINEOUT);
 }
 
+static void da7219_aad_jack_det_work(struct work_struct *work)
+{
+	struct da7219_aad_priv *da7219_aad =
+		container_of(work, struct da7219_aad_priv, jack_det_work);
+	struct snd_soc_component *component = da7219_aad->component;
+	u8 srm_st;
+
+	mutex_lock(&da7219_aad->jack_det_mutex);
+
+	srm_st = snd_soc_component_read(component, DA7219_PLL_SRM_STS) & DA7219_PLL_SRM_STS_MCLK;
+	msleep(da7219_aad->gnd_switch_delay * ((srm_st == 0x0) ? 2 : 1) - 4);
+	/* Enable ground switch */
+	snd_soc_component_update_bits(component, 0xFB, 0x01, 0x01);
+
+	mutex_unlock(&da7219_aad->jack_det_mutex);
+}
+
 
 /*
  * IRQ
  */
+
+static irqreturn_t da7219_aad_pre_irq_thread(int irq, void *data)
+{
+
+	struct da7219_aad_priv *da7219_aad = data;
+
+	if (!da7219_aad->jack_inserted)
+		schedule_work(&da7219_aad->jack_det_work);
+
+	return IRQ_WAKE_THREAD;
+}
 
 static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 {
@@ -366,6 +400,9 @@ static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 	dev_dbg(component->dev, "IRQ events = 0x%x|0x%x, status = 0x%x\n",
 		events[DA7219_AAD_IRQ_REG_A], events[DA7219_AAD_IRQ_REG_B],
 		statusa);
+
+	if (!da7219_aad->jack_inserted)
+		cancel_work_sync(&da7219_aad->jack_det_work);
 
 	if (statusa & DA7219_JACK_INSERTION_STS_MASK) {
 		/* Jack Insertion */
@@ -428,6 +465,10 @@ static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 			mask |= DA7219_AAD_REPORT_ALL_MASK;
 			da7219_aad->jack_inserted = false;
 
+			/* Cancel any pending work */
+			cancel_work_sync(&da7219_aad->btn_det_work);
+			cancel_work_sync(&da7219_aad->hptest_work);
+
 			/* Un-drive headphones/lineout */
 			snd_soc_component_update_bits(component, DA7219_HP_R_CTRL,
 					    DA7219_HP_R_AMP_OE_MASK, 0);
@@ -444,9 +485,8 @@ static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 			snd_soc_dapm_disable_pin(dapm, "Mic Bias");
 			snd_soc_dapm_sync(dapm);
 
-			/* Cancel any pending work */
-			cancel_work_sync(&da7219_aad->btn_det_work);
-			cancel_work_sync(&da7219_aad->hptest_work);
+			/* Disable ground switch */
+			snd_soc_component_update_bits(component, 0xFB, 0x01, 0x00);
 		}
 	}
 
@@ -822,6 +862,32 @@ static void da7219_aad_handle_pdata(struct snd_soc_component *component)
 	}
 }
 
+static void da7219_aad_handle_gnd_switch_time(struct snd_soc_component *component)
+{
+	struct da7219_priv *da7219 = snd_soc_component_get_drvdata(component);
+	struct da7219_aad_priv *da7219_aad = da7219->aad;
+	u8 jack_det;
+
+	jack_det = snd_soc_component_read(component, DA7219_ACCDET_CONFIG_2)
+		& DA7219_JACK_DETECT_RATE_MASK;
+	switch (jack_det) {
+	case 0x00:
+		da7219_aad->gnd_switch_delay = 32;
+		break;
+	case 0x10:
+		da7219_aad->gnd_switch_delay = 64;
+		break;
+	case 0x20:
+		da7219_aad->gnd_switch_delay = 128;
+		break;
+	case 0x30:
+		da7219_aad->gnd_switch_delay = 256;
+		break;
+	default:
+		da7219_aad->gnd_switch_delay = 32;
+		break;
+	}
+}
 
 /*
  * Suspend/Resume
@@ -901,8 +967,11 @@ int da7219_aad_init(struct snd_soc_component *component)
 
 	INIT_WORK(&da7219_aad->btn_det_work, da7219_aad_btn_det_work);
 	INIT_WORK(&da7219_aad->hptest_work, da7219_aad_hptest_work);
+	INIT_WORK(&da7219_aad->jack_det_work, da7219_aad_jack_det_work);
 
-	ret = request_threaded_irq(da7219_aad->irq, NULL,
+	mutex_init(&da7219_aad->jack_det_mutex);
+
+	ret = request_threaded_irq(da7219_aad->irq, da7219_aad_pre_irq_thread,
 				   da7219_aad_irq_thread,
 				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   "da7219-aad", da7219_aad);
@@ -915,6 +984,8 @@ int da7219_aad_init(struct snd_soc_component *component)
 	memset(mask, 0, DA7219_AAD_IRQ_REG_MAX);
 	regmap_bulk_write(da7219->regmap, DA7219_ACCDET_IRQ_MASK_A,
 			  &mask, DA7219_AAD_IRQ_REG_MAX);
+
+	da7219_aad_handle_gnd_switch_time(component);
 
 	return 0;
 }

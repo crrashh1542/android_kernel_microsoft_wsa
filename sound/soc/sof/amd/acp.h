@@ -12,6 +12,7 @@
 #define __SOF_AMD_ACP_H
 
 #include "../sof-priv.h"
+#include "../sof-audio.h"
 
 #define ACP_MAX_STREAM	8
 
@@ -68,6 +69,11 @@
 
 #define BOX_SIZE_512				0x200
 #define BOX_SIZE_1024				0x400
+
+#define EXCEPT_MAX_HDR_SIZE			0x400
+#define AMD_STACK_DUMP_SIZE			32
+
+#define SRAM1_SIZE				0x13A000
 
 enum clock_source {
 	ACP_CLOCK_96M = 0,
@@ -146,6 +152,7 @@ struct acp_dsp_stream {
 	int stream_tag;
 	int active;
 	unsigned int reg_offset;
+	size_t posn_offset;
 };
 
 struct sof_amd_acp_desc {
@@ -178,19 +185,6 @@ struct acp_dev_data {
 	struct pci_dev *smn_dev;
 };
 
-enum acp_pcm_types {
-	I2S_BT = 0,
-	I2S_SP,
-	PDM_DMIC,
-	I2S_HS,
-	PCM_NONE,
-};
-
-struct acp_pcm_table {
-	u8 pcm_index;
-	char *pcm_name;
-};
-
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
 void memcpy_from_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *dst, size_t bytes);
 
@@ -218,8 +212,11 @@ int acp_dsp_block_read(struct snd_sof_dev *sdev, enum snd_sof_fw_blk_type blk_ty
 
 /* IPC callbacks */
 irqreturn_t acp_sof_ipc_irq_thread(int irq, void *context);
-int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_sof_pcm_stream *sps,
 			 void *p, size_t sz);
+int acp_set_stream_data_offset(struct snd_sof_dev *sdev,
+			       struct snd_sof_pcm_stream *sps,
+			       size_t posn_offset);
 int acp_sof_ipc_send_msg(struct snd_sof_dev *sdev,
 			 struct snd_sof_ipc_msg *msg);
 int acp_sof_ipc_get_mailbox_offset(struct snd_sof_dev *sdev);
@@ -241,7 +238,8 @@ int acp_pcm_close(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream)
 int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
 		      struct snd_pcm_hw_params *params,
 		      struct snd_sof_platform_stream_params *platform_params);
-snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev,
+				  struct snd_pcm_substream *substream);
 
 extern struct snd_sof_dsp_ops sof_acp_common_ops;
 
@@ -263,6 +261,9 @@ int acp_sof_trace_release(struct snd_sof_dev *sdev);
 /* PM Callbacks */
 int amd_sof_acp_suspend(struct snd_sof_dev *sdev, u32 target_state);
 int amd_sof_acp_resume(struct snd_sof_dev *sdev);
+
+void amd_sof_ipc_dump(struct snd_sof_dev *sdev);
+void amd_sof_dump(struct snd_sof_dev *sdev, u32 flags);
 
 static inline const struct sof_amd_acp_desc *get_chip_info(struct snd_sof_pdata *pdata)
 {

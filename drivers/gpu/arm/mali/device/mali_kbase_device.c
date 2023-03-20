@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -40,30 +40,30 @@
 #include "priority_control_manager.h"
 
 #include <tl/mali_kbase_timeline.h>
+#include "mali_kbase_kinstr_prfcnt.h"
 #include "mali_kbase_vinstr.h"
-#include "mali_kbase_hwcnt_context.h"
-#include "mali_kbase_hwcnt_virtualizer.h"
+#include "hwcnt/mali_kbase_hwcnt_context.h"
+#include "hwcnt/mali_kbase_hwcnt_virtualizer.h"
 
 #include "mali_kbase_device.h"
 #include "mali_kbase_device_internal.h"
 #include "backend/gpu/mali_kbase_pm_internal.h"
 #include "backend/gpu/mali_kbase_irq_internal.h"
 #include "mali_kbase_regs_history_debugfs.h"
+#include "mali_kbase_pbha.h"
 
-#ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
 #include "arbiter/mali_kbase_arbiter_pm.h"
-#endif /* CONFIG_MALI_BIFROST_ARBITER_SUPPORT */
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 
-/* NOTE: Magic - 0x45435254 (TRCE in ASCII).
- * Supports tracing feature provided in the base module.
- * Please keep it in sync with the value of base module.
- */
-#define TRACE_BUFFER_HEADER_SPECIAL 0x45435254
+#if defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI)
 
 /* Number of register accesses for the buffer that we allocate during
  * initialization time. The buffer size can be changed later via debugfs.
  */
 #define KBASEP_DEFAULT_REGISTER_HISTORY_SIZE ((u16)512)
+
+#endif /* defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI) */
 
 static DEFINE_MUTEX(kbase_dev_list_lock);
 static LIST_HEAD(kbase_dev_list);
@@ -161,11 +161,14 @@ void kbase_device_pcm_dev_term(struct kbase_device *const kbdev)
 /**
  * mali_oom_notifier_handler - Mali driver out-of-memory handler
  *
- * @nb - notifier block - used to retrieve kbdev pointer
- * @action - action (unused)
- * @data - data pointer (unused)
+ * @nb: notifier block - used to retrieve kbdev pointer
+ * @action: action (unused)
+ * @data: data pointer (unused)
+ *
  * This function simply lists memory usage by the Mali driver, per GPU device,
  * for diagnostic purposes.
+ *
+ * Return: NOTIFY_OK on success, NOTIFY_BAD otherwise.
  */
 static int mali_oom_notifier_handler(struct notifier_block *nb,
 				     unsigned long action, void *data)
@@ -187,7 +190,7 @@ static int mali_oom_notifier_handler(struct notifier_block *nb,
 
 	mutex_lock(&kbdev->kctx_list_lock);
 
-	list_for_each_entry (kctx, &kbdev->kctx_list, kctx_list_link) {
+	list_for_each_entry(kctx, &kbdev->kctx_list, kctx_list_link) {
 		struct pid *pid_struct;
 		struct task_struct *task;
 		unsigned long task_alloc_total =
@@ -273,16 +276,10 @@ int kbase_device_misc_init(struct kbase_device * const kbdev)
 	if (err)
 		goto dma_set_mask_failed;
 
-	if (!kbdev->dev->dma_parms) {
-		kbdev->dev->dma_parms = devm_kzalloc(kbdev->dev,
-				sizeof(*kbdev->dev->dma_parms), GFP_KERNEL);
-		if (!kbdev->dev->dma_parms) {
-			err = -ENOMEM;
-			goto dma_set_mask_failed;
-		}
-	}
-	err = dma_set_max_seg_size(kbdev->dev,
-			(unsigned int)DMA_BIT_MASK(kbdev->gpu_props.mmu.pa_bits));
+
+	/* There is no limit for Mali, so set to max. */
+	if (kbdev->dev->dma_parms)
+		err = dma_set_max_seg_size(kbdev->dev, UINT_MAX);
 	if (err)
 		goto dma_set_mask_failed;
 
@@ -292,7 +289,7 @@ int kbase_device_misc_init(struct kbase_device * const kbdev)
 	if (err)
 		goto dma_set_mask_failed;
 
-	err = kbase_ktrace_init(kbdev);
+	err = kbase_pbha_read_dtb(kbdev);
 	if (err)
 		goto term_as;
 
@@ -304,7 +301,11 @@ int kbase_device_misc_init(struct kbase_device * const kbdev)
 
 	kbdev->pm.dvfs_period = DEFAULT_PM_DVFS_PERIOD;
 
-	kbdev->reset_timeout_ms = DEFAULT_RESET_TIMEOUT_MS;
+#if MALI_USE_CSF
+	kbdev->reset_timeout_ms = kbase_get_timeout_ms(kbdev, CSF_CSG_SUSPEND_TIMEOUT);
+#else
+	kbdev->reset_timeout_ms = JM_DEFAULT_RESET_TIMEOUT_MS;
+#endif /* MALI_USE_CSF */
 
 	kbdev->mmu_mode = kbase_mmu_mode_get_aarch64();
 
@@ -338,10 +339,8 @@ void kbase_device_misc_term(struct kbase_device *kbdev)
 #if KBASE_KTRACE_ENABLE
 	kbase_debug_assert_register_hook(NULL, NULL);
 #endif
-
-	kbase_ktrace_term(kbdev);
-
 	kbase_device_all_as_term(kbdev);
+
 
 	if (kbdev->oom_notifier_block.notifier_call)
 		unregister_oom_notifier(&kbdev->oom_notifier_block);
@@ -408,6 +407,17 @@ void kbase_device_vinstr_term(struct kbase_device *kbdev)
 	kbase_vinstr_term(kbdev->vinstr_ctx);
 }
 
+int kbase_device_kinstr_prfcnt_init(struct kbase_device *kbdev)
+{
+	return kbase_kinstr_prfcnt_init(kbdev->hwcnt_gpu_virt,
+					&kbdev->kinstr_prfcnt_ctx);
+}
+
+void kbase_device_kinstr_prfcnt_term(struct kbase_device *kbdev)
+{
+	kbase_kinstr_prfcnt_term(kbdev->kinstr_prfcnt_ctx);
+}
+
 int kbase_device_io_history_init(struct kbase_device *kbdev)
 {
 	return kbase_io_history_init(&kbdev->io_history,
@@ -466,28 +476,39 @@ int kbase_device_early_init(struct kbase_device *kbdev)
 {
 	int err;
 
-	err = kbasep_platform_device_init(kbdev);
+	err = kbase_ktrace_init(kbdev);
 	if (err)
 		return err;
+
+
+	err = kbasep_platform_device_init(kbdev);
+	if (err)
+		goto ktrace_term;
 
 	err = kbase_pm_runtime_init(kbdev);
 	if (err)
 		goto fail_runtime_pm;
 
+	/* This spinlock is initialized before doing the first access to GPU
+	 * registers and installing interrupt handlers.
+	 */
+	spin_lock_init(&kbdev->hwaccess_lock);
+
 	/* Ensure we can access the GPU registers */
 	kbase_pm_register_access_enable(kbdev);
 
-	/* Find out GPU properties based on the GPU feature registers */
+	/*
+	 * Find out GPU properties based on the GPU feature registers.
+	 * Note that this does not populate the few properties that depend on
+	 * hw_features being initialized. Those are set by kbase_gpuprops_set_features
+	 * soon after this in the init process.
+	 */
 	kbase_gpuprops_set(kbdev);
 
 	/* We're done accessing the GPU registers for now. */
 	kbase_pm_register_access_disable(kbdev);
 
-	/* This spinlock has to be initialized before installing interrupt
-	 * handlers that require to hold it to process interrupts.
-	 */
-	spin_lock_init(&kbdev->hwaccess_lock);
-#ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (kbdev->arb.arb_if)
 		err = kbase_arbiter_pm_install_interrupts(kbdev);
 	else
@@ -504,22 +525,25 @@ fail_interrupts:
 	kbase_pm_runtime_term(kbdev);
 fail_runtime_pm:
 	kbasep_platform_device_term(kbdev);
+ktrace_term:
+	kbase_ktrace_term(kbdev);
 
 	return err;
 }
 
 void kbase_device_early_term(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_BIFROST_ARBITER_SUPPORT
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (kbdev->arb.arb_if)
 		kbase_arbiter_pm_release_interrupts(kbdev);
 	else
 		kbase_release_interrupts(kbdev);
 #else
 	kbase_release_interrupts(kbdev);
-#endif /* CONFIG_MALI_BIFROST_ARBITER_SUPPORT */
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 	kbase_pm_runtime_term(kbdev);
 	kbasep_platform_device_term(kbdev);
+	kbase_ktrace_term(kbdev);
 }
 
 int kbase_device_late_init(struct kbase_device *kbdev)

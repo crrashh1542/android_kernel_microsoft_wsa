@@ -6,6 +6,7 @@
  *          Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  */
 
+#include <asm/barrier.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/module.h>
@@ -1098,11 +1099,28 @@ static int uvc_query_v4l2_class(struct uvc_video_chain *chain, u32 req_id,
 	return 0;
 }
 
+/*
+ * Check if control @v4l2_id can be accessed by the given control @ioctl
+ * (VIDIOC_G_EXT_CTRLS, VIDIOC_TRY_EXT_CTRLS or VIDIOC_S_EXT_CTRLS).
+ *
+ * For set operations on slave controls, check if the master's value is set to
+ * manual, either in the others controls set in the same ioctl call, or from
+ * the master's current value. This catches VIDIOC_S_EXT_CTRLS calls that set
+ * both the master and slave control, such as for instance setting
+ * auto_exposure=1, exposure_time_absolute=251.
+ */
 int uvc_ctrl_is_accessible(struct uvc_video_chain *chain, u32 v4l2_id,
-			   bool read)
+			   const struct v4l2_ext_controls *ctrls,
+			   unsigned long ioctl)
 {
+	struct uvc_control_mapping *master_map = NULL;
+	struct uvc_control *master_ctrl = NULL;
 	struct uvc_control_mapping *mapping;
 	struct uvc_control *ctrl;
+	bool read = ioctl == VIDIOC_G_EXT_CTRLS;
+	s32 val;
+	int ret;
+	int i;
 
 	if (__uvc_query_v4l2_class(chain, v4l2_id, 0) >= 0)
 		return -EACCES;
@@ -1115,6 +1133,29 @@ int uvc_ctrl_is_accessible(struct uvc_video_chain *chain, u32 v4l2_id,
 		return -EACCES;
 
 	if (!(ctrl->info.flags & UVC_CTRL_FLAG_SET_CUR) && !read)
+		return -EACCES;
+
+	if (ioctl != VIDIOC_S_EXT_CTRLS || !mapping->master_id)
+		return 0;
+
+	/*
+	 * Iterate backwards in cases where the master control is accessed
+	 * multiple times in the same ioctl. We want the last value.
+	 */
+	for (i = ctrls->count - 1; i >= 0; i--) {
+		if (ctrls->controls[i].id == mapping->master_id)
+			return ctrls->controls[i].value ==
+					mapping->master_manual ? 0 : -EACCES;
+	}
+
+	__uvc_find_control(ctrl->entity, mapping->master_id, &master_map,
+			   &master_ctrl, 0);
+
+	if (!master_ctrl || !(master_ctrl->info.flags & UVC_CTRL_FLAG_GET_CUR))
+		return 0;
+
+	ret = __uvc_ctrl_get(chain, master_ctrl, master_map, &val);
+	if (ret >= 0 && val != mapping->master_manual)
 		return -EACCES;
 
 	return 0;
@@ -1474,6 +1515,10 @@ static void uvc_ctrl_status_event_work(struct work_struct *work)
 	int ret;
 
 	uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
+
+	/* The barrier is needed to synchronize with uvc_status_stop(). */
+	if (smp_load_acquire(&dev->flush_status))
+		return;
 
 	/* Resubmit the URB. */
 	w->urb->interval = dev->int_ep->desc.bInterval;
@@ -2410,6 +2455,8 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		/* Region of interest(ROI) auto control */
 		/* Chicony Electronics Co., Ltd HD User Facing */
 		{ { USB_DEVICE(0x04f2, 0xb667) }, 21 },
+		/* Chicony Electronics Co., Ltd 720p HD Camera */
+		{ { USB_DEVICE(0x04f2, 0xb6b4) }, 21 },
 		/* Chicony Electronics Co., Ltd Integrated Camera */
 		{ { USB_DEVICE(0x04f2, 0xb6d8) }, 21 },
 		/* Chicony Electronics Co., Ltd HD User Facing */
@@ -2436,6 +2483,16 @@ static void uvc_ctrl_prune_entity(struct uvc_device *dev,
 		{ { USB_DEVICE(0x0bda, 0x5539) }, 21 },
 		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
 		{ { USB_DEVICE(0x0bda, 0x565c) }, 21 },
+		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
+		{ { USB_DEVICE(0x0bda, 0x5676) }, 21 },
+		/* Realtek Semiconductor Corp. Integrated_Webcam_HD */
+		{ { USB_DEVICE(0x0bda, 0x567e) }, 21 },
+		/* Syntek Integrated Camera */
+		{ { USB_DEVICE(0x174f, 0x244f) }, 21 },
+		/* Lenovo Integrated Camera */
+		{ { USB_DEVICE(0x30c9, 0x0093) }, 21 },
+		/* Acer, Inc Integrated Camera */
+		{ { USB_DEVICE(0x5986, 0x1179) }, 21 },
 	};
 
 	const struct uvc_ctrl_blacklist *blacklist;

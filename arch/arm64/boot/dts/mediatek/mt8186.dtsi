@@ -54,14 +54,12 @@
 				core5 {
 					cpu = <&cpu5>;
 				};
-			};
 
-			cluster1 {
-				core0 {
+				core6 {
 					cpu = <&cpu6>;
 				};
 
-				core1 {
+				core7 {
 					cpu = <&cpu7>;
 				};
 			};
@@ -601,10 +599,12 @@
 		};
 	};
 
-	clk13m: oscillator-13m {
-		compatible = "fixed-clock";
+	clk13m: fixed-factor-clock-13m {
+		compatible = "fixed-factor-clock";
 		#clock-cells = <0>;
-		clock-frequency = <13000000>;
+		clocks = <&clk26m>;
+		clock-div = <2>;
+		clock-mult = <1>;
 		clock-output-names = "clk13m";
 	};
 
@@ -916,8 +916,7 @@
 		};
 
 		watchdog: watchdog@10007000 {
-			compatible = "mediatek,mt8186-wdt",
-				     "mediatek,mt6589-wdt";
+			compatible = "mediatek,mt8186-wdt";
 			mediatek,disable-extrst;
 			reg = <0 0x10007000 0 0x1000>;
 			#reset-cells = <1>;
@@ -995,8 +994,9 @@
 				 <&topckgen CLK_TOP_ADSP_BUS>;
 			clock-names = "audiodsp",
 				      "adsp_bus";
-			assigned-clocks = <&topckgen CLK_TOP_AUDIODSP>;
-			assigned-clock-parents = <&apmixedsys CLK_APMIXED_ADSPPLL>;
+			assigned-clocks = <&topckgen CLK_TOP_AUDIODSP>,
+					  <&topckgen CLK_TOP_ADSP_BUS>;
+			assigned-clock-parents = <&clk26m>, <&topckgen CLK_TOP_MAINPLL_D2_D2>;
 			power-domains = <&spm MT8186_POWER_DOMAIN_ADSP_TOP>;
 			mbox-names = "rx", "tx";
 			mboxes = <&adsp_mailbox0>, <&adsp_mailbox1>;

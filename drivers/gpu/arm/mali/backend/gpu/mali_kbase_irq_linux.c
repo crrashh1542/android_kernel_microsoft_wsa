@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2014-2016, 2018-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2016, 2018-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,7 +25,7 @@
 
 #include <linux/interrupt.h>
 
-#if !IS_ENABLED(CONFIG_MALI_BIFROST_NO_MALI)
+#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
 
 /* GPU IRQ Tags */
 #define	JOB_IRQ_TAG	0
@@ -58,11 +58,11 @@ static irqreturn_t kbase_job_irq_handler(int irq, void *data)
 
 	val = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS));
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	if (!kbdev->pm.backend.driver_ready_for_irqs)
 		dev_warn(kbdev->dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val);
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 	if (!val) {
 		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
@@ -101,11 +101,11 @@ static irqreturn_t kbase_mmu_irq_handler(int irq, void *data)
 
 	val = kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_STATUS));
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	if (!kbdev->pm.backend.driver_ready_for_irqs)
 		dev_warn(kbdev->dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val);
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	if (!val) {
@@ -138,11 +138,11 @@ static irqreturn_t kbase_gpu_irq_handler(int irq, void *data)
 
 	val = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_STATUS));
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	if (!kbdev->pm.backend.driver_ready_for_irqs)
 		dev_dbg(kbdev->dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val);
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	if (!val)
@@ -161,9 +161,8 @@ static irq_handler_t kbase_handler_table[] = {
 	[GPU_IRQ_TAG] = kbase_gpu_irq_handler,
 };
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 #define  JOB_IRQ_HANDLER JOB_IRQ_TAG
-#define  MMU_IRQ_HANDLER MMU_IRQ_TAG
 #define  GPU_IRQ_HANDLER GPU_IRQ_TAG
 
 /**
@@ -445,7 +444,7 @@ int kbasep_common_test_interrupt_handlers(
 
 	return err;
 }
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 int kbase_install_interrupts(struct kbase_device *kbdev)
 {
@@ -501,4 +500,4 @@ void kbase_synchronize_irqs(struct kbase_device *kbdev)
 
 KBASE_EXPORT_TEST_API(kbase_synchronize_irqs);
 
-#endif /* !IS_ENABLED(CONFIG_MALI_BIFROST_NO_MALI) */
+#endif /* !IS_ENABLED(CONFIG_MALI_NO_MALI) */

@@ -20,10 +20,6 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
-#define MP1_C2PMSG_69 0x3B10A14
-#define MP1_C2PMSG_85 0x3B10A54
-#define MP1_C2PMSG_93 0x3B10A74
-
 static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
 {
 	pci_write_config_dword(dev, 0x60, smn_addr);
@@ -38,22 +34,6 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 	pci_read_config_dword(dev, 0x64, data);
 
 	return 0;
-}
-
-static void master_clock_generate(struct acp_dev_data *adata)
-{
-	int data;
-	smn_write(adata->smn_dev, MP1_C2PMSG_93,0);
-	smn_write(adata->smn_dev, MP1_C2PMSG_85, 0xC4);
-	smn_write(adata->smn_dev, MP1_C2PMSG_69, 0x4);
-
-	while(1) {
-		smn_read(adata->smn_dev, MP1_C2PMSG_93, &data);
-		if (data == 1){
-			return;
-		}else
-			continue;
-    }
 }
 
 static void init_dma_descriptor(struct acp_dev_data *adata)
@@ -237,7 +217,6 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 			      unsigned int image_length)
 {
 	struct snd_sof_dev *sdev = adata->dev;
-	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
 	unsigned int tx_count, fw_qualifier, val;
 	int ret;
 
@@ -272,16 +251,16 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 		return ret;
 	}
 
-	if (desc->rev == 3) {
-		ret = psp_send_cmd(adata, MBOX_ACP_SHA_DMA_COMMAND);
-		if (ret)
-			return ret;
-	}
+	ret = psp_send_cmd(adata, MBOX_ACP_SHA_DMA_COMMAND);
+	if (ret)
+		return ret;
 
-	fw_qualifier = snd_sof_dsp_read(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER);
-	if (!(fw_qualifier & DSP_FW_RUN_ENABLE)) {
+	ret = snd_sof_dsp_read_poll_timeout(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER,
+					    fw_qualifier, fw_qualifier & DSP_FW_RUN_ENABLE,
+					    ACP_REG_POLL_INTERVAL, ACP_DMA_COMPLETE_TIMEOUT_US);
+	if (ret < 0) {
 		dev_err(sdev->dev, "PSP validation failed\n");
-		return -EINVAL;
+		return ret;
 	}
 
 	return 0;
@@ -339,7 +318,6 @@ static irqreturn_t acp_irq_thread(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = context;
 	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
-	unsigned int base = desc->dsp_intr_base;
 	unsigned int val, count = ACP_HW_SEM_RETRY_COUNT;
 
 	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->ext_intr_stat);
@@ -349,28 +327,20 @@ static irqreturn_t acp_irq_thread(int irq, void *context)
 		return IRQ_HANDLED;
 	}
 
-	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET);
-	if (val & ACP_DSP_TO_HOST_IRQ) {
-		while (snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset)) {
-			/* Wait until acquired HW Semaphore lock or timeout */
-			count--;
-			if (!count) {
-				dev_err(sdev->dev, "%s: Failed to acquire HW lock\n", __func__);
-				return IRQ_NONE;
-			}
+	while (snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset)) {
+		/* Wait until acquired HW Semaphore lock or timeout */
+		count--;
+		if (!count) {
+			dev_err(sdev->dev, "%s: Failed to acquire HW lock\n", __func__);
+			return IRQ_NONE;
 		}
-
-		sof_ops(sdev)->irq_thread(irq, sdev);
-		val |= ACP_DSP_TO_HOST_IRQ;
-		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET, val);
-
-		/* Unlock or Release HW Semaphore */
-		snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset, 0x0);
-
-		return IRQ_HANDLED;
 	}
 
-	return IRQ_NONE;
+	sof_ops(sdev)->irq_thread(irq, sdev);
+	/* Unlock or Release HW Semaphore */
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset, 0x0);
+
+	return IRQ_HANDLED;
 };
 
 static irqreturn_t acp_irq_handler(int irq, void *dev_id)
@@ -381,8 +351,11 @@ static irqreturn_t acp_irq_handler(int irq, void *dev_id)
 	unsigned int val;
 
 	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET);
-	if (val)
+	if (val) {
+		val |= ACP_DSP_TO_HOST_IRQ;
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET, val);
 		return IRQ_WAKE_THREAD;
+	}
 
 	return IRQ_NONE;
 }
@@ -553,7 +526,7 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	sdev->debug_box.size = BOX_SIZE_1024;
 
 	acp_memory_init(sdev);
-	master_clock_generate(adata);
+
 	acp_dsp_stream_init(sdev);
 
 	return 0;

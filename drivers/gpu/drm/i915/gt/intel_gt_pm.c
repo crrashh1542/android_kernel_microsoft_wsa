@@ -7,6 +7,7 @@
 #include <linux/suspend.h>
 
 #include "i915_drv.h"
+#include "i915_irq.h"
 #include "i915_params.h"
 #include "intel_context.h"
 #include "intel_engine_pm.h"
@@ -275,8 +276,6 @@ int intel_gt_resume(struct intel_gt *gt)
 	intel_rc6_enable(&gt->rc6);
 
 	intel_uc_resume(&gt->uc);
-
-	intel_pxp_resume(&gt->pxp);
 
 	user_forcewake(gt, false);
 

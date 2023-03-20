@@ -2282,7 +2282,7 @@ static void amb_remove_one(struct pci_dev *pci_dev)
 	dev = pci_get_drvdata(pci_dev);
 
 	PRINTD(DBG_INFO|DBG_INIT, "closing %p (atm_dev = %p)", dev, dev->atm_dev);
-	del_timer_sync(&dev->housekeeping);
+	timer_shutdown_sync(&dev->housekeeping);
 	// the drain should not be necessary
 	drain_rx_pools(dev);
 	interrupts_off(dev);

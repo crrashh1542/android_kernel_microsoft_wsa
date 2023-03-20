@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -66,6 +67,13 @@ int ath11k_wow_wakeup(struct ath11k_base *ab)
 {
 	struct ath11k *ar = ath11k_ab_to_ar(ab, 0);
 	int ret;
+
+	/* In the case of WCN6750, WoW wakeup is done
+	 * by sending SMP2P power save exit message
+	 * to the target processor.
+	 */
+	if (ab->hw_params.smp2p_wow_exit)
+		return 0;
 
 	reinit_completion(&ab->wow.wakeup_completed);
 
@@ -640,11 +648,35 @@ static int ath11k_wow_protocol_offload(struct ath11k *ar, bool enable)
 	return 0;
 }
 
+static int ath11k_wow_set_keepalive(struct ath11k *ar,
+				    enum wmi_sta_keepalive_method method,
+				    u32 interval)
+{
+	struct ath11k_vif *arvif;
+	int ret;
+
+	lockdep_assert_held(&ar->conf_mutex);
+
+	list_for_each_entry(arvif, &ar->arvifs, list) {
+		ret = ath11k_mac_vif_set_keepalive(arvif, method, interval);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 int ath11k_wow_op_suspend(struct ieee80211_hw *hw,
 			  struct cfg80211_wowlan *wowlan)
 {
 	struct ath11k *ar = hw->priv;
 	int ret;
+
+	ret = ath11k_mac_wait_tx_complete(ar);
+	if (ret) {
+		ath11k_warn(ar->ab, "failed to wait tx complete: %d\n", ret);
+		return ret;
+	}
 
 	mutex_lock(&ar->conf_mutex);
 
@@ -677,16 +709,18 @@ int ath11k_wow_op_suspend(struct ieee80211_hw *hw,
 		goto cleanup;
 	}
 
-	ret = ath11k_mac_wait_tx_complete(ar);
-	if (ret) {
-		ath11k_warn(ar->ab, "failed to wait tx complete: %d\n", ret);
-		goto cleanup;
-	}
-
 	ret = ath11k_wow_set_hw_filter(ar);
 	if (ret) {
 		ath11k_warn(ar->ab, "failed to set hw filter: %d\n",
 			    ret);
+		goto cleanup;
+	}
+
+	ret = ath11k_wow_set_keepalive(ar,
+				       WMI_STA_KEEPALIVE_METHOD_NULL_FRAME,
+				       WMI_STA_KEEPALIVE_INTERVAL_DEFAULT);
+	if (ret) {
+		ath11k_warn(ar->ab, "failed to enable wow keepalive: %d\n", ret);
 		goto cleanup;
 	}
 
@@ -782,6 +816,14 @@ int ath11k_wow_op_resume(struct ieee80211_hw *hw)
 	if (ret) {
 		ath11k_warn(ar->ab, "failed to clear wow protocol offload events: %d\n",
 			    ret);
+		goto exit;
+	}
+
+	ret = ath11k_wow_set_keepalive(ar,
+				       WMI_STA_KEEPALIVE_METHOD_NULL_FRAME,
+				       WMI_STA_KEEPALIVE_INTERVAL_DISABLE);
+	if (ret) {
+		ath11k_warn(ar->ab, "failed to disable wow keepalive: %d\n", ret);
 		goto exit;
 	}
 

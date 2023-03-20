@@ -129,7 +129,8 @@ static int sof_ipc3_pcm_hw_params(struct snd_soc_component *component,
 		return ret;
 	}
 
-	ret = snd_sof_set_stream_data_offset(sdev, substream, ipc_params_reply.posn_offset);
+	ret = snd_sof_set_stream_data_offset(sdev, &spcm->stream[substream->stream],
+					     ipc_params_reply.posn_offset);
 	if (ret < 0) {
 		dev_err(component->dev, "%s: invalid stream data offset for PCM %d\n",
 			__func__, spcm->pcm.pcm_id);
@@ -355,9 +356,7 @@ static int sof_ipc3_pcm_dai_link_fixup(struct snd_soc_pcm_runtime *rtd,
 		channels->max = private->dai_config->acphs.tdm_slots;
 
 		dev_dbg(component->dev,
-			"AMD_HS rate_min: %d rate_max: %d\n", rate->min, rate->max);
-		dev_dbg(component->dev, "AMD_HS channels_min: %d channels_max: %d\n",
-			channels->min, channels->max);
+			"AMD_HS channel_max: %d rate_max: %d\n", channels->max, rate->max);
 		break;
 	case SOF_DAI_AMD_DMIC:
 		rate->min = private->dai_config->acpdmic.pdm_rate;

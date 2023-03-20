@@ -32,7 +32,7 @@ const struct mtk_hw_config mt8195_hw_config = {
 	.reg_mfg_qchannel_con = 0xb4,
 	.reg_mfg_debug_sel = 0x170,
 	.reg_mfg_debug_top = 0x178,
-	.top_tsvalueb_en = 0x1,
+	.top_tsvalueb_en = 0x3,
 	.bus_idle_bit = 0x4,
 	.vgpu_min_microvolt = 625000,
 	.vgpu_max_microvolt = 750000,
@@ -79,7 +79,7 @@ static int platform_init(struct kbase_device *kbdev)
 	if (err)
 		return err;
 
-#if IS_ENABLED(CONFIG_MALI_VALHALL_DEVFREQ)
+#if IS_ENABLED(CONFIG_MALI_DEVFREQ)
 	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
 	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
 #endif

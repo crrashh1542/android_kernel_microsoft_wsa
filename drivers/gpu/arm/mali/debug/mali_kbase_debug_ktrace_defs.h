@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,16 +23,16 @@
 #define _KBASE_DEBUG_KTRACE_DEFS_H_
 
 /* Enable SW tracing when set */
-#if defined(CONFIG_MALI_BIFROST_ENABLE_TRACE) || defined(CONFIG_MALI_BIFROST_SYSTEM_TRACE)
+#if defined(CONFIG_MALI_ENABLE_TRACE) || defined(CONFIG_MALI_SYSTEM_TRACE)
 #define KBASE_KTRACE_ENABLE 1
 #endif
 
 #ifndef KBASE_KTRACE_ENABLE
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 #define KBASE_KTRACE_ENABLE 1
-#else /* CONFIG_MALI_BIFROST_DEBUG */
+#else /* CONFIG_MALI_DEBUG */
 #define KBASE_KTRACE_ENABLE 0
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 #endif /* KBASE_KTRACE_ENABLE */
 
 /* Select targets for recording of trace:
@@ -40,17 +40,17 @@
  */
 #if KBASE_KTRACE_ENABLE
 
-#ifdef CONFIG_MALI_BIFROST_SYSTEM_TRACE
+#ifdef CONFIG_MALI_SYSTEM_TRACE
 #define KBASE_KTRACE_TARGET_FTRACE 1
-#else /* CONFIG_MALI_BIFROST_SYSTEM_TRACE */
+#else /* CONFIG_MALI_SYSTEM_TRACE */
 #define KBASE_KTRACE_TARGET_FTRACE 0
-#endif /* CONFIG_MALI_BIFROST_SYSTEM_TRACE */
+#endif /* CONFIG_MALI_SYSTEM_TRACE */
 
-#ifdef CONFIG_MALI_BIFROST_ENABLE_TRACE
+#ifdef CONFIG_MALI_ENABLE_TRACE
 #define KBASE_KTRACE_TARGET_RBUF 1
-#else /* CONFIG_MALI_BIFROST_ENABLE_TRACE*/
+#else /* CONFIG_MALI_ENABLE_TRACE*/
 #define KBASE_KTRACE_TARGET_RBUF 0
-#endif /* CONFIG_MALI_BIFROST_ENABLE_TRACE */
+#endif /* CONFIG_MALI_ENABLE_TRACE */
 
 #else /* KBASE_KTRACE_ENABLE */
 #define KBASE_KTRACE_TARGET_FTRACE 0
@@ -138,8 +138,8 @@ enum kbase_ktrace_code {
 };
 
 /**
- * struct kbase_ktrace - object representing a trace message added to trace
- *                      buffer trace_rbuf in &kbase_device
+ * struct kbase_ktrace_msg - object representing a trace message added to trace
+ *                           buffer trace_rbuf in &kbase_device
  * @timestamp: CPU timestamp at which the trace message was added.
  * @thread_id: id of the thread in the context of which trace message was
  *             added.

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2017-2018, 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2017-2018, 2020-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,14 +23,14 @@
 #define _KBASE_IPA_COUNTER_COMMON_JM_H_
 
 #include "mali_kbase.h"
-#include "mali_kbase_hwcnt_virtualizer.h"
-#include "mali_kbase_hwcnt_types.h"
+#include "hwcnt/mali_kbase_hwcnt_virtualizer.h"
+#include "hwcnt/mali_kbase_hwcnt_types.h"
 
 /* Maximum number of IPA groups for an IPA model. */
 #define KBASE_IPA_MAX_GROUP_DEF_NUM  16
 
 /* Number of bytes per hardware counter in a vinstr_buffer. */
-#define KBASE_IPA_NR_BYTES_PER_CNT    4
+#define KBASE_IPA_NR_BYTES_PER_CNT (sizeof(u64))
 
 /* Number of hardware counters per block in a vinstr_buffer. */
 #define KBASE_IPA_NR_CNT_PER_BLOCK   64
@@ -83,7 +83,7 @@ struct kbase_ipa_model_vinstr_data {
 };
 
 /**
- * struct ipa_group - represents a single IPA group
+ * struct kbase_ipa_group - represents a single IPA group
  * @name:               name of the IPA group
  * @default_value:      default value of coefficient for IPA group.
  *                      Coefficients are interpreted as fractions where the
@@ -94,7 +94,10 @@ struct kbase_ipa_model_vinstr_data {
 struct kbase_ipa_group {
 	const char *name;
 	s32 default_value;
-	s64 (*op)(struct kbase_ipa_model_vinstr_data *, s32, u32);
+	s64 (*op)(
+		struct kbase_ipa_model_vinstr_data *model_data,
+		s32 coeff,
+		u32 counter_block_offset);
 	u32 counter_block_offset;
 };
 
@@ -149,7 +152,7 @@ s64 kbase_ipa_single_counter(
 	s32 coeff, u32 counter);
 
 /**
- * attach_vinstr() - attach a vinstr_buffer to an IPA model.
+ * kbase_ipa_attach_vinstr() - attach a vinstr_buffer to an IPA model.
  * @model_data:		pointer to model data
  *
  * Attach a vinstr_buffer to an IPA model. The vinstr_buffer
@@ -161,7 +164,7 @@ s64 kbase_ipa_single_counter(
 int kbase_ipa_attach_vinstr(struct kbase_ipa_model_vinstr_data *model_data);
 
 /**
- * detach_vinstr() - detach a vinstr_buffer from an IPA model.
+ * kbase_ipa_detach_vinstr() - detach a vinstr_buffer from an IPA model.
  * @model_data:		pointer to model data
  *
  * Detach a vinstr_buffer from an IPA model.

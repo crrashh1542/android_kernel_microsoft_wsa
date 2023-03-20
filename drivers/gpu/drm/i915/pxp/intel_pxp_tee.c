@@ -108,6 +108,12 @@ static int i915_pxp_tee_component_bind(struct device *i915_kdev,
 	struct intel_pxp *pxp = i915_dev_to_pxp(i915_kdev);
 	intel_wakeref_t wakeref;
 
+	if (!HAS_HECI_PXP(i915)) {
+		pxp->dev_link = device_link_add(i915_kdev, tee_kdev, DL_FLAG_STATELESS);
+		if (drm_WARN_ON(&i915->drm, !pxp->dev_link))
+			return -ENODEV;
+	}
+
 	mutex_lock(&pxp->tee_mutex);
 	pxp->pxp_component = data;
 	pxp->pxp_component->tee_dev = tee_kdev;
@@ -139,6 +145,11 @@ static void i915_pxp_tee_component_unbind(struct device *i915_kdev,
 	mutex_lock(&pxp->tee_mutex);
 	pxp->pxp_component = NULL;
 	mutex_unlock(&pxp->tee_mutex);
+
+	if (pxp->dev_link) {
+		device_link_del(pxp->dev_link);
+		pxp->dev_link = NULL;
+	}
 }
 
 static const struct component_ops i915_pxp_tee_component_ops = {
@@ -201,6 +212,51 @@ int intel_pxp_tee_cmd_create_arb_session(struct intel_pxp *pxp,
 			 msg_out.header.status);
 
 	return ret;
+}
+
+static void intel_pxp_tee_end_one_fw_session(struct intel_pxp *pxp, u32 session_id, bool is_alive)
+{
+	struct drm_i915_private *i915 = pxp_to_gt(pxp)->i915;
+	struct pxp_inv_stream_key_in msg_in = {0};
+	struct pxp_inv_stream_key_out msg_out = {0};
+	int ret, trials = 0;
+
+try_again:
+	memset(&msg_in, 0, sizeof(msg_in));
+	memset(&msg_out, 0, sizeof(msg_out));
+	msg_in.header.api_version = PXP_TEE_APIVER;
+	msg_in.header.command_id = PXP_TEE_INVALIDATE_STREAM_KEY;
+	msg_in.header.buffer_len = sizeof(msg_in) - sizeof(msg_in.header);
+
+	msg_in.header.extdata = FIELD_PREP(PXP_CMDHDR_EXTDATA_SESSION_VALID, 1);
+	msg_in.header.extdata |= FIELD_PREP(PXP_CMDHDR_EXTDATA_APP_TYPE, 0);
+	msg_in.header.extdata |= FIELD_PREP(PXP_CMDHDR_EXTDATA_SESSION_ID, session_id);
+
+	ret = intel_pxp_tee_io_message(pxp,
+				       &msg_in, sizeof(msg_in),
+				       &msg_out, sizeof(msg_out),
+				       NULL);
+
+	/* Cleanup coherency between GT and Firmware is critical, so try again if it fails */
+	if ((ret || msg_out.header.status != 0x0) && ++trials < 3)
+		goto try_again;
+
+	if (ret)
+		drm_err(&i915->drm, "Failed to send tee msg for inv-stream-key-%d, ret=[%d]\n",
+			session_id, ret);
+	else if (msg_out.header.status != 0x0 && is_alive)
+		drm_warn(&i915->drm, "PXP firmware failed inv-stream-key-%d with status 0x%08x\n",
+			 session_id, msg_out.header.status);
+}
+
+void intel_pxp_tee_end_all_fw_sessions(struct intel_pxp *pxp, u32 sessions_mask)
+{
+	int n;
+
+	for (n = 0; n < INTEL_PXP_MAX_HWDRM_SESSIONS; ++n) {
+		intel_pxp_tee_end_one_fw_session(pxp, n, (sessions_mask & 0x1) ? true : false);
+		sessions_mask = (sessions_mask >> 1);
+	}
 }
 
 int intel_pxp_tee_ioctl_io_message(struct intel_pxp *pxp,

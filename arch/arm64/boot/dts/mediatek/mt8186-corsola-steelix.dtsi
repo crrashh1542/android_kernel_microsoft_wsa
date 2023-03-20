@@ -117,6 +117,7 @@
 };
 
 &i2c2 {
+	i2c-scl-internal-delay-ns = <22000>;
 	pinctrl-0 = <&i2c2_pins &trackpad_pins>;
 	pinctrl-names = "default";
 
@@ -254,6 +255,13 @@
 			/* External pull-up. */
 			bias-disable;
 		};
+	};
+};
+
+&anx7625_pins {
+	pins2 {
+		/delete-property/ bias-pull-up;
+		bias-disable;
 	};
 };
 

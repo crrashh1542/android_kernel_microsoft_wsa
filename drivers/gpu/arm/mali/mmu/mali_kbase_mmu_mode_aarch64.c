@@ -92,7 +92,7 @@ static phys_addr_t pte_to_phy_addr(u64 entry)
 
 static int ate_is_valid(u64 ate, int const level)
 {
-	if (level == BIFROST_MMU_BOTTOMLEVEL)
+	if (level == MIDGARD_MMU_BOTTOMLEVEL)
 		return ((ate & ENTRY_TYPE_MASK) == ENTRY_IS_ATE_L3);
 	else
 		return ((ate & ENTRY_TYPE_MASK) == ENTRY_IS_ATE_L02);
@@ -101,7 +101,7 @@ static int ate_is_valid(u64 ate, int const level)
 static int pte_is_valid(u64 pte, int const level)
 {
 	/* PTEs cannot exist at the bottom level */
-	if (level == BIFROST_MMU_BOTTOMLEVEL)
+	if (level == MIDGARD_MMU_BOTTOMLEVEL)
 		return false;
 	return ((pte & ENTRY_TYPE_MASK) == ENTRY_IS_PTE);
 }
@@ -143,7 +143,7 @@ static void entry_set_ate(u64 *entry,
 		unsigned long flags,
 		int const level)
 {
-	if (level == BIFROST_MMU_BOTTOMLEVEL)
+	if (level == MIDGARD_MMU_BOTTOMLEVEL)
 		page_table_entry_set(entry, as_phys_addr_t(phy) |
 				get_mmu_flags(flags) |
 				ENTRY_ACCESS_BIT | ENTRY_IS_ATE_L3);
@@ -187,14 +187,9 @@ static void set_num_valid_entries(u64 *pgd, unsigned int num_of_valid_entries)
 		   << UNUSED_BIT_POSITION_IN_PAGE_DESCRIPTOR);
 }
 
-static void entry_set_pte(u64 *pgd, u64 vpfn, phys_addr_t phy)
+static void entry_set_pte(u64 *entry, phys_addr_t phy)
 {
-	unsigned int nr_entries = get_num_valid_entries(pgd);
-
-	page_table_entry_set(&pgd[vpfn], (phy & PAGE_MASK) | ENTRY_ACCESS_BIT |
-						 ENTRY_IS_PTE);
-
-	set_num_valid_entries(pgd, nr_entries + 1);
+	page_table_entry_set(entry, (phy & PAGE_MASK) | ENTRY_ACCESS_BIT | ENTRY_IS_PTE);
 }
 
 static void entries_invalidate(u64 *entry, u32 count)
@@ -205,20 +200,18 @@ static void entries_invalidate(u64 *entry, u32 count)
 		page_table_entry_set(entry + i, ENTRY_IS_INVAL);
 }
 
-static const struct kbase_mmu_mode aarch64_mode = {
-	.update = mmu_update,
-	.get_as_setup = kbase_mmu_get_as_setup,
-	.disable_as = mmu_disable_as,
-	.pte_to_phy_addr = pte_to_phy_addr,
-	.ate_is_valid = ate_is_valid,
-	.pte_is_valid = pte_is_valid,
-	.entry_set_ate = entry_set_ate,
-	.entry_set_pte = entry_set_pte,
-	.entries_invalidate = entries_invalidate,
-	.get_num_valid_entries = get_num_valid_entries,
-	.set_num_valid_entries = set_num_valid_entries,
-	.flags = KBASE_MMU_MODE_HAS_NON_CACHEABLE
-};
+static const struct kbase_mmu_mode aarch64_mode = { .update = mmu_update,
+						    .get_as_setup = kbase_mmu_get_as_setup,
+						    .disable_as = mmu_disable_as,
+						    .pte_to_phy_addr = pte_to_phy_addr,
+						    .ate_is_valid = ate_is_valid,
+						    .pte_is_valid = pte_is_valid,
+						    .entry_set_ate = entry_set_ate,
+						    .entry_set_pte = entry_set_pte,
+						    .entries_invalidate = entries_invalidate,
+						    .get_num_valid_entries = get_num_valid_entries,
+						    .set_num_valid_entries = set_num_valid_entries,
+						    .flags = KBASE_MMU_MODE_HAS_NON_CACHEABLE };
 
 struct kbase_mmu_mode const *kbase_mmu_mode_get_aarch64(void)
 {

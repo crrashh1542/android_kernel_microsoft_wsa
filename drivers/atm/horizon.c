@@ -2765,7 +2765,7 @@ static void hrz_remove_one(struct pci_dev *pci_dev)
 	dev = pci_get_drvdata(pci_dev);
 
 	PRINTD(DBG_INFO, "closing %p (atm_dev = %p)", dev, dev->atm_dev);
-	del_timer_sync(&dev->housekeeping);
+	timer_shutdown_sync(&dev->housekeeping);
 	hrz_reset(dev);
 	atm_dev_deregister(dev->atm_dev);
 	free_irq(dev->irq, dev);

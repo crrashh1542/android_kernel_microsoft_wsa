@@ -10,10 +10,11 @@ config MTK_THERMAL
 if MTK_THERMAL
 
 config MTK_SOC_THERMAL
-	tristate "Temperature sensor driver for mediatek SoCs"
+	bool "Temperature sensor driver for mediatek SoCs"
 	depends on HAS_IOMEM
 	depends on NVMEM
 	depends on RESET_CONTROLLER
+	depends on CPU_FREQ
 	help
 	  Enable this option if you want to get SoC temperature
 	  information for Mediatek platforms. This driver

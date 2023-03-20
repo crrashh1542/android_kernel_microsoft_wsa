@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2014-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -29,12 +29,21 @@
 #include "mali_kbase_pm_always_on.h"
 #include "mali_kbase_pm_coarse_demand.h"
 
+#if defined(CONFIG_PM_RUNTIME) || defined(CONFIG_PM)
+#define KBASE_PM_RUNTIME 1
+#endif
+
 /* Forward definition - see mali_kbase.h */
 struct kbase_device;
 struct kbase_jd_atom;
 
 /**
  * enum kbase_pm_core_type - The types of core in a GPU.
+ *
+ * @KBASE_PM_CORE_L2: The L2 cache
+ * @KBASE_PM_CORE_SHADER: Shader cores
+ * @KBASE_PM_CORE_TILER: Tiler cores
+ * @KBASE_PM_CORE_STACK: Core stacks
  *
  * These enumerated values are used in calls to
  * - kbase_pm_get_present_cores()
@@ -45,11 +54,6 @@ struct kbase_jd_atom;
  * They specify which type of core should be acted on.  These values are set in
  * a manner that allows core_type_to_reg() function to be simpler and more
  * efficient.
- *
- * @KBASE_PM_CORE_L2: The L2 cache
- * @KBASE_PM_CORE_SHADER: Shader cores
- * @KBASE_PM_CORE_TILER: Tiler cores
- * @KBASE_PM_CORE_STACK: Core stacks
  */
 enum kbase_pm_core_type {
 	KBASE_PM_CORE_L2 = L2_PRESENT_LO,
@@ -131,7 +135,7 @@ struct kbasep_pm_metrics {
  *           or removed from a GPU slot.
  *  @active_cl_ctx: number of CL jobs active on the GPU. Array is per-device.
  *  @active_gl_ctx: number of GL jobs active on the GPU. Array is per-slot.
- *  @lock: spinlock protecting the kbasep_pm_metrics_data structure
+ *  @lock: spinlock protecting the kbasep_pm_metrics_state structure
  *  @platform_data: pointer to data controlled by platform specific code
  *  @kbdev: pointer to kbase device for which metrics are collected
  *  @values: The current values of the power management metrics. The
@@ -140,7 +144,7 @@ struct kbasep_pm_metrics {
  *  @initialized: tracks whether metrics_state has been initialized or not.
  *  @timer: timer to regularly make DVFS decisions based on the power
  *           management metrics.
- *  @timer_active: boolean indicating @timer is running
+ *  @timer_state: atomic indicating current @timer state, on, off, or stopped.
  *  @dvfs_last: values of the PM metrics from the last DVFS tick
  *  @dvfs_diff: different between the current and previous PM metrics.
  */
@@ -161,10 +165,10 @@ struct kbasep_pm_metrics_state {
 
 	struct kbasep_pm_metrics values;
 
-#ifdef CONFIG_MALI_BIFROST_DVFS
+#ifdef CONFIG_MALI_DVFS
 	bool initialized;
 	struct hrtimer timer;
-	bool timer_active;
+	atomic_t timer_state;
 	struct kbasep_pm_metrics dvfs_last;
 	struct kbasep_pm_metrics dvfs_diff;
 #endif
@@ -210,9 +214,6 @@ union kbase_pm_policy_data {
 
 /**
  * struct kbase_pm_backend_data - Data stored per device for power management.
- *
- * This structure contains data for the power management framework. There is one
- * instance of this structure per device in the system.
  *
  * @pm_current_policy: The policy that is currently actively controlling the
  *                     power state.
@@ -271,10 +272,18 @@ union kbase_pm_policy_data {
  *                             &struct kbase_pm_callback_conf
  * @callback_power_runtime_off: Callback when the GPU may be turned off. See
  *                              &struct kbase_pm_callback_conf
- * @callback_power_runtime_idle: Optional callback when the GPU may be idle. See
- *                              &struct kbase_pm_callback_conf
+ * @callback_power_runtime_idle: Optional callback invoked by runtime PM core
+ *                               when the GPU may be idle. See
+ *                               &struct kbase_pm_callback_conf
  * @callback_soft_reset: Optional callback to software reset the GPU. See
  *                       &struct kbase_pm_callback_conf
+ * @callback_power_runtime_gpu_idle: Callback invoked by Kbase when GPU has
+ *                                   become idle.
+ *                                   See &struct kbase_pm_callback_conf.
+ * @callback_power_runtime_gpu_active: Callback when GPU has become active and
+ *                                     @callback_power_runtime_gpu_idle was
+ *                                     called previously.
+ *                                     See &struct kbase_pm_callback_conf.
  * @ca_cores_enabled: Cores that are currently available
  * @mcu_state: The current state of the micro-control unit, only applicable
  *             to GPUs that have such a component
@@ -312,6 +321,38 @@ union kbase_pm_policy_data {
  * @policy_change_lock: Used to serialize the policy change calls. In CSF case,
  *                      the change of policy may involve the scheduler to
  *                      suspend running CSGs and then reconfigure the MCU.
+ * @core_idle_wq: Workqueue for executing the @core_idle_work.
+ * @core_idle_work: Work item used to wait for undesired cores to become inactive.
+ *                  The work item is enqueued when Host controls the power for
+ *                  shader cores and down scaling of cores is performed.
+ * @gpu_sleep_supported: Flag to indicate that if GPU sleep feature can be
+ *                       supported by the kernel driver or not. If this
+ *                       flag is not set, then HW state is directly saved
+ *                       when GPU idle notification is received.
+ * @gpu_sleep_mode_active: Flag to indicate that the GPU needs to be in sleep
+ *                         mode. It is set when the GPU idle notification is
+ *                         received and is cleared when HW state has been
+ *                         saved in the runtime suspend callback function or
+ *                         when the GPU power down is aborted if GPU became
+ *                         active whilst it was in sleep mode. The flag is
+ *                         guarded with hwaccess_lock spinlock.
+ * @exit_gpu_sleep_mode: Flag to indicate the GPU can now exit the sleep
+ *                       mode due to the submission of work from Userspace.
+ *                       The flag is guarded with hwaccess_lock spinlock.
+ *                       The @gpu_sleep_mode_active flag is not immediately
+ *                       reset when this flag is set, this is to ensure that
+ *                       MCU doesn't gets disabled undesirably without the
+ *                       suspend of CSGs. That could happen when
+ *                       scheduler_pm_active() and scheduler_pm_idle() gets
+ *                       called before the Scheduler gets reactivated.
+ * @gpu_idled: Flag to ensure that the gpu_idle & gpu_active callbacks are
+ *             always called in pair. The flag is guarded with pm.lock mutex.
+ * @gpu_wakeup_override: Flag to force the power up of L2 cache & reactivation
+ *                       of MCU. This is set during the runtime suspend
+ *                       callback function, when GPU needs to exit the sleep
+ *                       mode for the saving the HW state before power down.
+ * @db_mirror_interrupt_enabled: Flag tracking if the Doorbell mirror interrupt
+ *                               is enabled or not.
  * @in_reset: True if a GPU is resetting and normal power manager operation is
  *            suspended
  * @partial_shaderoff: True if we want to partial power off shader cores,
@@ -349,6 +390,9 @@ union kbase_pm_policy_data {
  * @gpu_clock_control_work: work item to set GPU clock during L2 power cycle
  *                          using gpu_clock_control
  *
+ * This structure contains data for the power management framework. There is one
+ * instance of this structure per device in the system.
+ *
  * Note:
  * During an IRQ, @pm_current_policy can be NULL when the policy is being
  * changed with kbase_pm_set_policy(). The change is protected under
@@ -373,9 +417,9 @@ struct kbase_pm_backend_data {
 
 	bool cg1_disabled;
 
-#ifdef CONFIG_MALI_BIFROST_DEBUG
+#ifdef CONFIG_MALI_DEBUG
 	bool driver_ready_for_irqs;
-#endif /* CONFIG_MALI_BIFROST_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 
 	struct kbasep_pm_metrics_state metrics;
 
@@ -398,6 +442,8 @@ struct kbase_pm_backend_data {
 	void (*callback_power_runtime_off)(struct kbase_device *kbdev);
 	int (*callback_power_runtime_idle)(struct kbase_device *kbdev);
 	int (*callback_soft_reset)(struct kbase_device *kbdev);
+	void (*callback_power_runtime_gpu_idle)(struct kbase_device *kbdev);
+	void (*callback_power_runtime_gpu_active)(struct kbase_device *kbdev);
 
 	u64 ca_cores_enabled;
 
@@ -413,6 +459,17 @@ struct kbase_pm_backend_data {
 	bool policy_change_clamp_state_to_off;
 	unsigned int csf_pm_sched_flags;
 	struct mutex policy_change_lock;
+	struct workqueue_struct *core_idle_wq;
+	struct work_struct core_idle_work;
+
+#ifdef KBASE_PM_RUNTIME
+	bool gpu_sleep_supported;
+	bool gpu_sleep_mode_active;
+	bool exit_gpu_sleep_mode;
+	bool gpu_idled;
+	bool gpu_wakeup_override;
+	bool db_mirror_interrupt_enabled;
+#endif
 #endif
 	bool l2_desired;
 	bool l2_always_on;
@@ -420,11 +477,13 @@ struct kbase_pm_backend_data {
 
 	bool in_reset;
 
+#if !MALI_USE_CSF
 	bool partial_shaderoff;
 
 	bool protected_entry_transition_override;
 	bool protected_transition_override;
 	int protected_l2_override;
+#endif
 
 	bool hwcnt_desired;
 	bool hwcnt_disabled;
@@ -438,7 +497,7 @@ struct kbase_pm_backend_data {
 };
 
 #if MALI_USE_CSF
-/* CSF PM flag, signaling that the MCU CORE should be kept on */
+/* CSF PM flag, signaling that the MCU shader Core should be kept on */
 #define  CSF_DYNAMIC_PM_CORE_KEEP_ON (1 << 0)
 /* CSF PM flag, signaling no scheduler suspension on idle groups */
 #define CSF_DYNAMIC_PM_SCHED_IGNORE_IDLE (1 << 1)
@@ -494,9 +553,6 @@ enum kbase_pm_policy_event {
 /**
  * struct kbase_pm_policy - Power policy structure.
  *
- * Each power policy exposes a (static) instance of this structure which
- * contains function pointers to the policy's methods.
- *
  * @name:               The name of this policy
  * @init:               Function called when the policy is selected
  * @term:               Function called when the policy is unselected
@@ -514,6 +570,8 @@ enum kbase_pm_policy_event {
  *                  Pre-defined required flags exist for each of the
  *                  ARM released policies, such as 'always_on', 'coarse_demand'
  *                  and etc.
+ * Each power policy exposes a (static) instance of this structure which
+ * contains function pointers to the policy's methods.
  */
 struct kbase_pm_policy {
 	char *name;
@@ -566,7 +624,7 @@ struct kbase_pm_policy {
 	 */
 	bool (*get_core_active)(struct kbase_device *kbdev);
 
-	/**
+	/*
 	 * Function called when a power event occurs
 	 *
 	 * @kbdev: The kbase device structure for the device (must be a

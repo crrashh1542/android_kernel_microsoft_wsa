@@ -78,7 +78,7 @@ static int platform_init(struct kbase_device *kbdev)
 	if (err)
 		return err;
 
-#if IS_ENABLED(CONFIG_MALI_VALHALL_DEVFREQ)
+#if IS_ENABLED(CONFIG_MALI_DEVFREQ)
 	kbdev->devfreq_ops.set_frequency = mtk_set_frequency;
 	kbdev->devfreq_ops.voltage_range_check = mtk_voltage_range_check;
 #if IS_ENABLED(CONFIG_REGULATOR)

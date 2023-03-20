@@ -137,7 +137,6 @@ static int acp_pci_rmb_probe(struct pci_dev *pci, const struct pci_device_id *pc
 	 * for some distributions. Register platform device that will be used to support non dsp
 	 * ACP's audio ends points on some machines.
 	 */
-
 	pdevinfo.name = "acp_asoc_rembrandt";
 	pdevinfo.id = 0;
 	pdevinfo.parent = &pci->dev;
@@ -167,9 +166,9 @@ static void acp_pci_rmb_remove(struct pci_dev *pci)
 
 /* PCI IDs */
 static const struct pci_device_id rmb_pci_ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_AMD, ACP_PCI_DEV_ID),
-	.driver_data = (unsigned long)&rembrandt_desc},
-	{ 0, }
+		{ PCI_DEVICE(PCI_VENDOR_ID_AMD, ACP_PCI_DEV_ID),
+		.driver_data = (unsigned long)&rembrandt_desc},
+		{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, rmb_pci_ids);
 

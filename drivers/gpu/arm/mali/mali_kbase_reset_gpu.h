@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2022 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -91,7 +91,8 @@ int kbase_reset_gpu_prevent_and_wait(struct kbase_device *kbdev);
  * Refer to kbase_reset_gpu_prevent_and_wait() for more information.
  *
  * Return: 0 on success. -EAGAIN if a reset is currently happening. Other
- * negative error codes on failure.
+ * negative error codes on failure, where -ENOMEM indicates that GPU reset
+ * had failed.
  */
 int kbase_reset_gpu_try_prevent(struct kbase_device *kbdev);
 
@@ -143,9 +144,10 @@ void kbase_reset_gpu_assert_prevented(struct kbase_device *kbdev);
 void kbase_reset_gpu_assert_failed_or_prevented(struct kbase_device *kbdev);
 
 /**
- * Flags for kbase_prepare_to_reset_gpu
+ * RESET_FLAGS_NONE - Flags for kbase_prepare_to_reset_gpu
  */
-#define RESET_FLAGS_NONE ((unsigned int)0)
+#define RESET_FLAGS_NONE (0U)
+
 /* This reset should be treated as an unrecoverable error by HW counter logic */
 #define RESET_FLAGS_HWC_UNRECOVERABLE_ERROR ((unsigned int)(1 << 0))
 
@@ -168,7 +170,7 @@ bool kbase_prepare_to_reset_gpu_locked(struct kbase_device *kbdev,
  * kbase_prepare_to_reset_gpu - Prepare for resetting the GPU.
  * @kbdev: Device pointer
  * @flags: Bitfield indicating impact of reset (see flag defines)
-
+ *
  * Return: a boolean which should be interpreted as follows:
  * - true  - Prepared for reset, kbase_reset_gpu should be called.
  * - false - Another thread is performing a reset, kbase_reset_gpu should
@@ -233,6 +235,18 @@ int kbase_reset_gpu_silent(struct kbase_device *kbdev);
  * Return: True if the GPU is in the process of being reset.
  */
 bool kbase_reset_gpu_is_active(struct kbase_device *kbdev);
+
+/**
+ * kbase_reset_gpu_not_pending - Reports if the GPU reset isn't pending
+ *
+ * @kbdev: Device pointer
+ *
+ * Note that unless appropriate locks are held when using this function, the
+ * state could change immediately afterwards.
+ *
+ * Return: True if the GPU reset isn't pending.
+ */
+bool kbase_reset_gpu_is_not_pending(struct kbase_device *kbdev);
 
 /**
  * kbase_reset_gpu_wait - Wait for a GPU reset to complete

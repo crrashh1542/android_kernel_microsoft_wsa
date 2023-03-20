@@ -109,7 +109,6 @@ static int __dma_free_buffer(struct device *dev, struct page **pages,
 
 	for (i = 0; i < count; i++) {
 		if (pages[i]) {
-			__dma_clear_buffer(pages[i], PAGE_SIZE, attrs);
 			__free_pages(pages[i], 0);
 		}
 	}
