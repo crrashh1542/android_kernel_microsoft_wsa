@@ -66,7 +66,6 @@
 #include "intel_sprite.h"
 #include "intel_tc.h"
 #include "intel_vdsc.h"
-#include "intel_vrr.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 
@@ -2722,8 +2721,6 @@ static void intel_ddi_post_disable(struct intel_atomic_state *state,
 	if (!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DP_MST)) {
 		intel_crtc_vblank_off(old_crtc_state);
 
-		intel_vrr_disable(old_crtc_state);
-
 		intel_disable_transcoder(old_crtc_state);
 
 		intel_ddi_disable_transcoder_func(old_crtc_state);
@@ -2954,8 +2951,6 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 		intel_ddi_enable_transcoder_func(encoder, crtc_state);
 
 	intel_enable_transcoder(crtc_state);
-
-	intel_vrr_enable(crtc_state);
 
 	intel_crtc_vblank_on(crtc_state);
 
