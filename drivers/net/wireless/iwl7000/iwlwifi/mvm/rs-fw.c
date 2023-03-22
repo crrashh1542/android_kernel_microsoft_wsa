@@ -551,7 +551,12 @@ u16 rs_fw_get_max_amsdu_len(struct ieee80211_sta *sta,
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	struct ieee80211_vif *vif = iwl_mvm_sta_from_mac80211(sta)->vif;
-	struct iwl_mvm *mvm = iwl_mvm_vif_from_mac80211(vif)->mvm;
+	struct iwl_mvm *mvm;
+
+	if (WARN_ON_ONCE(!vif))
+		return 0;
+
+	mvm = iwl_mvm_vif_from_mac80211(vif)->mvm;
 
 	if (mvm->trans->dbg_cfg.amsdu_in_ampdu_disabled)
 		return 0;
