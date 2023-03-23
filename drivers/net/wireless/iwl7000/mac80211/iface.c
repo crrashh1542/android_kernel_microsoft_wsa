@@ -2189,7 +2189,7 @@ struct vif_params *params)
 
 		ndev = alloc_netdev_mqs(size + txq_size,
 					name, name_assign_type,
-					ieee80211_if_setup, 1, 1);
+					ieee80211_if_setup, num_txqs, 1);
 		if (!ndev)
 			return -ENOMEM;
 
