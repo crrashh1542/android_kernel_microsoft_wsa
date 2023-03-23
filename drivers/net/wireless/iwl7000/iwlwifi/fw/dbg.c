@@ -3225,7 +3225,7 @@ void iwl_fw_dbg_stop_restart_recording(struct iwl_fw_runtime *fwrt,
 	if (fw_has_capa(&fwrt->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_DBG_SUSPEND_RESUME_CMD_SUPP)) {
 		if (stop)
-			ret = iwl_fw_send_timestamp_marker_cmd(fwrt);
+			iwl_fw_send_timestamp_marker_cmd(fwrt);
 		ret = iwl_fw_dbg_suspend_resume_hcmd(fwrt->trans, stop);
 	} else if (stop) {
 		iwl_fw_dbg_stop_recording(fwrt->trans, params);
