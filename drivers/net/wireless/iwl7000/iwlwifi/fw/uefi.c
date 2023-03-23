@@ -262,8 +262,11 @@ u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 
 	*len = package_size - sizeof(*package);
 	data = kmemdup(package->data, *len, GFP_KERNEL);
-	if (!data)
+	if (!data) {
+		kfree(package);
 		return ERR_PTR(-ENOMEM);
+	}
+
 	kfree(package);
 
 	return data;
