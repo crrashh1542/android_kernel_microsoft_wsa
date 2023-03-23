@@ -22,8 +22,6 @@ static void mle_defrag(struct kunit *test)
 
 	skb = alloc_skb(1024, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, skb);
-	if (!skb)
-		return;
 
 	if (skb_pad(skb, skb_tailroom(skb))) {
 		KUNIT_FAIL(test, "failed to pad skb");
@@ -65,13 +63,13 @@ static void mle_defrag(struct kunit *test)
 	parse_params.len = skb->len;
 	parsed = ieee802_11_parse_elems_full(&parse_params);
 	/* should return ERR_PTR or valid, not NULL */
-	KUNIT_ASSERT_NOT_NULL(test, parsed);
+	KUNIT_EXPECT_NOT_NULL(test, parsed);
 
 	if (IS_ERR_OR_NULL(parsed))
 		goto free_skb;
 
-	KUNIT_ASSERT_NOT_NULL(test, parsed->ml_basic_elem);
-	KUNIT_ASSERT_EQ(test,
+	KUNIT_EXPECT_NOT_NULL(test, parsed->ml_basic_elem);
+	KUNIT_EXPECT_EQ(test,
 			parsed->ml_basic_len,
 			2 /* control */ +
 			7 /* common info */ +
@@ -79,8 +77,8 @@ static void mle_defrag(struct kunit *test)
 			3 /* sta profile header */ +
 			20 * 22 /* sta profile data */ +
 			2 /* sta profile fragment element */);
-	KUNIT_ASSERT_NOT_NULL(test, parsed->prof);
-	KUNIT_ASSERT_EQ(test,
+	KUNIT_EXPECT_NOT_NULL(test, parsed->prof);
+	KUNIT_EXPECT_EQ(test,
 			parsed->sta_prof_len,
 			3 /* sta profile header */ +
 			20 * 22 /* sta profile data */);
