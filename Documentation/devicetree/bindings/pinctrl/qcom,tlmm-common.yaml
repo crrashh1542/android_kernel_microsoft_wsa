@@ -81,6 +81,7 @@ $defs:
       bias-disable: true
       input-enable: false
       output-disable: true
+      output-enable: true
       output-high: true
       output-low: true
 
