@@ -356,10 +356,10 @@ def do_splitconfig(
 
 
 # Arches relevant to this family.
-def family_arches(family: str) -> List[str]:
+def family_arches(srcdir: str, family: str) -> List[str]:
     return [
         os.path.basename(p)
-        for p in glob.glob("chromeos/config/" + family + "/*")
+        for p in glob.glob(srcdir + "/chromeos/config/" + family + "/*")
         if os.path.isdir(p)
     ]
 
@@ -394,11 +394,11 @@ def doit(args, tmpdir: str) -> int:
 
     families = [
         os.path.basename(p)
-        for p in glob.glob("chromeos/config/*")
+        for p in glob.glob(srcdir + "/chromeos/config/*")
         if os.path.isdir(p)
     ]
     for family in families:
-        for arch in family_arches(family):
+        for arch in family_arches(srcdir, family):
             if not arch in TOOLCHAIN_PREFIXES:
                 die("Unexpected arch: %s" % arch)
             procs += build_one_arch(args, tmpdir, srcdir, family, arch)
@@ -413,7 +413,12 @@ def doit(args, tmpdir: str) -> int:
     logging.info("Generating splitconfigs")
     for family in families:
         do_splitconfig(
-            tmpdir, srcdir, outdir, family, family_arches(family), save_configs
+            tmpdir,
+            srcdir,
+            outdir,
+            family,
+            family_arches(srcdir, family),
+            save_configs,
         )
 
     if args.mode == "checkconfig":
