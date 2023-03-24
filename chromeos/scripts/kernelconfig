@@ -51,7 +51,7 @@ def splitconfig(srcdir: str) -> Dict[str, str]:
 
         allconfigs[config] = set()
 
-        for line in open(os.path.join(srcdir, config)):
+        for line in open(os.path.join(srcdir, config), encoding="utf-8"):
             m = re.match(r"#*\s*CONFIG_(\w+)[\s=](.*)$", line)
             if not m:
                 continue
@@ -195,8 +195,8 @@ def checkconfig(srcdir: str, outdir: str) -> int:
         relative = os.path.relpath(src_config, srcdir)
         out_config = os.path.join(outdir, relative)
         logging.debug("Compare %s to %s", src_config, out_config)
-        before = open(src_config, "r").readlines()
-        after = open(out_config, "r").readlines()
+        before = open(src_config, "r", encoding="utf-8").readlines()
+        after = open(out_config, "r", encoding="utf-8").readlines()
 
         if before == after:
             continue
@@ -237,14 +237,16 @@ def build_one_arch(
 
         # Merge base.config, common.config, <flavour>.flavour.config
         conf = "\n".join(
-            open(os.path.join(srcdir, f)).read()
+            open(os.path.join(srcdir, f), encoding="utf-8").read()
             for f in [
                 config_base_dir + "/base.config",
                 config_arch_dir + "/common.config",
                 config_arch_dir + "/" + flavour,
             ]
         )
-        open(os.path.join(builddir, ".config"), "w").write(conf)
+        open(os.path.join(builddir, ".config"), "w", encoding="utf-8").write(
+            conf
+        )
 
         interactive = False
         if args.mode == "genconfig":
@@ -321,27 +323,35 @@ def do_splitconfig(
         # immediately.
         for config, contents in splitconfig(dest).items():
             if config == "common.config":
-                open(os.path.join(tmpdir, family, arch + ".config"), "w").write(
-                    contents
-                )
+                open(
+                    os.path.join(tmpdir, family, arch + ".config"),
+                    "w",
+                    encoding="utf-8",
+                ).write(contents)
             else:
-                open(os.path.join(outdir, family_arch_dir, config), "w").write(
-                    contents
-                )
+                open(
+                    os.path.join(outdir, family_arch_dir, config),
+                    "w",
+                    encoding="utf-8",
+                ).write(contents)
 
     # Find cross-arch common items; common ones go to base.config, and unique
     # ones to <arch>/common.config.
     for config, contents in splitconfig(tmpdir + "/" + family).items():
         if config == "common.config":
             open(
-                os.path.join(outdir, family_cfg_dir, "base.config"), "w"
+                os.path.join(outdir, family_cfg_dir, "base.config"),
+                "w",
+                encoding="utf-8",
             ).write(contents)
         else:
             assert config.endswith(".config")
             # Python3.9: arch = config.removesuffix('.config')
             arch = config[: -len(".config")]
             open(
-                os.path.join(outdir, family_cfg_dir, arch, "common.config"), "w"
+                os.path.join(outdir, family_cfg_dir, arch, "common.config"),
+                "w",
+                encoding="utf-8",
             ).write(contents)
 
 
