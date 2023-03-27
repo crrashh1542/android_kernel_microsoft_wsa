@@ -109,7 +109,7 @@ struct msm_dsi_host {
 
 	void __iomem *ctrl_base;
 	phys_addr_t ctrl_size;
-	struct regulator_bulk_data supplies[DSI_DEV_REGULATOR_MAX];
+	struct regulator_bulk_data *supplies;
 
 	int num_bus_clks;
 	struct clk_bulk_data bus_clks[DSI_BUS_CLK_MAX];
@@ -145,7 +145,6 @@ struct msm_dsi_host {
 
 	u32 err_work_state;
 	struct work_struct err_work;
-	struct work_struct hpd_work;
 	struct workqueue_struct *workqueue;
 
 	/* DSI 6G TX buffer*/
@@ -205,9 +204,6 @@ static inline void dsi_write(struct msm_dsi_host *msm_host, u32 reg, u32 data)
 	msm_writel(data, msm_host->ctrl_base + reg);
 }
 
-static int dsi_host_regulator_enable(struct msm_dsi_host *msm_host);
-static void dsi_host_regulator_disable(struct msm_dsi_host *msm_host);
-
 static const struct msm_dsi_cfg_handler *dsi_get_config(
 						struct msm_dsi_host *msm_host)
 {
@@ -256,76 +252,6 @@ exit:
 static inline struct msm_dsi_host *to_msm_dsi_host(struct mipi_dsi_host *host)
 {
 	return container_of(host, struct msm_dsi_host, base);
-}
-
-static void dsi_host_regulator_disable(struct msm_dsi_host *msm_host)
-{
-	struct regulator_bulk_data *s = msm_host->supplies;
-	const struct dsi_reg_entry *regs = msm_host->cfg_hnd->cfg->reg_cfg.regs;
-	int num = msm_host->cfg_hnd->cfg->reg_cfg.num;
-	int i;
-
-	DBG("");
-	for (i = num - 1; i >= 0; i--)
-		if (regs[i].disable_load >= 0)
-			regulator_set_load(s[i].consumer,
-					   regs[i].disable_load);
-
-	regulator_bulk_disable(num, s);
-}
-
-static int dsi_host_regulator_enable(struct msm_dsi_host *msm_host)
-{
-	struct regulator_bulk_data *s = msm_host->supplies;
-	const struct dsi_reg_entry *regs = msm_host->cfg_hnd->cfg->reg_cfg.regs;
-	int num = msm_host->cfg_hnd->cfg->reg_cfg.num;
-	int ret, i;
-
-	DBG("");
-	for (i = 0; i < num; i++) {
-		if (regs[i].enable_load >= 0) {
-			ret = regulator_set_load(s[i].consumer,
-						 regs[i].enable_load);
-			if (ret < 0) {
-				pr_err("regulator %d set op mode failed, %d\n",
-					i, ret);
-				goto fail;
-			}
-		}
-	}
-
-	ret = regulator_bulk_enable(num, s);
-	if (ret < 0) {
-		pr_err("regulator enable failed, %d\n", ret);
-		goto fail;
-	}
-
-	return 0;
-
-fail:
-	for (i--; i >= 0; i--)
-		regulator_set_load(s[i].consumer, regs[i].disable_load);
-	return ret;
-}
-
-static int dsi_regulator_init(struct msm_dsi_host *msm_host)
-{
-	struct regulator_bulk_data *s = msm_host->supplies;
-	const struct dsi_reg_entry *regs = msm_host->cfg_hnd->cfg->reg_cfg.regs;
-	int num = msm_host->cfg_hnd->cfg->reg_cfg.num;
-	int i, ret;
-
-	for (i = 0; i < num; i++)
-		s[i].supply = regs[i].name;
-
-	ret = devm_regulator_bulk_get(&msm_host->pdev->dev, num, s);
-	if (ret < 0) {
-		pr_err("%s: failed to init regulator, ret=%d\n",
-						__func__, ret);
-		return ret;
-	}
-
-	return 0;
 }
 
 int dsi_clk_init_v2(struct msm_dsi_host *msm_host)
@@ -1503,14 +1429,6 @@ static int dsi_cmds2buf_tx(struct msm_dsi_host *msm_host,
 	return len;
 }
 
-static void dsi_hpd_worker(struct work_struct *work)
-{
-	struct msm_dsi_host *msm_host =
-		container_of(work, struct msm_dsi_host, hpd_work);
-
-	drm_helper_hpd_irq_event(msm_host->dev);
-}
-
 static void dsi_err_worker(struct work_struct *work)
 {
 	struct msm_dsi_host *msm_host =
@@ -1702,8 +1620,6 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 		return ret;
 
 	DBG("id=%d", msm_host->id);
-	if (msm_host->dev)
-		queue_work(msm_host->workqueue, &msm_host->hpd_work);
 
 	return 0;
 }
@@ -1716,8 +1632,6 @@ static int dsi_host_detach(struct mipi_dsi_host *host,
 	dsi_dev_detach(msm_host->pdev);
 
 	DBG("id=%d", msm_host->id);
-	if (msm_host->dev)
-		queue_work(msm_host->workqueue, &msm_host->hpd_work);
 
 	return 0;
 }
@@ -1971,6 +1885,7 @@ int msm_dsi_host_init(struct msm_dsi *msm_dsi)
 {
 	struct msm_dsi_host *msm_host = NULL;
 	struct platform_device *pdev = msm_dsi->pdev;
+	const struct msm_dsi_config *cfg;
 	int ret;
 
 	msm_host = devm_kzalloc(&pdev->dev, sizeof(*msm_host), GFP_KERNEL);
@@ -2003,6 +1918,7 @@ int msm_dsi_host_init(struct msm_dsi *msm_dsi)
 		pr_err("%s: get config failed\n", __func__);
 		goto fail;
 	}
+	cfg = msm_host->cfg_hnd->cfg;
 
 	msm_host->id = dsi_host_get_id(msm_host);
 	if (msm_host->id < 0) {
@@ -2012,13 +1928,13 @@ int msm_dsi_host_init(struct msm_dsi *msm_dsi)
 	}
 
 	/* fixup base address by io offset */
-	msm_host->ctrl_base += msm_host->cfg_hnd->cfg->io_offset;
+	msm_host->ctrl_base += cfg->io_offset;
 
-	ret = dsi_regulator_init(msm_host);
-	if (ret) {
-		pr_err("%s: regulator init failed\n", __func__);
+	ret = devm_regulator_bulk_get_const(&pdev->dev, cfg->num_regulators,
+					    cfg->regulator_data,
+					    &msm_host->supplies);
+	if (ret)
 		goto fail;
-	}
 
 	ret = dsi_clk_init(msm_host);
 	if (ret) {
@@ -2072,7 +1988,6 @@ int msm_dsi_host_init(struct msm_dsi *msm_dsi)
 		return -ENOMEM;
 
 	INIT_WORK(&msm_host->err_work, dsi_err_worker);
-	INIT_WORK(&msm_host->hpd_work, dsi_hpd_worker);
 
 	msm_dsi->id = msm_host->id;
 
@@ -2488,7 +2403,8 @@ int msm_dsi_host_power_on(struct mipi_dsi_host *host,
 
 	msm_dsi_sfpb_config(msm_host, true);
 
-	ret = dsi_host_regulator_enable(msm_host);
+	ret = regulator_bulk_enable(msm_host->cfg_hnd->cfg->num_regulators,
+				    msm_host->supplies);
 	if (ret) {
 		pr_err("%s:Failed to enable vregs.ret=%d\n",
 			__func__, ret);
@@ -2528,7 +2444,8 @@ fail_disable_clk:
 	cfg_hnd->ops->link_clk_disable(msm_host);
 	pm_runtime_put(&msm_host->pdev->dev);
 fail_disable_reg:
-	dsi_host_regulator_disable(msm_host);
+	regulator_bulk_disable(msm_host->cfg_hnd->cfg->num_regulators,
+			       msm_host->supplies);
 unlock_ret:
 	mutex_unlock(&msm_host->dev_mutex);
 	return ret;
@@ -2555,7 +2472,8 @@ int msm_dsi_host_power_off(struct mipi_dsi_host *host)
 	cfg_hnd->ops->link_clk_disable(msm_host);
 	pm_runtime_put(&msm_host->pdev->dev);
 
-	dsi_host_regulator_disable(msm_host);
+	regulator_bulk_disable(msm_host->cfg_hnd->cfg->num_regulators,
+			       msm_host->supplies);
 
 	msm_dsi_sfpb_config(msm_host, false);
 
