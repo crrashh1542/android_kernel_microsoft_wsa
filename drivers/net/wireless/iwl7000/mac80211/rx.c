@@ -2417,8 +2417,7 @@ static int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 		return 0;
 
 	/* drop unicast protected dual (that wasn't protected) */
-	if (is_unicast_ether_addr(mgmt->da) &&
-	    ieee80211_is_action(fc) &&
+	if (ieee80211_is_action(fc) &&
 	    mgmt->u.action.category == WLAN_CATEGORY_PROTECTED_DUAL_OF_ACTION)
 		return -EACCES;
 
