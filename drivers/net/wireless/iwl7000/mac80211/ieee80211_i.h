@@ -2615,4 +2615,8 @@ ieee80211_eht_cap_ie_to_sta_eht_cap(struct ieee80211_sub_if_data *sdata,
 				    const struct ieee80211_eht_cap_elem *eht_cap_ie_elem,
 				    u8 eht_cap_len,
 				    struct link_sta_info *link_sta);
+
+#if IS_ENABLED(CONFIG_KUNIT)
+int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx);
+#endif
 #endif /* IEEE80211_I_H */

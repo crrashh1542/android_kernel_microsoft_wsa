@@ -19,6 +19,7 @@
 #include <linux/export.h>
 #include <linux/kcov.h>
 #include <linux/bitops.h>
+#include <kunit/visibility.h>
 #include <net/mac80211.h>
 #include <net/ieee80211_radiotap.h>
 #include <asm/unaligned.h>
@@ -2403,7 +2404,8 @@ static int ieee80211_drop_unencrypted(struct ieee80211_rx_data *rx, __le16 fc)
 	return 0;
 }
 
-static int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
+VISIBLE_IF_KUNIT int
+ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(rx->skb);
 	struct ieee80211_mgmt *mgmt = (void *)rx->skb->data;
@@ -2465,6 +2467,7 @@ static int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(ieee80211_drop_unencrypted_mgmt);
 
 static int
 __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
