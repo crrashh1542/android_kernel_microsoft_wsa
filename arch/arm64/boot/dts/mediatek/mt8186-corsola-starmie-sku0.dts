@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2023 Google LLC
+ *
+ * Panel ID: 0x8 (Starry-Ilitek9882t)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x08
+ * Panel ID: 0x3 (K&D-Ili9882t)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x03
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-starmie.dtsi"
+
+/ {
+	model = "Google Starmie sku0/unprovisioned board";
+	compatible = "google,starmie-sku0", "google,starmie-sku2147483640",
+		     "google,starmie-sku2", "google,starmie-sku2147483635",
+		     "google,starmie-sku3", "google,starmie", "mediatek,mt8186";
+};
+
+&panel {
+	compatible = "starry,ili9882t";
+};

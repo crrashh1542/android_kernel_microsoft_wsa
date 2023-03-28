@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2023 Google LLC
+ *
+ * Panel ID: 0xA (Starry-Himax83102)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x0A
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-starmie.dtsi"
+
+/ {
+	model = "Google Starmie sku1/unprovisioned board";
+	compatible = "google,starmie-sku1", "google,starmie-sku2147483642",
+		     "google,starmie", "mediatek,mt8186";
+};
+
+&panel {
+	compatible = "starry,himax83102-j02";
+};
+
+&i2c1 {
+  /delete-node/ touchscreen@41;
+  touchscreen_himax: touchscreen@4f {
+		status = "okay";
+
+		compatible = "hid-over-i2c";
+		reg = <0x4f>;
+		interrupt-parent = <&pio>;
+		interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		vdd-supply = <&mt6366_vio18_reg>;
+		panel = <&panel>;
+		post-power-on-delay-ms = <450>;
+		hid-descr-addr = <0x0001>;
+  };
+};
