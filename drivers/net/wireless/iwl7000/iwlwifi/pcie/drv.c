@@ -1534,6 +1534,17 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	trans_pcie = IWL_TRANS_GET_PCIE_TRANS(iwl_trans);
 
+#if IS_ENABLED(CPTCFG_IWLMVM)
+	/* BnJ and SnJ devices have the same device id 0x2726; they can be
+	 * differentiated by MAC type. SnJ device is registered by default, use
+	 * MAC type here to distinguish between them. In case it is GL MAC type,
+	 * replace trans_cfg accordingly.
+	 */
+	if (pdev->device == 0x2726 &&
+	    (CSR_HW_REV_TYPE(iwl_trans->hw_rev) == IWL_CFG_MAC_TYPE_GL))
+		iwl_trans->trans_cfg = &iwl_bz_trans_cfg;
+#endif
+
 	/*
 	 * Let's try to grab NIC access early here. Sometimes, NICs may
 	 * fail to initialize, and if that happens it's better if we see
