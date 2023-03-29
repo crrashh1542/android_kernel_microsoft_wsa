@@ -2614,8 +2614,4 @@ ieee80211_eht_cap_ie_to_sta_eht_cap(struct ieee80211_sub_if_data *sdata,
 				    const struct ieee80211_eht_cap_elem *eht_cap_ie_elem,
 				    u8 eht_cap_len,
 				    struct link_sta_info *link_sta);
-
-void ieee80211_defragment_element(struct ieee802_11_elems *elems,
-				  void **elem_ptr, size_t *len,
-				  size_t total_len, u8 frag_id);
 #endif /* IEEE80211_I_H */
