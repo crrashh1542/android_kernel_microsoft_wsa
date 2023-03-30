@@ -750,9 +750,11 @@ void kvm_timer_vcpu_init(struct kvm_vcpu *vcpu)
 	vtimer->offset.vm_offset = &vcpu->kvm->arch.timer_data.voffset;
 	ptimer->vcpu = vcpu;
 
-	/* Synchronize cntvoff across all vtimers of a VM. */
-	timer_set_offset(vtimer, kvm_phys_timer_read());
-	timer_set_offset(ptimer, 0);
+	/* Synchronize offsets across timers of a VM if not already provided */
+	if (!vcpu->kvm->arch.vm_counter_offset) {
+		timer_set_offset(vtimer, kvm_phys_timer_read());
+		timer_set_offset(ptimer, 0);
+	}
 
 	hrtimer_init(&timer->bg_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_HARD);
 	timer->bg_timer.function = kvm_bg_timer_expire;
@@ -788,8 +790,10 @@ int kvm_arm_timer_set_reg(struct kvm_vcpu *vcpu, u64 regid, u64 value)
 		kvm_arm_timer_write(vcpu, timer, TIMER_REG_CTL, value);
 		break;
 	case KVM_REG_ARM_TIMER_CNT:
-		timer = vcpu_vtimer(vcpu);
-		timer_set_offset(timer, kvm_phys_timer_read() - value);
+		if (!vcpu->kvm->arch.vm_counter_offset) {
+			timer = vcpu_vtimer(vcpu);
+			timer_set_offset(timer, kvm_phys_timer_read() - value);
+		}
 		break;
 	case KVM_REG_ARM_TIMER_CVAL:
 		timer = vcpu_vtimer(vcpu);
@@ -798,6 +802,12 @@ int kvm_arm_timer_set_reg(struct kvm_vcpu *vcpu, u64 regid, u64 value)
 	case KVM_REG_ARM_PTIMER_CTL:
 		timer = vcpu_ptimer(vcpu);
 		kvm_arm_timer_write(vcpu, timer, TIMER_REG_CTL, value);
+		break;
+	case KVM_REG_ARM_PTIMER_CNT:
+		if (!vcpu->kvm->arch.vm_counter_offset) {
+			timer = vcpu_ptimer(vcpu);
+			timer_set_offset(timer, kvm_phys_timer_read() - value);
+		}
 		break;
 	case KVM_REG_ARM_PTIMER_CVAL:
 		timer = vcpu_ptimer(vcpu);
@@ -1343,4 +1353,34 @@ int kvm_arm_timer_has_attr(struct kvm_vcpu *vcpu, struct kvm_device_attr *attr)
 	}
 
 	return -ENXIO;
+}
+
+int kvm_vm_ioctl_set_counter_offset(struct kvm *kvm,
+				    struct kvm_arm_counter_offset *offset)
+{
+	int ret = 0;
+
+	if (offset->reserved)
+		return -EINVAL;
+
+	mutex_lock(&kvm->lock);
+
+	if (lock_all_vcpus(kvm)) {
+		kvm->arch.vm_counter_offset = 1;
+
+		/*
+		 * If userspace decides to set the offset using this
+		 * API rather than merely restoring the counter
+		 * values, the offset applies to the virtual view only.
+		 */
+		kvm->arch.timer_data.voffset = offset->counter_offset;
+
+		unlock_all_vcpus(kvm);
+	} else {
+		ret = -EBUSY;
+	}
+
+	mutex_unlock(&kvm->lock);
+
+	return ret;
 }
