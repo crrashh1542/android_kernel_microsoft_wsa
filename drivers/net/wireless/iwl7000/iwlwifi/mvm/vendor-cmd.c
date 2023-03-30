@@ -418,7 +418,7 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 
 	if (mvm->trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_AX210 &&
 	    mvm->trans->trans_cfg->integrated) {
-		if (iwl_rfi_supported(mvm))
+		if (iwl_rfi_ddr_supported(mvm))
 			capa = IWL_MVM_RFIM_CAPA_ALL;
 		else
 			capa = IWL_MVM_RFIM_CAPA_CNVI;
@@ -497,7 +497,7 @@ static int iwl_vendor_rfim_set_table(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_rfi_lut_entry rfim_table[IWL_RFI_LUT_SIZE] = {};
+	struct iwl_rfi_lut_entry *rfi_ddr_table = NULL;
 	struct nlattr **tb;
 	struct nlattr *attr;
 	int rem, err = 0;
@@ -512,11 +512,18 @@ static int iwl_vendor_rfim_set_table(struct wiphy *wiphy,
 		goto out;
 	}
 
+	rfi_ddr_table = kzalloc(sizeof(*rfi_ddr_table) * IWL_RFI_DDR_LUT_SIZE,
+				GFP_KERNEL);
+	if (!rfi_ddr_table) {
+		err = -ENOMEM;
+		goto out;
+	}
+
 	nla_for_each_nested(attr, tb[IWL_MVM_VENDOR_ATTR_RFIM_INFO], rem) {
 		switch (nla_type(attr)) {
 		case IWL_MVM_VENDOR_ATTR_RFIM_FREQ:
 			row_idx++;
-			rfim_table[row_idx].freq =
+			rfi_ddr_table[row_idx].freq =
 				cpu_to_le16(nla_get_u16(attr));
 			break;
 		case IWL_MVM_VENDOR_ATTR_RFIM_CHANNELS:
@@ -524,16 +531,16 @@ static int iwl_vendor_rfim_set_table(struct wiphy *wiphy,
 				err = -EINVAL;
 				goto out;
 			}
-			memcpy(rfim_table[row_idx].channels, nla_data(attr),
-			       ARRAY_SIZE(rfim_table[row_idx].channels));
+			memcpy(rfi_ddr_table[row_idx].channels, nla_data(attr),
+			       ARRAY_SIZE(rfi_ddr_table[row_idx].channels));
 			break;
 		case IWL_MVM_VENDOR_ATTR_RFIM_BANDS:
 			if (row_idx < 0) {
 				err = -EINVAL;
 				goto out;
 			}
-			memcpy(rfim_table[row_idx].bands, nla_data(attr),
-			       ARRAY_SIZE(rfim_table[row_idx].bands));
+			memcpy(rfi_ddr_table[row_idx].bands, nla_data(attr),
+			       ARRAY_SIZE(rfi_ddr_table[row_idx].bands));
 			break;
 		default:
 			IWL_ERR(mvm, "Invalid attribute %d\n", nla_type(attr));
@@ -542,11 +549,12 @@ static int iwl_vendor_rfim_set_table(struct wiphy *wiphy,
 		}
 	}
 
-	err = iwl_rfi_send_config_cmd(mvm, rfim_table);
+	err = iwl_rfi_send_config_cmd(mvm, rfi_ddr_table);
 	if (err)
 		IWL_ERR(mvm, "Failed to send rfi table to FW, error %d\n", err);
 
 out:
+	kfree(rfi_ddr_table);
 	kfree(tb);
 	return err;
 }

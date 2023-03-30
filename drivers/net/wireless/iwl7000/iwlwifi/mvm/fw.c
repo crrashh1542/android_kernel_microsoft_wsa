@@ -794,6 +794,7 @@ static int iwl_run_unified_mvm_ucode(struct iwl_mvm *mvm)
 
 	mvm->rfkill_safe_init_done = true;
 
+	iwl_rfi_send_config_cmd(mvm, NULL);
 	return 0;
 
 error:
@@ -1319,28 +1320,57 @@ static void iwl_mvm_tas_init(struct iwl_mvm *mvm)
 		IWL_DEBUG_RADIO(mvm, "failed to send TAS_CONFIG (%d)\n", ret);
 }
 
-static u8 iwl_mvm_eval_dsm_rfi(struct iwl_mvm *mvm)
+u8 iwl_mvm_eval_dsm_rfi_dlvr(struct iwl_mvm *mvm)
 {
 	u8 value;
 
-	int ret = iwl_acpi_get_dsm_u8(mvm->fwrt.dev, 0, DSM_RFI_FUNC_ENABLE,
-				      &iwl_rfi_guid, &value);
+	int ret = iwl_acpi_get_dsm_u8(mvm->fwrt.dev, 0,
+				      DSM_FUNC_RFI_DLVR_CONFIG, &iwl_guid,
+				      &value);
 	if (ret < 0) {
-		IWL_DEBUG_RADIO(mvm, "Failed to get DSM RFI, ret=%d\n", ret);
+		IWL_DEBUG_RADIO(mvm, "Failed to get DSM RFI DLVR, ret=%d\n",
+				ret);
 
-	} else if (value >= DSM_VALUE_RFI_MAX) {
-		IWL_DEBUG_RADIO(mvm, "DSM RFI got invalid value, value=%d\n",
+	} else if (value >= DSM_VALUE_RFI_DLVR_MAX) {
+		IWL_DEBUG_RADIO(mvm,
+				"DSM RFI DLVR got invalid value, value=%d\n",
 				value);
 
-	} else if (value == DSM_VALUE_RFI_ENABLE) {
-		IWL_DEBUG_RADIO(mvm, "DSM RFI is evaluated to enable\n");
-		return DSM_VALUE_RFI_ENABLE;
+	} else if (value == DSM_VALUE_RFI_DLVR_ENABLE) {
+		IWL_DEBUG_RADIO(mvm, "DSM RFI DLVR is evaluated to enable\n");
+		return DSM_VALUE_RFI_DLVR_ENABLE;
 	}
 
-	IWL_DEBUG_RADIO(mvm, "DSM RFI is disabled\n");
+	IWL_DEBUG_RADIO(mvm, "DSM RFI DLVR is disabled\n");
 
 	/* default behaviour is disabled */
-	return DSM_VALUE_RFI_DISABLE;
+	return DSM_VALUE_RFI_DLVR_DISABLE;
+}
+
+u8 iwl_mvm_eval_dsm_rfi_ddr(struct iwl_mvm *mvm)
+{
+	u8 value;
+
+	int ret = iwl_acpi_get_dsm_u8(mvm->fwrt.dev, 0, DSM_RFI_DDR_FUNC_ENABLE,
+				      &iwl_rfi_guid, &value);
+	if (ret < 0) {
+		IWL_DEBUG_RADIO(mvm, "Failed to get DSM RFI DDR, ret=%d\n",
+				ret);
+
+	} else if (value >= DSM_VALUE_RFI_DDR_MAX) {
+		IWL_DEBUG_RADIO(mvm,
+				"DSM RFI DDR got invalid value, value=%d\n",
+				value);
+
+	} else if (value == DSM_VALUE_RFI_DDR_ENABLE) {
+		IWL_DEBUG_RADIO(mvm, "DSM RFI DDR is evaluated to enable\n");
+		return DSM_VALUE_RFI_DDR_ENABLE;
+	}
+
+	IWL_DEBUG_RADIO(mvm, "DSM RFI DDR is disabled\n");
+
+	/* default behaviour is disabled */
+	return DSM_VALUE_RFI_DDR_DISABLE;
 }
 
 static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
@@ -1525,9 +1555,14 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 {
 }
 
-static u8 iwl_mvm_eval_dsm_rfi(struct iwl_mvm *mvm)
+u8 iwl_mvm_eval_dsm_rfi_ddr(struct iwl_mvm *mvm)
 {
-	return DSM_VALUE_RFI_DISABLE;
+	return DSM_VALUE_RFI_DDR_DISABLE;
+}
+
+u8 iwl_mvm_eval_dsm_rfi_dlvr(struct iwl_mvm *mvm)
+{
+	return DSM_VALUE_RFI_DLVR_DISABLE;
 }
 
 void iwl_mvm_get_acpi_tables(struct iwl_mvm *mvm)
@@ -1924,11 +1959,6 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 
 	iwl_mvm_tas_init(mvm);
 	iwl_mvm_leds_sync(mvm);
-
-	if (iwl_rfi_supported(mvm)) {
-		if (iwl_mvm_eval_dsm_rfi(mvm) == DSM_VALUE_RFI_ENABLE)
-			iwl_rfi_send_config_cmd(mvm, NULL);
-	}
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	iwl_mvm_send_system_features_control(mvm);

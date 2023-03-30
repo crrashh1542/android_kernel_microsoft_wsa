@@ -1262,6 +1262,8 @@ struct iwl_mvm {
 
 	struct iwl_time_sync_data time_sync;
 
+	/* Firmware RFI state &enum iwl_rfi_support_reason */
+	u32 fw_rfi_state;
 	bool pldr_sync;
 };
 
@@ -2507,12 +2509,13 @@ u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
 
 /* 11ax Softap Test Mode */
 
-bool iwl_rfi_supported(struct iwl_mvm *mvm);
+bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm);
+bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm);
 int iwl_rfi_send_config_cmd(struct iwl_mvm *mvm,
 			    struct iwl_rfi_lut_entry *rfi_table);
 struct iwl_rfi_freq_table_resp_cmd *iwl_rfi_get_freq_table(struct iwl_mvm *mvm);
-void iwl_rfi_deactivate_notif_handler(struct iwl_mvm *mvm,
-				      struct iwl_rx_cmd_buffer *rxb);
+void iwl_rfi_support_notif_handler(struct iwl_mvm *mvm,
+				   struct iwl_rx_cmd_buffer *rxb);
 
 static inline u8 iwl_mvm_phy_band_from_nl80211(enum nl80211_band band)
 {
@@ -2818,4 +2821,6 @@ int iwl_mvm_set_hw_timestamp(struct ieee80211_hw *hw,
 			     struct cfg80211_set_hw_timestamp *hwts);
 int iwl_mvm_update_mu_groups(struct iwl_mvm *mvm, struct ieee80211_vif *vif);
 void iwl_mvm_set_twt_testmode(struct iwl_mvm *mvm);
+u8 iwl_mvm_eval_dsm_rfi_ddr(struct iwl_mvm *mvm);
+u8 iwl_mvm_eval_dsm_rfi_dlvr(struct iwl_mvm *mvm);
 #endif /* __IWL_MVM_H__ */

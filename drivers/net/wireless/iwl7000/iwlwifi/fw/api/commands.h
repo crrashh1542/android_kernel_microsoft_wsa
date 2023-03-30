@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 #ifndef __iwl_fw_api_commands_h__
 #define __iwl_fw_api_commands_h__
@@ -629,9 +629,9 @@ enum iwl_system_subcmd_ids {
 	SYSTEM_FEATURES_CONTROL_CMD = 0xd,
 
 	/**
-	 * @RFI_DEACTIVATE_NOTIF: &struct iwl_rfi_deactivate_notif
+	 * @RFI_SUPPORT_NOTIF: &struct iwl_rfi_support_notif
 	 */
-	RFI_DEACTIVATE_NOTIF = 0xff,
+	RFI_SUPPORT_NOTIF = 0xff,
 };
 
 /**
