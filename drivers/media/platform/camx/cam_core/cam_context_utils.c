@@ -308,6 +308,7 @@ int32_t cam_context_config_dev_to_hw(
 	if ((len < sizeof(struct cam_packet)) ||
 		(cmd->offset >= (len - sizeof(struct cam_packet)))) {
 		CAM_ERR(CAM_CTXT, "Not enough buf");
+		cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 		return -EINVAL;
 
 	}
@@ -328,6 +329,8 @@ int32_t cam_context_config_dev_to_hw(
 			ctx->dev_name, ctx->ctx_id);
 		rc = -EFAULT;
 	}
+
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 
 	return rc;
 }
@@ -501,9 +504,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 		}
 	}
 
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_CTXT, "[%s][%d] Can not put packet address",
-			ctx->dev_name, ctx->ctx_id);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 
 	return rc;
 
@@ -514,9 +515,7 @@ put_ref:
 				req->out_map_entries[i].sync_id);
 	}
 free_cpu_buf:
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_CTXT, "[%s][%d] Can not put packet address",
-			ctx->dev_name, ctx->ctx_id);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
 	spin_lock(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
@@ -1073,12 +1072,20 @@ static int cam_context_dump_context(struct cam_context *ctx,
 			dump_args->buf_handle, buf_len, rc);
 		return rc;
 	}
+	if (dump_args->offset >= buf_len) {
+		CAM_WARN(CAM_CTXT, "dump buffer overshoot offset %zu len %zu",
+			dump_args->offset, buf_len);
+		rc = -ENOSPC;
+		goto end;
+	}
+
 	remain_len = buf_len - dump_args->offset;
 	min_len =  2 * (sizeof(struct cam_context_dump_header) +
 		    CAM_CONTEXT_DUMP_TAG_MAX_LEN);
 	if (remain_len < min_len) {
 		CAM_ERR(CAM_CTXT, "dump buffer exhaust %d %d",
 			remain_len, min_len);
+		rc = -ENOSPC;
 		goto end;
 	}
 	dst = (char *)cpu_addr + dump_args->offset;
@@ -1106,10 +1113,7 @@ static int cam_context_dump_context(struct cam_context *ctx,
 	dump_args->offset += hdr->size +
 		sizeof(struct cam_context_dump_header);
 end:
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
-	if (rc)
-		CAM_ERR(CAM_CTXT, "Cpu put failed handle %u",
-			dump_args->buf_handle);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 

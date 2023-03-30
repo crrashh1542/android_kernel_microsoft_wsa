@@ -326,7 +326,10 @@ static int amdgpu_ctx_init(struct amdgpu_ctx_mgr *mgr, int32_t priority,
 	if (r)
 		return r;
 
-	ctx->stable_pstate = current_stable_pstate;
+	if (mgr->adev->pm.stable_pstate_ctx)
+		ctx->stable_pstate = mgr->adev->pm.stable_pstate_ctx->stable_pstate;
+	else
+		ctx->stable_pstate = current_stable_pstate;
 
 	return 0;
 }
@@ -401,7 +404,7 @@ static void amdgpu_ctx_fini(struct kref *ref)
 		}
 	}
 
-	if (drm_dev_enter(&adev->ddev, &idx)) {
+	if (drm_dev_enter(adev_to_drm(adev), &idx)) {
 		amdgpu_ctx_set_stable_pstate(ctx, ctx->stable_pstate);
 		drm_dev_exit(idx);
 	}
@@ -846,7 +849,7 @@ void amdgpu_ctx_mgr_init(struct amdgpu_ctx_mgr *mgr,
 
 	mgr->adev = adev;
 	mutex_init(&mgr->lock);
-	idr_init(&mgr->ctx_handles);
+	idr_init_base(&mgr->ctx_handles, 1);
 
 	for (i = 0; i < AMDGPU_HW_IP_NUM; ++i)
 		atomic64_set(&mgr->time_spend[i], 0);

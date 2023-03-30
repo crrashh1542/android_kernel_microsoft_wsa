@@ -183,9 +183,7 @@ static int cam_isp_update_dual_config(
 	}
 
 put_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
-		CAM_WARN(CAM_UTIL, "Failed to put buf: 0x%x",
-			cmd_desc->mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 
 	return rc;
 }
@@ -964,4 +962,3 @@ int cam_isp_add_reg_update(
 
 	return rc;
 }
-

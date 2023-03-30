@@ -3562,9 +3562,7 @@ static int cam_icp_mgr_put_cmd_buf(struct cam_packet *packet)
 
 	for (i = 0; i < packet->num_cmd_buf; i++) {
 		if (cmd_desc[i].type == CAM_CMD_BUF_FW) {
-			if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-				CAM_WARN(CAM_ICP, "put cmd buf failed: 0x%x",
-					cmd_desc[i].mem_handle);
+			cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 		}
 	}
 
@@ -3695,10 +3693,7 @@ static int cam_icp_mgr_process_cmd_desc(struct cam_icp_hw_mgr *hw_mgr,
 rel_cmd_buf:
 	for (i = num_cmd_buf; i >= 0; i--) {
 		if (cmd_desc[i].type == CAM_CMD_BUF_FW) {
-			if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle)) {
-				CAM_WARN(CAM_ICP, "put cmd buf failed 0x%x",
-					cmd_desc[i].mem_handle);
-			}
+			cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 		}
 	}
 
@@ -4544,6 +4539,13 @@ hw_dump:
 			dump_args->buf_handle, icp_dump_args.buf_len, rc);
 		return rc;
 	}
+	if (icp_dump_args.buf_len <= dump_args->offset) {
+		CAM_WARN(CAM_ICP, "dump buffer overshoot len %zu offset %zu",
+			icp_dump_args.buf_len, dump_args->offset);
+		rc = -ENOSPC;
+		goto end;
+	}
+
 	remain_len = icp_dump_args.buf_len - dump_args->offset;
 	min_len = 2 * (sizeof(struct cam_icp_dump_header) +
 		    CAM_ICP_DUMP_TAG_MAX_LEN);
@@ -4574,7 +4576,7 @@ hw_dump:
 		sizeof(struct cam_icp_hw_dump_args));
 	dump_args->offset = icp_dump_args.offset;
 end:
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 
@@ -5586,4 +5588,3 @@ void cam_icp_hw_mgr_deinit(void)
 {
 	crm_timer_cache_destroy();
 }
-

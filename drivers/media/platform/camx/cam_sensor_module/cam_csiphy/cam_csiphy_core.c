@@ -256,14 +256,10 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		cam_csiphy_update_secure_info(csiphy_dev,
 			cam_cmd_csiphy_info, cfg_dev);
 
-	if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
-		CAM_WARN(CAM_CSIPHY, "Failed to put cmd buffer: 0x%x",
-			cmd_desc->mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 
 rel_pkt_buf:
-	if (cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle))
-		CAM_WARN(CAM_CSIPHY, "Failed to put packet Mem address: 0x%llx",
-			 cfg_dev->packet_handle);
+	cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle);
 
 	return rc;
 }
