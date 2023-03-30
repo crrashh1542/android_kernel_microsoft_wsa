@@ -2969,11 +2969,8 @@ int iwl_mvm_sta_rx_agg(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 
 		/* synchronize all rx queues so we can safely delete */
 		iwl_mvm_free_reorder(mvm, baid_data);
-#if LINUX_VERSION_IS_GEQ(6,2,1)
 		timer_shutdown_sync(&baid_data->session_timer);
-#else
-		del_timer_sync(&baid_data->session_timer);
-#endif
+
 		RCU_INIT_POINTER(mvm->baid_map[baid], NULL);
 		kfree_rcu(baid_data, rcu_head);
 		IWL_DEBUG_HT(mvm, "BAID %d is free\n", baid);
