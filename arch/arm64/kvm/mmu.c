@@ -112,6 +112,18 @@ static void kvm_host_put_page(void *addr)
 	put_page(virt_to_page(addr));
 }
 
+static void kvm_s2_rcu_put_page(struct rcu_head *head)
+{
+	put_page(container_of(head, struct page, rcu_head));
+}
+
+static void kvm_s2_put_page_rcu(void *addr)
+{
+	struct page *page = virt_to_page(addr);
+
+	call_rcu(&page->rcu_head, kvm_s2_rcu_put_page);
+}
+
 static int kvm_host_page_count(void *addr)
 {
 	return page_count(virt_to_page(addr));
@@ -505,6 +517,7 @@ static struct kvm_pgtable_mm_ops kvm_s2_mm_ops = {
 	.free_pages_exact	= free_pages_exact,
 	.get_page		= kvm_host_get_page,
 	.put_page		= kvm_host_put_page,
+	.put_page_rcu		= kvm_s2_put_page_rcu,
 	.page_count		= kvm_host_page_count,
 	.phys_to_virt		= kvm_host_va,
 	.virt_to_phys		= kvm_host_pa,
@@ -1403,6 +1416,70 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 					   range->start << PAGE_SHIFT);
 }
 
+struct test_clear_young_arg {
+	struct kvm_gfn_range *range;
+	gfn_t lsb_gfn;
+	unsigned long *bitmap;
+};
+
+static int stage2_test_clear_young(u64 addr, u64 end, u32 level, kvm_pte_t *ptep,
+				   enum kvm_pgtable_walk_flags flag, void *const ctx)
+{
+	gfn_t gfn = addr / PAGE_SIZE;
+	kvm_pte_t old = READ_ONCE(*ptep);
+	kvm_pte_t new = old & ~KVM_PTE_LEAF_ATTR_LO_S2_AF;
+	struct test_clear_young_arg *arg = ctx;
+
+	VM_WARN_ON_ONCE(!page_count(virt_to_page(ptep)));
+	VM_WARN_ON_ONCE(gfn < arg->range->start || gfn >= arg->range->end);
+
+	if (kvm_pte_table(old, level))
+		return 0;
+
+	if (!kvm_pte_valid(new))
+		return 0;
+
+	if (new == old)
+		return 0;
+
+	/* see the comments on the generic kvm_arch_has_test_clear_young() */
+	if (__test_and_change_bit(arg->lsb_gfn - gfn, arg->bitmap))
+		cmpxchg64(ptep, old, new);
+
+	return 0;
+}
+
+bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
+			       gfn_t lsb_gfn, unsigned long *bitmap)
+{
+	u64 start = range->start * PAGE_SIZE;
+	u64 end = range->end * PAGE_SIZE;
+	struct test_clear_young_arg arg = {
+		.range		= range,
+		.lsb_gfn	= lsb_gfn,
+		.bitmap		= bitmap,
+	};
+	struct kvm_pgtable_walker walker = {
+		.cb		= stage2_test_clear_young,
+		.arg		= &arg,
+		.flags		= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	BUILD_BUG_ON(is_hyp_code());
+
+	if (WARN_ON_ONCE(!kvm_arch_has_test_clear_young()))
+		return false;
+
+	/* see the comments on kvm_pgtable_walk_flags */
+	rcu_read_lock();
+
+	kvm_pgtable_walk(kvm->arch.mmu.pgt, start, end - start, &walker);
+
+	rcu_read_unlock();
+
+	return true;
+}
+
 phys_addr_t kvm_mmu_get_httbr(void)
 {
 	return __pa(hyp_pgtable->pgd);
@@ -1596,7 +1673,6 @@ void kvm_arch_memslots_updated(struct kvm *kvm, u64 gen)
 
 void kvm_arch_flush_shadow_all(struct kvm *kvm)
 {
-	kvm_free_stage2_pgd(&kvm->arch.mmu);
 }
 
 void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
