@@ -821,6 +821,64 @@ static int kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
 					     kvm_test_age_gfn);
 }
 
+static bool kvm_test_clear_young(struct kvm *kvm, unsigned long start,
+				 unsigned long end, unsigned long *bitmap)
+{
+	int i;
+	int key;
+	bool success = true;
+
+	trace_kvm_age_hva(start, end);
+
+	key = srcu_read_lock(&kvm->srcu);
+
+	for (i = 0; i < KVM_ADDRESS_SPACE_NUM; i++) {
+		struct kvm_memory_slot *slot;
+		struct kvm_memslots *slots = __kvm_memslots(kvm, i);
+
+		kvm_for_each_memslot(slot, slots) {
+			gfn_t lsb_gfn;
+			unsigned long hva_start, hva_end;
+			struct kvm_gfn_range range = {
+				.slot = slot,
+			};
+
+			hva_start = max(start, slot->userspace_addr);
+			hva_end = min(end, slot->userspace_addr + slot->npages * PAGE_SIZE);
+
+			if (hva_start >= hva_end)
+				continue;
+
+			range.start = hva_to_gfn_memslot(hva_start, slot);
+			range.end = hva_to_gfn_memslot(hva_end + PAGE_SIZE - 1, slot);
+
+			if (WARN_ON_ONCE(range.end <= range.start))
+				continue;
+
+			/* see the comments on the generic kvm_arch_has_test_clear_young() */
+			lsb_gfn = hva_to_gfn_memslot(end - 1, slot);
+
+			success = kvm_arch_test_clear_young(kvm, &range, lsb_gfn, bitmap);
+			if (!success)
+				break;
+		}
+	}
+
+	srcu_read_unlock(&kvm->srcu, key);
+
+	return success;
+}
+
+static bool kvm_mmu_notifier_test_clear_young(struct mmu_notifier *mn, struct mm_struct *mm,
+					      unsigned long start, unsigned long end,
+					      unsigned long *bitmap)
+{
+	if (kvm_arch_has_test_clear_young())
+		return kvm_test_clear_young(mmu_notifier_to_kvm(mn), start, end, bitmap);
+
+	return false;
+}
+
 static void kvm_mmu_notifier_release(struct mmu_notifier *mn,
 				     struct mm_struct *mm)
 {
@@ -839,6 +897,7 @@ static const struct mmu_notifier_ops kvm_mmu_notifier_ops = {
 	.clear_flush_young	= kvm_mmu_notifier_clear_flush_young,
 	.clear_young		= kvm_mmu_notifier_clear_young,
 	.test_young		= kvm_mmu_notifier_test_young,
+	.test_clear_young	= kvm_mmu_notifier_test_clear_young,
 	.change_pte		= kvm_mmu_notifier_change_pte,
 	.release		= kvm_mmu_notifier_release,
 };
