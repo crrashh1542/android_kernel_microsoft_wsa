@@ -1291,6 +1291,10 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	unsigned int minor;
 	int i, rval = -E2BIG;
 
+	/* firmware is not ready, so defer the probe */
+	if (!isp->pkg_dir)
+		return -EPROBE_DEFER;
+
 	rval = ipu_mmu_hw_init(adev->mmu);
 	if (rval)
 		return rval;
