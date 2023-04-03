@@ -40,6 +40,7 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 {
 	struct ipu_bus_device *isys;
 	struct ipu_isys_pdata *pdata;
+	int ret;
 
 	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -52,17 +53,23 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 	if (ipu_ver == IPU_VER_6SE)
 		ctrl->ratio = IPU6SE_IS_FREQ_CTL_DEFAULT_RATIO;
 
-	isys = ipu_bus_add_device(pdev, parent, pdata, ctrl,
-				  IPU_ISYS_NAME, nr);
-	if (IS_ERR(isys))
-		return ERR_PTR(-ENOMEM);
-
+	isys = ipu_bus_initialize_device(pdev, parent, pdata, ctrl,
+					 IPU_ISYS_NAME, nr);
+	if (IS_ERR(isys)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(isys),
+			      "ipu_bus_initialize_device(isys) failed\n");
+		return ERR_CAST(isys);
+	}
 	isys->mmu = ipu_mmu_init(&pdev->dev, base, ISYS_MMID,
 				 &ipdata->hw_variant);
 	if (IS_ERR(isys->mmu))
 		return ERR_PTR(-ENOMEM);
 
 	isys->mmu->dev = &isys->dev;
+
+	ret = ipu_bus_add_device(isys);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return isys;
 }
@@ -76,6 +83,7 @@ static struct ipu_bus_device *ipu_psys_init(struct pci_dev *pdev,
 {
 	struct ipu_bus_device *psys;
 	struct ipu_psys_pdata *pdata;
+	int ret;
 
 	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -84,10 +92,13 @@ static struct ipu_bus_device *ipu_psys_init(struct pci_dev *pdev,
 	pdata->base = base;
 	pdata->ipdata = ipdata;
 
-	psys = ipu_bus_add_device(pdev, parent, pdata, ctrl,
-				  IPU_PSYS_NAME, nr);
-	if (IS_ERR(psys))
-		return ERR_PTR(-ENOMEM);
+	psys = ipu_bus_initialize_device(pdev, parent, pdata, ctrl,
+					 IPU_PSYS_NAME, nr);
+	if (IS_ERR(psys)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(psys),
+			      "ipu_bus_initialize_device(psys) failed\n");
+		return ERR_CAST(psys);
+	}
 
 	psys->mmu = ipu_mmu_init(&pdev->dev, base, PSYS_MMID,
 				 &ipdata->hw_variant);
@@ -95,6 +106,10 @@ static struct ipu_bus_device *ipu_psys_init(struct pci_dev *pdev,
 		return ERR_PTR(-ENOMEM);
 
 	psys->mmu->dev = &psys->dev;
+
+	ret = ipu_bus_add_device(psys);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return psys;
 }

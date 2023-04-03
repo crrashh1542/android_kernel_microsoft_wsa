@@ -142,14 +142,14 @@ static void ipu_bus_release(struct device *dev)
 {
 }
 
-struct ipu_bus_device *ipu_bus_add_device(struct pci_dev *pdev,
-					  struct device *parent, void *pdata,
-					  struct ipu_buttress_ctrl *ctrl,
-					  char *name, unsigned int nr)
+struct ipu_bus_device *ipu_bus_initialize_device(struct pci_dev *pdev,
+						 struct device *parent,
+						 void *pdata,
+						 struct ipu_buttress_ctrl *ctrl,
+						 char *name, unsigned int nr)
 {
 	struct ipu_bus_device *adev;
 	struct ipu_device *isp = pci_get_drvdata(pdev);
-	int rval;
 
 	adev = devm_kzalloc(&pdev->dev, sizeof(*adev), GFP_KERNEL);
 	if (!adev)
@@ -171,20 +171,29 @@ struct ipu_bus_device *ipu_bus_add_device(struct pci_dev *pdev,
 	mutex_init(&adev->resume_lock);
 	dev_set_name(&adev->dev, "%s%d", name, nr);
 
-	rval = device_register(&adev->dev);
-	if (rval) {
-		put_device(&adev->dev);
-		return ERR_PTR(rval);
-	}
-
-	mutex_lock(&ipu_bus_mutex);
-	list_add(&adev->list, &isp->devices);
-	mutex_unlock(&ipu_bus_mutex);
-
-	pm_runtime_allow(&adev->dev);
+	device_initialize(&adev->dev);
+	pm_runtime_forbid(&adev->dev);
 	pm_runtime_enable(&adev->dev);
 
 	return adev;
+}
+
+int ipu_bus_add_device(struct ipu_bus_device *adev)
+{
+	int rval;
+
+	rval = device_add(&adev->dev);
+	if (rval) {
+		put_device(&adev->dev);
+		return rval;
+	}
+
+	mutex_lock(&ipu_bus_mutex);
+	list_add(&adev->list, &adev->isp->devices);
+	mutex_unlock(&ipu_bus_mutex);
+
+	pm_runtime_allow(&adev->dev);
+	return 0;
 }
 
 void ipu_bus_del_devices(struct pci_dev *pdev)
