@@ -58,12 +58,15 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 	if (IS_ERR(isys)) {
 		dev_err_probe(&pdev->dev, PTR_ERR(isys),
 			      "ipu_bus_initialize_device(isys) failed\n");
-		return ERR_CAST(isys);
+		return isys;
 	}
 	isys->mmu = ipu_mmu_init(&pdev->dev, base, ISYS_MMID,
 				 &ipdata->hw_variant);
-	if (IS_ERR(isys->mmu))
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(isys->mmu)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(isys->mmu),
+			      "ipu_mmu_init(isys->mmu) failed\n");
+		return ERR_CAST(isys->mmu);
+	}
 
 	isys->mmu->dev = &isys->dev;
 
@@ -97,13 +100,16 @@ static struct ipu_bus_device *ipu_psys_init(struct pci_dev *pdev,
 	if (IS_ERR(psys)) {
 		dev_err_probe(&pdev->dev, PTR_ERR(psys),
 			      "ipu_bus_initialize_device(psys) failed\n");
-		return ERR_CAST(psys);
+		return psys;
 	}
 
 	psys->mmu = ipu_mmu_init(&pdev->dev, base, PSYS_MMID,
 				 &ipdata->hw_variant);
-	if (IS_ERR(psys->mmu))
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(psys->mmu)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(psys->mmu),
+			      "ipu_mmu_init(psys->mmu) failed\n");
+		return ERR_CAST(psys->mmu);
+	}
 
 	psys->mmu->dev = &psys->dev;
 
