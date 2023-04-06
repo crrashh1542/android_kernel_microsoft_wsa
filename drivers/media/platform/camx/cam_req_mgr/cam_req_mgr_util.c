@@ -251,7 +251,7 @@ int32_t cam_create_link_hdl(struct cam_create_dev_hdl *hdl_data)
 	return handle;
 }
 
-void *cam_get_priv(int32_t dev_hdl, int handle_type)
+static void *cam_get_priv(int32_t dev_hdl, int handle_type)
 {
 	int idx;
 	int type;
