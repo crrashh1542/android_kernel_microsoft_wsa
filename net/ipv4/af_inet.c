@@ -122,6 +122,10 @@
 
 #include <trace/events/sock.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/cros_net.h>
+#undef CREATE_TRACE_POINTS
+
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
@@ -238,7 +242,11 @@ int inet_listen(struct socket *sock, int backlog)
 	err = 0;
 
 out:
+	// Cros specific tracepoint to accommodate the lack of
+	// arm64 bpf-trampoline in v5.10, v5.15 kernels.
+	trace_cros_inet_listen(sock, backlog, err);
 	release_sock(sk);
+
 	return err;
 }
 EXPORT_SYMBOL(inet_listen);
