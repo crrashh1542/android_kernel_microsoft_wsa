@@ -2843,4 +2843,6 @@ u8 iwl_mvm_eval_dsm_rfi_ddr(struct iwl_mvm *mvm);
 u8 iwl_mvm_eval_dsm_rfi_dlvr(struct iwl_mvm *mvm);
 bool iwl_mvm_enable_fils(struct iwl_mvm *mvm,
 			 struct ieee80211_chanctx_conf *ctx);
+void iwl_mvm_mld_select_links(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
+			      bool valid_links_changed);
 #endif /* __IWL_MVM_H__ */
