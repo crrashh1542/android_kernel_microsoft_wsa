@@ -385,7 +385,7 @@ const char *iwl_drv_get_fwname_pre(struct iwl_trans *trans, char *buf)
 		return trans->cfg->fw_name_pre;
 
 	if (WARN_ON(!trans->cfg->fw_name_mac))
-		return "unconfigured-";
+		return "unconfigured";
 
 	mac_step = iwl_drv_get_step(trans->hw_rev_step);
 
@@ -410,7 +410,7 @@ const char *iwl_drv_get_fwname_pre(struct iwl_trans *trans, char *buf)
 		rf = "wh";
 		break;
 	default:
-		return "unknown-rf-";
+		return "unknown-rf";
 	}
 
 	cdb = CSR_HW_RFID_IS_CDB(trans->hw_rf_id) ? "4" : "";
@@ -485,7 +485,7 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 		return -ENOENT;
 	}
 
-	snprintf(drv->firmware_name, sizeof(drv->firmware_name), "%s%d.ucode",
+	snprintf(drv->firmware_name, sizeof(drv->firmware_name), "%s-%d.ucode",
 		 fw_name_pre, drv->fw_index);
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
