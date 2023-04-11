@@ -418,15 +418,13 @@ const char *iwl_drv_get_fwname_pre(struct iwl_trans *trans, char *buf)
 	rf_step = iwl_drv_get_step(CSR_HW_RFID_STEP(trans->hw_rf_id));
 
 	scnprintf(buf, FW_NAME_PRE_BUFSIZE,
-		  "iwlwifi-%s-%c0-%s%s-%c0-",
+		  "iwlwifi-%s-%c0-%s%s-%c0",
 		  trans->cfg->fw_name_mac, mac_step,
 		  rf, cdb, rf_step);
 
 	return buf;
 }
-#if IS_ENABLED(CPTCFG_IWLXVT)
 IWL_EXPORT_SYMBOL(iwl_drv_get_fwname_pre);
-#endif
 
 static void iwl_req_fw_callback(const struct firmware *ucode_raw,
 				void *context);
