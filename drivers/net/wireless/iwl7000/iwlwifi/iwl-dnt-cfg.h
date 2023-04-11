@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2014 Intel Corporation
+ * Copyright (C) 2014, 2023 Intel Corporation
  * Copyright (C) 2014 Intel Mobile Communications GmbH
  */
 #ifndef __iwl_dnt_cfg_h__
@@ -100,8 +100,10 @@ struct dnt_collect_entry {
 };
 
 /**
- * @list_read_ptr: list read pointer
- * @list_wr_ptr: list write pointer
+ * struct dnt_collect_db - crash data collection struct
+ * @collect_array: data collection entries
+ * @read_ptr: list read pointer
+ * @wr_ptr: list write pointer
  * @waitq: waitqueue for new data
  * @db_lock: lock for the list
  */
@@ -137,10 +139,10 @@ struct dnt_crash_data {
 /**
  * struct iwl_dnt_dispatch - the iwl Debug and Trace Dispatch
  *
- * @in_mode: The dispatch incoming data mode
- * @out_mode: The dispatch outgoing data mode
- * @dbgm_list: dbgm link list
- * @um_list: uCodeMessages link list
+ * @mon_in_mode: The dispatch incoming data mode
+ * @mon_out_mode: The dispatch outgoing data mode
+ * @dbgm_db: dbgm link list
+ * @um_db: uCodeMessages link list
  */
 struct iwl_dnt_dispatch {
 	u32 mon_in_mode;
@@ -162,7 +164,6 @@ struct iwl_dnt_dispatch {
 /**
  * struct iwl_dnt - the iwl Debug and Trace
  *
- * @cfg: pointer to user configuration
  * @dev: pointer to struct device for printing purposes
  * @iwl_dnt_status: represents the DnT status
  * @is_configuration_valid: indicates whether the persistent configuration
