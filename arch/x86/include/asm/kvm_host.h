@@ -1957,12 +1957,12 @@ int kvm_cpu_dirty_log_size(void);
 
 int alloc_all_memslots_rmaps(struct kvm *kvm);
 
+extern u64 __read_mostly shadow_accessed_mask;
+
 /* see the comments on the generic kvm_arch_has_test_clear_young() */
 #define kvm_arch_has_test_clear_young kvm_arch_has_test_clear_young
 static inline bool kvm_arch_has_test_clear_young(void)
 {
-	extern u64 __read_mostly shadow_accessed_mask;
-
 	return IS_ENABLED(CONFIG_KVM) && IS_ENABLED(CONFIG_X86_64) &&
 	       (!IS_REACHABLE(CONFIG_KVM) || (tdp_enabled && shadow_accessed_mask));
 }
