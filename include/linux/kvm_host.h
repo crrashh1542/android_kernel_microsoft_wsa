@@ -245,6 +245,8 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_set_spte_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
+bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
+			       gfn_t lsb_gfn, unsigned long *bitmap);
 #endif
 
 enum {
@@ -2038,8 +2040,5 @@ static inline bool kvm_arch_has_test_clear_young(void)
 	return false;
 }
 #endif
-
-bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
-			       gfn_t lsb_gfn, unsigned long *bitmap);
 
 #endif
