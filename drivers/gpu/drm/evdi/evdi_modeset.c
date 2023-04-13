@@ -25,7 +25,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_atomic_helper.h>
-#include "evdi_drm.h"
+#include <uapi/drm/evdi_drm.h>
 #include "evdi_drm_drv.h"
 #include "evdi_cursor.h"
 #include "evdi_params.h"
