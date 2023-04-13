@@ -756,13 +756,14 @@ struct iwl_dram_data {
  * struct iwl_dram_regions - DRAM regions container structure
  * @drams: array of several DRAM areas that contains the
  *	pnvm/power reduction table payloads.
+ * @total_len: length of the entire payload, all chunks combined
  * @n_regions: number of DRAM regions that were allocated
- * @prph_scrath_mem_desc: points to a structure allocated in dram,
+ * @prph_scratch_mem_desc: points to a structure allocated in dram,
  *	designed to show FW where all the payloads are.
  */
 struct iwl_dram_regions {
 	struct iwl_dram_data drams[IPC_DRAM_MAP_ENTRY_NUM_MAX];
-	struct iwl_dram_data prph_scrath_mem_desc;
+	struct iwl_dram_data prph_scratch_mem_desc;
 	u8 n_regions;
 };
 
@@ -1655,9 +1656,9 @@ static inline int iwl_trans_load_reduce_power
 	return trans->ops->load_reduce_power(trans, payloads, capa);
 }
 
-static inline void iwl_trans_set_reduce_power
-				(struct iwl_trans *trans,
-				 const struct iwl_ucode_capabilities *capa)
+static inline void
+iwl_trans_set_reduce_power(struct iwl_trans *trans,
+			   const struct iwl_ucode_capabilities *capa)
 {
 	if (trans->ops->set_reduce_power)
 		trans->ops->set_reduce_power(trans, capa);

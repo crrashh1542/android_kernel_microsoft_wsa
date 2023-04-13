@@ -2050,7 +2050,7 @@ void iwl_trans_pcie_free_pnvm_dram_regions(struct iwl_dram_regions *dram_regions
 					   struct device *dev)
 {
 	u8 i;
-	struct iwl_dram_data *desc_dram = &dram_regions->prph_scrath_mem_desc;
+	struct iwl_dram_data *desc_dram = &dram_regions->prph_scratch_mem_desc;
 
 	/* free DRAM payloads */
 	for (i = 0; i < dram_regions->n_regions; i++) {

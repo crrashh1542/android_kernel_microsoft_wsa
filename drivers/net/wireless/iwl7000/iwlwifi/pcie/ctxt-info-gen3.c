@@ -320,7 +320,7 @@ static int iwl_pcie_load_payloads_segments
 				 const struct iwl_pnvm_image *pnvm_data)
 {
 	struct iwl_dram_data *cur_payload_dram = &dram_regions->drams[0];
-	struct iwl_dram_data *desc_dram = &dram_regions->prph_scrath_mem_desc;
+	struct iwl_dram_data *desc_dram = &dram_regions->prph_scratch_mem_desc;
 	struct iwl_prph_scrath_mem_desc_addr_array *addresses;
 	const void *data;
 	u32 len;
@@ -416,16 +416,29 @@ int iwl_trans_pcie_ctx_info_gen3_load_pnvm(struct iwl_trans *trans,
 	return ret;
 }
 
+static inline size_t
+iwl_dram_regions_size(const struct iwl_dram_regions *dram_regions)
+{
+	size_t total_size = 0;
+	int i;
+
+	for (i = 0; i < dram_regions->n_regions; i++)
+		total_size += dram_regions->drams[i].size;
+
+	return total_size;
+}
+
 static void iwl_pcie_set_pnvm_segments(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	struct iwl_dram_data *mem_desc =
-		&trans_pcie->pnvm_data.prph_scrath_mem_desc;
+	struct iwl_dram_regions *dram_regions = &trans_pcie->pnvm_data;
 
-	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr = cpu_to_le64(mem_desc->physical);
-	prph_sc_ctrl->pnvm_cfg.pnvm_size = cpu_to_le32(mem_desc->size);
+	prph_sc_ctrl->pnvm_cfg.pnvm_base_addr =
+		cpu_to_le64(dram_regions->prph_scratch_mem_desc.physical);
+	prph_sc_ctrl->pnvm_cfg.pnvm_size =
+		cpu_to_le32(iwl_dram_regions_size(dram_regions));
 }
 
 static void iwl_pcie_set_continuous_pnvm(struct iwl_trans *trans)
@@ -504,12 +517,12 @@ static void iwl_pcie_set_reduce_power_segments(struct iwl_trans *trans)
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl =
 		&trans_pcie->prph_scratch->ctrl_cfg;
-	struct iwl_dram_data *mem_desc =
-		&trans_pcie->reduced_tables_data.prph_scrath_mem_desc;
+	struct iwl_dram_regions *dram_regions = &trans_pcie->reduced_tables_data;
 
 	prph_sc_ctrl->reduce_power_cfg.base_addr =
-		cpu_to_le64(mem_desc->physical);
-	prph_sc_ctrl->reduce_power_cfg.size = cpu_to_le32(mem_desc->size);
+		cpu_to_le64(dram_regions->prph_scratch_mem_desc.physical);
+	prph_sc_ctrl->reduce_power_cfg.size =
+		cpu_to_le32(iwl_dram_regions_size(dram_regions));
 }
 
 static void iwl_pcie_set_continuous_reduce_power(struct iwl_trans *trans)
@@ -524,8 +537,9 @@ static void iwl_pcie_set_continuous_reduce_power(struct iwl_trans *trans)
 		cpu_to_le32(trans_pcie->reduced_tables_data.drams[0].size);
 }
 
-void iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans,
-						   const struct iwl_ucode_capabilities *capa)
+void
+iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans,
+					      const struct iwl_ucode_capabilities *capa)
 {
 	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
 		return;
