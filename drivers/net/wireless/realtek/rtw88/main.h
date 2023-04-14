@@ -2001,6 +2001,7 @@ struct rtw_dev {
 
 	bool need_rfk;
 	struct completion fw_scan_density;
+	bool ap_active;
 
 	struct rtw_sar sar;
 
