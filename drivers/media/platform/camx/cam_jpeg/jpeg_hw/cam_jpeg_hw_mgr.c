@@ -1110,7 +1110,7 @@ hw_dump:
 	}
 
 	if (jpeg_dump_args.buf_len <= dump_args->offset) {
-		CAM_WARN(CAM_JPEG, "dump offset overshoot len %zu offset %zu",
+		CAM_WARN(CAM_JPEG, "dump offset overshoot len %zu offset %u",
 			jpeg_dump_args.buf_len, dump_args->offset);
 		rc = -ENOSPC;
 		goto end;

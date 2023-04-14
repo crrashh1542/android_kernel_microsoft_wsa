@@ -4676,7 +4676,7 @@ static int cam_ife_mgr_dump(void *hw_mgr_priv, void *args)
 
 	if (isp_hw_dump_args.buf_len <= isp_hw_dump_args.offset) {
 		CAM_ERR(CAM_ISP,
-			"Dump offset overshoot offset %zu buf_len %zu",
+			"Dump offset overshoot offset %u buf_len %zu",
 			isp_hw_dump_args.offset, isp_hw_dump_args.buf_len);
 		rc = -EINVAL;
 		goto end;
