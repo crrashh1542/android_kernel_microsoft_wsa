@@ -394,14 +394,18 @@ static int iwl_vendor_tdls_peer_cache_query(struct wiphy *wiphy,
 }
 #endif /* CPTCFG_IWLMVM_TDLS_PEER_CACHE */
 
-#define IWL_MVM_RFIM_CAPA_CNVI  (BIT(2))
-#define IWL_MVM_RFIM_CAPA_SCAN  (BIT(3))
-#define IWL_MVM_RFIM_CAPA_ASSOC (BIT(4))
-#define IWL_MVM_RFIM_CAPA_TPT   (BIT(5))
-#define IWL_MVM_RFIM_CAPA_ALL	(IWL_MVM_RFIM_CAPA_CNVI	  |\
-				IWL_MVM_RFIM_CAPA_SCAN    |\
-				IWL_MVM_RFIM_CAPA_ASSOC   |\
-				IWL_MVM_RFIM_CAPA_TPT)
+enum iwl_rfi_capabilites {
+	IWL_MVM_RFI_DDR_CAPA_CNVI	= BIT(2),
+	IWL_MVM_RFI_DDR_CAPA_SCAN	= BIT(3),
+	IWL_MVM_RFI_DDR_CAPA_ASSOC	= BIT(4),
+	IWL_MVM_RFI_DDR_CAPA_TPT	= BIT(5),
+	IWL_MVM_RFI_DLVR_CAPA		= BIT(9),
+};
+
+#define IWL_MVM_RFI_DDR_CAPA_ALL (IWL_MVM_RFI_DDR_CAPA_CNVI	|\
+				  IWL_MVM_RFI_DDR_CAPA_SCAN	|\
+				  IWL_MVM_RFI_DDR_CAPA_ASSOC	|\
+				  IWL_MVM_RFI_DDR_CAPA_TPT)
 
 static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 				    struct wireless_dev *wdev,
@@ -416,13 +420,15 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 	if (!skb)
 		return -ENOMEM;
 
-	if (mvm->trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_AX210 &&
-	    mvm->trans->trans_cfg->integrated) {
+	if (mvm->trans->trans_cfg->integrated) {
 		if (iwl_rfi_ddr_supported(mvm))
-			capa = IWL_MVM_RFIM_CAPA_ALL;
+			capa = IWL_MVM_RFI_DDR_CAPA_ALL;
 		else
-			capa = IWL_MVM_RFIM_CAPA_CNVI;
+			capa = IWL_MVM_RFI_DDR_CAPA_CNVI;
 	}
+
+	if (iwl_rfi_dlvr_supported(mvm))
+		capa |= IWL_MVM_RFI_DLVR_CAPA;
 
 	if (nla_put_u8(skb, IWL_MVM_VENDOR_ATTR_RFIM_CAPA, capa)) {
 		kfree_skb(skb);
@@ -432,9 +438,9 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 	return cfg80211_vendor_cmd_reply(skb);
 }
 
-static int iwl_vendor_rfim_get_table(struct wiphy *wiphy,
-				     struct wireless_dev *wdev,
-				     const void *data, int data_len)
+static int iwl_vendor_rfi_ddr_get_table(struct wiphy *wiphy,
+					struct wireless_dev *wdev,
+					const void *data, int data_len)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
@@ -491,9 +497,9 @@ err:
 	return ret;
 }
 
-static int iwl_vendor_rfim_set_table(struct wiphy *wiphy,
-				     struct wireless_dev *wdev,
-				     const void *data, int data_len)
+static int iwl_vendor_rfi_ddr_set_table(struct wiphy *wiphy,
+					struct wireless_dev *wdev,
+					const void *data, int data_len)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
@@ -2017,7 +2023,7 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
-		.doit = iwl_vendor_rfim_set_table,
+		.doit = iwl_vendor_rfi_ddr_set_table,
 #if CFG80211_VERSION >= KERNEL_VERSION(5,3,0)
 		.policy = iwl_mvm_vendor_attr_policy,
 #endif
@@ -2031,7 +2037,7 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 			.subcmd = IWL_MVM_VENDOR_CMD_RFIM_GET_TABLE,
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV,
-		.doit = iwl_vendor_rfim_get_table,
+		.doit = iwl_vendor_rfi_ddr_get_table,
 #if CFG80211_VERSION >= KERNEL_VERSION(5,3,0)
 		.policy = iwl_mvm_vendor_attr_policy,
 #endif
