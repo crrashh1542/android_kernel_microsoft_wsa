@@ -3255,6 +3255,10 @@ void iwl_fw_disable_dbg_asserts(struct iwl_fw_runtime *fwrt)
 		.len[0] = sizeof(cmd),
 	};
 
+	/* supported starting from 9000 devices */
+	if (fwrt->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_9000)
+		return;
+
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	/* don't send this command when need debug asserts */
 	if (fwrt->trans->dbg_cfg.enable_dbg_asserts) {
