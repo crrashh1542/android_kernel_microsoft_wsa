@@ -12,3 +12,4 @@ ARM
    pvtime
    ptp_kvm
    get_cur_cpufreq
+   util_hint
