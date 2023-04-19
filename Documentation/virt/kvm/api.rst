@@ -7272,6 +7272,14 @@ of the result of KVM_CHECK_EXTENSION.  KVM will forward to userspace
 the hypercalls whose corresponding bit is in the argument, and return
 ENOSYS for the others.
 
+8.40 KVM_CAP_GET_CUR_CPUFREQ
+------------------------
+
+:Architectures: arm64
+
+This capability indicates that KVM supports getting the
+frequency of the current CPU that the vCPU thread is running on.
+
 9. Known KVM API problems
 =========================
 
