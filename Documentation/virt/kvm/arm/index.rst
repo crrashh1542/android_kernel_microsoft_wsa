@@ -11,4 +11,3 @@ ARM
    psci
    pvtime
    ptp_kvm
-   uclamp
