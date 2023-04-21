@@ -550,7 +550,7 @@ static void mem_cgroup_update_tree(struct mem_cgroup *memcg, struct page *page)
 	struct mem_cgroup_tree_per_node *mctz;
 
 	if (lru_gen_enabled()) {
-		struct lruvec *lruvec = mem_cgroup_page_lruvec(page);
+		struct lruvec *lruvec = &mem_cgroup_page_nodeinfo(memcg, page)->lruvec;
 
 		/* see the comment on MEMCG_NR_GENS */
 		if (soft_limit_excess(memcg) && lru_gen_memcg_seg(lruvec) != MEMCG_LRU_HEAD)
