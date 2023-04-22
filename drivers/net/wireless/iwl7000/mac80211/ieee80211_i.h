@@ -5,7 +5,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2007-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 #ifndef IEEE80211_I_H
@@ -419,6 +419,8 @@ struct ieee80211_mgd_assoc_data {
 		ieee80211_conn_flags_t conn_flags;
 
 		u16 status;
+
+		bool disabled;
 	} link[IEEE80211_MLD_MAX_NUM_LINKS];
 
 	u8 ap_addr[ETH_ALEN] __aligned(2);
@@ -839,7 +841,7 @@ enum txq_info_flags {
 	IEEE80211_TXQ_STOP,
 	IEEE80211_TXQ_AMPDU,
 	IEEE80211_TXQ_NO_AMSDU,
-	IEEE80211_TXQ_STOP_NETIF_TX,
+	IEEE80211_TXQ_DIRTY,
 };
 
 /**
@@ -1373,6 +1375,9 @@ struct ieee80211_local {
 	/* device is during a HW reconfig */
 	bool in_reconfig;
 
+	/* reconfiguration failed ... suppress some warnings etc. */
+	bool reconfig_failure;
+
 	/* wowlan is enabled -- don't reconfig on resume */
 	bool wowlan;
 
@@ -1591,7 +1596,7 @@ ieee80211_get_sband(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_chanctx_conf *chanctx_conf;
 	enum nl80211_band band;
 
-	WARN_ON(sdata->vif.valid_links);
+	WARN_ON(ieee80211_vif_is_mld(&sdata->vif));
 
 	rcu_read_lock();
 	chanctx_conf = rcu_dereference(sdata->vif.bss_conf.chanctx_conf);
@@ -1701,7 +1706,8 @@ struct ieee802_11_elems {
 	const struct ieee80211_aid_response_ie *aid_resp;
 	const struct ieee80211_eht_cap_elem *eht_cap;
 	const struct ieee80211_eht_operation *eht_operation;
-	const struct ieee80211_multi_link_elem *multi_link;
+	const struct ieee80211_multi_link_elem *ml_basic;
+	const struct ieee80211_multi_link_elem *ml_reconf;
 
 	/* length of them, respectively */
 	u8 ext_capab_len;
@@ -1726,7 +1732,14 @@ struct ieee802_11_elems {
 	u8 eht_cap_len;
 
 	/* mult-link element can be de-fragmented and thus u8 is not sufficient */
-	size_t multi_link_len;
+	size_t ml_basic_len;
+	size_t ml_reconf_len;
+
+	/* The basic Multi-Link element in the original IEs */
+	const struct element *ml_basic_elem;
+
+	/* The reconfiguration Multi-Link element in the original IEs */
+	const struct element *ml_reconf_elem;
 
 	/*
 	 * store the per station profile pointer and length in case that the
@@ -1806,7 +1819,7 @@ void ieee80211_link_info_change_notify(struct ieee80211_sub_if_data *sdata,
 				       struct ieee80211_link_data *link,
 				       u64 changed);
 void ieee80211_configure_filter(struct ieee80211_local *local);
-u32 ieee80211_reset_erp_info(struct ieee80211_sub_if_data *sdata);
+u64 ieee80211_reset_erp_info(struct ieee80211_sub_if_data *sdata);
 
 u64 ieee80211_mgmt_tx_cookie(struct ieee80211_local *local);
 int ieee80211_attach_ack_skb(struct ieee80211_local *local, struct sk_buff *skb,
@@ -1866,8 +1879,10 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata);
 void ieee80211_ibss_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 				   struct sk_buff *skb);
 int ieee80211_ibss_csa_beacon(struct ieee80211_sub_if_data *sdata,
-			      struct cfg80211_csa_settings *csa_settings);
-int ieee80211_ibss_finish_csa(struct ieee80211_sub_if_data *sdata);
+			      struct cfg80211_csa_settings *csa_settings,
+			      u64 *changed);
+int ieee80211_ibss_finish_csa(struct ieee80211_sub_if_data *sdata,
+			      u64 *changed);
 void ieee80211_ibss_stop(struct ieee80211_sub_if_data *sdata);
 
 /* OCB code */
@@ -1884,8 +1899,10 @@ void ieee80211_mesh_work(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mesh_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 				   struct sk_buff *skb);
 int ieee80211_mesh_csa_beacon(struct ieee80211_sub_if_data *sdata,
-			      struct cfg80211_csa_settings *csa_settings);
-int ieee80211_mesh_finish_csa(struct ieee80211_sub_if_data *sdata);
+			      struct cfg80211_csa_settings *csa_settings,
+			      u64 *changed);
+int ieee80211_mesh_finish_csa(struct ieee80211_sub_if_data *sdata,
+			      u64 *changed);
 
 /* scan/BSS handling */
 void ieee80211_scan_work(struct work_struct *work);
@@ -1899,6 +1916,9 @@ int ieee80211_request_scan(struct ieee80211_sub_if_data *sdata,
 void ieee80211_scan_cancel(struct ieee80211_local *local);
 void ieee80211_run_deferred_scan(struct ieee80211_local *local);
 void ieee80211_scan_rx(struct ieee80211_local *local, struct sk_buff *skb);
+
+void ieee80211_inform_bss(struct wiphy *wiphy, struct cfg80211_bss *bss,
+			  const struct cfg80211_bss_ies *ies, void *data);
 
 void ieee80211_mlme_notify_scan_completed(struct ieee80211_local *local);
 struct ieee80211_bss *
@@ -1993,7 +2013,7 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 			 struct ieee80211_bss_conf *link_conf);
 void ieee80211_link_stop(struct ieee80211_link_data *link);
 int ieee80211_vif_set_links(struct ieee80211_sub_if_data *sdata,
-			    u16 new_links);
+			    u16 new_links, u16 dormant_links);
 void ieee80211_vif_clear_links(struct ieee80211_sub_if_data *sdata);
 
 /* tx handling */
@@ -2282,7 +2302,7 @@ ieee802_11_parse_elems(const u8 *start, size_t len, bool action,
 	return ieee802_11_parse_elems_crc(start, len, action, 0, 0, bss);
 }
 
-void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos);
+void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id);
 
 extern const int ieee802_1d_to_ac[8];
 
@@ -2321,7 +2341,6 @@ void ieee80211_wake_queue_by_reason(struct ieee80211_hw *hw, int queue,
 void ieee80211_stop_queue_by_reason(struct ieee80211_hw *hw, int queue,
 				    enum queue_stop_reason reason,
 				    bool refcounted);
-void ieee80211_propagate_queue_wake(struct ieee80211_local *local, int queue);
 void ieee80211_add_pending_skb(struct ieee80211_local *local,
 			       struct sk_buff *skb);
 void ieee80211_add_pending_skbs(struct ieee80211_local *local,
@@ -2393,6 +2412,7 @@ void ieee80211_send_deauth_disassoc(struct ieee80211_sub_if_data *sdata,
 				    const u8 *da, const u8 *bssid,
 				    u16 stype, u16 reason,
 				    bool send_frame, u8 *frame_buf);
+u8 *ieee80211_write_he_6ghz_cap(u8 *pos, __le16 cap, u8 *end);
 
 enum {
 	IEEE80211_PROBE_FLAG_DIRECTED		= BIT(0),
@@ -2497,7 +2517,7 @@ int ieee80211_link_unreserve_chanctx(struct ieee80211_link_data *link);
 int __must_check
 ieee80211_link_change_bandwidth(struct ieee80211_link_data *link,
 				const struct cfg80211_chan_def *chandef,
-				u32 *changed);
+				u64 *changed);
 void ieee80211_link_release_channel(struct ieee80211_link_data *link);
 void ieee80211_link_vlan_copy_chanctx(struct ieee80211_link_data *link);
 void ieee80211_link_copy_chanctx_to_vlans(struct ieee80211_link_data *link,
@@ -2531,10 +2551,13 @@ void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 
 /* TDLS */
 int ieee80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
-			const u8 *peer, u8 action_code, u8 dialog_token,
-			u16 status_code, u32 peer_capability,
-			bool initiator, const u8 *extra_ies,
-			size_t extra_ies_len);
+			const u8 *peer,
+#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+ int link_id,
+#endif
+			u8 action_code, u8 dialog_token, u16 status_code,
+			u32 peer_capability, bool initiator,
+			const u8 *extra_ies, size_t extra_ies_len);
 int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 			const u8 *peer, enum nl80211_tdls_operation oper);
 void ieee80211_tdls_peer_del_work(struct work_struct *wk);

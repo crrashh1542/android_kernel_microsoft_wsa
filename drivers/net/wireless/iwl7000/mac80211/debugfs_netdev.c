@@ -3,7 +3,7 @@
  * Copyright (c) 2006	Jiri Benc <jbenc@suse.cz>
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2015	Intel Deutschland GmbH
- * Copyright (C) 2020-2022 Intel Corporation
+ * Copyright (C) 2020-2023 Intel Corporation
  */
 
 #include <linux/kernel.h>
@@ -127,41 +127,41 @@ static const struct file_operations name##_ops = {			\
 	.llseek = generic_file_llseek,					\
 }
 
-#define _IEEE80211_IF_FILE_R_FN(name)					\
+#define _IEEE80211_IF_FILE_R_FN(name, type)				\
 static ssize_t ieee80211_if_read_##name(struct file *file,		\
 					char __user *userbuf,		\
 					size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(const void *, char *, int) =			\
-		(ssize_t (*)(const void *, char *, int))		\
-		ieee80211_if_fmt_##name;				\
+	ssize_t (*fn)(const void *, char *, int) = (void *)		\
+		((ssize_t (*)(const type, char *, int))			\
+		 ieee80211_if_fmt_##name);				\
 	return ieee80211_if_read(file->private_data,			\
 				 userbuf, count, ppos, fn);		\
 }
 
-#define _IEEE80211_IF_FILE_W_FN(name)					\
+#define _IEEE80211_IF_FILE_W_FN(name, type)				\
 static ssize_t ieee80211_if_write_##name(struct file *file,		\
 					 const char __user *userbuf,	\
 					 size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(void *, const char *, int) =			\
-		(ssize_t (*)(void *, const char *, int))		\
-		ieee80211_if_parse_##name;				\
+	ssize_t (*fn)(void *, const char *, int) = (void *)		\
+		((ssize_t (*)(type, const char *, int))			\
+		 ieee80211_if_parse_##name);				\
 	return ieee80211_if_write(file->private_data, userbuf, count,	\
 				  ppos, fn);				\
 }
 
 #define IEEE80211_IF_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_FILE_W(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name,		\
 			       ieee80211_if_write_##name)
 
@@ -171,7 +171,7 @@ static ssize_t ieee80211_if_write_##name(struct file *file,		\
 
 /* Same but with a link_ prefix in the ops variable name and different type */
 #define IEEE80211_IF_LINK_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_LINK_FILE_W(name)					\
@@ -179,8 +179,8 @@ static ssize_t ieee80211_if_write_##name(struct file *file,		\
 	_IEEE80211_IF_FILE_OPS(link_##name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_LINK_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
+	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_link_data *)	\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name,	\
 			       ieee80211_if_write_##name)
 
@@ -267,6 +267,9 @@ static int ieee80211_set_smps(struct ieee80211_link_data *link,
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	int err;
+
+	if (sdata->vif.driver_flags & IEEE80211_VIF_DISABLE_SMPS_OVERRIDE)
+		return -EOPNOTSUPP;
 
 	if (!(local->hw.wiphy->features & NL80211_FEATURE_STATIC_SMPS) &&
 	    smps_mode == IEEE80211_SMPS_STATIC)
@@ -596,14 +599,6 @@ static ssize_t ieee80211_if_parse_tsf(
 }
 IEEE80211_IF_FILE_RW(tsf);
 
-static ssize_t ieee80211_if_fmt_valid_links(const struct ieee80211_sub_if_data *sdata,
-					    char *buf, int buflen)
-{
-	return snprintf(buf, buflen, "0x%x\n", sdata->vif.valid_links);
-}
-
-IEEE80211_IF_FILE_R(valid_links);
-
 static ssize_t ieee80211_if_fmt_active_links(const struct ieee80211_sub_if_data *sdata,
 					     char *buf, int buflen)
 {
@@ -695,6 +690,19 @@ IEEE80211_IF_FILE(dot11MeshConnectedToAuthServer,
 	debugfs_create_file(#name, mode, sdata->vif.debugfs_dir, \
 			    sdata, &name##_ops)
 
+#define DEBUGFS_ADD_X(_bits, _name, _mode) \
+	debugfs_create_x##_bits(#_name, _mode, sdata->vif.debugfs_dir, \
+				&sdata->vif._name)
+
+#define DEBUGFS_ADD_X8(_name, _mode) \
+	DEBUGFS_ADD_X(8, _name, _mode)
+
+#define DEBUGFS_ADD_X16(_name, _mode) \
+	DEBUGFS_ADD_X(16, _name, _mode)
+
+#define DEBUGFS_ADD_X32(_name, _mode) \
+	DEBUGFS_ADD_X(32, _name, _mode)
+
 #define DEBUGFS_ADD(name) DEBUGFS_ADD_MODE(name, 0400)
 
 static void add_common_files(struct ieee80211_sub_if_data *sdata)
@@ -707,8 +715,7 @@ static void add_common_files(struct ieee80211_sub_if_data *sdata)
 	DEBUGFS_ADD(rc_rateidx_vht_mcs_mask_5ghz);
 	DEBUGFS_ADD(hw_queues);
 
-	if (sdata->local->ops->wake_tx_queue &&
-	    sdata->vif.type != NL80211_IFTYPE_P2P_DEVICE &&
+	if (sdata->vif.type != NL80211_IFTYPE_P2P_DEVICE &&
 	    !ieee80211_viftype_nan(sdata->vif.type))
 		DEBUGFS_ADD(aqm);
 }
@@ -723,8 +730,9 @@ static void add_sta_files(struct ieee80211_sub_if_data *sdata)
 	DEBUGFS_ADD_MODE(uapsd_queues, 0600);
 	DEBUGFS_ADD_MODE(uapsd_max_sp_len, 0600);
 	DEBUGFS_ADD_MODE(tdls_wider_bw, 0600);
-	DEBUGFS_ADD_MODE(valid_links, 0200);
+	DEBUGFS_ADD_X16(valid_links, 0400);
 	DEBUGFS_ADD_MODE(active_links, 0600);
+	DEBUGFS_ADD_X16(dormant_links, 0400);
 }
 
 static void add_ap_files(struct ieee80211_sub_if_data *sdata)

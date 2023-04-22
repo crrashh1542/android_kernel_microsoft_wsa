@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -62,7 +62,9 @@
  *	6) Eventually, the free function will be called.
  */
 
-#define IWL_FW_DBG_DOMAIN	BIT(16)	/* default preset 0 (start from bit 16)*/
+/* default preset 0 (start from bit 16)*/
+#define IWL_FW_DBG_DOMAIN_POS	16
+#define IWL_FW_DBG_DOMAIN	BIT(IWL_FW_DBG_DOMAIN_POS)
 
 #ifndef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #define IWL_TRANS_FW_DBG_DOMAIN(trans)	IWL_FW_INI_DOMAIN_ALWAYS_ON
@@ -1083,6 +1085,8 @@ struct iwl_trans_txqs {
  * @iwl_trans_txqs: transport tx queues data.
  * @mbx_addr_0_step: step address data 0
  * @mbx_addr_1_step: step address data 1
+ * @pcie_link_speed: current PCIe link speed (%PCI_EXP_LNKSTA_CLS_*),
+ *	only valid for discrete (not integrated) NICs
  */
 struct iwl_trans {
 	bool csme_own;
@@ -1114,6 +1118,7 @@ struct iwl_trans {
 	u8 pnvm_loaded:1;
 	u8 fail_to_parse_pnvm_image:1;
 	u8 reduce_power_loaded:1;
+	u8 failed_to_load_reduce_power_image:1;
 
 	const struct iwl_hcmd_arr *command_groups;
 	int command_groups_size;
@@ -1151,6 +1156,8 @@ struct iwl_trans {
 	struct iwl_trans_txqs txqs;
 	u32 mbx_addr_0_step;
 	u32 mbx_addr_1_step;
+
+	u8 pcie_link_speed;
 
 	/* pointer to trans specific struct */
 	/*Ensure that this pointer will always be aligned to sizeof pointer */
@@ -1549,7 +1556,7 @@ static inline u32 iwl_trans_read_mem32(struct iwl_trans *trans, u32 addr)
 {
 	u32 value;
 
-	if (WARN_ON(iwl_trans_read_mem(trans, addr, &value, 1)))
+	if (iwl_trans_read_mem(trans, addr, &value, 1))
 		return 0xa5a5a5a5;
 
 	return value;

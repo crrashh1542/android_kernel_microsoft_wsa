@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -1018,12 +1018,13 @@ static int iwl_mvm_vendor_put_geo_profile(struct iwl_mvm *mvm, struct sk_buff *s
 		if (!nl_band)
 			return -ENOBUFS;
 
-		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_MAX_TXP,
-			   mvm->fwrt.geo_profiles[profile - 1].bands[i].max);
-		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
-			   mvm->fwrt.geo_profiles[profile - 1].bands[i].chains[0]);
-		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
-			   mvm->fwrt.geo_profiles[profile - 1].bands[i].chains[1]);
+		if (nla_put_u8(skb, IWL_VENDOR_SAR_GEO_MAX_TXP,
+			       mvm->fwrt.geo_profiles[profile - 1].bands[i].max) ||
+		    nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
+			       mvm->fwrt.geo_profiles[profile - 1].bands[i].chains[0]) ||
+		    nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
+			       mvm->fwrt.geo_profiles[profile - 1].bands[i].chains[1]))
+			return -ENOBUFS;
 		nla_nest_end(skb, nl_band);
 	}
 	return 0;

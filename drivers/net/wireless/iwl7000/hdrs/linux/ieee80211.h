@@ -9,7 +9,7 @@
  * Copyright (c) 2006, Michael Wu <flamingice@sourmilk.net>
  * Copyright (c) 2013 - 2014 Intel Mobile Communications GmbH
  * Copyright (c) 2016 - 2017 Intel Deutschland GmbH
- * Copyright (c) 2018 - 2022 Intel Corporation
+ * Copyright (c) 2018 - 2023 Intel Corporation
  */
 
 #ifndef LINUX_IEEE80211_H
@@ -335,6 +335,17 @@ struct ieee80211_qos_hdr {
 	u8 addr2[ETH_ALEN];
 	u8 addr3[ETH_ALEN];
 	__le16 seq_ctrl;
+	__le16 qos_ctrl;
+} __packed __aligned(2);
+
+struct ieee80211_qos_hdr_4addr {
+	__le16 frame_control;
+	__le16 duration_id;
+	u8 addr1[ETH_ALEN];
+	u8 addr2[ETH_ALEN];
+	u8 addr3[ETH_ALEN];
+	__le16 seq_ctrl;
+	u8 addr4[ETH_ALEN];
 	__le16 qos_ctrl;
 } __packed __aligned(2);
 
@@ -2861,6 +2872,7 @@ ieee80211_he_spr_size(const u8 *he_spr_ie)
 
 /* Maximum number of supported EHT LTF is split */
 #define IEEE80211_EHT_PHY_CAP5_MAX_NUM_SUPP_EHT_LTF_MASK	0xc0
+#define IEEE80211_EHT_PHY_CAP5_SUPP_EXTRA_EHT_LTF		0x40
 #define IEEE80211_EHT_PHY_CAP6_MAX_NUM_SUPP_EHT_LTF_MASK	0x07
 
 #define IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK			0x78
@@ -3548,11 +3560,6 @@ enum ieee80211_unprotected_wnm_actioncode {
 	WLAN_UNPROTECTED_WNM_ACTION_TIMING_MEASUREMENT_RESPONSE = 1,
 };
 
-/* Public action codes */
-enum ieee80211_public_actioncode {
-	WLAN_PUBLIC_ACTION_FTM_RESPONSE = 33,
-};
-
 /* Security key length */
 enum ieee80211_key_len {
 	WLAN_KEY_LEN_WEP40 = 5,
@@ -3644,7 +3651,7 @@ enum ieee80211_pub_actioncode {
 	WLAN_PUB_ACTION_NETWORK_CHANNEL_CONTROL = 30,
 	WLAN_PUB_ACTION_WHITE_SPACE_MAP_ANN = 31,
 	WLAN_PUB_ACTION_FTM_REQUEST = 32,
-	WLAN_PUB_ACTION_FTM = 33,
+	WLAN_PUB_ACTION_FTM_RESPONSE = 33,
 	WLAN_PUB_ACTION_FILS_DISCOVERY = 34,
 };
 
@@ -4063,16 +4070,21 @@ struct ieee80211_he_6ghz_capa {
  * @hdr: the frame
  *
  * The qos ctrl bytes come after the frame_control, duration, seq_num
- * and 3 or 4 addresses of length ETH_ALEN.
- * 3 addr: 2 + 2 + 2 + 3*6 = 24
- * 4 addr: 2 + 2 + 2 + 4*6 = 30
+ * and 3 or 4 addresses of length ETH_ALEN. Checks frame_control to choose
+ * between struct ieee80211_qos_hdr_4addr and struct ieee80211_qos_hdr.
  */
 static inline u8 *ieee80211_get_qos_ctl(struct ieee80211_hdr *hdr)
 {
-	if (ieee80211_has_a4(hdr->frame_control))
-		return (u8 *)hdr + 30;
+	union {
+		struct ieee80211_qos_hdr	addr3;
+		struct ieee80211_qos_hdr_4addr	addr4;
+	} *qos;
+
+	qos = (void *)hdr;
+	if (ieee80211_has_a4(qos->addr3.frame_control))
+		return (u8 *)&qos->addr4.qos_ctrl;
 	else
-		return (u8 *)hdr + 24;
+		return (u8 *)&qos->addr3.qos_ctrl;
 }
 
 /**
@@ -4369,7 +4381,7 @@ static inline bool ieee80211_is_ftm(struct sk_buff *skb)
 		return false;
 
 	if (mgmt->u.action.u.ftm.action_code ==
-		WLAN_PUBLIC_ACTION_FTM_RESPONSE &&
+		WLAN_PUB_ACTION_FTM_RESPONSE &&
 	    skb->len >= offsetofend(typeof(*mgmt), u.action.u.ftm))
 		return true;
 
@@ -4446,6 +4458,7 @@ static inline bool for_each_element_completed(const struct element *element,
 #define IEEE80211_AP_INFO_TBTT_HDR_COUNT			0xF0
 #define IEEE80211_TBTT_INFO_OFFSET_BSSID_BSS_PARAM		9
 #define IEEE80211_TBTT_INFO_OFFSET_BSSID_SSSID_BSS_PARAM	13
+#define IEEE80211_TBTT_INFO_OFFSET_BSSID_SSSID_BSS_PARAM_MLD_PARAM	16
 
 #define IEEE80211_RNR_TBTT_PARAMS_OCT_RECOMMENDED		0x01
 #define IEEE80211_RNR_TBTT_PARAMS_SAME_SSID			0x02
@@ -4468,6 +4481,20 @@ enum ieee80211_range_params_max_total_ltf {
 	IEEE80211_RANGE_PARAMS_MAX_TOTAL_LTF_16,
 	IEEE80211_RANGE_PARAMS_MAX_TOTAL_LTF_UNSPECIFIED,
 };
+
+/*
+ * reduced neighbor report, based on Draft P802.11be_D3.0,
+ * section 9.4.2.170.2.
+ */
+struct ieee80211_rnr_mld_params {
+	u8 mld_id;
+	__le16 params;
+} __packed;
+
+#define IEEE80211_RNR_MLD_PARAMS_LINK_ID			0x000F
+#define IEEE80211_RNR_MLD_PARAMS_BSS_CHANGE_COUNT		0x0FF0
+#define IEEE80211_RNR_MLD_PARAMS_UPDATES_INCLUDED		0x1000
+#define IEEE80211_RNR_MLD_PARAMS_DISABLED_LINK			0x2000
 
 /* multi-link device */
 #define IEEE80211_MLD_MAX_NUM_LINKS	15
@@ -4495,6 +4522,14 @@ struct ieee80211_multi_link_elem {
 #define IEEE80211_MED_SYNC_DELAY_DURATION		0x00ff
 #define IEEE80211_MED_SYNC_DELAY_SYNC_OFDM_ED_THRESH	0x0f00
 #define IEEE80211_MED_SYNC_DELAY_SYNC_MAX_NUM_TXOPS	0xf000
+
+/*
+ * Described in P802.11be_D3.0
+ * dot11MSDTimerDuration should default to 5484 (i.e. 171.375)
+ * dot11MSDOFDMEDthreshold defaults to -72 (i.e. 0)
+ * dot11MSDTXOPMAX defaults to 1
+ */
+#define IEEE80211_MED_SYNC_DELAY_DEFAULT		0x10ac
 
 #define IEEE80211_EML_CAP_EMLSR_SUPP			0x0001
 #define IEEE80211_EML_CAP_EMLSR_PADDING_DELAY		0x000e
@@ -4578,15 +4613,12 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
 	case IEEE80211_ML_CONTROL_TYPE_BASIC:
 	case IEEE80211_ML_CONTROL_TYPE_PREQ:
 	case IEEE80211_ML_CONTROL_TYPE_TDLS:
+	case IEEE80211_ML_CONTROL_TYPE_RECONF:
 		/*
 		 * The length is the first octet pointed by mle->variable so no
 		 * need to add anything
 		 */
 		break;
-	case IEEE80211_ML_CONTROL_TYPE_RECONF:
-		if (control & IEEE80211_MLC_RECONF_PRES_MLD_MAC_ADDR)
-			common += ETH_ALEN;
-		return common;
 	case IEEE80211_ML_CONTROL_TYPE_PRIO_ACCESS:
 		if (control & IEEE80211_MLC_PRIO_ACCESS_PRES_AP_MLD_MAC_ADDR)
 			common += ETH_ALEN;
@@ -4600,22 +4632,49 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
 }
 
 /**
+ * ieee80211_mle_get_eml_sync_delay - returns the medium sync delay
+ * @data: pointer to the multi link EHT IE
+ *
+ * The element is assumed to be of the correct type (BASIC) and big enough,
+ * this must be checked using ieee80211_mle_type_ok().
+ *
+ * If the medium synchronization is not present, then the default value is
+ * returned.
+ */
+static inline u16 ieee80211_mle_get_eml_med_sync_delay(const u8 *data)
+{
+	const struct ieee80211_multi_link_elem *mle = (const void *)data;
+	u16 control = le16_to_cpu(mle->control);
+	const u8 *common = mle->variable;
+
+	/* common points now at the beginning of ieee80211_mle_basic_common_info */
+	common += sizeof(struct ieee80211_mle_basic_common_info);
+
+	if (!(control & IEEE80211_MLC_BASIC_PRES_MED_SYNC_DELAY))
+		return IEEE80211_MED_SYNC_DELAY_DEFAULT;
+
+	if (control & IEEE80211_MLC_BASIC_PRES_LINK_ID)
+		common += 1;
+	if (control & IEEE80211_MLC_BASIC_PRES_BSS_PARAM_CH_CNT)
+		common += 1;
+
+	return get_unaligned_le16(common);
+}
+
+/**
  * ieee80211_mle_get_eml_cap - returns the EML capability
  * @data: pointer to the multi link EHT IE
  *
- * The element is assumed to be big enough. This must be checked by
- * ieee80211_mle_size_ok().
- * If the EML capability can't be found (the type is not basic, or
- * the EML capability presence bit is clear), 0 will be returned.
+ * The element is assumed to be of the correct type (BASIC) and big enough,
+ * this must be checked using ieee80211_mle_type_ok().
+ *
+ * If the EML capability is not present, 0 will be returned.
  */
 static inline u16 ieee80211_mle_get_eml_cap(const u8 *data)
 {
 	const struct ieee80211_multi_link_elem *mle = (const void *)data;
 	u16 control = le16_to_cpu(mle->control);
 	const u8 *common = mle->variable;
-
-	if (u16_get_bits(control, IEEE80211_ML_CONTROL_TYPE) != IEEE80211_ML_CONTROL_TYPE_BASIC)
-		return 0;
 
 	/* common points now at the beginning of ieee80211_mle_basic_common_info */
 	common += sizeof(struct ieee80211_mle_basic_common_info);
@@ -4701,6 +4760,28 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 	return mle->variable[0] >= common;
 }
 
+/**
+ * ieee80211_mle_type_ok - validate multi-link element type and size
+ * @data: pointer to the element data
+ * @type: expected type of the element
+ * @len: length of the containing element
+ */
+static inline bool ieee80211_mle_type_ok(const u8 *data, u8 type, size_t len)
+{
+	const struct ieee80211_multi_link_elem *mle = (const void *)data;
+	u16 control;
+
+	if (!ieee80211_mle_size_ok(data, len))
+		return false;
+
+	control = le16_to_cpu(mle->control);
+
+	if (u16_get_bits(control, IEEE80211_ML_CONTROL_TYPE) == type)
+		return true;
+
+	return false;
+}
+
 enum ieee80211_mle_subelems {
 	IEEE80211_MLE_SUBELEM_PER_STA_PROFILE		= 0,
 	IEEE80211_MLE_SUBELEM_FRAGMENT		        = 254,
@@ -4723,11 +4804,13 @@ struct ieee80211_mle_per_sta_profile {
 } __packed;
 
 /**
- * ieee80211_mle_sta_prof_size_ok - validate multi-link element sta profile size
+ * ieee80211_mle_basic_sta_prof_size_ok - validate basic multi-link element sta
+ *	profile size
  * @data: pointer to the sub element data
  * @len: length of the containing sub element
  */
-static inline bool ieee80211_mle_sta_prof_size_ok(const u8 *data, size_t len)
+static inline bool ieee80211_mle_basic_sta_prof_size_ok(const u8 *data,
+							size_t len)
 {
 	const struct ieee80211_mle_per_sta_profile *prof = (const void *)data;
 	u16 control;

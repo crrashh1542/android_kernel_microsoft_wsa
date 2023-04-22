@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2015, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2015, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -60,21 +60,28 @@ u32 iwl_mvm_get_sta_ampdu_dens(struct ieee80211_link_sta *link_sta,
 	if (WARN_ON(!link_sta))
 		return 0;
 
-	if (link_sta->ht_cap.ht_supported)
+	/*
+	 * Note that we always use only legacy & highest supported PPDUs, so
+	 * of Draft P802.11be D.30 Table 10-12a--Fields used for calculating
+	 * the maximum A-MPDU size of various PPDU types in different bands,
+	 * we only need to worry about the highest supported PPDU type here.
+	 */
+
+	if (link_sta->ht_cap.ht_supported) {
+		agg_size = link_sta->ht_cap.ampdu_factor;
 		mpdu_dens = link_sta->ht_cap.ampdu_density;
+	}
 
 	if (nl80211_is_6ghz(link_conf->chandef.chan->band)) {
+		/* overwrite HT values on 6 GHz */
 		mpdu_dens = le16_get_bits(link_sta->he_6ghz_capa.capa,
 					  IEEE80211_HE_6GHZ_CAP_MIN_MPDU_START);
 		agg_size = le16_get_bits(link_sta->he_6ghz_capa.capa,
 					 IEEE80211_HE_6GHZ_CAP_MAX_AMPDU_LEN_EXP);
 	} else if (link_sta->vht_cap.vht_supported) {
-		agg_size = link_sta->vht_cap.cap &
-			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;
-		agg_size >>=
-			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_SHIFT;
-	} else if (link_sta->ht_cap.ht_supported) {
-		agg_size = link_sta->ht_cap.ampdu_factor;
+		/* if VHT supported overwrite HT value */
+		agg_size = u32_get_bits(link_sta->vht_cap.cap,
+					IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK);
 	}
 
 	/* D6.0 10.12.2 A-MPDU length limit rules
@@ -89,10 +96,13 @@ u32 iwl_mvm_get_sta_ampdu_dens(struct ieee80211_link_sta *link_sta,
 		agg_size += u8_get_bits(link_sta->he_cap.he_cap_elem.mac_cap_info[3],
 					IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_MASK);
 
+	if (cfg_eht_cap_has_eht(link_sta))
+		agg_size += u8_get_bits(cfg_eht_cap(link_sta)->eht_cap_elem.mac_cap_info[1],
+					IEEE80211_EHT_MAC_CAP1_MAX_AMPDU_LEN_MASK);
+
 	/* Limit to max A-MPDU supported by FW */
-	if (agg_size > (STA_FLG_MAX_AGG_SIZE_4M >> STA_FLG_MAX_AGG_SIZE_SHIFT))
-		agg_size = (STA_FLG_MAX_AGG_SIZE_4M >>
-			    STA_FLG_MAX_AGG_SIZE_SHIFT);
+	agg_size = min_t(u32, agg_size,
+			 STA_FLG_MAX_AGG_SIZE_4M >> STA_FLG_MAX_AGG_SIZE_SHIFT);
 
 	*_agg_size = agg_size;
 	return mpdu_dens;
@@ -1659,7 +1669,7 @@ static int iwl_mvm_add_int_sta_common(struct iwl_mvm *mvm,
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.sta_id = sta->sta_id;
 
-	if (iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 0) >= 12 &&
+	if (iwl_mvm_has_new_station_api(mvm->fw) &&
 	    sta->type == IWL_STA_AUX_ACTIVITY)
 		cmd.mac_id_n_color = cpu_to_le32(mac_id);
 	else
@@ -2960,6 +2970,7 @@ int iwl_mvm_sta_rx_agg(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 		/* synchronize all rx queues so we can safely delete */
 		iwl_mvm_free_reorder(mvm, baid_data);
 		timer_shutdown_sync(&baid_data->session_timer);
+
 		RCU_INIT_POINTER(mvm->baid_map[baid], NULL);
 		kfree_rcu(baid_data, rcu_head);
 		IWL_DEBUG_HT(mvm, "BAID %d is free\n", baid);

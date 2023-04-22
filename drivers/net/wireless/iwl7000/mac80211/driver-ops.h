@@ -2,7 +2,7 @@
 /*
 * Portions of this file
 * Copyright(c) 2016 Intel Deutschland GmbH
-* Copyright (C) 2018 - 2019, 2021 - 2022 Intel Corporation
+* Copyright (C) 2018 - 2019, 2021 - 2023 Intel Corporation
 */
 
 #ifndef __MAC80211_DRIVER_OPS
@@ -13,9 +13,11 @@
 #include "trace.h"
 
 #define check_sdata_in_driver(sdata)	({					\
-	!WARN_ONCE(!(sdata->flags & IEEE80211_SDATA_IN_DRIVER),			\
-		   "%s: Failed check-sdata-in-driver check, flags: 0x%x\n",	\
-		   sdata->dev ? sdata->dev->name : sdata->name, sdata->flags);	\
+	WARN_ONCE(!sdata->local->reconfig_failure &&				\
+		  !(sdata->flags & IEEE80211_SDATA_IN_DRIVER),			\
+		  "%s: Failed check-sdata-in-driver check, flags: 0x%x\n",	\
+		  sdata->dev ? sdata->dev->name : sdata->name, sdata->flags);	\
+	!!(sdata->flags & IEEE80211_SDATA_IN_DRIVER);				\
 })
 
 static inline struct ieee80211_sub_if_data *
@@ -1055,8 +1057,9 @@ drv_pre_channel_switch(struct ieee80211_sub_if_data *sdata,
 }
 
 static inline int
-drv_post_channel_switch(struct ieee80211_sub_if_data *sdata)
+drv_post_channel_switch(struct ieee80211_link_data *link)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	int ret = 0;
 
@@ -1065,7 +1068,8 @@ drv_post_channel_switch(struct ieee80211_sub_if_data *sdata)
 
 	trace_drv_post_channel_switch(local, sdata);
 	if (local->ops->post_channel_switch)
-		ret = local->ops->post_channel_switch(&local->hw, &sdata->vif);
+		ret = local->ops->post_channel_switch(&local->hw, &sdata->vif,
+						      link->conf);
 	trace_drv_return_int(local, ret);
 	return ret;
 }
@@ -1215,7 +1219,7 @@ static inline void drv_wake_tx_queue(struct ieee80211_local *local,
 
 	/* In reconfig don't transmit now, but mark for waking later */
 	if (local->in_reconfig) {
-		set_bit(IEEE80211_TXQ_STOP_NETIF_TX, &txq->flags);
+		set_bit(IEEE80211_TXQ_DIRTY, &txq->flags);
 		return;
 	}
 

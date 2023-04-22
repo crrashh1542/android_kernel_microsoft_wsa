@@ -4,7 +4,7 @@
  *
  * ChromeOS backport definitions
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 #include <linux/version.h>
@@ -420,9 +420,11 @@ static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
 #endif /* LINUX_VERSION_IS_LESS(4,14,0) */
 
 /* avoid conflicts with other headers */
+#if LINUX_VERSION_IS_LESS(6,1,0)
 #ifdef is_signed_type
 #undef is_signed_type
 #endif
+#endif /* LINUX_VERSION_IS_LESS(6,1,0) */
 
 #ifndef offsetofend
 /**
@@ -627,3 +629,18 @@ kthread_complete_and_exit(struct completion *c, long ret)
 	complete_and_exit(c, ret);
 }
 #endif /* <v5.17 */
+
+#if LINUX_VERSION_IS_LESS(6,1,0)
+static inline u32 get_random_u32_below(u32 ceil)
+{
+	return prandom_u32_max(ceil);
+}
+
+static inline u32 get_random_u32_inclusive(u32 floor, u32 ceil)
+{
+	BUILD_BUG_ON_MSG(__builtin_constant_p(floor) && __builtin_constant_p(ceil) &&
+			 (floor > ceil || ceil - floor == U32_MAX),
+			 "get_random_u32_inclusive() must take floor <= ceil");
+	return floor + get_random_u32_below(ceil - floor + 1);
+}
+#endif

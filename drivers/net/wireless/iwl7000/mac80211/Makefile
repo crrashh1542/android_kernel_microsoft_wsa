@@ -59,8 +59,6 @@ mac80211-$(CPTCFG_MAC80211_MESH) += \
 
 mac80211-$(CONFIG_PM) += pm.o
 mac80211-y += arc4.o
-mac80211-y += bucket_locks.o
-mac80211-y += rhashtable.o
 
 CFLAGS_trace.o := -I$(srctree)/$(src)
 

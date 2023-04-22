@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2013-2015, 2018-2022 Intel Corporation
+ * Copyright (C) 2013-2015, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  */
 #if !defined(__IWL_DBG_CFG_H__) || defined(DBG_CFG_REINCLUDE)
@@ -25,6 +25,7 @@ struct iwl_dbg_cfg {
 
 #define IWL_DBG_CFG(type, name)		type name;
 #define IWL_DBG_CFG_NODEF(type, name)	type name;
+#define IWL_DBG_CFG_DEF(type, name, v)	type name;
 #define IWL_DBG_CFG_BIN(name)		struct iwl_dbg_cfg_bin name;
 #define IWL_DBG_CFG_STR(name)	const char *name;
 #define IWL_DBG_CFG_BINA(name, max)	struct iwl_dbg_cfg_bin name[max]; \
@@ -45,6 +46,8 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(bool, disable_wrt_dump)
 	IWL_DBG_CFG_NODEF(bool, disable_52GHz)
 	IWL_DBG_CFG_NODEF(bool, disable_24GHz)
+	IWL_DBG_CFG_DEF(bool, FW_MISBEHAVE_NMI,
+			CPTCFG_IWLWIFI_FW_MISBEHAVE_NMI_DEFAULT)
 #if IS_ENABLED(CPTCFG_IWLMVM)
 	IWL_DBG_CFG_NODEF(u32, MVM_CALIB_OVERRIDE_CONTROL)
 	IWL_DBG_CFG_NODEF(u32, MVM_CALIB_INIT_FLOW)
@@ -101,10 +104,10 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_RANGE(u8, MVM_UAPSD_NOAGG_LIST_LEN,
 			  1, IWL_MVM_UAPSD_NOAGG_BSSIDS_NUM)
 	IWL_DBG_CFG(bool, MVM_NON_TRANSMITTING_AP)
-	IWL_DBG_CFG(u32, MVM_PHY_FILTER_CHAIN_A)
-	IWL_DBG_CFG(u32, MVM_PHY_FILTER_CHAIN_B)
-	IWL_DBG_CFG(u32, MVM_PHY_FILTER_CHAIN_C)
-	IWL_DBG_CFG(u32, MVM_PHY_FILTER_CHAIN_D)
+	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_A)
+	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_B)
+	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_C)
+	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_D)
 	IWL_DBG_CFG(u8, MVM_QUOTA_THRESHOLD)
 	IWL_DBG_CFG(u8, MVM_RS_RSSI_BASED_INIT_RATE)
 	IWL_DBG_CFG(u8, MVM_RS_80_20_FAR_RANGE_TWEAK)
@@ -183,6 +186,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(bool, MVM_MEI_REPORT_RFKILL)
 	IWL_DBG_CFG(u8, MVM_MIN_BEACON_INTERVAL_TU)
 	IWL_DBG_CFG_RANGE(u8, MVM_ADAPTIVE_DWELL_NUM_APS_OVERRIDE, 0, 10)
+	IWL_DBG_CFG_DEF(int, eml_capa_override, -1)
 #endif /* CPTCFG_IWLMVM */
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	IWL_DBG_CFG_NODEF(u32, dnt_out_mode)
@@ -276,11 +280,13 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_BIN(eht_mcs_160)
 	IWL_DBG_CFG_BIN(eht_mcs_320)
 	IWL_DBG_CFG_NODEF(bool, eht_disable_320)
+	IWL_DBG_CFG_NODEF(bool, eht_disable_extra_ltf)
 	IWL_DBG_CFG(u32, FW_DBG_DOMAIN)
 	IWL_DBG_CFG_FN(FW_DBG_PRESET, iwl_dbg_cfg_parse_fw_dbg_preset)
 	IWL_DBG_CFG_NODEF(bool, he_smps_disabled)
 	IWL_DBG_CFG_NODEF(bool, ht_dynamic_smps)
 	IWL_DBG_CFG_NODEF(bool, amsdu_in_ampdu_disabled)
+	IWL_DBG_CFG_NODEF(bool, disable_eml)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */
@@ -290,6 +296,7 @@ struct iwl_dbg_cfg {
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
+#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE

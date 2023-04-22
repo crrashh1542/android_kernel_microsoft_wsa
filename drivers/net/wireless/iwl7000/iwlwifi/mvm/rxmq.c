@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -483,7 +483,7 @@ static void iwl_mvm_rx_csum(struct iwl_mvm *mvm,
 }
 
 /*
- * returns true if a packet is a duplicate and should be dropped.
+ * returns true if a packet is a duplicate or invalid tid and should be dropped.
  * Updates AMSDU PN tracking info
  */
 static bool iwl_mvm_is_dup(struct ieee80211_sta *sta, int queue,
@@ -512,11 +512,14 @@ static bool iwl_mvm_is_dup(struct ieee80211_sta *sta, int queue,
 		return false;
 	}
 
-	if (ieee80211_is_data_qos(hdr->frame_control))
+	if (ieee80211_is_data_qos(hdr->frame_control)) {
 		/* frame has qos control */
 		tid = ieee80211_get_tid(hdr);
-	else
+		if (tid >= IWL_MAX_TID_COUNT)
+			return true;
+	} else {
 		tid = IWL_MAX_TID_COUNT;
+	}
 
 	/* If this wasn't a part of an A-MSDU the sub-frame index will be 0 */
 	sub_frame_idx = desc->amsdu_info &
@@ -982,9 +985,12 @@ static bool iwl_mvm_reorder(struct iwl_mvm *mvm,
 	sta_mask = iwl_mvm_sta_fw_id_mask(mvm, sta, -1);
 	rcu_read_unlock();
 
-	if (WARN(tid != baid_data->tid || !(sta_mask & baid_data->sta_mask),
-		 "baid 0x%x is mapped to sta_mask:0x%x tid:%d, but was received for sta_mask:0x%x tid:%d\n",
-		 baid, baid_data->sta_mask, baid_data->tid, sta_mask, tid))
+	if (IWL_FW_CHECK(mvm,
+			 tid != baid_data->tid ||
+			 !(sta_mask & baid_data->sta_mask),
+			 "baid 0x%x is mapped to sta_mask:0x%x tid:%d, but was received for sta_mask:0x%x tid:%d\n",
+			 baid, baid_data->sta_mask, baid_data->tid,
+			 sta_mask, tid))
 		return false;
 
 	nssn = reorder & IWL_RX_MPDU_REORDER_NSSN_MASK;
@@ -1742,6 +1748,15 @@ static void iwl_mvm_decode_eht_phy_data(struct iwl_mvm *mvm,
 					     IEEE80211_RADIOTAP_EHT_USIG_COMMON_BSS_COLOR);
 	}
 
+	if (fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_SNIFF_VALIDATE_SUPPORT)) {
+		usig->common |=
+			cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_VALIDATE_BITS_CHECKED);
+		usig->common |=
+			LE32_DEC_ENC(data0, IWL_RX_PHY_DATA0_EHT_VALIDATE,
+				     IEEE80211_RADIOTAP_EHT_USIG_COMMON_VALIDATE_BITS_OK);
+	}
+
 	eht->known |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_KNOWN_SPATIAL_REUSE);
 	eht->data[0] |= LE32_DEC_ENC(data0,
 				     IWL_RX_PHY_DATA0_ETH_SPATIAL_REUSE_MASK,
@@ -1786,7 +1801,7 @@ static void iwl_mvm_decode_eht_phy_data(struct iwl_mvm *mvm,
 
 	/* TODO: what about IWL_RX_PHY_DATA0_EHT_BW320_SLOT */
 
-	if (le32_get_bits(data0, IWL_RX_PHY_DATA0_EHT_SIGA_CRC_OK))
+	if (!le32_get_bits(data0, IWL_RX_PHY_DATA0_EHT_SIGA_CRC_OK))
 		usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BAD_USIG_CRC);
 
 	usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_PHY_VER_KNOWN);
@@ -1817,26 +1832,33 @@ static void iwl_mvm_rx_eht(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	struct ieee80211_radiotap_eht *eht;
 	struct ieee80211_radiotap_eht_usig *usig;
-
+	size_t eht_len = sizeof(*eht);
 	u32 rate_n_flags = phy_data->rate_n_flags;
 	u32 he_type = rate_n_flags & RATE_MCS_HE_TYPE_MSK;
 	/* EHT and HE have the same valus for LTF */
 	u8 ltf = IEEE80211_RADIOTAP_HE_DATA5_LTF_SIZE_UNKNOWN;
-
 	u16 phy_info = phy_data->phy_info;
+	u32 bw;
 
-	// u32 for 1 user_info
-	eht = iwl_mvm_radiotap_put_tlv(skb, IEEE80211_RADIOTAP_EHT,
-				       sizeof(*eht) + sizeof(u32));
+	/* u32 for 1 user_info */
+	if (phy_data->with_data)
+		eht_len += sizeof(u32);
+
+	eht = iwl_mvm_radiotap_put_tlv(skb, IEEE80211_RADIOTAP_EHT, eht_len);
 
 	usig = iwl_mvm_radiotap_put_tlv(skb, IEEE80211_RADIOTAP_EHT_USIG,
 					sizeof(*usig));
 	rx_status->flag |= RX_FLAG_RADIOTAP_TLV_AT_END;
 	usig->common |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW_KNOWN);
 
+	/* specific handling for 320MHz */
+	bw = FIELD_GET(RATE_MCS_CHAN_WIDTH_MSK, rate_n_flags);
+	if (bw == RATE_MCS_CHAN_WIDTH_320_VAL)
+		bw += FIELD_GET(IWL_RX_PHY_DATA0_EHT_BW320_SLOT,
+				le32_to_cpu(phy_data->d0));
+
 	usig->common |= cpu_to_le32
-		(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW,
-			    FIELD_GET(RATE_MCS_CHAN_WIDTH_MSK, rate_n_flags)));
+		(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USIG_COMMON_BW, bw));
 
 	/* report the AMPDU-EOF bit on single frames */
 	if (!queue && !(phy_info & IWL_RX_MPDU_PHY_AMPDU)) {
@@ -1907,26 +1929,39 @@ static void iwl_mvm_rx_eht(struct iwl_mvm *mvm, struct sk_buff *skb,
 				    rx_status->eht.gi));
 	}
 
-	eht->user_info[0] |= cpu_to_le32
-		(IEEE80211_RADIOTAP_EHT_USER_INFO_MCS_KNOWN |
-		 IEEE80211_RADIOTAP_EHT_USER_INFO_CODING_KNOWN |
-		 IEEE80211_RADIOTAP_EHT_USER_INFO_NSS_KNOWN_O |
-		 IEEE80211_RADIOTAP_EHT_USER_INFO_BEAMFORMING_KNOWN_O |
-		 IEEE80211_RADIOTAP_EHT_USER_INFO_DATA_FOR_USER);
 
-	if (rate_n_flags & RATE_MCS_BF_MSK)
+	if (!phy_data->with_data) {
+		eht->known |= cpu_to_le32(IEEE80211_RADIOTAP_EHT_KNOWN_NSS_S |
+					  IEEE80211_RADIOTAP_EHT_KNOWN_BEAMFORMED_S);
+		eht->data[7] |=
+			le32_encode_bits(le32_get_bits(phy_data->rx_vec[2],
+						       RX_NO_DATA_RX_VEC2_EHT_NSTS_MSK),
+						 IEEE80211_RADIOTAP_EHT_DATA7_NSS_S);
+		if (rate_n_flags & RATE_MCS_BF_MSK)
+			eht->data[7] |=
+				cpu_to_le32(IEEE80211_RADIOTAP_EHT_DATA7_BEAMFORMED_S);
+	} else {
 		eht->user_info[0] |=
-			cpu_to_le32(IEEE80211_RADIOTAP_EHT_USER_INFO_BEAMFORMING_O);
+			cpu_to_le32(IEEE80211_RADIOTAP_EHT_USER_INFO_MCS_KNOWN |
+				    IEEE80211_RADIOTAP_EHT_USER_INFO_CODING_KNOWN |
+				    IEEE80211_RADIOTAP_EHT_USER_INFO_NSS_KNOWN_O |
+				    IEEE80211_RADIOTAP_EHT_USER_INFO_BEAMFORMING_KNOWN_O |
+				    IEEE80211_RADIOTAP_EHT_USER_INFO_DATA_FOR_USER);
 
-	if (rate_n_flags & RATE_MCS_LDPC_MSK)
-		eht->user_info[0] |=
-			cpu_to_le32(IEEE80211_RADIOTAP_EHT_USER_INFO_CODING);
+		if (rate_n_flags & RATE_MCS_BF_MSK)
+			eht->user_info[0] |=
+				cpu_to_le32(IEEE80211_RADIOTAP_EHT_USER_INFO_BEAMFORMING_O);
 
-	eht->user_info[0] |= cpu_to_le32
-		(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USER_INFO_MCS,
-			    FIELD_GET(RATE_VHT_MCS_RATE_CODE_MSK, rate_n_flags)) |
-		 FIELD_PREP(IEEE80211_RADIOTAP_EHT_USER_INFO_NSS_O,
-			    FIELD_GET(RATE_MCS_NSS_MSK, rate_n_flags)));
+		if (rate_n_flags & RATE_MCS_LDPC_MSK)
+			eht->user_info[0] |=
+				cpu_to_le32(IEEE80211_RADIOTAP_EHT_USER_INFO_CODING);
+
+		eht->user_info[0] |= cpu_to_le32
+			(FIELD_PREP(IEEE80211_RADIOTAP_EHT_USER_INFO_MCS,
+				    FIELD_GET(RATE_VHT_MCS_RATE_CODE_MSK, rate_n_flags)) |
+			 FIELD_PREP(IEEE80211_RADIOTAP_EHT_USER_INFO_NSS_O,
+				    FIELD_GET(RATE_MCS_NSS_MSK, rate_n_flags)));
+	}
 }
 
 static void iwl_mvm_rx_he(struct iwl_mvm *mvm, struct sk_buff *skb,
@@ -2168,6 +2203,7 @@ static void iwl_mvm_rx_fill_status(struct iwl_mvm *mvm,
 	iwl_mvm_decode_lsig(skb, phy_data);
 
 	rx_status->device_timestamp = phy_data->gp2_on_air_rise;
+
 	rx_status->freq = ieee80211_channel_to_frequency(phy_data->channel,
 							 rx_status->band);
 	iwl_mvm_get_signal_strength(mvm, rx_status, rate_n_flags,
@@ -2597,6 +2633,8 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 	phy_data.energy_b = u32_get_bits(rssi, RX_NO_DATA_CHAIN_B_MSK);
 	phy_data.channel = u32_get_bits(rssi, RX_NO_DATA_CHANNEL_MSK);
 	phy_data.with_data = false;
+	phy_data.rx_vec[0] = desc->rx_vec[0];
+	phy_data.rx_vec[1] = desc->rx_vec[1];
 
 	if (iwl_fw_lookup_notif_ver(mvm->fw, DATA_PATH_GROUP,
 				    RX_NO_DATA_NOTIF, 0) < 2) {
@@ -2615,7 +2653,8 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 		    sizeof(struct iwl_rx_no_data_ver_3)))
 		/* invalid len for ver 3 */
 			return;
-		memcpy(phy_data.rx_vec, desc->rx_vec, sizeof(phy_data.rx_vec));
+		phy_data.rx_vec[2] = desc->rx_vec[2];
+		phy_data.rx_vec[3] = desc->rx_vec[3];
 	} else {
 		if (format == RATE_MCS_EHT_MSK)
 			/* no support for EHT before version 3 API */

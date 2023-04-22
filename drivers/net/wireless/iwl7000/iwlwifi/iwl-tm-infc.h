@@ -3,6 +3,7 @@
  * Copyright (C) 2010-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
+ * Copyright (C) 2023 Intel Corporation
  */
 #ifndef __iwl_tm_infc__
 #define __iwl_tm_infc__
@@ -47,7 +48,9 @@ enum iwl_tm_gnl_cmd_t {
  * differentiate registery access through HBUS_TARG_PRPH_.* and
  * HBUS_TARG_MEM_* accesses.
  */
-#define IWL_ABS_PRPH_START (0xA00000)
+#define IWL_ABS_LMAC1_PRPH_START (0xA00000)
+#define IWL_ABS_LMAC2_PRPH_START (0xB00000)
+#define IWL_ABS_UMAC_PRPH_START (0xD00000)
 
 /* User-Driver interface commands */
 enum {

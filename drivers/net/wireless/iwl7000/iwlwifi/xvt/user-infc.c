@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -799,6 +799,8 @@ static u16 iwl_xvt_get_offload_assist(struct ieee80211_hdr *hdr)
 	if (hdrlen % 4 && !amsdu)
 		offload_assist |= BIT(TX_CMD_OFFLD_PAD);
 
+	offload_assist |= (hdrlen / 2) << TX_CMD_OFFLD_MH_SIZE;
+
 	return offload_assist;
 }
 
@@ -1436,6 +1438,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 	struct iwl_xvt_tx_mod_task_data *task_data =
 		(struct iwl_xvt_tx_mod_task_data *)data;
 	struct tx_meta_data *xvt_tx;
+	struct completion *completion = task_data->completion;
 
 	xvt = task_data->xvt;
 	xvt_tx = &xvt->tx_meta_data[task_data->lmac_id];
@@ -1489,7 +1492,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 
 	xvt_tx->tx_task_operating = false;
 	kfree(data);
-	kthread_complete_and_exit(task_data->completion, err);
+	kthread_complete_and_exit(completion, err);
 }
 
 static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,

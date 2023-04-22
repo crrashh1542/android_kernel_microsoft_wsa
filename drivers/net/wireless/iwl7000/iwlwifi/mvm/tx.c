@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -44,9 +44,9 @@ static u16 iwl_mvm_tx_csum_pre_bz(struct iwl_mvm *mvm, struct sk_buff *skb,
 				  struct ieee80211_tx_info *info, bool amsdu)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
+	u16 mh_len = ieee80211_hdrlen(hdr->frame_control);
 	u16 offload_assist = 0;
 #if IS_ENABLED(CONFIG_INET)
-	u16 mh_len = ieee80211_hdrlen(hdr->frame_control);
 	u8 protocol = 0;
 
 	/* Do not compute checksum if already computed */
@@ -118,6 +118,8 @@ static u16 iwl_mvm_tx_csum_pre_bz(struct iwl_mvm *mvm, struct sk_buff *skb,
 	else
 		udp_hdr(skb)->check = 0;
 
+out:
+#endif
 	/*
 	 * mac header len should include IV, size is in words unless
 	 * the IV is added by the firmware like in WEP.
@@ -130,8 +132,6 @@ static u16 iwl_mvm_tx_csum_pre_bz(struct iwl_mvm *mvm, struct sk_buff *skb,
 	mh_len /= 2;
 	offload_assist |= mh_len << TX_CMD_OFFLD_MH_SIZE;
 
-out:
-#endif
 	if (amsdu)
 		offload_assist |= BIT(TX_CMD_OFFLD_AMSDU);
 	else if (ieee80211_hdrlen(hdr->frame_control) % 4)
@@ -184,10 +184,7 @@ static u32 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 			   struct ieee80211_tx_info *info,
 			   bool amsdu)
 {
-	if (mvm->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_BZ ||
-	    (mvm->trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_BZ &&
-	     CSR_HW_REV_TYPE(mvm->trans->hw_rev) == IWL_CFG_MAC_TYPE_GL &&
-	     mvm->trans->hw_rev_step == SILICON_A_STEP))
+	if (!iwl_mvm_has_new_tx_csum(mvm))
 		return iwl_mvm_tx_csum_pre_bz(mvm, skb, info, amsdu);
 	return iwl_mvm_tx_csum_bz(mvm, skb, amsdu);
 }
@@ -802,13 +799,15 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 			struct iwl_mvm_vif_link_info *link;
 
 			if (link_id == IEEE80211_LINK_UNSPECIFIED) {
-				if (info.control.vif->valid_links)
-					link_id = ffs(info.control.vif->valid_links) - 1;
+				if (info.control.vif->active_links)
+					link_id = ffs(info.control.vif->active_links) - 1;
 				else
 					link_id = 0;
 			}
 
 			link = mvmvif->link[link_id];
+			if (WARN_ON(!link))
+				return -1;
 
 			if (!ieee80211_is_data(hdr->frame_control))
 				sta_id = link->bcast_sta.sta_id;
@@ -900,7 +899,7 @@ unsigned int iwl_mvm_max_amsdu_size(struct iwl_mvm *mvm,
 			band = mvmsta->vif->bss_conf.chandef.chan->band;
 		}
 
-		lmac = iwl_mvm_get_lmac_id(mvm->fw, band);
+		lmac = iwl_mvm_get_lmac_id(mvm, band);
 	} else if (fw_has_capa(&mvm->fw->ucode_capa,
 			       IWL_UCODE_TLV_CAPA_CDB_SUPPORT)) {
 		/* for real MLO restrict to both LMACs if they exist */
@@ -2135,7 +2134,8 @@ void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 		u16 tfd_cnt;
 		int i;
 
-		if (unlikely(sizeof(*ba_res) > pkt_len))
+		if (IWL_FW_CHECK(mvm, sizeof(*ba_res) > pkt_len,
+				 "short BA notification (%d)\n", pkt_len))
 			return;
 
 		sta_id = ba_res->sta_id;
@@ -2147,7 +2147,13 @@ void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 			(void *)(uintptr_t)ba_res->reduced_txp;
 
 		tfd_cnt = le16_to_cpu(ba_res->tfd_cnt);
-		if (!tfd_cnt || struct_size(ba_res, tfd, tfd_cnt) > pkt_len)
+		if (!tfd_cnt)
+			return;
+
+		if (IWL_FW_CHECK(mvm,
+				 struct_size(ba_res, tfd, tfd_cnt) > pkt_len,
+				 "short BA notification (tfds:%d, size:%d)\n",
+				 tfd_cnt, pkt_len))
 			return;
 
 		rcu_read_lock();
@@ -2205,7 +2211,9 @@ void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 
 	rcu_read_lock();
 	mvmsta = iwl_mvm_sta_from_staid_rcu(mvm, sta_id);
-	if (WARN_ON_ONCE(!mvmsta)) {
+	if (IWL_FW_CHECK(mvm, !mvmsta,
+			 "invalid STA ID %d in BA notif\n",
+			 sta_id)) {
 		rcu_read_unlock();
 		return;
 	}

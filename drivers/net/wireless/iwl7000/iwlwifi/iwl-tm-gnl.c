@@ -1087,6 +1087,9 @@ static struct genl_family iwl_tm_gnl_family __genl_ro_after_init = {
 	.module		= THIS_MODULE,
 	.ops		= iwl_tm_gnl_ops,
 	.n_ops		= ARRAY_SIZE(iwl_tm_gnl_ops),
+#if LINUX_VERSION_IS_GEQ(6,1,0)
+	.resv_start_op  = IWL_TM_GNL_CMD_SUBSCRIBE_EVENTS + 1,
+#endif
 	.mcgrps		= iwl_tm_gnl_mcgrps,
 	.n_mcgrps	= ARRAY_SIZE(iwl_tm_gnl_mcgrps),
 };
