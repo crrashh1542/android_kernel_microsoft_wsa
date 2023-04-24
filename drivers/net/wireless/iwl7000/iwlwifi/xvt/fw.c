@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
 #include "iwl-trans.h"
@@ -343,6 +343,7 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type)
 	iwl_dbg_tlv_time_point(&xvt->fwrt, IWL_FW_INI_TIME_POINT_AFTER_ALIVE,
 			       NULL);
 
+	iwl_fw_disable_dbg_asserts(&xvt->fwrt);
 	iwl_get_shared_mem_conf(&xvt->fwrt);
 
 	if (iwl_xvt_is_unified_fw(xvt)) {
