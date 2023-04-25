@@ -268,6 +268,10 @@ static int iwl_mvm_esr_mode_active(struct iwl_mvm *mvm,
 
 	/* Disable SMPS overrideing by user */
 	vif->driver_flags |= IEEE80211_VIF_DISABLE_SMPS_OVERRIDE;
+#ifdef CPTCFG_IWLWIFI_DEBUGFS
+	/* Disable RLC overriding by user */
+	mvm->dbgfs_rx_phyinfo = 0;
+#endif
 
 	iwl_mvm_update_smps_on_active_links(mvm, vif, IWL_MVM_SMPS_REQ_FW,
 					    IEEE80211_SMPS_OFF);
