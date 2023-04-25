@@ -7132,6 +7132,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	struct ieee80211_mgd_auth_data *auth_data;
 	struct ieee80211_link_data *link;
+	const struct element *csa_elem, *ecsa_elem;
 	u16 auth_alg;
 	int err;
 	bool cont_auth;
@@ -7177,6 +7178,20 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 
 	if (ifmgd->assoc_data)
 		return -EBUSY;
+
+	rcu_read_lock();
+	csa_elem = ieee80211_bss_get_elem(req->bss, WLAN_EID_CHANNEL_SWITCH);
+	ecsa_elem = ieee80211_bss_get_elem(req->bss,
+					   WLAN_EID_EXT_CHANSWITCH_ANN);
+	if ((csa_elem &&
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie)) ||
+	    (ecsa_elem &&
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie))) {
+		rcu_read_unlock();
+		sdata_info(sdata, "AP is in CSA process, reject auth\n");
+		return -EINVAL;
+	}
+	rcu_read_unlock();
 
 	auth_data = kzalloc(sizeof(*auth_data) + iwl7000_get_auth_data_len(req) +
 			    req->ie_len, GFP_KERNEL);
@@ -7494,7 +7509,7 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	struct ieee80211_mgd_assoc_data *assoc_data;
-	const struct element *ssid_elem;
+	const struct element *ssid_elem, *csa_elem, *ecsa_elem;
 	struct ieee80211_vif_cfg *vif_cfg = &sdata->vif.cfg;
 	ieee80211_conn_flags_t conn_flags = 0;
 	struct ieee80211_link_data *link;
@@ -7525,6 +7540,19 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		kfree(assoc_data);
 		return -EINVAL;
 	}
+
+	csa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_CHANNEL_SWITCH);
+	ecsa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_EXT_CHANSWITCH_ANN);
+	if ((csa_elem &&
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie)) ||
+	    (ecsa_elem &&
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie))) {
+		sdata_info(sdata, "AP is in CSA process, reject assoc\n");
+		rcu_read_unlock();
+		kfree(assoc_data);
+		return -EINVAL;
+	}
+
 	memcpy(assoc_data->ssid, ssid_elem->data, ssid_elem->datalen);
 	assoc_data->ssid_len = ssid_elem->datalen;
 	memcpy(vif_cfg->ssid, assoc_data->ssid, assoc_data->ssid_len);
