@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2020-2022 Intel Corporation
+ * Copyright(c) 2020-2023 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -270,73 +270,110 @@ static u8 *iwl_get_pnvm_image(struct iwl_trans *trans_p, size_t *len)
 	return image;
 }
 
+static void iwl_pnvm_load_pnvm_to_trans(struct iwl_trans *trans,
+					const struct iwl_ucode_capabilities *capa)
+{
+	struct iwl_pnvm_image *pnvm_data = NULL;
+	u8 *data = NULL;
+	size_t length;
+	int ret;
+
+	/* failed to get/parse the image in the past, no use trying again */
+	if (trans->fail_to_parse_pnvm_image)
+		return;
+
+	if (trans->pnvm_loaded)
+		goto set;
+
+	data = iwl_get_pnvm_image(trans, &length);
+	if (!data) {
+		trans->fail_to_parse_pnvm_image = true;
+		return;
+	}
+
+	pnvm_data = kzalloc(sizeof(*pnvm_data), GFP_KERNEL);
+	if (!pnvm_data)
+		goto free;
+
+	ret = iwl_pnvm_parse(trans, data, length, pnvm_data);
+	if (ret) {
+		trans->fail_to_parse_pnvm_image = true;
+		goto free;
+	}
+
+	ret = iwl_trans_load_pnvm(trans, pnvm_data, capa);
+	if (ret)
+		goto free;
+	IWL_INFO(trans, "loaded PNVM version %08x\n", pnvm_data->version);
+
+set:
+	iwl_trans_set_pnvm(trans, capa);
+free:
+	kfree(data);
+	kfree(pnvm_data);
+}
+
+static void
+iwl_pnvm_load_reduce_power_to_trans(struct iwl_trans *trans,
+				    const struct iwl_ucode_capabilities *capa)
+{
+	struct iwl_pnvm_image *pnvm_data = NULL;
+	u8 *data = NULL;
+	size_t length;
+	int ret;
+
+	if (trans->failed_to_load_reduce_power_image)
+		return;
+
+	if (trans->reduce_power_loaded)
+		goto set;
+
+	data = iwl_uefi_get_reduced_power(trans, &length);
+	if (IS_ERR(data)) {
+		trans->failed_to_load_reduce_power_image = true;
+		return;
+	}
+
+	pnvm_data = kzalloc(sizeof(*pnvm_data), GFP_KERNEL);
+	if (!pnvm_data)
+		goto free;
+
+	ret = iwl_uefi_reduce_power_parse(trans, data, length, pnvm_data);
+	if (ret) {
+		trans->failed_to_load_reduce_power_image = true;
+		goto free;
+	}
+
+	ret = iwl_trans_load_reduce_power(trans, pnvm_data, capa);
+	if (ret) {
+		IWL_DEBUG_FW(trans,
+			     "Failed to load reduce power table %d\n",
+			     ret);
+		trans->failed_to_load_reduce_power_image = true;
+		goto free;
+	}
+
+set:
+	iwl_trans_set_reduce_power(trans, capa);
+free:
+	kfree(data);
+	kfree(pnvm_data);
+}
+
 int iwl_pnvm_load(struct iwl_trans *trans,
 		  struct iwl_notif_wait_data *notif_wait,
 		  const struct iwl_ucode_capabilities *capa)
 {
-	u8 *data = NULL;
-	size_t length;
 	struct iwl_notification_wait pnvm_wait;
 	static const u16 ntf_cmds[] = { WIDE_ID(REGULATORY_AND_NVM_GROUP,
 						PNVM_INIT_COMPLETE_NTFY) };
-	struct iwl_pnvm_image pnvm_data;
-	int ret;
 
 	/* if the SKU_ID is empty, there's nothing to do */
 	if (!trans->sku_id[0] && !trans->sku_id[1] && !trans->sku_id[2])
 		return 0;
 
-	/* failed to get/parse the image in the past, no use to try again */
-	if (trans->fail_to_parse_pnvm_image)
-		goto reduce_tables;
-
-	/* get the image, parse and load it, if not loaded yet */
-	if (!trans->pnvm_loaded) {
-		data = iwl_get_pnvm_image(trans, &length);
-		if (!data) {
-			trans->fail_to_parse_pnvm_image = true;
-			goto reduce_tables;
-		}
-		ret = iwl_pnvm_parse(trans, data, length, &pnvm_data);
-		if (ret) {
-			trans->fail_to_parse_pnvm_image = true;
-			kfree(data);
-			goto reduce_tables;
-		}
-
-		ret = iwl_trans_load_pnvm(trans, &pnvm_data, capa);
-		/* data can be free only after we finish using pnvm_data */
-		kfree(data);
-		if (ret)
-			goto reduce_tables;
-		IWL_INFO(trans, "loaded PNVM version %08x\n", pnvm_data.version);
-	}
-
-	iwl_trans_set_pnvm(trans, capa);
-
-reduce_tables:
-	/* now try to get the reduce power table, if not loaded yet */
-	if (!trans->reduce_power_loaded) {
-		memset(&pnvm_data, 0, sizeof(pnvm_data));
-		ret = iwl_uefi_get_reduced_power(trans, &pnvm_data);
-		if (ret) {
-			/*
-			 * Pretend we've loaded it - at least we've tried and
-			 * couldn't load it at all, so there's no point in
-			 * trying again over and over.
-			 */
-			trans->reduce_power_loaded = true;
-		} else {
-			ret = iwl_trans_load_reduce_power(trans, &pnvm_data, capa);
-			if (ret) {
-				IWL_DEBUG_FW(trans,
-					     "Failed to load reduce power table %d\n",
-					     ret);
-				trans->reduce_power_loaded = true;
-			}
-		}
-	}
-	iwl_trans_set_reduce_power(trans, capa);
+	iwl_pnvm_load_pnvm_to_trans(trans, capa);
+	iwl_pnvm_load_reduce_power_to_trans(trans, capa);
 
 	iwl_init_notification_wait(notif_wait, &pnvm_wait,
 				   ntf_cmds, ARRAY_SIZE(ntf_cmds),

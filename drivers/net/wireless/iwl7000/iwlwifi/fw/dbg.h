@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018-2019, 2021-2022 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2019, 2021-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -234,6 +234,7 @@ static inline void iwl_fw_cancel_timestamp(struct iwl_fw_runtime *fwrt)
 	cancel_delayed_work_sync(&fwrt->timestamp.wk);
 }
 
+int iwl_fw_send_timestamp_marker_cmd(struct iwl_fw_runtime *fwrt);
 void iwl_fw_trigger_timestamp(struct iwl_fw_runtime *fwrt, u32 delay);
 
 static inline void iwl_fw_suspend_timestamp(struct iwl_fw_runtime *fwrt)
@@ -325,4 +326,27 @@ void iwl_fwrt_dump_error_logs(struct iwl_fw_runtime *fwrt);
 void iwl_send_dbg_dump_complete_cmd(struct iwl_fw_runtime *fwrt,
 				    u32 timepoint,
 				    u32 timepoint_data);
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+#define IWL_FW_CHECK_FAILED(_obj, _fmt, ...)				\
+	do {								\
+		IWL_ERR(_obj, _fmt, __VA_ARGS__);			\
+		if ((_obj)->trans->dbg_cfg.FW_MISBEHAVE_NMI)		\
+			iwl_force_nmi((_obj)->trans);			\
+	} while (0)
+#else
+#define IWL_FW_CHECK_FAILED(_obj, _fmt, ...)				\
+	IWL_ERR_LIMIT(_obj, _fmt, __VA_ARGS__)
+#endif
+
+#define IWL_FW_CHECK(_obj, _cond, _fmt, ...)				\
+	({								\
+		bool __cond = (_cond);					\
+									\
+		if (unlikely(__cond))					\
+			IWL_FW_CHECK_FAILED(_obj, _fmt, __VA_ARGS__);	\
+									\
+		unlikely(__cond);					\
+	})
+
 #endif  /* __iwl_fw_dbg_h__ */

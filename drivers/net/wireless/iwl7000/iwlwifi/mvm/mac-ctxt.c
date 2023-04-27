@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -471,19 +471,24 @@ void iwl_mvm_set_fw_qos_params(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 			       struct iwl_ac_qos *ac, __le32 *qos_flags)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	struct iwl_mvm_vif_link_info *mvm_link =
+		mvmvif->link[link_conf->link_id];
 	int i;
+
+	if (!mvm_link)
+		return;
 
 	for (i = 0; i < IEEE80211_NUM_ACS; i++) {
 		u8 txf = iwl_mvm_mac_ac_to_tx_fifo(mvm, i);
 		u8 ucode_ac = iwl_mvm_mac80211_ac_to_ucode_ac(i);
 
 		ac[ucode_ac].cw_min =
-			cpu_to_le16(mvmvif->deflink.queue_params[i].cw_min);
+			cpu_to_le16(mvm_link->queue_params[i].cw_min);
 		ac[ucode_ac].cw_max =
-			cpu_to_le16(mvmvif->deflink.queue_params[i].cw_max);
+			cpu_to_le16(mvm_link->queue_params[i].cw_max);
 		ac[ucode_ac].edca_txop =
-			cpu_to_le16(mvmvif->deflink.queue_params[i].txop * 32);
-		ac[ucode_ac].aifsn = mvmvif->deflink.queue_params[i].aifs;
+			cpu_to_le16(mvm_link->queue_params[i].txop * 32);
+		ac[ucode_ac].aifsn = mvm_link->queue_params[i].aifs;
 		ac[ucode_ac].fifos_mask = BIT(txf);
 	}
 
@@ -559,7 +564,7 @@ static void iwl_mvm_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
 
 	cmd->filter_flags = 0;
 
-	iwl_mvm_set_fw_qos_params(mvm, vif, &vif->bss_conf, &cmd->ac[0],
+	iwl_mvm_set_fw_qos_params(mvm, vif, &vif->bss_conf, cmd->ac,
 				  &cmd->qos_flags);
 
 	/* The fw does not distinguish between ht and fat */
@@ -897,7 +902,7 @@ u8 iwl_mvm_mac_ctxt_get_lowest_rate(struct iwl_mvm *mvm,
 	u8 rate;
 	u32 i;
 
-	if (link_id == IEEE80211_LINK_UNSPECIFIED && vif->valid_links) {
+	if (link_id == IEEE80211_LINK_UNSPECIFIED && ieee80211_vif_is_mld(vif)) {
 		for (i = 0; i < ARRAY_SIZE(mvmvif->link); i++) {
 			if (!mvmvif->link[i])
 				continue;
@@ -1125,6 +1130,9 @@ static int iwl_mvm_mac_ctxt_send_beacon_v9(struct iwl_mvm *mvm,
 	beacon_cmd.flags = cpu_to_le16(flags);
 	beacon_cmd.byte_cnt = cpu_to_le16((u16)beacon->len);
 
+	if (WARN_ON(!mvmvif->link[link_conf->link_id]))
+		return -EINVAL;
+
 	if (iwl_fw_lookup_cmd_ver(mvm->fw, BEACON_TEMPLATE_CMD, 0) > 12)
 		beacon_cmd.link_id =
 			cpu_to_le32(mvmvif->link[link_conf->link_id]->fw_link_id);
@@ -1297,7 +1305,7 @@ static void iwl_mvm_mac_ctxt_cmd_fill_ap(struct iwl_mvm *mvm,
 			iwl_mvm_mac_ap_iterator, &data);
 
 		if (data.beacon_device_ts) {
-			u32 rand = prandom_u32_max(64 - 36) + 36;
+			u32 rand = get_random_u32_inclusive(36, 63);
 			mvmvif->ap_beacon_time = data.beacon_device_ts +
 				ieee80211_tu_to_usec(data.beacon_int * rand /
 						     100);
@@ -1776,8 +1784,10 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 	u32 id_n_color, csa_id;
 	/* save mac_id or link_id to use later to cancel csa if needed */
 	u32 id;
+	u32 mac_link_id = 0;
 	u8 notif_ver = iwl_fw_lookup_notif_ver(mvm->fw, MAC_CONF_GROUP,
 					       CHANNEL_SWITCH_START_NOTIF, 0);
+	bool csa_active;
 
 	rcu_read_lock();
 
@@ -1793,6 +1803,7 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 			goto out_unlock;
 
 		id = mac_id;
+		csa_active = vif->bss_conf.csa_active;
 	} else {
 		struct iwl_channel_switch_start_notif *notif = (void *)pkt->data;
 		u32 link_id = le32_to_cpu(notif->link_id);
@@ -1803,7 +1814,9 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 			goto out_unlock;
 
 		id = link_id;
+		mac_link_id = bss_conf->link_id;
 		vif = bss_conf->vif;
+		csa_active = bss_conf->csa_active;
 	}
 
 	mvmvif = iwl_mvm_vif_from_mac80211(vif);
@@ -1843,7 +1856,7 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 		 */
 		if (iwl_fw_lookup_notif_ver(mvm->fw, MAC_CONF_GROUP,
 					    CHANNEL_SWITCH_ERROR_NOTIF,
-					    0) && !vif->bss_conf.csa_active) {
+					    0) && !csa_active) {
 			IWL_DEBUG_INFO(mvm, "Channel Switch was canceled\n");
 			iwl_mvm_cancel_channel_switch(mvm, vif, id);
 			break;
@@ -1851,7 +1864,7 @@ void iwl_mvm_channel_switch_start_notif(struct iwl_mvm *mvm,
 
 		iwl_mvm_csa_client_absent(mvm, vif);
 		cancel_delayed_work(&mvmvif->csa_work);
-		ieee80211_chswitch_done(vif, true);
+		ieee80211_chswitch_done(vif, true, mac_link_id);
 		break;
 	default:
 		/* should never happen */

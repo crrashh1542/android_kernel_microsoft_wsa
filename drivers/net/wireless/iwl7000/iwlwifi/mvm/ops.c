@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -215,8 +215,7 @@ static void iwl_mvm_rx_monitor_notif(struct iwl_mvm *mvm,
 	WARN_ON(!(sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40));
 	sband->ht_cap.cap &= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 
-	he_cap = ieee80211_get_he_iftype_cap(sband,
-					     ieee80211_vif_type_p2p(vif));
+	he_cap = ieee80211_get_he_iftype_cap_vif(sband, vif);
 
 	if (he_cap) {
 		/* we know that ours is writable */
@@ -773,6 +772,7 @@ static void iwl_mvm_init_modparams(struct iwl_mvm *mvm)
 #define IWL_DBG_CFG(t, n)			/* nothing */
 #define IWL_DBG_CFG_STR(n)			/* nothing */
 #define IWL_DBG_CFG_NODEF(t, n)			/* nothing */
+#define IWL_DBG_CFG_DEF(t, n, v)		/* nothing */
 #define IWL_DBG_CFG_BIN(n)			/* nothing */
 #define IWL_DBG_CFG_BINA(n, max)		/* nothing */
 #define IWL_DBG_CFG_RANGE(t, n, min, max)	/* nothing */
@@ -786,6 +786,7 @@ static void iwl_mvm_init_modparams(struct iwl_mvm *mvm)
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
+#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
@@ -1236,9 +1237,8 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	static const u8 no_reclaim_cmds[] = {
 		TX_CMD,
 	};
-	u32 max_agg = trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_BZ ?
-			   IEEE80211_MAX_AMPDU_BUF_EHT : IEEE80211_MAX_AMPDU_BUF_HE;
-	int scan_size;
+	u32 max_agg;
+	size_t scan_size;
 	u32 min_backoff;
 	struct iwl_mvm_csme_conn_info *csme_conn_info __maybe_unused;
 
@@ -1259,6 +1259,11 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 				&iwl_mvm_hw_ops);
 	if (!hw)
 		return NULL;
+
+	if (trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_BZ)
+		max_agg = IEEE80211_MAX_AMPDU_BUF_EHT;
+	else
+		max_agg = IEEE80211_MAX_AMPDU_BUF_HE;
 
 	hw->max_rx_aggregation_subframes = max_agg;
 
@@ -1598,6 +1603,9 @@ void iwl_mvm_stop_device(struct iwl_mvm *mvm)
 static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 {
 	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	void *iftype_free = NULL;
+#endif
 	int i;
 
 	if (mvm->mei_registered) {
@@ -1641,7 +1649,6 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 
 	if (mvm->hw_registered)
 		iwl_mvm_vendor_cmds_unregister(mvm);
-
 #endif /* CPTCFG_IWLMVM_VENDOR_CMDS */
 
 	iwl_trans_op_mode_leave(mvm->trans);
@@ -1671,7 +1678,16 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 	if (mvm->mei_registered)
 		iwl_mei_unregister_complete();
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mvm->trans->dbg_cfg.eml_capa_override >= 0)
+		iftype_free = (void *)(uintptr_t)mvm->hw->wiphy->iftype_ext_capab;
+#endif
+
 	ieee80211_free_hw(mvm->hw);
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	kfree(iftype_free);
+#endif
 }
 
 struct iwl_async_handler_entry {
@@ -1779,7 +1795,9 @@ static void iwl_mvm_rx_common(struct iwl_mvm *mvm,
 		if (rx_h->cmd_id != WIDE_ID(pkt->hdr.group_id, pkt->hdr.cmd))
 			continue;
 
-		if (unlikely(pkt_len < rx_h->min_size))
+		if (IWL_FW_CHECK(mvm, pkt_len < rx_h->min_size,
+				 "unexpected notification 0x%04x size %d, need %d\n",
+				 rx_h->cmd_id, pkt_len, rx_h->min_size))
 			return;
 
 		if (rx_h->context == RX_HANDLER_SYNC) {
@@ -1935,8 +1953,11 @@ static void iwl_mvm_queue_state_change(struct iwl_op_mode *op_mode,
 		mvmtxq = iwl_mvm_txq_from_mac80211(txq);
 		mvmtxq->stopped = !start;
 
-		if (start && mvmsta->sta_state != IEEE80211_STA_NOTEXIST)
+		if (start && mvmsta->sta_state != IEEE80211_STA_NOTEXIST) {
+			local_bh_disable();
 			iwl_mvm_mac_itxq_xmit(mvm->hw, txq);
+			local_bh_enable();
+		}
 	}
 
 out:

@@ -7,7 +7,7 @@
  * Copyright 2007-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018 - 2022 Intel Corporation
+ * Copyright (C) 2018 - 2023 Intel Corporation
  */
 
 #ifndef MAC80211_H
@@ -89,15 +89,13 @@
 /**
  * DOC: mac80211 software tx queueing
  *
- * mac80211 provides an optional intermediate queueing implementation designed
- * to allow the driver to keep hardware queues short and provide some fairness
- * between different stations/interfaces.
- * In this model, the driver pulls data frames from the mac80211 queue instead
- * of letting mac80211 push them via drv_tx().
- * Other frames (e.g. control or management) are still pushed using drv_tx().
+ * mac80211 uses an intermediate queueing implementation, designed to allow the
+ * driver to keep hardware queues short and to provide some fairness between
+ * different stations/interfaces.
  *
- * Drivers indicate that they use this model by implementing the .wake_tx_queue
- * driver operation.
+ * Drivers must provide the .wake_tx_queue driver operation by either
+ * linking it to ieee80211_handle_wake_tx_queue() or implementing a custom
+ * handler.
  *
  * Intermediate queues (struct ieee80211_txq) are kept per-sta per-tid, with
  * another per-sta for non-data/non-mgmt and bufferable management frames, and
@@ -106,9 +104,12 @@
  * The driver is expected to initialize its private per-queue data for stations
  * and interfaces in the .add_interface and .sta_add ops.
  *
- * The driver can't access the queue directly. To dequeue a frame from a
- * txq, it calls ieee80211_tx_dequeue(). Whenever mac80211 adds a new frame to a
- * queue, it calls the .wake_tx_queue driver op.
+ * The driver can't access the internal TX queues (iTXQs) directly.
+ * Whenever mac80211 adds a new frame to a queue, it calls the .wake_tx_queue
+ * driver op.
+ * Drivers implementing a custom .wake_tx_queue op can get them by calling
+ * ieee80211_tx_dequeue(). Drivers using ieee80211_handle_wake_tx_queue() will
+ * simply get the individual frames pushed via the .tx driver operation.
  *
  * Drivers can optionally delegate responsibility for scheduling queues to
  * mac80211, to take advantage of airtime fairness accounting. In this case, to
@@ -1719,14 +1720,18 @@ struct ieee80211_channel_switch {
  * @IEEE80211_VIF_GET_NOA_UPDATE: request to handle NOA attributes
  *	and send P2P_PS notification to the driver if NOA changed, even
  *	this is not pure P2P vif.
+ * @IEEE80211_VIF_DISABLE_SMPS_OVERRIDE: disable user configuration of
+ *	SMPS mode via debugfs.
+ * @IEEE80211_VIF_DISABLE_EML: disable EML in EHT
  */
 enum ieee80211_vif_flags {
 	IEEE80211_VIF_BEACON_FILTER		= BIT(0),
 	IEEE80211_VIF_SUPPORTS_CQM_RSSI		= BIT(1),
 	IEEE80211_VIF_SUPPORTS_UAPSD		= BIT(2),
 	IEEE80211_VIF_GET_NOA_UPDATE		= BIT(3),
+	IEEE80211_VIF_DISABLE_SMPS_OVERRIDE	= BIT(4),
+	IEEE80211_VIF_DISABLE_EML		= BIT(5),
 };
-
 
 /**
  * enum ieee80211_offload_flags - virtual interface offload flags
@@ -1755,6 +1760,8 @@ enum ieee80211_offload_flags {
  *	offchannel/dynamic_ps operations.
  * @aid: association ID number, valid only when @assoc is true
  * @eml_cap: EML capabilities as described in P802.11be_D2.2 Figure 9-1002k.
+ * @eml_med_sync_delay: Medium Synchronization delay as described in
+ *	P802.11be_D2.2 Figure 9-1002j.
  * @arp_addr_list: List of IPv4 addresses for hardware ARP filtering. The
  *	may filter ARP queries targeted for other addresses than listed here.
  *	The driver must allow ARP queries targeted for all address listed here
@@ -1778,6 +1785,7 @@ struct ieee80211_vif_cfg {
 	bool ps;
 	u16 aid;
 	u16 eml_cap;
+	u16 eml_med_sync_delay;
 
 	__be32 arp_addr_list[IEEE80211_BSS_ARP_ADDR_LIST_LEN];
 	int arp_addr_cnt;
@@ -1804,9 +1812,15 @@ struct ieee80211_vif_cfg {
  * @active_links: The bitmap of active links, or 0 for non-MLO.
  *	The driver shouldn't change this directly, but use the
  *	API calls meant for that purpose.
+ * @dormant_links: bitmap of valid but disabled links, or 0 for non-MLO.
+ *	Must be a subset of valid_links.
  * @addr: address of this interface
  * @p2p: indicates whether this AP or STA interface is a p2p
  *	interface, i.e. a GO or p2p-sta respectively
+ * @netdev_features: tx netdev features supported by the hardware for this
+ *	vif. mac80211 initializes this to hw->netdev_features, and the driver
+ *	can mask out specific tx features. mac80211 will handle software fixup
+ *	for masked offloads (GSO, CSUM)
  * @driver_flags: flags/capabilities the driver has for this interface,
  *	these need to be set (or cleared) when the interface is added
  *	or, if supported by the driver, the interface type is changed
@@ -1827,9 +1841,7 @@ struct ieee80211_vif_cfg {
  *	for this interface.
  * @drv_priv: data area for driver use, will always be aligned to
  *	sizeof(void \*).
- * @txq: the multicast data TX queue (if driver uses the TXQ abstraction)
- * @txqs_stopped: per AC flag to indicate that intermediate TXQs are stopped,
- *	protected by fq->lock.
+ * @txq: the multicast data TX queue
  * @offload_flags: 802.3 -> 802.11 enapsulation offload flags, see
  *	&enum ieee80211_offload_flags.
  * @mbssid_tx_vif: Pointer to the transmitting interface if MBSSID is enabled.
@@ -1839,7 +1851,7 @@ struct ieee80211_vif {
 	struct ieee80211_vif_cfg cfg;
 	struct ieee80211_bss_conf bss_conf;
 	struct ieee80211_bss_conf __rcu *link_conf[IEEE80211_MLD_MAX_NUM_LINKS];
-	u16 valid_links, active_links;
+	u16 valid_links, active_links, dormant_links;
 	u8 addr[ETH_ALEN] __aligned(2);
 	bool p2p;
 
@@ -1848,6 +1860,7 @@ struct ieee80211_vif {
 
 	struct ieee80211_txq *txq;
 
+	netdev_features_t netdev_features;
 	u32 driver_flags;
 	u32 offload_flags;
 
@@ -1858,13 +1871,32 @@ struct ieee80211_vif {
 	bool probe_req_reg;
 	bool rx_mcast_action_reg;
 
-	bool txqs_stopped[IEEE80211_NUM_ACS];
-
 	struct ieee80211_vif *mbssid_tx_vif;
 
 	/* must be last */
 	u8 drv_priv[] __aligned(sizeof(void *));
 };
+
+/**
+ * ieee80211_vif_usable_links - Return the usable links for the vif
+ * @vif: the vif for which the usable links are requested
+ * Return: the usable link bitmap
+ */
+static inline u16 ieee80211_vif_usable_links(const struct ieee80211_vif *vif)
+{
+	return vif->valid_links & ~vif->dormant_links;
+}
+
+/**
+ * ieee80211_vif_is_mld - Returns true iff the vif is an MLD one
+ * @vif: the vif
+ * Return: %true if the vif is an MLD, %false otherwise.
+ */
+static inline bool ieee80211_vif_is_mld(const struct ieee80211_vif *vif)
+{
+	/* valid_links != 0 indicates this vif is an MLD */
+	return vif->valid_links != 0;
+}
 
 #define for_each_vif_active_link(vif, link, link_id)				\
 	for (link_id = 0; link_id < ARRAY_SIZE((vif)->link_conf); link_id++)	\
@@ -2260,8 +2292,8 @@ struct ieee80211_link_sta {
  *	For non MLO STA it will point to the deflink data. For MLO STA
  *	ieee80211_sta_recalc_aggregates() must be called to update it.
  * @support_p2p_ps: indicates whether the STA supports P2P PS mechanism or not.
- * @txq: per-TID data TX queues (if driver uses the TXQ abstraction); note that
- *	the last entry (%IEEE80211_NUM_TIDS) is used for non-data frames
+ * @txq: per-TID data TX queues; note that the last entry (%IEEE80211_NUM_TIDS)
+ *	is used for non-data frames
  * @deflink: This holds the default link STA information, for non MLO STA all link
  *	specific STA information is accessed through @deflink or through
  *	link[0] which points to address of @deflink. For MLO Link STA
@@ -4465,7 +4497,8 @@ struct ieee80211_ops {
 				  struct ieee80211_channel_switch *ch_switch);
 
 	int (*post_channel_switch)(struct ieee80211_hw *hw,
-				   struct ieee80211_vif *vif);
+				   struct ieee80211_vif *vif,
+				   struct ieee80211_bss_conf *link_conf);
 	void (*abort_channel_switch)(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif);
 	void (*channel_switch_rx_beacon)(struct ieee80211_hw *hw,
@@ -5225,7 +5258,8 @@ struct ieee80211_mutable_offsets {
  * @vif: &struct ieee80211_vif pointer from the add_interface callback.
  * @offs: &struct ieee80211_mutable_offsets pointer to struct that will
  *	receive the offsets that may be updated by the driver.
- * @link_id: the link id to which the beacon belongs (or 0 for a non-MLD AP)
+ * @link_id: the link id to which the beacon belongs (or 0 for an AP STA
+ *	that is not associated with AP MLD).
  *
  * If the driver implements beaconing modes, it must use this function to
  * obtain the beacon template.
@@ -5254,7 +5288,8 @@ ieee80211_beacon_get_template(struct ieee80211_hw *hw,
  * @tim_length: pointer to variable that will receive the TIM IE length,
  *	(including the ID and length bytes!).
  *	Set to 0 if invalid (in non-AP modes).
- * @link_id: the link id to which the beacon belongs (or 0 for a non-MLD AP)
+ * @link_id: the link id to which the beacon belongs (or 0 for an AP STA
+ *	that is not associated with AP MLD).
  *
  * If the driver implements beaconing modes, it must use this function to
  * obtain the beacon frame.
@@ -5277,7 +5312,8 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
  * ieee80211_beacon_get - beacon generation function
  * @hw: pointer obtained from ieee80211_alloc_hw().
  * @vif: &struct ieee80211_vif pointer from the add_interface callback.
- * @link_id: the link id to which the beacon belongs (or 0 for a non-MLD AP)
+ * @link_id: the link id to which the beacon belongs (or 0 for an AP STA
+ *	that is not associated with AP MLD).
  *
  * See ieee80211_beacon_get_tim().
  *
@@ -5734,7 +5770,7 @@ void ieee80211_key_replay(struct ieee80211_key_conf *keyconf);
  * @hw: pointer as obtained from ieee80211_alloc_hw().
  * @queue: queue number (counted from zero).
  *
- * Drivers should use this function instead of netif_wake_queue.
+ * Drivers must use this function instead of netif_wake_queue.
  */
 void ieee80211_wake_queue(struct ieee80211_hw *hw, int queue);
 
@@ -5743,7 +5779,7 @@ void ieee80211_wake_queue(struct ieee80211_hw *hw, int queue);
  * @hw: pointer as obtained from ieee80211_alloc_hw().
  * @queue: queue number (counted from zero).
  *
- * Drivers should use this function instead of netif_stop_queue.
+ * Drivers must use this function instead of netif_stop_queue.
  */
 void ieee80211_stop_queue(struct ieee80211_hw *hw, int queue);
 
@@ -5752,7 +5788,7 @@ void ieee80211_stop_queue(struct ieee80211_hw *hw, int queue);
  * @hw: pointer as obtained from ieee80211_alloc_hw().
  * @queue: queue number (counted from zero).
  *
- * Drivers should use this function instead of netif_stop_queue.
+ * Drivers must use this function instead of netif_queue_stopped.
  *
  * Return: %true if the queue is stopped. %false otherwise.
  */
@@ -5763,7 +5799,7 @@ int ieee80211_queue_stopped(struct ieee80211_hw *hw, int queue);
  * ieee80211_stop_queues - stop all queues
  * @hw: pointer as obtained from ieee80211_alloc_hw().
  *
- * Drivers should use this function instead of netif_stop_queue.
+ * Drivers must use this function instead of netif_tx_stop_all_queues.
  */
 void ieee80211_stop_queues(struct ieee80211_hw *hw);
 
@@ -5771,7 +5807,7 @@ void ieee80211_stop_queues(struct ieee80211_hw *hw);
  * ieee80211_wake_queues - wake all queues
  * @hw: pointer as obtained from ieee80211_alloc_hw().
  *
- * Drivers should use this function instead of netif_wake_queue.
+ * Drivers must use this function instead of netif_tx_wake_all_queues.
  */
 void ieee80211_wake_queues(struct ieee80211_hw *hw);
 
@@ -6418,11 +6454,14 @@ void ieee80211_radar_detected(struct ieee80211_hw *hw);
  * ieee80211_chswitch_done - Complete channel switch process
  * @vif: &struct ieee80211_vif pointer from the add_interface callback.
  * @success: make the channel switch successful or not
+ * @link_id: the link_id on which the switch was done. Ignored if success is
+ *	false.
  *
  * Complete the channel switch post-process: set the new operational channel
  * and wake up the suspended queues.
  */
-void ieee80211_chswitch_done(struct ieee80211_vif *vif, bool success);
+void ieee80211_chswitch_done(struct ieee80211_vif *vif, bool success,
+			     unsigned int link_id);
 
 /**
  * ieee80211_channel_switch_disconnect - disconnect due to channel switch error
@@ -6775,6 +6814,48 @@ ieee80211_vif_type_p2p(struct ieee80211_vif *vif)
 }
 
 /**
+ * ieee80211_get_he_iftype_cap_vif - return HE capabilities for sband/vif
+ * @sband: the sband to search for the iftype on
+ * @vif: the vif to get the iftype from
+ *
+ * Return: pointer to the struct ieee80211_sta_he_cap, or %NULL is none found
+ */
+static inline const struct ieee80211_sta_he_cap *
+ieee80211_get_he_iftype_cap_vif(const struct ieee80211_supported_band *sband,
+				struct ieee80211_vif *vif)
+{
+	return ieee80211_get_he_iftype_cap(sband, ieee80211_vif_type_p2p(vif));
+}
+
+/**
+ * ieee80211_get_he_6ghz_capa_vif - return HE 6 GHz capabilities
+ * @sband: the sband to search for the STA on
+ * @vif: the vif to get the iftype from
+ *
+ * Return: the 6GHz capabilities
+ */
+static inline __le16
+ieee80211_get_he_6ghz_capa_vif(const struct ieee80211_supported_band *sband,
+			       struct ieee80211_vif *vif)
+{
+	return ieee80211_get_he_6ghz_capa(sband, ieee80211_vif_type_p2p(vif));
+}
+
+/**
+ * ieee80211_get_eht_iftype_cap_vif - return ETH capabilities for sband/vif
+ * @sband: the sband to search for the iftype on
+ * @vif: the vif to get the iftype from
+ *
+ * Return: pointer to the struct ieee80211_sta_eht_cap, or %NULL is none found
+ */
+static inline const struct ieee80211_sta_eht_cap *
+ieee80211_get_eht_iftype_cap_vif(const struct ieee80211_supported_band *sband,
+				 struct ieee80211_vif *vif)
+{
+	return ieee80211_get_eht_iftype_cap(sband, ieee80211_vif_type_p2p(vif));
+}
+
+/**
  * ieee80211_update_mu_groups - set the VHT MU-MIMO groud data
  *
  * @vif: the specified virtual interface
@@ -6991,6 +7072,18 @@ static inline struct sk_buff *ieee80211_tx_dequeue_ni(struct ieee80211_hw *hw,
 
 	return skb;
 }
+
+/**
+ * ieee80211_handle_wake_tx_queue - mac80211 handler for wake_tx_queue callback
+ *
+ * @hw: pointer as obtained from wake_tx_queue() callback().
+ * @txq: pointer as obtained from wake_tx_queue() callback().
+ *
+ * Drivers can use this function for the mandatory mac80211 wake_tx_queue
+ * callback in struct ieee80211_ops. They should not call this function.
+ */
+void ieee80211_handle_wake_tx_queue(struct ieee80211_hw *hw,
+				    struct ieee80211_txq *txq);
 
 /**
  * ieee80211_next_txq - get next tx queue to pull packets from
