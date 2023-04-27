@@ -173,12 +173,10 @@ static const struct iwl_ht_params iwl_gl_a_ht_params = {
 	.ht_params = &iwl_gl_a_ht_params
 
 /*
- * If the device doesn't support HE, no need to have that many buffers.
- * These sizes were picked according to 8 MSDUs inside 256 A-MSDUs in an
+ * This size was picked according to 8 MSDUs inside 512 A-MSDUs in an
  * A-MPDU, with additional overhead to account for processing time.
  */
-#define IWL_NUM_RBDS_NON_HE		512
-#define IWL_NUM_RBDS_BZ_HE		4096
+#define IWL_NUM_RBDS_BZ_EHT		(512 * 16)
 
 const struct iwl_cfg_trans_params iwl_bz_trans_cfg = {
 	.device_family = IWL_DEVICE_FAMILY_BZ,
@@ -200,7 +198,7 @@ const struct iwl_cfg iwl_cfg_bz = {
 	.uhb_supported = true,
 	IWL_DEVICE_BZ,
 	.features = IWL_TX_CSUM_NETIF_FLAGS_BZ | NETIF_F_RXCSUM,
-	.num_rbds = IWL_NUM_RBDS_BZ_HE,
+	.num_rbds = IWL_NUM_RBDS_BZ_EHT,
 };
 
 const struct iwl_cfg iwl_cfg_gl_a0_fm_a0 = {
@@ -208,7 +206,7 @@ const struct iwl_cfg iwl_cfg_gl_a0_fm_a0 = {
 	.uhb_supported = true,
 	IWL_DEVICE_GL_A,
 	.features = IWL_TX_CSUM_NETIF_FLAGS | NETIF_F_RXCSUM,
-	.num_rbds = IWL_NUM_RBDS_BZ_HE,
+	.num_rbds = IWL_NUM_RBDS_BZ_EHT,
 };
 
 const struct iwl_cfg iwl_cfg_gl = {
@@ -216,7 +214,7 @@ const struct iwl_cfg iwl_cfg_gl = {
 	.uhb_supported = true,
 	IWL_DEVICE_BZ,
 	.features = IWL_TX_CSUM_NETIF_FLAGS_BZ | NETIF_F_RXCSUM,
-	.num_rbds = IWL_NUM_RBDS_BZ_HE,
+	.num_rbds = IWL_NUM_RBDS_BZ_EHT,
 };
 
 
