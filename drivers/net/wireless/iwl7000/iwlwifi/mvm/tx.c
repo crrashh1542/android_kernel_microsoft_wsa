@@ -40,7 +40,7 @@ iwl_mvm_bar_check_trigger(struct iwl_mvm *mvm, const u8 *addr,
 #define OPT_HDR(type, skb, off) \
 	(type *)(skb_network_header(skb) + (off))
 
-static u16 iwl_mvm_tx_csum_pre_bz(struct iwl_mvm *mvm, struct sk_buff *skb,
+static u16 iwl_mvm_tx_csum_pre_sc(struct iwl_mvm *mvm, struct sk_buff *skb,
 				  struct ieee80211_tx_info *info, bool amsdu)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
@@ -141,7 +141,7 @@ out:
 	return offload_assist;
 }
 
-u32 iwl_mvm_tx_csum_bz(struct iwl_mvm *mvm, struct sk_buff *skb, bool amsdu)
+u32 iwl_mvm_tx_csum_sc(struct iwl_mvm *mvm, struct sk_buff *skb, bool amsdu)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	u32 offload_assist = IWL_TX_CMD_OFFLD_BZ_PARTIAL_CSUM;
@@ -185,8 +185,8 @@ static u32 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 			   bool amsdu)
 {
 	if (!iwl_mvm_has_new_tx_csum(mvm))
-		return iwl_mvm_tx_csum_pre_bz(mvm, skb, info, amsdu);
-	return iwl_mvm_tx_csum_bz(mvm, skb, amsdu);
+		return iwl_mvm_tx_csum_pre_sc(mvm, skb, info, amsdu);
+	return iwl_mvm_tx_csum_sc(mvm, skb, amsdu);
 }
 
 /*
@@ -288,7 +288,7 @@ void iwl_mvm_set_tx_cmd(struct iwl_mvm *mvm, struct sk_buff *skb,
 	tx_cmd->sta_id = sta_id;
 
 	tx_cmd->offload_assist =
-		cpu_to_le16(iwl_mvm_tx_csum_pre_bz(mvm, skb, info, amsdu));
+		cpu_to_le16(iwl_mvm_tx_csum_pre_sc(mvm, skb, info, amsdu));
 }
 
 static u32 iwl_mvm_get_tx_ant(struct iwl_mvm *mvm,
@@ -614,7 +614,7 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 			cmd->rate_n_flags = cpu_to_le32(rate_n_flags);
 		} else {
 			struct iwl_tx_cmd_gen2 *cmd = (void *)dev_cmd->payload;
-			u16 offload_assist = iwl_mvm_tx_csum_pre_bz(mvm, skb,
+			u16 offload_assist = iwl_mvm_tx_csum_pre_sc(mvm, skb,
 								    info,
 								    amsdu);
 
