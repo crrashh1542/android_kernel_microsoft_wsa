@@ -118,10 +118,15 @@ struct dnt_collect_db {
 /**
  * struct dnt_crash_data - holds pointers for crash data
  * @sram: sram data pointer
+ * @sram_buf_size: sram buffer size
  * @dbgm: monitor data pointer
+ * @dbgm_buf_size: monitor data size
  * @rx: rx fifo data pointer
+ * @rx_buf_size: RX FIFO data size
  * @tx: tx fifo data pointer
+ * @tx_buf_size: TX FIFO data size
  * @periph: periphery registers data pointer
+ * @periph_buf_size: periphery registers size
  */
 struct dnt_crash_data {
 	u8 *sram;
@@ -136,7 +141,7 @@ struct dnt_crash_data {
 	u32 periph_buf_size;
 };
 
-/**
+/*
  * struct iwl_dnt_dispatch - the iwl Debug and Trace Dispatch
  *
  * @mon_in_mode: The dispatch incoming data mode
@@ -161,7 +166,7 @@ struct iwl_dnt_dispatch {
 	struct dnt_crash_data crash;
 };
 
-/**
+/*
  * struct iwl_dnt - the iwl Debug and Trace
  *
  * @dev: pointer to struct device for printing purposes
@@ -205,28 +210,9 @@ struct iwl_dnt {
 };
 
 
-/**
- * iwl_dnt_init - initialize iwl_dnt.
- *
- */
 void iwl_dnt_init(struct iwl_trans *trans, struct dentry *dbgfs_dir);
-
-/**
- * iwl_dnt_free - free iwl_dnt.
- *
- */
 void iwl_dnt_free(struct iwl_trans *trans);
-
-/**
- * iwl_dnt_configure - configures iwl_dnt.
- *
- */
 void iwl_dnt_configure(struct iwl_trans *trans, const struct fw_img *image);
-
-/**
- * iwl_dnt_start - starts monitor and set log level
- *
- */
 void iwl_dnt_start(struct iwl_trans *trans);
 
 #endif

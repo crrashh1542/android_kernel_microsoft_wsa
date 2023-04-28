@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2014 Intel Corporation
+ * Copyright (C) 2014, 2023 Intel Corporation
  */
 #ifndef __iwl_dnt_dispatch_h__
 #define __iwl_dnt_dispatch_h__
@@ -12,7 +12,7 @@
 #include "iwl-config.h"
 
 
-/**
+/*
  * iwl_dnt_dispatch_pull - pulling debug data.
  */
 int iwl_dnt_dispatch_pull(struct iwl_trans *trans, u8 *buffer, u32 buffer_size,

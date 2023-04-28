@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2010-2014, 2018 Intel Corporation
+ * Copyright (C) 2010-2014, 2018, 2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  */
 #ifndef __IWL_TM_GNL_H__
@@ -26,9 +26,12 @@ struct iwl_test {
 /**
  * struct iwl_tm_gnl_dev - Devices data base
  * @list:	  Linked list to all devices
+ * @tst:          Test data
+ * @dnt:          tracing data
  * @trans:	  Pointer to the owning transport
  * @dev_name:	  Pointer to the device name
- * @cmd_handlers: Operation mode specific command handlers.
+ * @dev_name:     device name
+ * @nl_events_portid: port ID for netlink events
  *
  * Used to retrieve a device op mode pointer.
  * Device identifier it's name.
