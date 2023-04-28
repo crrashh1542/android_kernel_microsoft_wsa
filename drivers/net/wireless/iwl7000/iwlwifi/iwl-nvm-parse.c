@@ -1340,12 +1340,22 @@ static void iwl_init_eht_band_override(struct iwl_trans *trans,
 #endif
 		}
 
-		if (trans->dbg_cfg.eht_disable_320 || !nl80211_is_6ghz(sband->band)) {
+		if (trans->dbg_cfg.eht_disable_320 ||
+		    trans->reduced_cap_sku ||
+		    !nl80211_is_6ghz(sband->band)) {
 			memset(&cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320,
 			       0,
 			       sizeof(cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320));
 			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[0] &=
 					~IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ;
+		}
+		if (trans->reduced_cap_sku) {
+			cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._80.rx_tx_mcs13_max_nss = 0;
+			cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._160.rx_tx_mcs13_max_nss = 0;
+			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[8] &=
+					~IEEE80211_EHT_PHY_CAP8_RX_4096QAM_WIDER_BW_DL_OFDMA;
+			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[2] &=
+					~IEEE80211_EHT_PHY_CAP2_SOUNDING_DIM_320MHZ_MASK;
 		}
 	}
 }

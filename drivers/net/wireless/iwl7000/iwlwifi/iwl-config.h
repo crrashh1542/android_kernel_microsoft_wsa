@@ -446,6 +446,9 @@ struct iwl_cfg {
 #define IWL_CFG_NO_160			0x1
 #define IWL_CFG_160			0x0
 
+#define IWL_CFG_NO_320			0x1
+#define IWL_CFG_320			0x0
+
 #define IWL_CFG_CORES_BT		0x0
 #define IWL_CFG_CORES_BT_GNSS		0x5
 
@@ -530,6 +533,7 @@ extern const char iwl_ax221_name[];
 extern const char iwl_ax231_name[];
 extern const char iwl_ax411_name[];
 extern const char iwl_bz_name[];
+extern const char iwl_mtp_name[];
 extern const char iwl_sc_name[];
 #if IS_ENABLED(CPTCFG_IWLMVM)
 extern const struct iwl_ht_params iwl_22000_ht_params;
