@@ -76,7 +76,7 @@ void *cam_common_mem_kdup(void *from, size_t len)
 		return to;
 	}
 
-	CAM_DBG(CAM_UTIL, "Allocate and copy header with size: %d", len);
+	CAM_DBG(CAM_UTIL, "Allocate and copy header with size: %zu", len);
 	memcpy(to, from, len);
 
 	return to;

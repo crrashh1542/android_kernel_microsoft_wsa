@@ -316,7 +316,7 @@ static int cam_cdm_util_reg_cont_write(void __iomem *base_addr,
 		cam_io_memcpy(base_addr + reg_cont.offset,	data,
 			reg_cont.count * sizeof(uint32_t));
 	} else {
-		CAM_ERR(CAM_CDM, "Offset out of mapped range! size: %lu, offset: %u",
+		CAM_ERR(CAM_CDM, "Offset out of mapped range! size: %llu, offset: %u",
 			size, reg_cont.offset);
 		return -EINVAL;
 	}
