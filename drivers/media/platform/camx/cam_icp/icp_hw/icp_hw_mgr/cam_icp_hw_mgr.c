@@ -4540,7 +4540,7 @@ hw_dump:
 		return rc;
 	}
 	if (icp_dump_args.buf_len <= dump_args->offset) {
-		CAM_WARN(CAM_ICP, "dump buffer overshoot len %zu offset %zu",
+		CAM_WARN(CAM_ICP, "dump buffer overshoot len %zu offset %u",
 			icp_dump_args.buf_len, dump_args->offset);
 		rc = -ENOSPC;
 		goto end;

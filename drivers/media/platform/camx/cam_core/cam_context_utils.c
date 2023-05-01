@@ -1113,7 +1113,7 @@ static int cam_context_dump_context(struct cam_context *ctx,
 		return rc;
 	}
 	if (dump_args->offset >= buf_len) {
-		CAM_WARN(CAM_CTXT, "dump buffer overshoot offset %zu len %zu",
+		CAM_WARN(CAM_CTXT, "dump buffer overshoot offset %u len %zu",
 			dump_args->offset, buf_len);
 		rc = -ENOSPC;
 		goto end;

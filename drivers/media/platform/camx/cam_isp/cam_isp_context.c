@@ -2376,7 +2376,7 @@ hw_dump:
 		}
 
 		if (buf_len <= dump_info->offset) {
-			CAM_WARN(CAM_ISP, "buf overshoot len %zu offset %zu",
+			CAM_WARN(CAM_ISP, "buf overshoot len %zu offset %u",
 				buf_len, dump_info->offset);
 			rc = -ENOSPC;
 			goto end;
