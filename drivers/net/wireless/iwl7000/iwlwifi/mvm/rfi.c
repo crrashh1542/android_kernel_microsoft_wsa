@@ -12,62 +12,142 @@
  */
 static const
 struct iwl_rfi_lut_entry iwl_rfi_ddr_table[IWL_RFI_DDR_LUT_SIZE] = {
-	/* frequency 2667MHz */
-	{cpu_to_le16(160), {50, 58, 60, 62, 64, 52, 54, 56},
+	/* frequency 2600MHz */
+	{cpu_to_le16(156), {34, 36, 38, 40, 42, 50},
 	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-	       PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
+	       PHY_BAND_5,}},
+
+	/* frequency 2667MHz */
+	{cpu_to_le16(160), {50, 58, 60, 62, 64, 68},
+	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
+	       PHY_BAND_5,}},
+
+	/* frequency 2800MHz */
+	{cpu_to_le16(168), {114, 116, 118, 120, 122},
+	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
 
 	/* frequency 2933MHz */
-	{cpu_to_le16(176), {149, 151, 153, 157, 159, 161, 165, 163, 167, 169,
-			    171, 173, 175},
+	{cpu_to_le16(176), {163, 167, 169, 171, 173, 175},
 	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-	       PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-	       PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
+	       PHY_BAND_5,}},
+
+	/* frequency 3000MHz */
+	{cpu_to_le16(180), {3, 5, 7, 9, 11, 15, 31},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 3067MHz */
+	{cpu_to_le16(184), {15, 23, 27, 29, 31, 33, 35, 37, 39, 47, 63},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6,}},
 
 	/* frequency 3200MHz */
-	{cpu_to_le16(192), {79, 81, 83, 85, 87, 89, 91, 93},
+	{cpu_to_le16(192), {63, 79, 83, 85, 87, 89, 91, 95},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 3300MHz */
+	{cpu_to_le16(198), {95, 111, 119, 123, 125, 129, 127, 131, 135, 143,
+				159},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6,}},
+
+	/* frequency 3400MHz */
+	{cpu_to_le16(204), {159, 163, 165, 167, 169, 171, 175, 191},
 	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
 	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
 
 	/* frequency 3733MHz */
-	{cpu_to_le16(223), {114, 116, 118, 120, 122, 106, 110, 124, 126},
-	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-	       PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
+	{cpu_to_le16(224), {114, 116, 118, 120, 122},
+	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
 
 	/* frequency 4000MHz */
-	{cpu_to_le16(240), {114, 151, 155, 157, 159, 161, 165},
-	      {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-	       PHY_BAND_5, PHY_BAND_5,}},
+	{cpu_to_le16(240), {3, 5, 7, 9, 11, 15, 31},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 4200MHz */
+	{cpu_to_le16(252), {63, 65, 67, 69, 71, 79, 95},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6,}},
 
 	/* frequency 4267MHz */
-	{cpu_to_le16(256), {79, 83, 85, 87, 89, 91, 93,},
+	{cpu_to_le16(256), {63, 79, 83, 85, 87, 89, 91, 95},
 	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
-		PHY_BAND_6, PHY_BAND_6,}},
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
 
 	/* frequency 4400MHz */
-	{cpu_to_le16(264), {111, 119, 123, 125, 129, 131, 133, 135, 143,},
+	{cpu_to_le16(264), {95, 111, 119, 123, 125, 127, 129, 131, 135, 143,
+				159},
 	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
-	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
+	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6,}},
+
+	/* frequency 4600MHz */
+	{cpu_to_le16(276), {159, 175, 183, 185, 187, 189, 191},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 4800MHz */
+	{cpu_to_le16(288), {1, 3, 5, 7, 9, 11, 13, 15},
+	      {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+	       PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
 
 	/* frequency 5200MHz */
-	{cpu_to_le16(312), {36, 38, 40, 42, 44, 46, 50,},
+	{cpu_to_le16(312), {34, 36, 38, 40, 42, 50},
 	       {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-		PHY_BAND_5, PHY_BAND_5,}},
+		PHY_BAND_5,}},
+
+	/* frequency 5333MHz */
+	{cpu_to_le16(320), {50, 58, 60, 62, 64, 68},
+	       {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
+		PHY_BAND_5,}},
 
 	/* frequency 5600MHz */
-	{cpu_to_le16(336), {106, 110, 112, 114, 116, 118, 120, 122},
+	{cpu_to_le16(336), {114, 116, 118, 120, 122},
+	       {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
+
+	/* frequency 5868MHz */
+	{cpu_to_le16(352), {163, 167, 169, 171, 173, 175},
 	       {PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,
-		PHY_BAND_5, PHY_BAND_5, PHY_BAND_5,}},
+		PHY_BAND_5,}},
 
 	/* frequency 6000MHz */
-	{cpu_to_le16(360), {3, 5, 7, 9, 11, 13, 15,},
+	{cpu_to_le16(360), {3, 5, 7, 9, 11, 15, 31},
 	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
 		PHY_BAND_6, PHY_BAND_6,}},
 
-	/* frequency 6400MHz */
-	{cpu_to_le16(384), {79, 83, 85, 87, 89, 91, 93,},
+	/* frequency 6133MHz */
+	{cpu_to_le16(368), {15, 23, 27, 29, 31, 33, 35, 37, 39, 47, 63},
 	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
-		PHY_BAND_6, PHY_BAND_6,}},
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6,}},
+
+	/* frequency 6400MHz */
+	{cpu_to_le16(384), {63, 79, 83, 85, 87, 89, 91, 95,},
+	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 6600MHz */
+	{cpu_to_le16(396), {95, 111, 119, 123, 125, 127, 129, 131, 135, 143,
+				159},
+	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6,}},
+
+	/* frequency 6800MHz */
+	{cpu_to_le16(408), {159, 163, 165, 167, 169, 171, 175, 191},
+	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,}},
+
+	/* frequency 6933MHz */
+	{cpu_to_le16(416), {159, 175, 183, 187, 189, 191, 193, 195, 197, 199,
+				207},
+	       {PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6, PHY_BAND_6,
+		PHY_BAND_6,}},
 };
 
 bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm)
