@@ -5807,16 +5807,21 @@ static void ieee80211_ml_reconf_work(struct work_struct *work)
 	u16 new_valid_links, new_active_links, new_dormant_links;
 	int ret;
 
-	if (!sdata->u.mgd.removed_links)
+	sdata_lock(sdata);
+	if (!sdata->u.mgd.removed_links) {
+		sdata_unlock(sdata);
 		return;
+	}
 
 	sdata_info(sdata,
 		   "MLO Reconfiguration: work: valid=0x%x, removed=0x%x\n",
 		   sdata->vif.valid_links, sdata->u.mgd.removed_links);
 
 	new_valid_links = sdata->vif.valid_links & ~sdata->u.mgd.removed_links;
-	if (new_valid_links == sdata->vif.valid_links)
+	if (new_valid_links == sdata->vif.valid_links) {
+		sdata_unlock(sdata);
 		return;
+	}
 
 	if (!new_valid_links ||
 	    !(new_valid_links & ~sdata->vif.dormant_links)) {
@@ -5832,8 +5837,8 @@ static void ieee80211_ml_reconf_work(struct work_struct *work)
 				BIT(ffs(new_valid_links &
 					~sdata->vif.dormant_links) - 1);
 
-		ret = ieee80211_set_active_links(&sdata->vif,
-						 new_active_links);
+		ret = __ieee80211_set_active_links(&sdata->vif,
+						   new_active_links);
 		if (ret) {
 			sdata_info(sdata,
 				   "Failed setting active links\n");
@@ -5849,16 +5854,15 @@ static void ieee80211_ml_reconf_work(struct work_struct *work)
 		sdata_info(sdata, "Failed setting valid links\n");
 
 out:
-	if (!ret) {
-		sdata_lock(sdata);
+	if (!ret)
 		cfg80211_cqm_links_state_change_notify(sdata->dev,
 						       sdata->u.mgd.removed_links);
-		sdata_unlock(sdata);
-	} else {
-		__ieee80211_disconnect(sdata);
-	}
+	else
+		___ieee80211_disconnect(sdata);
 
 	sdata->u.mgd.removed_links = 0;
+
+	sdata_unlock(sdata);
 }
 
 static void ieee80211_ml_reconfiguration(struct ieee80211_sub_if_data *sdata,
