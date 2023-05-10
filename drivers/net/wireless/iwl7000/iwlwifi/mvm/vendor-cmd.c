@@ -414,7 +414,7 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct sk_buff *skb;
-	u8 capa = 0;
+	u16 capa = 0;
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, 4);
 	if (!skb)
@@ -430,7 +430,7 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 	if (iwl_rfi_dlvr_supported(mvm))
 		capa |= IWL_MVM_RFI_DLVR_CAPA;
 
-	if (nla_put_u8(skb, IWL_MVM_VENDOR_ATTR_RFIM_CAPA, capa)) {
+	if (nla_put_u16(skb, IWL_MVM_VENDOR_ATTR_RFIM_CAPA, capa)) {
 		kfree_skb(skb);
 		return -ENOBUFS;
 	}

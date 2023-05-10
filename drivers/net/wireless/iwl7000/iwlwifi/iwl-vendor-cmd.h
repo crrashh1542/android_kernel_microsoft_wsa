@@ -792,7 +792,7 @@ enum iwl_vendor_auth_akm_mode {
  *	table version
  * @IWL_MVM_VENDOR_ATTR_SGOM_TABLE: binary attribute.
  * @IWL_MVM_VENDOR_ATTR_RFIM_BANDS: RFIM bands
- * @IWL_MVM_VENDOR_ATTR_RFIM_CAPA: RFIM capabilities (u8)
+ * @IWL_MVM_VENDOR_ATTR_RFIM_CAPA: RFIM capabilities (u16)
  * @IWL_MVM_VENDOR_ATTR_RFIM_CHANNELS: RFIM channels
  * @IWL_MVM_VENDOR_ATTR_RFIM_FREQ: RFIM frequency (u16)
  * @IWL_MVM_VENDOR_ATTR_RFIM_INFO: overall RFIM info (nested)
