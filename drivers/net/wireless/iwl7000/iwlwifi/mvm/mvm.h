@@ -1642,11 +1642,6 @@ static inline int iwl_mvm_max_active_links(struct iwl_mvm *mvm,
 	return 1;
 }
 
-static inline bool iwl_mvm_has_new_tx_csum(struct iwl_mvm *mvm)
-{
-	return mvm->trans->trans_cfg->device_family >= IWL_DEVICE_FAMILY_SC;
-}
-
 extern const u8 iwl_mvm_ac_to_tx_fifo[];
 extern const u8 iwl_mvm_ac_to_gen2_tx_fifo[];
 
@@ -1724,7 +1719,6 @@ void iwl_mvm_mac_itxq_xmit(struct ieee80211_hw *hw, struct ieee80211_txq *txq);
 unsigned int iwl_mvm_max_amsdu_size(struct iwl_mvm *mvm,
 				    struct ieee80211_sta *sta,
 				    unsigned int tid);
-u32 iwl_mvm_tx_csum_sc(struct iwl_mvm *mvm, struct sk_buff *skb, bool amsdu);
 
 #ifdef CPTCFG_IWLWIFI_DEBUG
 const char *iwl_mvm_get_tx_fail_reason(u32 status);
