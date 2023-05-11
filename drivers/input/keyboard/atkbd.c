@@ -309,12 +309,19 @@ static ssize_t atkbd_show_function_row_physmap(struct atkbd *atkbd, char *buf)
 	return vivaldi_function_row_physmap_show(&atkbd->vdata, buf);
 }
 
+static struct atkbd *atkbd_from_serio(struct serio *serio)
+{
+	struct ps2dev *ps2dev = serio_get_drvdata(serio);
+
+	return container_of(ps2dev, struct atkbd, ps2dev);
+}
+
 static umode_t atkbd_attr_is_visible(struct kobject *kobj,
 				struct attribute *attr, int i)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct serio *serio = to_serio_port(dev);
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 
 	if (attr == &atkbd_attr_function_row_physmap.attr &&
 	    !atkbd->vdata.num_function_row_keys)
@@ -397,7 +404,7 @@ static unsigned int atkbd_compat_scancode(struct atkbd *atkbd, unsigned int code
 static irqreturn_t atkbd_interrupt(struct serio *serio, unsigned char data,
 				   unsigned int flags)
 {
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 	struct input_dev *dev = atkbd->dev;
 	unsigned int code = data;
 	int scroll = 0, hscroll = 0, click = -1;
@@ -907,7 +914,7 @@ static int atkbd_reset_state(struct atkbd *atkbd)
 
 static void atkbd_cleanup(struct serio *serio)
 {
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 
 	atkbd_disable(atkbd);
 	ps2_command(&atkbd->ps2dev, NULL, ATKBD_CMD_RESET_DEF);
@@ -920,7 +927,7 @@ static void atkbd_cleanup(struct serio *serio)
 
 static void atkbd_disconnect(struct serio *serio)
 {
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 
 	sysfs_remove_group(&serio->dev.kobj, &atkbd_attribute_group);
 
@@ -1188,7 +1195,7 @@ static void atkbd_set_device_attrs(struct atkbd *atkbd)
 
 static void atkbd_parse_fwnode_data(struct serio *serio)
 {
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 	struct device *dev = &serio->dev;
 	int n;
 
@@ -1300,7 +1307,7 @@ static int atkbd_connect(struct serio *serio, struct serio_driver *drv)
 
 static int atkbd_reconnect(struct serio *serio)
 {
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 	struct serio_driver *drv = serio->drv;
 	int retval = -1;
 
@@ -1393,7 +1400,7 @@ static ssize_t atkbd_attr_show_helper(struct device *dev, char *buf,
 				ssize_t (*handler)(struct atkbd *, char *))
 {
 	struct serio *serio = to_serio_port(dev);
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 
 	return handler(atkbd, buf);
 }
@@ -1402,7 +1409,7 @@ static ssize_t atkbd_attr_set_helper(struct device *dev, const char *buf, size_t
 				ssize_t (*handler)(struct atkbd *, const char *, size_t))
 {
 	struct serio *serio = to_serio_port(dev);
-	struct atkbd *atkbd = serio_get_drvdata(serio);
+	struct atkbd *atkbd = atkbd_from_serio(serio);
 	int retval;
 
 	retval = mutex_lock_interruptible(&atkbd->mutex);
