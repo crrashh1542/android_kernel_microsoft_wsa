@@ -3012,19 +3012,29 @@ static int ieee80211_set_txq_params(struct wiphy *wiphy,
 static int ieee80211_suspend(struct wiphy *wiphy,
 			     struct cfg80211_wowlan *wowlan)
 {
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	wiphy_work_flush(hw_to_local(wiphy_priv(wiphy)));
+#endif
 	return __ieee80211_suspend(wiphy_priv(wiphy), wowlan);
 }
 
 static int ieee80211_resume(struct wiphy *wiphy)
 {
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	struct ieee80211_local *local = hw_to_local(wiphy_priv(wiphy));
+#endif
 #if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
 	int ret = __ieee80211_resume(wiphy_priv(wiphy));
 
 	if (ret)
 		cfg80211_shutdown_all_interfaces(wiphy);
 
+	schedule_work(&local->wiphy_work);
 	return ret;
 #else
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	schedule_work(&local->wiphy_work);
+#endif
 	return __ieee80211_resume(wiphy_priv(wiphy));
 #endif
 }

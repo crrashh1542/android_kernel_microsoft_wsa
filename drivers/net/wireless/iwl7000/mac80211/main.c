@@ -734,6 +734,10 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 
 	local = wiphy_priv(wiphy);
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	wiphy_work_setup(local);
+#endif
+
 	if (sta_info_init(local))
 		goto err_free;
 
@@ -1553,6 +1557,10 @@ void ieee80211_free_hw(struct ieee80211_hw *hw)
 			continue;
 		kfree(local->hw.wiphy->bands[band]);
 	}
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	wiphy_work_teardown(local);
+#endif
 
 	wiphy_free(local->hw.wiphy);
 }

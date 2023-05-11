@@ -1372,6 +1372,11 @@ struct ieee80211_local {
 #else
 	unsigned int probe_req_reg;
 #endif
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+	struct work_struct wiphy_work;
+	struct list_head wiphy_work_list;
+	spinlock_t wiphy_work_lock;
+#endif
 	bool rx_mcast_action_reg;
 	unsigned int filter_flags; /* FIF_* */
 
@@ -2648,6 +2653,12 @@ u32 ieee80211_calc_expected_tx_airtime(struct ieee80211_hw *hw,
 #define debug_noinline noinline
 #else
 #define debug_noinline
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+void wiphy_work_setup(struct ieee80211_local *local);
+void wiphy_work_teardown(struct ieee80211_local *local);
+void wiphy_work_flush(struct ieee80211_local *local);
 #endif
 
 void ieee80211_init_frag_cache(struct ieee80211_fragment_cache *cache);
