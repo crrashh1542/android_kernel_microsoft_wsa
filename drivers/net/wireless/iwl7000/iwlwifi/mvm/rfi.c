@@ -157,12 +157,14 @@ bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm)
 	bool ddr_capa = fw_has_capa(&mvm->fw->ucode_capa,
 				    IWL_UCODE_TLV_CAPA_RFI_DDR_SUPPORT);
 
-	IWL_INFO(mvm, "FW has RFI DDR capability:%s DDR enabled in BIOS:%s\n",
-		 ddr_capa ? "yes" : "no",
-		 dsm_rfi_ddr == DSM_VALUE_RFI_DDR_ENABLE ? "yes" : "no");
-	IWL_INFO(mvm, "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
-		 mvm->trans->trans_cfg->integrated ? "yes" : "no", mac_type,
-		 mvm->fw_rfi_state);
+	IWL_DEBUG_FW(mvm,
+		     "FW has RFI DDR capability:%s DDR enabled in BIOS:%s\n",
+		     ddr_capa ? "yes" : "no",
+		     dsm_rfi_ddr == DSM_VALUE_RFI_DDR_ENABLE ? "yes" : "no");
+	IWL_DEBUG_FW(mvm,
+		     "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
+		     mvm->trans->trans_cfg->integrated ? "yes" : "no",
+		     mac_type, mvm->fw_rfi_state);
 
 	return ddr_capa && dsm_rfi_ddr == DSM_VALUE_RFI_DDR_ENABLE &&
 		mac_type >= IWL_CFG_MAC_TYPE_MA &&
@@ -177,12 +179,14 @@ bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm)
 	bool dlvr_capa = fw_has_capa(&mvm->fw->ucode_capa,
 				     IWL_UCODE_TLV_CAPA_RFI_DLVR_SUPPORT);
 
-	IWL_INFO(mvm, "FW has RFI DLVR capability:%s DLVR enabled in BIOS:%s\n",
-		 dlvr_capa ? "yes" : "no",
-		 dsm_rfi_dlvr == DSM_VALUE_RFI_DLVR_ENABLE ? "yes" : "no");
-	IWL_INFO(mvm, "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
-		 mvm->trans->trans_cfg->integrated ? "yes" : "no", mac_type,
-		 mvm->fw_rfi_state);
+	IWL_DEBUG_FW(mvm,
+		     "FW has RFI DLVR capability:%s DLVR enabled in BIOS:%s\n",
+		     dlvr_capa ? "yes" : "no",
+		     dsm_rfi_dlvr == DSM_VALUE_RFI_DLVR_ENABLE ? "yes" : "no");
+	IWL_DEBUG_FW(mvm,
+		     "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
+		     mvm->trans->trans_cfg->integrated ? "yes" : "no",
+		     mac_type, mvm->fw_rfi_state);
 
 	return dlvr_capa && dsm_rfi_dlvr == DSM_VALUE_RFI_DLVR_ENABLE &&
 		mac_type >= IWL_CFG_MAC_TYPE_MA &&
@@ -283,10 +287,10 @@ void iwl_rfi_support_notif_handler(struct iwl_mvm *mvm,
 	mvm->fw_rfi_state = le32_to_cpu(notif->reason);
 	switch (mvm->fw_rfi_state) {
 	case IWL_RFI_PMC_SUPPORTED:
-		IWL_INFO(mvm, "RFIm, PMC supported\n");
+		IWL_DEBUG_FW(mvm, "RFIm, PMC supported\n");
 		break;
 	case IWL_RFI_PMC_NOT_SUPPORTED:
-		IWL_INFO(mvm, "RFIm, PMC not supported\n");
+		IWL_DEBUG_FW(mvm, "RFIm, PMC not supported\n");
 		break;
 	case IWL_RFI_RESET_FAILURE_SEND_TO_PEER:
 		fallthrough;
@@ -297,7 +301,7 @@ void iwl_rfi_support_notif_handler(struct iwl_mvm *mvm,
 	case IWL_RFI_MAX_RESETS_DONE:
 		fallthrough;
 	default:
-		IWL_INFO(mvm, "RFIm is deactivated, reason = %d\n",
-			 mvm->fw_rfi_state);
+		IWL_DEBUG_FW(mvm, "RFIm is deactivated, reason = %d\n",
+			     mvm->fw_rfi_state);
 	}
 }
