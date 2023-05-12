@@ -2382,7 +2382,6 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 {
 	struct ieee80211_sub_if_data *sdata, *tmp;
 	LIST_HEAD(unreg_list);
-	LIST_HEAD(wdev_list);
 
 	ASSERT_RTNL();
 
@@ -2405,25 +2404,20 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 	ieee80211_txq_teardown_flows(local);
 
 	mutex_lock(&local->iflist_mtx);
-	list_for_each_entry_safe(sdata, tmp, &local->interfaces, list) {
-		list_del(&sdata->list);
-
-		if (sdata->dev)
-			unregister_netdevice_queue(sdata->dev, &unreg_list);
-		else
-			list_add(&sdata->list, &wdev_list);
-	}
+	list_splice_init(&local->interfaces, &unreg_list);
 	mutex_unlock(&local->iflist_mtx);
-
-	unregister_netdevice_many(&unreg_list);
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_lock(local->hw.wiphy);
 #endif
-	list_for_each_entry_safe(sdata, tmp, &wdev_list, list) {
+	list_for_each_entry_safe(sdata, tmp, &unreg_list, list) {
+		bool netdev = sdata->dev;
+
 		list_del(&sdata->list);
 		cfg80211_unregister_wdev(&sdata->wdev);
-		kfree(sdata);
+
+		if (!netdev)
+			kfree(sdata);
 	}
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_unlock(local->hw.wiphy);
