@@ -1744,8 +1744,8 @@ static void ieee80211_chswitch_work(struct wiphy *wiphy,
 			sdata_info(sdata,
 				   "failed to use reserved channel context, disconnecting (err=%d)\n",
 				   ret);
-			ieee80211_queue_work(&sdata->local->hw,
-					     &ifmgd->csa_connection_drop_work);
+			wiphy_work_queue(sdata->local->hw.wiphy,
+					 &ifmgd->csa_connection_drop_work);
 			goto out;
 		}
 
@@ -1756,8 +1756,8 @@ static void ieee80211_chswitch_work(struct wiphy *wiphy,
 					&link->csa_chandef)) {
 		sdata_info(sdata,
 			   "failed to finalize channel switch, disconnecting\n");
-		ieee80211_queue_work(&sdata->local->hw,
-				     &ifmgd->csa_connection_drop_work);
+		wiphy_work_queue(sdata->local->hw.wiphy,
+				 &ifmgd->csa_connection_drop_work);
 		goto out;
 	}
 
@@ -1801,8 +1801,8 @@ static void ieee80211_chswitch_post_beacon(struct ieee80211_link_data *link)
 	if (ret) {
 		sdata_info(sdata,
 			   "driver post channel switch failed, disconnecting\n");
-		ieee80211_queue_work(&local->hw,
-				     &ifmgd->csa_connection_drop_work);
+		wiphy_work_queue(sdata->local->hw.wiphy,
+				 &ifmgd->csa_connection_drop_work);
 		return;
 	}
 
@@ -1832,8 +1832,8 @@ void ieee80211_chswitch_done(struct ieee80211_vif *vif, bool success,
 	if (!success) {
 		sdata_info(sdata,
 			   "driver channel switch failed, disconnecting\n");
-		ieee80211_queue_work(&sdata->local->hw,
-				     &sdata->u.mgd.csa_connection_drop_work);
+		wiphy_work_queue(sdata->local->hw.wiphy,
+				 &sdata->u.mgd.csa_connection_drop_work);
 	} else {
 		wiphy_delayed_work_queue(sdata->local->hw.wiphy,
 					 &ifmgd->chswitch_work, 0);
@@ -2048,7 +2048,8 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 	link->conf->csa_active = true;
 	link->csa_block_tx = csa_ie.mode;
 
-	ieee80211_queue_work(&local->hw, &ifmgd->csa_connection_drop_work);
+	wiphy_work_queue(sdata->local->hw.wiphy,
+			 &ifmgd->csa_connection_drop_work);
 	mutex_unlock(&local->chanctx_mtx);
 	mutex_unlock(&local->mtx);
 }
@@ -3438,7 +3439,8 @@ static void __ieee80211_disconnect(struct ieee80211_sub_if_data *sdata)
 	sdata_unlock(sdata);
 }
 
-static void ieee80211_beacon_connection_loss_work(struct work_struct *work)
+static void ieee80211_beacon_connection_loss_work(struct wiphy *wiphy,
+						  struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,
@@ -3463,7 +3465,8 @@ static void ieee80211_beacon_connection_loss_work(struct work_struct *work)
 	}
 }
 
-static void ieee80211_csa_connection_drop_work(struct work_struct *work)
+static void ieee80211_csa_connection_drop_work(struct wiphy *wiphy,
+					       struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,
@@ -3480,7 +3483,7 @@ void ieee80211_beacon_loss(struct ieee80211_vif *vif)
 	trace_api_beacon_loss(sdata);
 
 	sdata->u.mgd.connection_loss = false;
-	ieee80211_queue_work(hw, &sdata->u.mgd.beacon_connection_loss_work);
+	wiphy_work_queue(hw->wiphy, &sdata->u.mgd.beacon_connection_loss_work);
 }
 EXPORT_SYMBOL(ieee80211_beacon_loss);
 
@@ -3492,7 +3495,7 @@ void ieee80211_connection_loss(struct ieee80211_vif *vif)
 	trace_api_connection_loss(sdata);
 
 	sdata->u.mgd.connection_loss = true;
-	ieee80211_queue_work(hw, &sdata->u.mgd.beacon_connection_loss_work);
+	wiphy_work_queue(hw->wiphy, &sdata->u.mgd.beacon_connection_loss_work);
 }
 EXPORT_SYMBOL(ieee80211_connection_loss);
 
@@ -3508,7 +3511,7 @@ void ieee80211_disconnect(struct ieee80211_vif *vif, bool reconnect)
 
 	sdata->u.mgd.driver_disconnect = true;
 	sdata->u.mgd.reconnect = reconnect;
-	ieee80211_queue_work(hw, &sdata->u.mgd.beacon_connection_loss_work);
+	wiphy_work_queue(hw->wiphy, &sdata->u.mgd.beacon_connection_loss_work);
 }
 EXPORT_SYMBOL(ieee80211_disconnect);
 
@@ -6696,8 +6699,8 @@ static void ieee80211_sta_bcn_mon_timer(struct timer_list *t)
 		return;
 
 	sdata->u.mgd.connection_loss = false;
-	ieee80211_queue_work(&sdata->local->hw,
-			     &sdata->u.mgd.beacon_connection_loss_work);
+	wiphy_work_queue(sdata->local->hw.wiphy,
+			 &sdata->u.mgd.beacon_connection_loss_work);
 }
 
 static void ieee80211_sta_conn_mon_timer(struct timer_list *t)
@@ -6874,10 +6877,10 @@ void ieee80211_sta_setup_sdata(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 
 	INIT_WORK(&ifmgd->monitor_work, ieee80211_sta_monitor_work);
-	INIT_WORK(&ifmgd->beacon_connection_loss_work,
-		  ieee80211_beacon_connection_loss_work);
-	INIT_WORK(&ifmgd->csa_connection_drop_work,
-		  ieee80211_csa_connection_drop_work);
+	wiphy_work_init(&ifmgd->beacon_connection_loss_work,
+			ieee80211_beacon_connection_loss_work);
+	wiphy_work_init(&ifmgd->csa_connection_drop_work,
+			ieee80211_csa_connection_drop_work);
 	INIT_DELAYED_WORK(&ifmgd->tdls_peer_del_work,
 			  ieee80211_tdls_peer_del_work);
 	INIT_DELAYED_WORK(&ifmgd->ml_reconf_work, ieee80211_ml_reconf_work);
@@ -7953,8 +7956,10 @@ void ieee80211_mgd_stop(struct ieee80211_sub_if_data *sdata)
 	 * cancelled when disconnecting.
 	 */
 	cancel_work_sync(&ifmgd->monitor_work);
-	cancel_work_sync(&ifmgd->beacon_connection_loss_work);
-	cancel_work_sync(&ifmgd->csa_connection_drop_work);
+	wiphy_work_cancel(sdata->local->hw.wiphy,
+			  &ifmgd->beacon_connection_loss_work);
+	wiphy_work_cancel(sdata->local->hw.wiphy,
+			  &ifmgd->csa_connection_drop_work);
 	cancel_delayed_work_sync(&ifmgd->tdls_peer_del_work);
 	cancel_delayed_work_sync(&ifmgd->ml_reconf_work);
 
