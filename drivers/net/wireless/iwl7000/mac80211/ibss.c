@@ -561,7 +561,8 @@ void ieee80211_ibss_stop(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
-	cancel_work_sync(&ifibss->csa_connection_drop_work);
+	wiphy_work_cancel(sdata->local->hw.wiphy,
+			  &ifibss->csa_connection_drop_work);
 }
 
 static struct sta_info *ieee80211_ibss_finish_sta(struct sta_info *sta)
@@ -717,7 +718,8 @@ static void ieee80211_ibss_disconnect(struct ieee80211_sub_if_data *sdata)
 	mutex_unlock(&local->mtx);
 }
 
-static void ieee80211_csa_connection_drop_work(struct work_struct *work)
+static void ieee80211_csa_connection_drop_work(struct wiphy *wiphy,
+					       struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,
@@ -883,8 +885,8 @@ ieee80211_ibss_process_chanswitch(struct ieee80211_sub_if_data *sdata,
 	return true;
 disconnect:
 	ibss_dbg(sdata, "Can't handle channel switch, disconnect\n");
-	ieee80211_queue_work(&sdata->local->hw,
-			     &ifibss->csa_connection_drop_work);
+	wiphy_work_queue(sdata->local->hw.wiphy,
+			 &ifibss->csa_connection_drop_work);
 
 	ieee80211_ibss_csa_mark_radar(sdata);
 
@@ -1681,8 +1683,8 @@ void ieee80211_ibss_setup_sdata(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
 	timer_setup(&ifibss->timer, ieee80211_ibss_timer, 0);
-	INIT_WORK(&ifibss->csa_connection_drop_work,
-		  ieee80211_csa_connection_drop_work);
+	wiphy_work_init(&ifibss->csa_connection_drop_work,
+			ieee80211_csa_connection_drop_work);
 }
 
 /* scan finished notification */
