@@ -1248,6 +1248,7 @@ const struct ieee80211_ops iwl_mvm_mld_hw_ops = {
 	.del_nan_func = iwl_mvm_del_nan_func,
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	.vif_add_debugfs = iwl_mvm_vif_add_debugfs,
+	.link_add_debugfs = iwl_mvm_link_add_debugfs,
 	.link_sta_add_debugfs = iwl_mvm_link_sta_add_debugfs,
 #endif
 	.set_hw_timestamp = iwl_mvm_set_hw_timestamp,
