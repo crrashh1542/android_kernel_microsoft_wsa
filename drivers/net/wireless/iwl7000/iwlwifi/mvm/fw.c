@@ -812,7 +812,7 @@ static int iwl_run_unified_mvm_ucode(struct iwl_mvm *mvm)
 
 	mvm->rfkill_safe_init_done = true;
 
-	iwl_rfi_send_config_cmd(mvm, NULL);
+	iwl_rfi_send_config_cmd(mvm, NULL, false);
 	return 0;
 
 error:

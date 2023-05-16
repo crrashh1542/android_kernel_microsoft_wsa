@@ -2429,7 +2429,7 @@ static ssize_t iwl_dbgfs_rfi_freq_table_write(struct iwl_mvm *mvm, char *buf,
 	/* value zero triggers re-sending the default table to the device */
 	if (!op_id) {
 		mutex_lock(&mvm->mutex);
-		ret = iwl_rfi_send_config_cmd(mvm, NULL);
+		ret = iwl_rfi_send_config_cmd(mvm, NULL, false);
 		mutex_unlock(&mvm->mutex);
 	} else {
 		ret = -EOPNOTSUPP; /* in the future a new table will be added */

@@ -1320,6 +1320,7 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	}
 
 	mvm->fw_restart = iwlwifi_mod_params.fw_restart ? -1 : 0;
+	mvm->rfi_wlan_master = true;
 
 	if (iwl_mvm_has_new_tx_api(mvm)) {
 		/*

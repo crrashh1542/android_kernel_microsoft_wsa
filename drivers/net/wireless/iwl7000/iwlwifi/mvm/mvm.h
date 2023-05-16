@@ -1267,6 +1267,8 @@ struct iwl_mvm {
 	/* Firmware RFI state &enum iwl_rfi_support_reason */
 	u32 fw_rfi_state;
 	bool pldr_sync;
+	bool rfi_wlan_master;
+	bool force_enable_rfi;
 };
 
 /* Extract MVM priv from op_mode and _hw */
@@ -2518,10 +2520,11 @@ u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
 
 /* 11ax Softap Test Mode */
 
-bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm);
-bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm);
+bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm, bool so_rfi_mode);
+bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm, bool so_rfi_mode);
 int iwl_rfi_send_config_cmd(struct iwl_mvm *mvm,
-			    struct iwl_rfi_lut_entry *rfi_table);
+			    struct iwl_rfi_lut_entry *rfi_table,
+			    bool is_set_master_cmd);
 struct iwl_rfi_freq_table_resp_cmd *iwl_rfi_get_freq_table(struct iwl_mvm *mvm);
 void iwl_rfi_support_notif_handler(struct iwl_mvm *mvm,
 				   struct iwl_rx_cmd_buffer *rxb);
