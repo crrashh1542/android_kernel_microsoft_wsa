@@ -173,7 +173,7 @@ enum iwl_dsm_values_rfi_dlvr {
 };
 
 enum iwl_dsm_masks_reg {
-	DSM_MASK_CHINA_22_REG = BIT(1)
+	DSM_MASK_CHINA_22_REG = BIT(2)
 };
 
 #ifdef CONFIG_ACPI
