@@ -5799,6 +5799,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
+#ifdef CONFIG_SMP
 	/*
 	 * The normal code path for host thread enqueue doesn't take into
 	 * account guest task migrations when updating cpufreq util.
@@ -5807,6 +5808,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	if (READ_ONCE(p->se.avg.util_guest))
 		cpufreq_update_util(rq, 0);
+#endif
 
 	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq

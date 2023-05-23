@@ -1966,6 +1966,7 @@ static inline void uclamp_post_fork(struct task_struct *p) { }
 static inline void init_uclamp(void) { }
 #endif /* CONFIG_UCLAMP_TASK */
 
+#ifdef CONFIG_SMP
 static void __setscheduler_task_util(struct task_struct *p,
 				  const struct sched_attr *attr)
 {
@@ -1975,6 +1976,11 @@ static void __setscheduler_task_util(struct task_struct *p,
 
 	p->se.avg.util_guest = attr->sched_util_min;
 }
+#else
+static void __setscheduler_task_util(struct task_struct *p,
+				  const struct sched_attr *attr)
+{ }
+#endif
 
 bool sched_task_on_rq(struct task_struct *p)
 {
