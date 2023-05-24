@@ -960,9 +960,11 @@ static int get_crf_id(struct iwl_trans *iwl_trans)
 	iwl_trans->hw_cnv_id = iwl_read_prph_no_grab(iwl_trans, CNVI_AUX_MISC_CHIP);
 
 	/* Read cdb info (also contains the jacket info if needed in the future */
-	iwl_trans->hw_wfpm_id = iwl_read_umac_prph_no_grab(iwl_trans, WFPM_OTP_CFG1_ADDR);
+	iwl_trans->hw_wfpm_id =
+		iwl_read_umac_prph_no_grab(iwl_trans, WFPM_OTP_CFG1_ADDR);
 	IWL_INFO(iwl_trans, "Detected crf-id 0x%x, cnv-id 0x%x wfpm id 0x%x\n",
-		 iwl_trans->hw_crf_id, iwl_trans->hw_cnv_id, iwl_trans->hw_wfpm_id);
+		 iwl_trans->hw_crf_id, iwl_trans->hw_cnv_id,
+		 iwl_trans->hw_wfpm_id);
 
 	return ret;
 }
@@ -1033,9 +1035,11 @@ static int map_crf_id(struct iwl_trans *iwl_trans)
 		IWL_INFO(iwl_trans, "Adding jacket to rf id\n");
 	}
 
-	IWL_INFO(iwl_trans, "Detected rf-type 0x%x step-id 0x%x slave-id 0x%x from crf id 0x%x\n",
+	IWL_INFO(iwl_trans,
+		 "Detected rf-type 0x%x step-id 0x%x slave-id 0x%x from crf id 0x%x\n",
 		 REG_CRF_ID_TYPE(val), step_id, slave_id, iwl_trans->hw_rf_id);
-	IWL_INFO(iwl_trans, "Detected cdb-id 0x%x jacket-id 0x%x from wfpm id 0x%x\n",
+	IWL_INFO(iwl_trans,
+		 "Detected cdb-id 0x%x jacket-id 0x%x from wfpm id 0x%x\n",
 		 cdb_id_wfpm, jacket_id_wfpm, iwl_trans->hw_wfpm_id);
 	IWL_INFO(iwl_trans, "Detected jacket-id 0x%x from cnvi id 0x%x\n",
 		 jacket_id_cnv, iwl_trans->hw_cnv_id);

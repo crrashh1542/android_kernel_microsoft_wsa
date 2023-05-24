@@ -95,6 +95,7 @@ ieee80211_get_eht_iftype_cap(const struct ieee80211_supported_band *sband,
 
 /* mbssid was added in 5.18.0, so it's safe to return 0 prior to that version */
 #define ieee80211_get_mbssid_beacon_len(...) 0
+#define ieee80211_beacon_get_ap_ema_list(...) 0
 #else
 #define cfg_eht_cap_has_eht(obj) (obj)->eht_cap.has_eht
 #define cfg_eht_cap_set_has_eht(obj, val) (obj)->eht_cap.has_eht = val
@@ -1720,7 +1721,7 @@ static inline void
 LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
 						  struct cfg80211_chan_def *chandef,
 						  unsigned int link_id, u8 count,
-						  bool quiet)
+						  bool quiet, u16 punct_bitmap)
 {
 	cfg80211_ch_switch_started_notify(dev, chandef, count);
 }
@@ -1731,12 +1732,22 @@ static inline void
 LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
 						  struct cfg80211_chan_def *chandef,
 						  unsigned int link_id, u8 count,
-						  bool quiet)
+						  bool quiet, u16 punct_bitmap)
 {
 	cfg80211_ch_switch_started_notify(dev, chandef, count, quiet);
 }
 #define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
-#endif /* < 6.1.0 */
+#elif CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+static inline void
+LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
+						  struct cfg80211_chan_def *chandef,
+						  unsigned int link_id, u8 count,
+						  bool quiet, u16 punct_bitmap)
+{
+	cfg80211_ch_switch_started_notify(dev, chandef, link_id, count, quiet);
+}
+#define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
+#endif /* < 6.3.0 */
 
 #ifndef ETH_TLEN
 #define ETH_TLEN	2		/* Octets in ethernet type field */
@@ -2223,6 +2234,23 @@ struct cfg80211_set_hw_timestamp {
 #define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,3,0) & CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
+#define cfg80211_ch_switch_notify(dev, chandef, link_id, punct_bitmap) cfg80211_ch_switch_notify(dev, chandef, link_id)
+#elif CFG80211_VERSION < KERNEL_VERSION(6,0,0)
+#define cfg80211_ch_switch_notify(dev, chandef, link_id, punct_bitmap) cfg80211_ch_switch_notify(dev, chandef)
+#endif
+
+#ifdef CONFIG_THERMAL
+#if LINUX_VERSION_IS_GEQ(5,10,0) && LINUX_VERSION_IS_LESS(6,0,0)
+#include <linux/thermal.h>
+struct thermal_trip {
+	int temperature;
+	int hysteresis;
+	enum thermal_trip_type type;
+};
+#endif
+#endif
+
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
 static inline enum ieee80211_rate_flags
 ieee80211_chanwidth_rate_flags(enum nl80211_chan_width width)
@@ -2238,7 +2266,6 @@ ieee80211_chanwidth_rate_flags(enum nl80211_chan_width width)
 	return 0;
 }
 
-#define cfg80211_ch_switch_notify(dev, chandef, link_id) cfg80211_ch_switch_notify(dev, chandef)
 #define link_sta_params_link_id(params)	-1
 #define link_sta_params_link_mac(params)	NULL
 #define WIPHY_FLAG_SUPPORTS_MLO 0
@@ -2338,6 +2365,18 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_req_link_bss(req, link)	NULL
 #define cfg80211_req_link_id(req)		-1
 #define cfg80211_req_link_elems_len(req, link)	0
+
+#ifdef CONFIG_THERMAL
+#include <linux/thermal.h>
+struct thermal_zone_device *
+thermal_zone_device_register_with_trips(const char *type,
+					struct thermal_trip *trips,
+					int num_trips, int mask, void *devdata,
+					struct thermal_zone_device_ops *ops,
+					struct thermal_zone_params *tzp, int passive_delay,
+					int polling_delay);
+#endif /* CONFIG_THERMAL */
+
 #else /* CFG80211 < 6.0 */
 #define link_sta_params_link_id(params) ((params)->link_sta_params.link_id)
 #define link_sta_params_link_mac(params) ((params)->link_sta_params.link_mac)
@@ -2415,6 +2454,18 @@ cfg80211_cqm_links_state_change_notify(struct net_device *dev,
 {
 }
 
+#ifdef CONFIG_THERMAL
+#include <linux/thermal.h>
+void *thermal_zone_device_priv(struct thermal_zone_device *tzd);
+#endif
+
 #else
 #define cfg80211_req_link_disabled(req, link)	((req)->links[link].disabled)
 #endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+bool ieee80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					       enum nl80211_chan_width bw);
+bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					      struct cfg80211_chan_def *chandef);
+#endif /* < 6.3  */

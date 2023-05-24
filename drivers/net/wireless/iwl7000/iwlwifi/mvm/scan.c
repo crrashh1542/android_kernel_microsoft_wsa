@@ -197,7 +197,8 @@ static void iwl_mvm_scan_iterator(void *_data, u8 *mac,
 	struct iwl_mvm_scan_iter_data *data = _data;
 	struct iwl_mvm_vif *curr_mvmvif;
 
-	if (vif->type != NL80211_IFTYPE_P2P_DEVICE && mvmvif->deflink.phy_ctxt &&
+	if (vif->type != NL80211_IFTYPE_P2P_DEVICE &&
+	    mvmvif->deflink.phy_ctxt &&
 	    mvmvif->deflink.phy_ctxt->id < NUM_PHY_CTX)
 		data->global_cnt += 1;
 
@@ -2152,8 +2153,9 @@ static u8 iwl_mvm_scan_umac_flags2(struct iwl_mvm *mvm,
 				IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_RESPECT_P2P_GO_HB;
 	}
 
-	if (params->scan_6ghz && fw_has_capa(&mvm->fw->ucode_capa,
-					     IWL_UCODE_TLV_CAPA_SCAN_DONT_TOGGLE_ANT))
+	if (params->scan_6ghz &&
+	    fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_SCAN_DONT_TOGGLE_ANT))
 		flags |= IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_DONT_TOGGLE_ANT;
 
 	return flags;
@@ -2807,7 +2809,9 @@ static void iwl_mvm_scan_respect_p2p_go_iter(void *_data, u8 *mac,
 	if (vif->type == NL80211_IFTYPE_AP && vif->p2p) {
 		u32 link_id;
 
-		for (link_id = 0; link_id < ARRAY_SIZE(mvmvif->link); link_id++) {
+		for (link_id = 0;
+		     link_id < ARRAY_SIZE(mvmvif->link);
+		     link_id++) {
 			struct iwl_mvm_vif_link_info *link =
 				mvmvif->link[link_id];
 

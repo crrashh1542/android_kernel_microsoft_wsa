@@ -963,16 +963,23 @@ static ssize_t iwl_dbgfs_tas_get_status_read(struct file *file,
 	static const size_t bufsz = 1024;
 	char *buff, *pos, *endpos;
 	const char * const tas_dis_reason[TAS_DISABLED_REASON_MAX] = {
-		[TAS_DISABLED_DUE_TO_BIOS] = "Due To BIOS",
-		[TAS_DISABLED_DUE_TO_SAR_6DBM] = "Due To SAR Limit Less Than 6 dBm",
-		[TAS_DISABLED_REASON_INVALID] = "N/A",
+		[TAS_DISABLED_DUE_TO_BIOS] =
+			"Due To BIOS",
+		[TAS_DISABLED_DUE_TO_SAR_6DBM] =
+			"Due To SAR Limit Less Than 6 dBm",
+		[TAS_DISABLED_REASON_INVALID] =
+			"N/A",
 	};
 	const char * const tas_current_status[TAS_DYNA_STATUS_MAX] = {
 		[TAS_DYNA_INACTIVE] = "INACTIVE",
-		[TAS_DYNA_INACTIVE_MVM_MODE] = "Inactive Due To MVM Mode",
-		[TAS_DYNA_INACTIVE_TRIGGER_MODE] = "Inactive Due To Trigger Mode",
-		[TAS_DYNA_INACTIVE_BLOCK_LISTED] = "Inactive Due To Block Listed",
-		[TAS_DYNA_INACTIVE_UHB_NON_US] = "Inactive Due To UHB Non USA",
+		[TAS_DYNA_INACTIVE_MVM_MODE] =
+			"Inactive Due To MVM Mode",
+		[TAS_DYNA_INACTIVE_TRIGGER_MODE] =
+			"Inactive Due To Trigger Mode",
+		[TAS_DYNA_INACTIVE_BLOCK_LISTED] =
+			"Inactive Due To Block Listed",
+		[TAS_DYNA_INACTIVE_UHB_NON_US] =
+			"Inactive Due To UHB Non USA",
 		[TAS_DYNA_ACTIVE] = "ACTIVE",
 	};
 	struct iwl_host_cmd hcmd = {
@@ -1651,7 +1658,8 @@ static int _iwl_dbgfs_inject_beacon_ie(struct iwl_mvm *mvm, char *bin, int len)
 
 	for_each_mvm_vif_valid_link(mvmvif, link_id) {
 		beacon_cmd.flags =
-			cpu_to_le16(iwl_mvm_mac_ctxt_get_beacon_flags(mvm->fw, rate));
+			cpu_to_le16(iwl_mvm_mac_ctxt_get_beacon_flags(mvm->fw,
+								      rate));
 		beacon_cmd.byte_cnt = cpu_to_le16((u16)beacon->len);
 		if (iwl_fw_lookup_cmd_ver(mvm->fw, BEACON_TEMPLATE_CMD, 0) > 12)
 			beacon_cmd.link_id =

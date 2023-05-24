@@ -385,8 +385,7 @@ static u32 iwl_mvm_get_tx_rate(struct iwl_mvm *mvm,
 
 		rate_idx = info->control.rates[0].idx;
 
-		/*
-		 * For non 2 GHZ band, remap mac80211 rate ndices into driver
+		/* For non 2 GHZ band, remap mac80211 rate indices into driver
 		 * indices.
 		 */
 		if (info->band != NL80211_BAND_2GHZ ||
@@ -1500,7 +1499,8 @@ void iwl_mvm_hwrate_to_tx_rate(u32 rate_n_flags,
 		r->idx = rate;
 	} else if (format ==  RATE_MCS_VHT_MSK) {
 		ieee80211_rate_set_vht(r, rate,
-				       FIELD_GET(RATE_MCS_NSS_MSK, rate_n_flags) + 1);
+				       FIELD_GET(RATE_MCS_NSS_MSK,
+						 rate_n_flags) + 1);
 		r->flags |= IEEE80211_TX_RC_VHT_MCS;
 	} else if (format == RATE_MCS_HE_MSK) {
 		/* mac80211 cannot do this without ieee80211_tx_status_ext()

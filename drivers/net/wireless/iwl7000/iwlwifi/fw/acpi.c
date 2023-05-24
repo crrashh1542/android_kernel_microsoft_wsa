@@ -1121,7 +1121,8 @@ read_table:
 
 	fwrt->ppag_flags = flags->integer.value & ACPI_PPAG_MASK;
 	cmd_ver = iwl_fw_lookup_cmd_ver(fwrt->fw,
-					WIDE_ID(PHY_OPS_GROUP, PER_PLATFORM_ANT_GAIN_CMD),
+					WIDE_ID(PHY_OPS_GROUP,
+						PER_PLATFORM_ANT_GAIN_CMD),
 					IWL_FW_CMD_VER_UNKNOWN);
 	if (cmd_ver == IWL_FW_CMD_VER_UNKNOWN) {
 		ret = -EINVAL;
@@ -1190,7 +1191,9 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
                 return -EINVAL;
 	}
 
-	cmd_ver = iwl_fw_lookup_cmd_ver(fwrt->fw, WIDE_ID(PHY_OPS_GROUP, PER_PLATFORM_ANT_GAIN_CMD),
+	cmd_ver = iwl_fw_lookup_cmd_ver(fwrt->fw,
+					WIDE_ID(PHY_OPS_GROUP,
+						PER_PLATFORM_ANT_GAIN_CMD),
 					IWL_FW_CMD_VER_UNKNOWN);
 	if (!fwrt->ppag_table_valid || (cmd_ver <= 3 && !fwrt->ppag_flags)) {
 		IWL_DEBUG_RADIO(fwrt, "PPAG not enabled, command not sent.\n");

@@ -867,7 +867,9 @@ int iwl_mvm_tvqm_enable_txq(struct iwl_mvm *mvm,
 		struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
 		unsigned int link_id;
 
-		for (link_id = 0; link_id < ARRAY_SIZE(mvmsta->link); link_id++) {
+		for (link_id = 0;
+		     link_id < ARRAY_SIZE(mvmsta->link);
+		     link_id++) {
 			struct iwl_mvm_link_sta *link =
 				rcu_dereference_protected(mvmsta->link[link_id],
 							  lockdep_is_held(&mvm->mutex));

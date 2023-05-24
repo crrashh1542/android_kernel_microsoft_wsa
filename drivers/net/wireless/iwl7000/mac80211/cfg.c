@@ -1186,6 +1186,25 @@ ieee80211_copy_mbssid_beacon(u8 *pos, struct cfg80211_mbssid_elems *dst,
 }
 #endif
 
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+static int
+ieee80211_copy_rnr_beacon(u8 *pos, struct cfg80211_rnr_elems *dst,
+			  struct cfg80211_rnr_elems *src)
+{
+	int i, offset = 0;
+
+	for (i = 0; i < src->cnt; i++) {
+		memcpy(pos + offset, src->elem[i].data, src->elem[i].len);
+		dst->elem[i].len = src->elem[i].len;
+		dst->elem[i].data = pos + offset;
+		offset += dst->elem[i].len;
+	}
+	dst->cnt = src->cnt;
+
+	return offset;
+}
+#endif
+
 static int ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 				   struct ieee80211_link_data *link,
 				   struct cfg80211_beacon_data *params,
@@ -1195,6 +1214,9 @@ static int ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 {
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 	struct cfg80211_mbssid_elems *mbssid = NULL;
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+#endif
+	struct cfg80211_rnr_elems *rnr = NULL;
 #endif
 	struct beacon_data *new, *old;
 	int new_head_len, new_tail_len;
@@ -1228,11 +1250,29 @@ static int ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 	if (params->mbssid_ies) {
 		mbssid = params->mbssid_ies;
 		size += struct_size(new->mbssid_ies, elem, mbssid->cnt);
-		size += ieee80211_get_mbssid_beacon_len(mbssid);
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		if (params->rnr_ies) {
+			rnr = params->rnr_ies;
+			size += struct_size(new->rnr_ies, elem, rnr->cnt);
+		}
+		size += ieee80211_get_mbssid_beacon_len(mbssid, rnr,
+							mbssid->cnt);
+#else
+		size += ieee80211_get_mbssid_beacon_len(mbssid, mbssid->cnt);
+#endif
 	} else if (old && old->mbssid_ies) {
 		mbssid = old->mbssid_ies;
 		size += struct_size(new->mbssid_ies, elem, mbssid->cnt);
-		size += ieee80211_get_mbssid_beacon_len(mbssid);
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		if (old && old->rnr_ies) {
+			rnr = old->rnr_ies;
+			size += struct_size(new->rnr_ies, elem, rnr->cnt);
+		}
+		size += ieee80211_get_mbssid_beacon_len(mbssid, rnr,
+							mbssid->cnt);
+#else
+		size += ieee80211_get_mbssid_beacon_len(mbssid, mbssid->cnt);
+#endif
 	}
 #endif
 
@@ -1244,7 +1284,7 @@ static int ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 
 	/*
 	 * pointers go into the block we allocated,
-	 * memory is | beacon_data | head | tail | mbssid_ies
+	 * memory is | beacon_data | head | tail | mbssid_ies | rnr_ies
 	 */
 	new->head = ((u8 *) new) + sizeof(*new);
 	new->tail = new->head + new_head_len;
@@ -1257,7 +1297,19 @@ static int ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 
 		new->mbssid_ies = (void *)pos;
 		pos += struct_size(new->mbssid_ies, elem, mbssid->cnt);
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		pos += ieee80211_copy_mbssid_beacon(pos, new->mbssid_ies,
+						    mbssid);
+#else
 		ieee80211_copy_mbssid_beacon(pos, new->mbssid_ies, mbssid);
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		if (rnr) {
+			new->rnr_ies = (void *)pos;
+			pos += struct_size(new->rnr_ies, elem, rnr->cnt);
+			ieee80211_copy_rnr_beacon(pos, new->rnr_ies, rnr);
+		}
+#endif
 		/* update bssid_indicator */
 		link_conf->bssid_indicator =
 			ilog2(__roundup_pow_of_two(mbssid->cnt + 1));
@@ -1367,6 +1419,29 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	prev_beacon_int = link_conf->beacon_int;
 	link_conf->beacon_int = params->beacon_interval;
 
+	if (params->ht_cap)
+		link_conf->ht_ldpc =
+			params->ht_cap->cap_info &
+				cpu_to_le16(IEEE80211_HT_CAP_LDPC_CODING);
+
+	if (params->vht_cap) {
+		link_conf->vht_ldpc =
+			params->vht_cap->vht_cap_info &
+				cpu_to_le32(IEEE80211_VHT_CAP_RXLDPC);
+		link_conf->vht_su_beamformer =
+			params->vht_cap->vht_cap_info &
+				cpu_to_le32(IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE);
+		link_conf->vht_su_beamformee =
+			params->vht_cap->vht_cap_info &
+				cpu_to_le32(IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE);
+		link_conf->vht_mu_beamformer =
+			params->vht_cap->vht_cap_info &
+				cpu_to_le32(IEEE80211_VHT_CAP_MU_BEAMFORMER_CAPABLE);
+		link_conf->vht_mu_beamformee =
+			params->vht_cap->vht_cap_info &
+				cpu_to_le32(IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE);
+	}
+
 	if (cfg_he_cap(params) && cfg_he_oper(params)) {
 		link_conf->he_support = true;
 		link_conf->htc_trig_based_pkt_ext =
@@ -1385,6 +1460,55 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 #endif
 			changed |= BSS_CHANGED_HE_BSS_COLOR;
 	}
+
+	if (cfg_he_cap(params)) {
+		link_conf->he_ldpc =
+			cfg_he_cap(params)->phy_cap_info[1] &
+				IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD;
+		link_conf->he_su_beamformer =
+			cfg_he_cap(params)->phy_cap_info[3] &
+				IEEE80211_HE_PHY_CAP3_SU_BEAMFORMER;
+		link_conf->he_su_beamformee =
+			cfg_he_cap(params)->phy_cap_info[4] &
+				IEEE80211_HE_PHY_CAP4_SU_BEAMFORMEE;
+		link_conf->he_mu_beamformer =
+			cfg_he_cap(params)->phy_cap_info[4] &
+				IEEE80211_HE_PHY_CAP4_MU_BEAMFORMER;
+		link_conf->he_full_ul_mumimo =
+			cfg_he_cap(params)->phy_cap_info[2] &
+				IEEE80211_HE_PHY_CAP2_UL_MU_FULL_MU_MIMO;
+	}
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
+	if (params->eht_cap) {
+		if (!link_conf->he_support)
+			return -EOPNOTSUPP;
+
+		link_conf->eht_support = true;
+#if CFG80211_VERSION >= KERNEL_VERSION(6,3,0)
+		link_conf->eht_puncturing = params->punct_bitmap;
+#endif
+		changed |= BSS_CHANGED_EHT_PUNCTURING;
+
+		link_conf->eht_su_beamformer =
+			params->eht_cap->fixed.phy_cap_info[0] &
+				IEEE80211_EHT_PHY_CAP0_SU_BEAMFORMER;
+		link_conf->eht_su_beamformee =
+			params->eht_cap->fixed.phy_cap_info[0] &
+				IEEE80211_EHT_PHY_CAP0_SU_BEAMFORMEE;
+		link_conf->eht_mu_beamformer =
+			params->eht_cap->fixed.phy_cap_info[7] &
+				(IEEE80211_EHT_PHY_CAP7_MU_BEAMFORMER_80MHZ |
+				 IEEE80211_EHT_PHY_CAP7_MU_BEAMFORMER_160MHZ |
+				 IEEE80211_EHT_PHY_CAP7_MU_BEAMFORMER_320MHZ);
+	} else {
+#endif
+		link_conf->eht_su_beamformer = false;
+		link_conf->eht_su_beamformee = false;
+		link_conf->eht_mu_beamformer = false;
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
+	}
+#endif
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,16,0)
 	if (sdata->vif.type == NL80211_IFTYPE_AP &&
@@ -1586,6 +1710,9 @@ static void ieee80211_free_next_beacon(struct ieee80211_link_data *link)
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 	kfree(link->u.ap.next_beacon->mbssid_ies);
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+	kfree(link->u.ap.next_beacon->rnr_ies);
 #endif
 	kfree(link->u.ap.next_beacon);
 	link->u.ap.next_beacon = NULL;
@@ -2967,7 +3094,7 @@ static int ieee80211_scan(struct wiphy *wiphy,
 		 * If the scan has been forced (and the driver supports
 		 * forcing), don't care about being beaconing already.
 		 * This will create problems to the attached stations (e.g. all
-		 * the  frames sent while scanning on other channel will be
+		 * the frames sent while scanning on other channel will be
 		 * lost)
 		 */
 		if (sdata->deflink.u.ap.beacon &&
@@ -3590,8 +3717,19 @@ cfg80211_beacon_dup(struct cfg80211_beacon_data *beacon)
 	len = beacon->head_len + beacon->tail_len + beacon->beacon_ies_len +
 	      beacon->proberesp_ies_len + beacon->assocresp_ies_len +
 	      beacon->probe_resp_len + beacon_ftm_len(beacon, lci_len) + beacon_ftm_len(beacon,
-											civicloc_len) +
-	      ieee80211_get_mbssid_beacon_len(beacon->mbssid_ies);
+											civicloc_len);
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
+	if (beacon->mbssid_ies)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		len += ieee80211_get_mbssid_beacon_len(beacon->mbssid_ies,
+						       beacon->rnr_ies,
+						       beacon->mbssid_ies->cnt);
+#else
+	len = ieee80211_get_mbssid_beacon_len(beacon->mbssid_ies,
+					      beacon->mbssid_ies->cnt);
+#endif
+#endif
 
 	new_beacon = kzalloc(sizeof(*new_beacon) + len, GFP_KERNEL);
 	if (!new_beacon)
@@ -3607,6 +3745,20 @@ cfg80211_beacon_dup(struct cfg80211_beacon_data *beacon)
 			kfree(new_beacon);
 			return NULL;
 		}
+
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+		if (beacon->rnr_ies && beacon->rnr_ies->cnt) {
+			new_beacon->rnr_ies =
+				kzalloc(struct_size(new_beacon->rnr_ies,
+						    elem, beacon->rnr_ies->cnt),
+					GFP_KERNEL);
+			if (!new_beacon->rnr_ies) {
+				kfree(new_beacon->mbssid_ies);
+				kfree(new_beacon);
+				return NULL;
+			}
+		}
+#endif
 	}
 #endif
 
@@ -3648,10 +3800,15 @@ cfg80211_beacon_dup(struct cfg80211_beacon_data *beacon)
 		pos += beacon->probe_resp_len;
 	}
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
-	if (beacon->mbssid_ies && beacon->mbssid_ies->cnt)
+	if (beacon->mbssid_ies && beacon->mbssid_ies->cnt) {
 		pos += ieee80211_copy_mbssid_beacon(pos,
 						    new_beacon->mbssid_ies,
 						    beacon->mbssid_ies);
+		if (beacon->rnr_ies && beacon->rnr_ies->cnt)
+			pos += ieee80211_copy_rnr_beacon(pos,
+							 new_beacon->rnr_ies,
+							 beacon->rnr_ies);
+	}
 #endif
 
 	/* might copy -1, meaning no changes requested */
@@ -3772,6 +3929,12 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 	lockdep_assert_held(&local->mtx);
 	lockdep_assert_held(&local->chanctx_mtx);
 
+	if (sdata->vif.bss_conf.eht_puncturing != sdata->vif.bss_conf.csa_punct_bitmap) {
+		sdata->vif.bss_conf.eht_puncturing =
+					sdata->vif.bss_conf.csa_punct_bitmap;
+		changed |= BSS_CHANGED_EHT_PUNCTURING;
+	}
+
 	/*
 	 * using reservation isn't immediate as it may be deferred until later
 	 * with multi-vif. once reservation is complete it will re-schedule the
@@ -3813,7 +3976,8 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 	if (err)
 		return err;
 
-	cfg80211_ch_switch_notify(sdata->dev, &link_data->csa_chandef, 0);
+	cfg80211_ch_switch_notify(sdata->dev, &sdata->deflink.csa_chandef, 0,
+				  sdata->vif.bss_conf.eht_puncturing);
 
 	return 0;
 }
@@ -4079,9 +4243,17 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 		goto out;
 	}
 
+#if CFG80211_VERSION >= KERNEL_VERSION(6,3,0)
+	if (params->punct_bitmap && !sdata->vif.bss_conf.eht_support)
+		goto out;
+#endif
+
 	sdata->deflink.csa_chandef = params->chandef;
 	sdata->deflink.csa_block_tx = params->block_tx;
 	sdata->vif.bss_conf.csa_active = true;
+#if CFG80211_VERSION >= KERNEL_VERSION(6,3,0)
+	sdata->vif.bss_conf.csa_punct_bitmap = params->punct_bitmap;
+#endif
 
 	if (sdata->deflink.csa_block_tx)
 		ieee80211_stop_vif_queues(local, sdata,
@@ -4089,7 +4261,8 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 	cfg80211_ch_switch_started_notify(sdata->dev,
 					  &sdata->deflink.csa_chandef, 0,
-					  params->count, params->block_tx);
+					  params->count, params->block_tx,
+					  sdata->vif.bss_conf.csa_punct_bitmap);
 
 	if (changed) {
 		ieee80211_link_info_change_notify(sdata, &sdata->deflink,
@@ -4941,6 +5114,23 @@ unlock:
 }
 #endif
 
+void ieee80211_color_collision_detection_work(struct work_struct *work)
+{
+	struct delayed_work *delayed_work = to_delayed_work(work);
+	struct ieee80211_link_data *link =
+		container_of(delayed_work, struct ieee80211_link_data,
+			     color_collision_detect_work);
+	struct ieee80211_sub_if_data *sdata = link->sdata;
+
+	sdata_lock(sdata);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,19,0) && CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+	cfg80211_obss_color_collision_notify(sdata->dev, link->color_bitmap, GFP_ATOMIC);
+#elif CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
+	cfg80211_obss_color_collision_notify(sdata->dev, link->color_bitmap);
+#endif
+	sdata_unlock(sdata);
+}
+
 void ieee80211_color_change_finish(struct ieee80211_vif *vif)
 {
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
@@ -4953,23 +5143,27 @@ void ieee80211_color_change_finish(struct ieee80211_vif *vif)
 EXPORT_SYMBOL_GPL(ieee80211_color_change_finish);
 
 void
-ieeee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
+ieee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
 				       u64 color_bitmap, gfp_t gfp)
 {
-#if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+	struct ieee80211_link_data *link = &sdata->deflink;
 
 	if (sdata->vif.bss_conf.color_change_active || sdata->vif.bss_conf.csa_active)
 		return;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(5,19,0)
-	cfg80211_obss_color_collision_notify(sdata->dev, color_bitmap, gfp);
-#else
-	cfg80211_obss_color_collision_notify(sdata->dev, color_bitmap);
-#endif
-#endif
+	if (delayed_work_pending(&link->color_collision_detect_work))
+		return;
+
+	link->color_bitmap = color_bitmap;
+	/* queue the color collision detection event every 500 ms in order to
+	 * avoid sending too much netlink messages to userspace.
+	 */
+	ieee80211_queue_delayed_work(&sdata->local->hw,
+				     &link->color_collision_detect_work,
+				     msecs_to_jiffies(500));
 }
-EXPORT_SYMBOL_GPL(ieeee80211_obss_color_collision_notify);
+EXPORT_SYMBOL_GPL(ieee80211_obss_color_collision_notify);
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
 static int
@@ -5061,24 +5255,6 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 	mutex_lock(&sdata->local->mtx);
 	ieee80211_vif_set_links(sdata, wdev->valid_links, 0);
 	mutex_unlock(&sdata->local->mtx);
-}
-#endif
-
-#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
-static int ieee80211_set_hw_timestamp(struct wiphy *wiphy,
-				      struct net_device *dev,
-				      struct cfg80211_set_hw_timestamp *hwts)
-{
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-
-	if (!local->ops->set_hw_timestamp)
-		return -EOPNOTSUPP;
-
-	if (!check_sdata_in_driver(sdata))
-		return -EIO;
-
-	return local->ops->set_hw_timestamp(&local->hw, &sdata->vif, hwts);
 }
 #endif
 
@@ -5194,6 +5370,24 @@ ieee80211_del_link_station(struct wiphy *wiphy, struct net_device *dev,
 
 	return ret;
 }
+
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+static int ieee80211_set_hw_timestamp(struct wiphy *wiphy,
+				      struct net_device *dev,
+				      struct cfg80211_set_hw_timestamp *hwts)
+{
+	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_local *local = sdata->local;
+
+	if (!local->ops->set_hw_timestamp)
+		return -EOPNOTSUPP;
+
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
+	return local->ops->set_hw_timestamp(&local->hw, &sdata->vif, hwts);
+}
+#endif
 
 #endif
 const struct cfg80211_ops mac80211_config_ops = {
@@ -5382,12 +5576,12 @@ const struct cfg80211_ops mac80211_config_ops = {
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
 	.del_intf_link = ieee80211_del_intf_link,
 #endif
-#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
-	.set_hw_timestamp = ieee80211_set_hw_timestamp,
-#endif
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
 	.add_link_station = ieee80211_add_link_station,
 	.mod_link_station = ieee80211_mod_link_station,
 	.del_link_station = ieee80211_del_link_station,
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+	.set_hw_timestamp = ieee80211_set_hw_timestamp,
 #endif
 };

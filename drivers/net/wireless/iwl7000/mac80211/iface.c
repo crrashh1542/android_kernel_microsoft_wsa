@@ -840,6 +840,15 @@ bp_ieee80211_get_stats64(struct net_device *dev,
 }
 #endif
 
+static int ieee80211_netdev_setup_tc(struct net_device *dev,
+				     enum tc_setup_type type, void *type_data)
+{
+	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_local *local = sdata->local;
+
+	return drv_net_setup_tc(local, sdata, dev, type, type_data);
+}
+
 #if LINUX_VERSION_IS_LESS(4,10,0)
 static int __change_mtu(struct net_device *ndev, int new_mtu){
 	if (new_mtu < 0 || new_mtu > 0)
@@ -866,6 +875,7 @@ static const struct net_device_ops ieee80211_dataif_ops = {
 	.ndo_get_stats64 = bp_ieee80211_get_stats64,
 #endif
 
+	.ndo_setup_tc		= ieee80211_netdev_setup_tc,
 };
 
 static const struct net_device_ops ieee80211_dataif_ops_itxq = {
@@ -1027,6 +1037,7 @@ static const struct net_device_ops ieee80211_dataif_8023_ops = {
 #if LINUX_VERSION_IS_GEQ(5,13,0)
 	.ndo_fill_forward_path	= ieee80211_netdev_fill_forward_path,
 #endif
+	.ndo_setup_tc		= ieee80211_netdev_setup_tc,
 };
 
 static bool ieee80211_iftype_supports_hdr_offload(enum nl80211_iftype iftype)

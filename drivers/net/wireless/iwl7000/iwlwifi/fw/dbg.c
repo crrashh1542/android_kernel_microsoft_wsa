@@ -2329,7 +2329,8 @@ static u32 iwl_dump_ini_file_name_info(struct iwl_fw_runtime *fwrt,
 {
 	struct iwl_fw_ini_dump_entry *entry;
 	struct iwl_dump_file_name_info *tlv;
-	u32 len = strnlen(fwrt->trans->dbg.dump_file_name_ext, IWL_FW_INI_MAX_NAME);
+	u32 len = strnlen(fwrt->trans->dbg.dump_file_name_ext,
+			  IWL_FW_INI_MAX_NAME);
 
 	if (!fwrt->trans->dbg.dump_file_name_ext_valid)
 		return 0;

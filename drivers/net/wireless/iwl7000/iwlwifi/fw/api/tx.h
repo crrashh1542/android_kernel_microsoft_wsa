@@ -821,9 +821,10 @@ struct iwl_mac_beacon_cmd {
 	__le32 csa_offset;
 	struct ieee80211_hdr frame[];
 } __packed; /* BEACON_TEMPLATE_CMD_API_S_VER_10,
-	       BEACON_TEMPLATE_CMD_API_S_VER_11,
-	       BEACON_TEMPLATE_CMD_API_S_VER_12
-	       BEACON_TEMPLATE_CMD_API_S_VER_13 */
+	     * BEACON_TEMPLATE_CMD_API_S_VER_11,
+	     * BEACON_TEMPLATE_CMD_API_S_VER_12,
+	     * BEACON_TEMPLATE_CMD_API_S_VER_13
+	     */
 
 struct iwl_beacon_notif {
 	struct iwl_mvm_tx_resp beacon_notify_hdr;

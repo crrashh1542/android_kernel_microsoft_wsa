@@ -405,7 +405,8 @@ static int iwl_mvm_load_ucode_wait_alive(struct iwl_mvm *mvm,
 		if (trans->trans_cfg->device_family >=
 					IWL_DEVICE_FAMILY_22000) {
 			pc_data = trans->dbg.pc_data;
-			for (count = 0; count < trans->dbg.num_pc; count++, pc_data++)
+			for (count = 0; count < trans->dbg.num_pc;
+			     count++, pc_data++)
 				IWL_ERR(mvm, "%s: 0x%x\n",
 					pc_data->pc_name,
 					pc_data->pc_address);

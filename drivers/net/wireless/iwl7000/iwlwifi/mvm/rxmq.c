@@ -214,7 +214,8 @@ static void iwl_mvm_add_rtap_sniffer_config(struct iwl_mvm *mvm,
 	if (!mvm->cur_aid)
 		return;
 
-	radiotap = iwl_mvm_radiotap_put_tlv(skb, IEEE80211_RADIOTAP_VENDOR_NAMESPACE,
+	radiotap = iwl_mvm_radiotap_put_tlv(skb,
+					    IEEE80211_RADIOTAP_VENDOR_NAMESPACE,
 					    sizeof(*radiotap) + vendor_data_len);
 
 	/* Intel OUI */
@@ -990,12 +991,10 @@ static bool iwl_mvm_reorder(struct iwl_mvm *mvm,
 	sta_mask = iwl_mvm_sta_fw_id_mask(mvm, sta, -1);
 	rcu_read_unlock();
 
-	if (IWL_FW_CHECK(mvm,
-			 tid != baid_data->tid ||
-			 !(sta_mask & baid_data->sta_mask),
-			 "baid 0x%x is mapped to sta_mask:0x%x tid:%d, but was received for sta_mask:0x%x tid:%d\n",
-			 baid, baid_data->sta_mask, baid_data->tid,
-			 sta_mask, tid))
+	if (WARN(tid != baid_data->tid ||
+		 !(sta_mask & baid_data->sta_mask),
+		 "baid 0x%x is mapped to sta_mask:0x%x tid:%d, but was received for sta_mask:0x%x tid:%d\n",
+		 baid, baid_data->sta_mask, baid_data->tid, sta_mask, tid))
 		return false;
 
 	nssn = reorder & IWL_RX_MPDU_REORDER_NSSN_MASK;

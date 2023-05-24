@@ -278,8 +278,7 @@ static void iwl_mvm_bt_notif_per_link(struct iwl_mvm *mvm,
 		return;
 
 	link_conf = rcu_dereference(vif->link_conf[link_id]);
-	/*
-	 * This can happen due to races: if we receive the notification
+	/* This can happen due to races: if we receive the notification
 	 * and have the mutex held, while mac80211 is stuck on our mutex
 	 * in the middle of removing the link.
 	 */
@@ -404,10 +403,12 @@ static void iwl_mvm_bt_notif_per_link(struct iwl_mvm *mvm,
 	if (!ave_rssi)
 		ave_rssi = -100;
 	if (ave_rssi > -IWL_MVM_BT_COEX_EN_RED_TXP_THRESH) {
-		if (iwl_mvm_bt_coex_reduced_txp(mvm, link_info->ap_sta_id, true))
+		if (iwl_mvm_bt_coex_reduced_txp(mvm, link_info->ap_sta_id,
+						true))
 			IWL_ERR(mvm, "Couldn't send BT_CONFIG cmd\n");
 	} else if (ave_rssi < -IWL_MVM_BT_COEX_DIS_RED_TXP_THRESH) {
-		if (iwl_mvm_bt_coex_reduced_txp(mvm, link_info->ap_sta_id, false))
+		if (iwl_mvm_bt_coex_reduced_txp(mvm, link_info->ap_sta_id,
+						false))
 			IWL_ERR(mvm, "Couldn't send BT_CONFIG cmd\n");
 	}
 

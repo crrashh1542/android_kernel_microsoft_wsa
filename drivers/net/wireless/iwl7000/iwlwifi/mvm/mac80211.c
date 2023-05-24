@@ -766,7 +766,8 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		hw->wiphy->iftype_ext_capab = add_iftypes_ext_capa;
 #endif
 #if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
-		hw->wiphy->num_iftype_ext_capab = ARRAY_SIZE(add_iftypes_ext_capa) - 1;
+		hw->wiphy->num_iftype_ext_capab =
+			ARRAY_SIZE(add_iftypes_ext_capa) - 1;
 #endif
 
 		ieee80211_hw_set(hw, SUPPORTS_MULTI_BSSID);
@@ -1814,7 +1815,8 @@ static int iwl_mvm_mac_add_interface(struct ieee80211_hw *hw,
 
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
 		mvm->monitor_on = true;
-		mvm->monitor_p80 = iwl_mvm_chandef_get_primary_80(&vif->bss_conf.chandef);
+		mvm->monitor_p80 =
+			iwl_mvm_chandef_get_primary_80(&vif->bss_conf.chandef);
 	}
 
 	iwl_mvm_vif_dbgfs_register(mvm, vif);
@@ -3033,7 +3035,8 @@ static void iwl_mvm_bss_info_changed_station(struct iwl_mvm *mvm,
 		iwl_mvm_bss_info_changed_station_assoc(mvm, vif, changes);
 	}
 
-	iwl_mvm_bss_info_changed_station_common(mvm, vif, &vif->bss_conf, changes);
+	iwl_mvm_bss_info_changed_station_common(mvm, vif, &vif->bss_conf,
+						changes);
 }
 
 bool iwl_mvm_start_ap_ibss_common(struct ieee80211_hw *hw,
@@ -5053,8 +5056,9 @@ static int __iwl_mvm_add_chanctx(struct iwl_mvm *mvm,
 {
 	u16 *phy_ctxt_id = (u16 *)ctx->drv_priv;
 	struct iwl_mvm_phy_ctxt *phy_ctxt;
-	bool responder = iwl_mvm_is_ftm_responder_chanctx(mvm, ctx);
-	struct cfg80211_chan_def *def = responder ? &ctx->def : &ctx->min_def;
+	bool use_def = iwl_mvm_is_ftm_responder_chanctx(mvm, ctx) ||
+		iwl_mvm_enable_fils(mvm, ctx);
+	struct cfg80211_chan_def *def = use_def ? &ctx->def : &ctx->min_def;
 	int ret;
 
 	lockdep_assert_held(&mvm->mutex);
@@ -5122,8 +5126,9 @@ void iwl_mvm_change_chanctx(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	u16 *phy_ctxt_id = (u16 *)ctx->drv_priv;
 	struct iwl_mvm_phy_ctxt *phy_ctxt = &mvm->phy_ctxts[*phy_ctxt_id];
-	bool responder = iwl_mvm_is_ftm_responder_chanctx(mvm, ctx);
-	struct cfg80211_chan_def *def = responder ? &ctx->def : &ctx->min_def;
+	bool use_def = iwl_mvm_is_ftm_responder_chanctx(mvm, ctx) ||
+		iwl_mvm_enable_fils(mvm, ctx);
+	struct cfg80211_chan_def *def = use_def ? &ctx->def : &ctx->min_def;
 
 	if (WARN_ONCE((phy_ctxt->ref > 1) &&
 		      (changed & ~(IEEE80211_CHANCTX_CHANGE_WIDTH |

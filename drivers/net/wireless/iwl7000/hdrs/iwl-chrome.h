@@ -13,6 +13,7 @@
 #include <linux/idr.h>
 #include <linux/vmalloc.h>
 
+#include <hdrs/net/dropreason.h>
 /* get the CPTCFG_* preprocessor symbols */
 #include <hdrs/config.h>
 

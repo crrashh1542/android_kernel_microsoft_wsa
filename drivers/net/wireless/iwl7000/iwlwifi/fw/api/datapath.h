@@ -222,37 +222,6 @@ struct iwl_synced_time_rsp {
 	__le32 gp2_timestamp_lo;
 } __packed; /* WNM_80211V_TIMING_RSP_API_S_VER_1 */
 
-/**
- * struct iwl_time_msmt_cfm_notify - Time Sync measurement confirmation
- * notification for TM/FTM. Sent on receipt of 802.11 Ack from peer for the
- * Tx'ed TM/FTM measurement action frame.
- *
- * @peer_addr: peer address
- * @reserved: for alignment
- * @dialog_token: measurement flow dialog token number
- * @t1_hi: high dword of t1-time of the Tx'ed action frame departure on
- *	sender side in units of 10 nano seconds
- * @t1_lo: low dword of t1-time of the Tx'ed action frame departure on
- *	sender side in units of 10 nano seconds
- * @t1_max_err: maximum t1-time error in units of 10 nano seconds
- * @t4_hi: high dword of t4-time of the Rx'ed action frame's Ack arrival on
- *	sender side in units of 10 nano seconds
- * @t4_lo: low dword of t4-time of the Rx'ed action frame's Ack arrival on
- *	sender side in units of 10 nano seconds
- * @t4_max_err: maximum t4-time error in units of 10 nano seconds
- */
-struct iwl_time_msmt_cfm_notify {
-	u8 peer_addr[ETH_ALEN];
-	u8 reserved[2];
-	__le32 dialog_token;
-	__le32 t1_hi;
-	__le32 t1_lo;
-	__le32 t1_max_err;
-	__le32 t4_hi;
-	__le32 t4_lo;
-	__le32 t4_max_err;
-} __packed; /* WNM_80211V_TIMING_MEASUREMENT_CONFIRM_NTFY_API_S_VER_1 */
-
 /* PTP_CTX_MAX_DATA_SIZE_IN_API_D_VER_1 */
 #define PTP_CTX_MAX_DATA_SIZE   128
 
@@ -331,6 +300,37 @@ struct iwl_time_msmt_notify {
 	__le32 t3_max_err;
 	struct iwl_time_msmt_ptp_ctx ptp;
 } __packed; /* WNM_80211V_TIMING_MEASUREMENT_NTFY_API_S_VER_1 */
+
+/**
+ * struct iwl_time_msmt_cfm_notify - Time Sync measurement confirmation
+ * notification for TM/FTM. Sent on receipt of 802.11 Ack from peer for the
+ * Tx'ed TM/FTM measurement action frame.
+ *
+ * @peer_addr: peer address
+ * @reserved: for alignment
+ * @dialog_token: measurement flow dialog token number
+ * @t1_hi: high dword of t1-time of the Tx'ed action frame departure on
+ *	sender side in units of 10 nano seconds
+ * @t1_lo: low dword of t1-time of the Tx'ed action frame departure on
+ *	sender side in units of 10 nano seconds
+ * @t1_max_err: maximum t1-time error in units of 10 nano seconds
+ * @t4_hi: high dword of t4-time of the Rx'ed action frame's Ack arrival on
+ *	sender side in units of 10 nano seconds
+ * @t4_lo: low dword of t4-time of the Rx'ed action frame's Ack arrival on
+ *	sender side in units of 10 nano seconds
+ * @t4_max_err: maximum t4-time error in units of 10 nano seconds
+ */
+struct iwl_time_msmt_cfm_notify {
+	u8 peer_addr[ETH_ALEN];
+	u8 reserved[2];
+	__le32 dialog_token;
+	__le32 t1_hi;
+	__le32 t1_lo;
+	__le32 t1_max_err;
+	__le32 t4_hi;
+	__le32 t4_lo;
+	__le32 t4_max_err;
+} __packed; /* WNM_80211V_TIMING_MEASUREMENT_CONFIRM_NTFY_API_S_VER_1 */
 
 /**
  * struct iwl_channel_estimation_cfg_v1 - channel estimation reporting config

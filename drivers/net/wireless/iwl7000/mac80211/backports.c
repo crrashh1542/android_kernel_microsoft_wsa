@@ -488,3 +488,117 @@ void ieee80211_mgmt_frame_register(struct wiphy *wiphy,
 	}
 }
 #endif /* < 5.8 */
+
+#ifdef CONFIG_THERMAL
+#if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
+struct thermal_zone_device *
+thermal_zone_device_register_with_trips(const char *type,
+					struct thermal_trip *trips,
+					int num_trips, int mask, void *devdata,
+					struct thermal_zone_device_ops *ops,
+					struct thermal_zone_params *tzp, int passive_delay,
+					int polling_delay)
+{
+	return thermal_zone_device_register(type, num_trips, mask, devdata, ops, tzp,
+					    passive_delay, polling_delay);
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+void drop_reasons_register_subsys(enum skb_drop_reason_subsys subsys,
+				  const struct drop_reason_list *list)
+{}
+EXPORT_SYMBOL(/* don't auto-generate a rename */
+	drop_reasons_register_subsys);
+
+void drop_reasons_unregister_subsys(enum skb_drop_reason_subsys subsys)
+{}
+EXPORT_SYMBOL(/* don't auto-generate a rename */
+	drop_reasons_unregister_subsys);
+
+void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
+{
+	return tzd->devdata;
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_priv);
+#endif /* < 6.4 */
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+/*
+ * How many Beacon frames need to have been used in average signal strength
+ * before starting to indicate signal change events.
+ */
+#define IEEE80211_SIGNAL_AVE_MIN_COUNT	4
+
+struct ieee80211_per_bw_puncturing_values {
+	u8 len;
+	const u16 *valid_values;
+};
+
+static const u16 puncturing_values_80mhz[] = {
+	0x8, 0x4, 0x2, 0x1
+};
+
+static const u16 puncturing_values_160mhz[] = {
+	 0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1, 0xc0, 0x30, 0xc, 0x3
+};
+
+static const u16 puncturing_values_320mhz[] = {
+	0xc000, 0x3000, 0xc00, 0x300, 0xc0, 0x30, 0xc, 0x3, 0xf000, 0xf00,
+	0xf0, 0xf, 0xfc00, 0xf300, 0xf0c0, 0xf030, 0xf00c, 0xf003, 0xc00f,
+	0x300f, 0xc0f, 0x30f, 0xcf, 0x3f
+};
+
+#define IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(_bw) \
+	{ \
+		.len = ARRAY_SIZE(puncturing_values_ ## _bw ## mhz), \
+		.valid_values = puncturing_values_ ## _bw ## mhz \
+	}
+
+static const struct ieee80211_per_bw_puncturing_values per_bw_puncturing[] = {
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(80),
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(160),
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(320)
+};
+
+bool ieee80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					       enum nl80211_chan_width bw)
+{
+	u32 idx, i;
+
+	switch (bw) {
+	case NL80211_CHAN_WIDTH_80:
+		idx = 0;
+		break;
+	case NL80211_CHAN_WIDTH_160:
+		idx = 1;
+		break;
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
+	case NL80211_CHAN_WIDTH_320:
+		idx = 2;
+		break;
+#endif
+	default:
+		*bitmap = 0;
+		break;
+	}
+
+	if (!*bitmap)
+		return true;
+
+	for (i = 0; i < per_bw_puncturing[idx].len; i++)
+		if (per_bw_puncturing[idx].valid_values[i] == *bitmap)
+			return true;
+
+	return false;
+}
+
+bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					      struct cfg80211_chan_def *chandef)
+{
+	return ieee80211_valid_disable_subchannel_bitmap(bitmap, chandef->width);
+}
+
+#endif /* < 6.3  */
