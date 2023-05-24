@@ -34,5 +34,6 @@ struct resume_swap_area {
 /* These are chromeos internal ioctls for locking down hibernate. */
 #define SNAPSHOT_SET_BLOCK_DEVICE 	_IOW(SNAPSHOT_IOC_MAGIC, 40, __u32)
 #define SNAPSHOT_XFER_BLOCK_DEVICE 	_IO(SNAPSHOT_IOC_MAGIC, 41)
+#define SNAPSHOT_RELEASE_BLOCK_DEVICE 	_IO(SNAPSHOT_IOC_MAGIC, 42)
 
 #endif /* _LINUX_SUSPEND_IOCTLS_H */

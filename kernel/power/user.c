@@ -289,6 +289,22 @@ static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 	return 0;
 }
 
+static int snapshot_release_block_device(struct snapshot_data *data) {
+	if (swsusp_swap_in_use())
+		return -EPERM;
+
+	if (!data->dev || !data->snapshot_bdev.bdev)
+		return -ENODEV;
+
+	blkdev_put(data->snapshot_bdev.bdev, FMODE_WRITE | FMODE_READ | FMODE_EXCL);
+	data->dev = 0;
+	data->snapshot_bdev.bdev = NULL;
+	data->snapshot_bdev.nr_blocks = 0;
+	data->snapshot_bdev.nr_blocks_used = 0;
+
+	return 0;
+}
+
 static int snapshot_write_block_device(struct snapshot_data *data) {
 	int res = 0;
 	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
@@ -368,18 +384,6 @@ static int snapshot_transfer_block_device(struct snapshot_data *data)
 	return res;
 }
 
-static void __maybe_unused release_block_dev_on_restore(struct snapshot_data *data)
-{
-	if (!data->dev || !data->snapshot_bdev.bdev)
-		return;
-
-	blkdev_put(data->snapshot_bdev.bdev, FMODE_WRITE | FMODE_READ | FMODE_EXCL);
-	data->dev = 0;
-	data->snapshot_bdev.bdev = NULL;
-	data->snapshot_bdev.nr_blocks = 0;
-	data->snapshot_bdev.nr_blocks_used = 0;
-}
-
 static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 							unsigned long arg)
 {
@@ -397,6 +401,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		return -ENOTTY;
 	if (_IOC_NR(cmd) > SNAPSHOT_IOC_MAXNR &&
 		cmd != SNAPSHOT_SET_BLOCK_DEVICE &&
+		cmd != SNAPSHOT_RELEASE_BLOCK_DEVICE &&
 		cmd != SNAPSHOT_XFER_BLOCK_DEVICE)
 		return -ENOTTY;
 	if (!capable(CAP_SYS_ADMIN))
@@ -556,6 +561,10 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		error = snapshot_set_block_device(data, (__u32)arg);
 		break;
 
+	case SNAPSHOT_RELEASE_BLOCK_DEVICE:
+		snapshot_release_block_device(data);
+		break;
+
 	case SNAPSHOT_XFER_BLOCK_DEVICE:
 		error = snapshot_transfer_block_device(data);
 		break;
@@ -583,6 +592,7 @@ snapshot_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case SNAPSHOT_CREATE_IMAGE:
 	case SNAPSHOT_SET_SWAP_AREA:
 	case SNAPSHOT_SET_BLOCK_DEVICE:
+	case SNAPSHOT_RELEASE_BLOCK_DEVICE:
 	case SNAPSHOT_XFER_BLOCK_DEVICE:
 		return snapshot_ioctl(file, cmd,
 				      (unsigned long) compat_ptr(arg));
