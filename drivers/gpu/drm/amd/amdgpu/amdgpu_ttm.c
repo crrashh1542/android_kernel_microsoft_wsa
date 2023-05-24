@@ -58,6 +58,7 @@
 #include "amdgpu_sdma.h"
 #include "amdgpu_ras.h"
 #include "amdgpu_atomfirmware.h"
+#include "amdgpu_dma_buf.h"
 #include "amdgpu_res_cursor.h"
 #include "bif/bif_4_1_d.h"
 
@@ -68,8 +69,6 @@ static int amdgpu_ttm_backend_bind(struct ttm_device *bdev,
 				   struct ttm_resource *bo_mem);
 static void amdgpu_ttm_backend_unbind(struct ttm_device *bdev,
 				      struct ttm_tt *ttm);
-
-int amdgpu_try_dma_buf_mmap(struct file *filp, struct vm_area_struct *vma);
 
 static int amdgpu_ttm_init_on_chip(struct amdgpu_device *adev,
 				    unsigned int type,
