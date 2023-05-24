@@ -5794,8 +5794,9 @@ static void ieee80211_ml_reconf_work(struct work_struct *work)
 	new_active_links = sdata->vif.active_links & ~sdata->u.mgd.removed_links;
 	if (new_active_links != sdata->vif.active_links) {
 		if (!new_active_links)
-			new_active_links = ffs(new_valid_links &
-					       ~sdata->vif.dormant_links) - 1;
+			new_active_links =
+				BIT(ffs(new_valid_links &
+					~sdata->vif.dormant_links) - 1);
 
 		ret = ieee80211_set_active_links(&sdata->vif,
 						 new_active_links);
