@@ -20,6 +20,7 @@ struct cmm_buf_context;
  * struct cam_req_mgr_device - a camera request manager device
  *
  * @video: pointer to struct video device.
+ * @video_lock: lock to serialize video device ioctl calls
  * @v4l2_dev: pointer to struct v4l2 device.
  * @subdev_nodes_created: flag to check the created state.
  * @dev_lock: lock for the subdevice count.
@@ -31,6 +32,7 @@ struct cmm_buf_context;
  */
 struct cam_req_mgr_device {
 	struct video_device *video;
+	struct mutex video_lock;
 	struct v4l2_device *v4l2_dev;
 	bool subdev_nodes_created;
 	struct mutex dev_lock;

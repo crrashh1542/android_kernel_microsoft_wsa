@@ -1021,6 +1021,7 @@ static int cam_sync_probe(struct platform_device *pdev)
 
 	sync_dev->err_cnt = 0;
 	mutex_init(&sync_dev->table_lock);
+	mutex_init(&sync_dev->vdev_lock);
 	spin_lock_init(&sync_dev->cam_sync_eventq_lock);
 
 	for (idx = 0; idx < CAM_SYNC_MAX_OBJS; idx++)
@@ -1050,6 +1051,7 @@ static int cam_sync_probe(struct platform_device *pdev)
 	sync_dev->vdev->minor     = -1;
 	sync_dev->vdev->vfl_type  = VFL_TYPE_VIDEO;
 	sync_dev->vdev->device_caps = V4L2_CAP_DEVICE_CAPS;
+	sync_dev->vdev->lock = &sync_dev->vdev_lock;
 
 	rc = video_register_device(sync_dev->vdev,
 		VFL_TYPE_VIDEO, -1);
@@ -1093,6 +1095,7 @@ mcinit_fail:
 	video_device_release(sync_dev->vdev);
 vdev_fail:
 	mutex_destroy(&sync_dev->table_lock);
+	mutex_destroy(&sync_dev->vdev_lock);
 	kfree(sync_dev);
 	return rc;
 }

@@ -176,6 +176,7 @@ struct cam_signalable_info {
  * struct sync_device - Internal struct to book keep sync driver details
  *
  * @vdev            : Video device
+ * @vdev_lock       : lock to serialize video device ioctl calls
  * @v4l2_dev        : V4L2 device
  * @sync_table      : Table of all sync objects
  * @row_spinlocks   : Spinlock array, one for each row in the table
@@ -189,6 +190,7 @@ struct cam_signalable_info {
  */
 struct sync_device {
 	struct video_device *vdev;
+	struct mutex vdev_lock;
 	struct v4l2_device v4l2_dev;
 	struct sync_table_row sync_table[CAM_SYNC_MAX_OBJS];
 	spinlock_t row_spinlocks[CAM_SYNC_MAX_OBJS];
