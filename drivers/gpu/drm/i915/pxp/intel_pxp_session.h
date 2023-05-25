@@ -24,7 +24,7 @@ int intel_pxp_sm_ioctl_mark_session_in_play(struct intel_pxp *pxp,
 					    u32 session_id);
 int intel_pxp_sm_ioctl_terminate_session(struct intel_pxp *pxp,
 					 struct drm_file *drmfile,
-					 u32 pxp_tag);
+					 u32 session_id);
 
 int intel_pxp_sm_ioctl_query_pxp_tag(struct intel_pxp *pxp,
 				     u32 *session_is_alive, u32 *pxp_tag);
