@@ -4706,7 +4706,6 @@ static inline int l2cap_disconnect_rsp(struct l2cap_conn *conn,
 			l2cap_chan_lock(chan);
 	}
 	if (!chan) {
-		mutex_unlock(&conn->chan_lock);
 		return 0;
 	}
 
