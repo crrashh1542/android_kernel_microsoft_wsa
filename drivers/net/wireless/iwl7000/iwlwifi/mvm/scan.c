@@ -1814,7 +1814,7 @@ iwl_mvm_umac_scan_cfg_channels_v7_6g(struct iwl_mvm *mvm,
 			/* Use the highest PSD value allowed as advertised by
 			 * APs for this channel
 			 */
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 			tmp_psd_20 = IEEE80211_RNR_TBTT_PARAMS_PSD_RESERVED;
 #else
 			tmp_psd_20 = scan_6ghz_params[j].psd_20;

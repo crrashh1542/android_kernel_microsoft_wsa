@@ -31,7 +31,7 @@
 #if CFG80211_VERSION < KERNEL_VERSION(5,6,0)
 #define ieee80211_get_vht_max_nss __iwl7000_ieee80211_get_vht_max_nss
 #endif
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 #define cfg80211_defragment_element __iwl7000_cfg80211_defragment_element
 #define ieee80211_fragment_element __iwl7000_ieee80211_fragment_element
 #endif

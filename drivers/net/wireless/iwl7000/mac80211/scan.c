@@ -175,7 +175,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	};
 	struct cfg80211_inform_bss bss_meta = {
 		.boottime_ns = rx_status->boottime_ns,
-#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,5,0)
 		.drv_data = (void *)&update_data,
 #endif
 	};
@@ -218,7 +218,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 
 	cbss = cfg80211_inform_bss_frame_data(local->hw.wiphy, &bss_meta,
 					      mgmt, len, GFP_ATOMIC);
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 	if (cbss) {
 		struct cfg80211_bss *non_tx_cbss;
 		ieee80211_inform_bss(local->hw.wiphy, cbss,
