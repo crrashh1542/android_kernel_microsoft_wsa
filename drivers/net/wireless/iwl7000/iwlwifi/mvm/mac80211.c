@@ -138,8 +138,10 @@ static const struct cfg80211_pmsr_capabilities iwl_mvm_pmsr_capa = {
 		.non_asap = 1,
 		.request_lci = 1,
 		.request_civicloc = 1,
-#if CFG80211_VERSION >= KERNEL_VERSION(9,9,9)
+#if CFG80211_VERSION >= KERNEL_VERSION(5,7,0)
 		.trigger_based = 1,
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(5,13,0)
 		.non_trigger_based = 1,
 #endif
 		.max_bursts_exponent = -1, /* all supported */
