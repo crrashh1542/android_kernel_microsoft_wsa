@@ -2012,7 +2012,7 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 		ieee80211_he_cap_ie_to_sta_he_cap(sdata, sband,
 						  (void *)params->he_capa,
 						  params->he_capa_len,
-#if CFG80211_VERSION >= KERNEL_VERSION(99,0,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(5,8,0)
 						  (void *)params->he_6ghz_capa,
 #else
 						  NULL,
