@@ -110,12 +110,10 @@ static const struct ieee80211_iface_limit iwl_mvm_limits_nan[] = {
 		.max = 1,
 		.types = BIT(NL80211_IFTYPE_P2P_DEVICE),
 	},
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	{
 		.max = 1,
 		.types = BIT(NL80211_IFTYPE_NAN),
 	},
-#endif
 };
 
 static const struct ieee80211_iface_combination
@@ -300,7 +298,6 @@ int iwl_mvm_init_fw_regd(struct iwl_mvm *mvm)
 }
 
 /* Each capability added here should also be add to tm_if_types_ext_capa_sta */
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 static const u8 he_if_types_ext_capa_sta[] = {
 	 [0] = WLAN_EXT_CAPA1_EXT_CHANNEL_SWITCHING,
 	 [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
@@ -308,9 +305,7 @@ static const u8 he_if_types_ext_capa_sta[] = {
 	       WLAN_EXT_CAPA8_MAX_MSDU_IN_AMSDU_LSB,
 	 [8] = WLAN_EXT_CAPA9_MAX_MSDU_IN_AMSDU_MSB,
 };
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 static const u8 tm_if_types_ext_capa_sta[] = {
 	 [0] = WLAN_EXT_CAPA1_EXT_CHANNEL_SWITCHING,
 	 [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT |
@@ -320,7 +315,6 @@ static const u8 tm_if_types_ext_capa_sta[] = {
 	 [8] = WLAN_EXT_CAPA9_MAX_MSDU_IN_AMSDU_MSB,
 	 [9] = WLAN_EXT_CAPA10_TWT_REQUESTER_SUPPORT,
 };
-#endif
 
 /*
  * Additional interface types for which extended capabilities are
@@ -333,7 +327,6 @@ static const u8 tm_if_types_ext_capa_sta[] = {
 				 IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_64US << \
 					__bf_shf(IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY))
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 static const struct wiphy_iftype_ext_capab add_iftypes_ext_capa[] = {
 	{
 		.iftype = NL80211_IFTYPE_STATION,
@@ -356,7 +349,6 @@ static const struct wiphy_iftype_ext_capab add_iftypes_ext_capa[] = {
 #endif
 	},
 };
-#endif
 
 int iwl_mvm_op_get_antenna(struct ieee80211_hw *hw, u32 *tx_ant, u32 *rx_ant)
 {
@@ -614,20 +606,16 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	hw->wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;
 	hw->wiphy->flags |= WIPHY_FLAG_SPLIT_SCAN_6GHZ;
 
-	if (false) {
-		hw->wiphy->interface_modes |= 0;
+	if (fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_NAN_SUPPORT)) {
+		hw->wiphy->interface_modes |= BIT(NL80211_IFTYPE_NAN);
 		hw->wiphy->iface_combinations = iwl_mvm_iface_combinations_nan;
 		hw->wiphy->n_iface_combinations =
 			ARRAY_SIZE(iwl_mvm_iface_combinations_nan);
-#if CFG80211_VERSION >= KERNEL_VERSION(4,11,0)
 		hw->wiphy->nan_supported_bands = BIT(NL80211_BAND_2GHZ);
-#endif
-		if (mvm->nvm_data->bands[NL80211_BAND_5GHZ].n_channels) {
-#if CFG80211_VERSION >= KERNEL_VERSION(4,11,0)
+		if (mvm->nvm_data->bands[NL80211_BAND_5GHZ].n_channels)
 			hw->wiphy->nan_supported_bands |=
 				BIT(NL80211_BAND_5GHZ);
-#endif
-		}
 		hw->max_nan_de_entries = NAN_MAX_SUPPORTED_DE_ENTRIES;
 	} else {
 		hw->wiphy->iface_combinations = iwl_mvm_iface_combinations;
@@ -703,11 +691,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	else
 		hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
 
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-	hw->wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
-#else
 	hw->wiphy->max_sched_scan_reqs = 1;
-#endif
 	hw->wiphy->max_sched_scan_ssids = PROBE_OPTION_MAX;
 	hw->wiphy->max_match_sets = iwl_umac_scan_get_max_profiles(mvm->fw);
 	/* we create the 802.11 header and zero length SSID IE. */
@@ -776,28 +760,18 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 					      NL80211_EXT_FEATURE_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION);
 	}
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 	hw->wiphy->iftype_ext_capab = NULL;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 	hw->wiphy->num_iftype_ext_capab = 0;
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 	if (mvm->nvm_data->sku_cap_11ax_enable &&
 	    !iwlwifi_mod_params.disable_11ax) {
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 		hw->wiphy->iftype_ext_capab = add_iftypes_ext_capa;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 		hw->wiphy->num_iftype_ext_capab =
 			ARRAY_SIZE(add_iftypes_ext_capa) - 1;
-#endif
 
 		ieee80211_hw_set(hw, SUPPORTS_MULTI_BSSID);
 		ieee80211_hw_set(hw, SUPPORTS_ONLY_HE_MULTI_BSSID);
 	}
-#endif
 
 	if (iwl_fw_lookup_cmd_ver(mvm->fw,
 				  WIDE_ID(DATA_PATH_GROUP,
@@ -806,17 +780,11 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		IWL_DEBUG_INFO(mvm->trans, "Timing measurement supported\n");
 
 		if (!hw->wiphy->iftype_ext_capab) {
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 			hw->wiphy->num_iftype_ext_capab = 1;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 			hw->wiphy->iftype_ext_capab = add_iftypes_ext_capa +
 				ARRAY_SIZE(add_iftypes_ext_capa) - 1;
-#endif
 		} else {
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 			hw->wiphy->iftype_ext_capab = add_iftypes_ext_capa + 1;
-#endif
 		}
 	}
 
@@ -904,9 +872,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 			cfg80211_ext_capa_set_eml_capabilities(capa,
 							       mvm->trans->dbg_cfg.eml_capa_override);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 		hw->wiphy->iftype_ext_capab = capa;
-#endif
 	}
 #endif
 
@@ -922,12 +888,8 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	if (mvm->trans->dbg_cfg.eml_capa_override >= 0 &&
 	    hw->wiphy->iftype_ext_capab && ret) {
 		kfree(hw->wiphy->iftype_ext_capab);
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 		hw->wiphy->num_iftype_ext_capab = 0;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,8,0)
 		hw->wiphy->iftype_ext_capab = NULL;
-#endif
 	}
 #endif
 
@@ -1762,7 +1724,7 @@ static int iwl_mvm_mac_add_interface(struct ieee80211_hw *hw,
 	rcu_assign_pointer(mvm->vif_id_to_mac[mvmvif->id], vif);
 
 	/* Currently not much to do for NAN */
-	if (ieee80211_viftype_nan(vif->type)) {
+	if (vif->type == NL80211_IFTYPE_NAN) {
 		ret = 0;
 		goto out;
 	}
@@ -1906,7 +1868,7 @@ static bool iwl_mvm_mac_remove_interface_common(struct ieee80211_hw *hw,
 
 	iwl_mvm_prepare_mac_removal(mvm, vif);
 
-	if (ieee80211_viftype_nan(vif->type)) {
+	if (vif->type == NL80211_IFTYPE_NAN) {
 		struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
 		/* cfg80211 should stop NAN before interface removal */
 		if (wdev && WARN_ON(wdev_running(wdev)))

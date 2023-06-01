@@ -230,7 +230,7 @@ void ieee80211_bss_info_change_notify(struct ieee80211_sub_if_data *sdata,
 		return;
 
 	if (WARN_ON_ONCE(sdata->vif.type == NL80211_IFTYPE_P2P_DEVICE ||
-			 ieee80211_viftype_nan(sdata->vif.type) ||
+			 sdata->vif.type == NL80211_IFTYPE_NAN ||
 			 (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
 			  !sdata->vif.bss_conf.mu_mimo_owner &&
 			  !(changed & BSS_CHANGED_TXPOWER))))
@@ -967,7 +967,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		    !local->ops->set_frag_threshold))
 		return -EINVAL;
 
-	if (WARN_ON(ieee80211_has_nan_iftype(local->hw.wiphy->interface_modes) &&
+	if (WARN_ON(local->hw.wiphy->interface_modes &
+			BIT(NL80211_IFTYPE_NAN) &&
 		    (!local->ops->start_nan || !local->ops->stop_nan)))
 		return -EINVAL;
 
@@ -1413,15 +1414,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	/* add one default STA interface if supported */
 	if (local->hw.wiphy->interface_modes & BIT(NL80211_IFTYPE_STATION) &&
 	    !ieee80211_hw_check(hw, NO_AUTO_VIF)) {
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-		u32 f = 0;
-		u32 *flags = &f;
-#endif
 		struct vif_params params = {0};
 
-		result = ieee80211_if_add(local, "wlan%d", NET_NAME_ENUM,
-					  NULL, NL80211_IFTYPE_STATION,
-					  mon_opts_params(&params));
+		result = ieee80211_if_add(local, "wlan%d", NET_NAME_ENUM, NULL,
+					  NL80211_IFTYPE_STATION, &params);
 		if (result)
 			wiphy_warn(local->hw.wiphy,
 				   "Failed to add default virtual iface\n");

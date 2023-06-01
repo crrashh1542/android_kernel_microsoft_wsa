@@ -396,7 +396,7 @@ static int ieee80211_check_queues(struct ieee80211_sub_if_data *sdata,
 	int n_queues = sdata->local->hw.queues;
 	int i;
 
-	if (ieee80211_viftype_nan(iftype))
+	if (iftype == NL80211_IFTYPE_NAN)
 		return 0;
 
 	if (iftype != NL80211_IFTYPE_P2P_DEVICE) {
@@ -1487,7 +1487,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 						FIF_PROBE_REQ);
 
 		if (sdata->vif.type != NL80211_IFTYPE_P2P_DEVICE &&
-		    !ieee80211_viftype_nan(sdata->vif.type))
+		    sdata->vif.type != NL80211_IFTYPE_NAN)
 			changed |= ieee80211_reset_erp_info(sdata);
 		ieee80211_link_info_change_notify(sdata, &sdata->deflink,
 						  changed);
@@ -2168,10 +2168,7 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 		     unsigned char name_assign_type,
 		     struct wireless_dev **new_wdev, enum nl80211_iftype type,
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-		     u32 flags,
-#endif
-struct vif_params *params)
+		     struct vif_params *params)
 {
 	struct net_device *ndev = NULL;
 	struct ieee80211_sub_if_data *sdata = NULL;
@@ -2180,7 +2177,7 @@ struct vif_params *params)
 
 	ASSERT_RTNL();
 
-	if (type == NL80211_IFTYPE_P2P_DEVICE || ieee80211_viftype_nan(type)) {
+	if (type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN) {
 		struct wireless_dev *wdev;
 
 		sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size,
@@ -2201,7 +2198,7 @@ struct vif_params *params)
 
 		if (type != NL80211_IFTYPE_AP_VLAN &&
 		    (type != NL80211_IFTYPE_MONITOR ||
-		     (mon_opts_flags(params) & MONITOR_FLAG_ACTIVE)))
+		     (params->flags & MONITOR_FLAG_ACTIVE)))
 			txq_size += sizeof(struct txq_info) +
 				    local->hw.txq_data_size;
 

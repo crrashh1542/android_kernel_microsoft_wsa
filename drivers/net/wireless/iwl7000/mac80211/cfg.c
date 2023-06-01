@@ -53,48 +53,42 @@ static void ieee80211_set_mu_mimo_follow(struct ieee80211_sub_if_data *sdata,
 	bool mu_mimo_groups = false;
 	bool mu_mimo_follow = false;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,12,0)
-	if (vif_params_vht_mumimo_groups(params)) {
+	if (params->vht_mumimo_groups) {
 		u64 membership;
 
 		BUILD_BUG_ON(sizeof(membership) != WLAN_MEMBERSHIP_LEN);
 
 		memcpy(sdata->vif.bss_conf.mu_group.membership,
-		       vif_params_vht_mumimo_groups(params),
-		       WLAN_MEMBERSHIP_LEN);
+		       params->vht_mumimo_groups, WLAN_MEMBERSHIP_LEN);
 		memcpy(sdata->vif.bss_conf.mu_group.position,
-		       vif_params_vht_mumimo_groups(params) + WLAN_MEMBERSHIP_LEN,
+		       params->vht_mumimo_groups + WLAN_MEMBERSHIP_LEN,
 		       WLAN_USER_POSITION_LEN);
 		ieee80211_link_info_change_notify(sdata, &sdata->deflink,
 						  BSS_CHANGED_MU_GROUPS);
 		/* don't care about endianness - just check for 0 */
-		memcpy(&membership, vif_params_vht_mumimo_groups(params),
+		memcpy(&membership, params->vht_mumimo_groups,
 		       WLAN_MEMBERSHIP_LEN);
 		mu_mimo_groups = membership != 0;
 	}
-#endif
 
-	if (vif_params_vht_mumimo_follow_addr(params)) {
+	if (params->vht_mumimo_follow_addr) {
 		mu_mimo_follow =
-			is_valid_ether_addr(vif_params_vht_mumimo_follow_addr(params));
+			is_valid_ether_addr(params->vht_mumimo_follow_addr);
 		ether_addr_copy(sdata->u.mntr.mu_follow_addr,
-				vif_params_vht_mumimo_follow_addr(params));
+				params->vht_mumimo_follow_addr);
 	}
 
 	sdata->vif.bss_conf.mu_mimo_owner = mu_mimo_groups || mu_mimo_follow;
 }
 
 static int ieee80211_set_mon_options(struct ieee80211_sub_if_data *sdata,
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-				     u32 flags,
-#endif
-struct vif_params *params)
+				     struct vif_params *params)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_sub_if_data *monitor_sdata;
 
 	/* check flags first */
-	if (mon_opts_flags(params) && ieee80211_sdata_running(sdata)) {
+	if (params->flags && ieee80211_sdata_running(sdata)) {
 		u32 mask = MONITOR_FLAG_COOK_FRAMES | MONITOR_FLAG_ACTIVE;
 
 		/*
@@ -106,7 +100,7 @@ struct vif_params *params)
 		 *	cooked_mntrs, monitor and all fif_* counters
 		 *	reconfigure hardware
 		 */
-		if ((mon_opts_flags(params) & mask) != (sdata->u.mntr.flags & mask))
+		if ((params->flags & mask) != (sdata->u.mntr.flags & mask))
 			return -EBUSY;
 	}
 
@@ -115,7 +109,7 @@ struct vif_params *params)
 					  local->monitor_sdata);
 
 	if (!monitor_sdata &&
-	    (vif_params_vht_mumimo_groups(params) || vif_params_vht_mumimo_follow_addr(params)))
+	    (params->vht_mumimo_groups || params->vht_mumimo_follow_addr))
 		return -EOPNOTSUPP;
 
 	/* apply all changes now - no failures allowed */
@@ -123,10 +117,10 @@ struct vif_params *params)
 	if (monitor_sdata)
 		ieee80211_set_mu_mimo_follow(monitor_sdata, params);
 
-	if (mon_opts_flags(params)) {
+	if (params->flags) {
 		if (ieee80211_sdata_running(sdata)) {
 			ieee80211_adjust_monitor_flags(sdata, -1);
-			sdata->u.mntr.flags = mon_opts_flags(params);
+			sdata->u.mntr.flags = params->flags;
 			ieee80211_adjust_monitor_flags(sdata, 1);
 
 			ieee80211_configure_filter(local);
@@ -136,7 +130,7 @@ struct vif_params *params)
 			 * and ieee80211_do_open take care of "everything"
 			 * mentioned in the comment above.
 			 */
-			sdata->u.mntr.flags = mon_opts_flags(params);
+			sdata->u.mntr.flags = params->flags;
 		}
 	}
 
@@ -181,26 +175,21 @@ static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
 						const char *name,
 						unsigned char name_assign_type,
 						enum nl80211_iftype type,
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-						u32 *flags,
-#endif
-struct vif_params *params)
+						struct vif_params *params)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct wireless_dev *wdev;
 	struct ieee80211_sub_if_data *sdata;
 	int err;
 
-	err = ieee80211_if_add(local, name, name_assign_type, &wdev, type,
-			       mon_opts_params(params));
+	err = ieee80211_if_add(local, name, name_assign_type, &wdev, type, params);
 	if (err)
 		return ERR_PTR(err);
 
 	sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 
 	if (type == NL80211_IFTYPE_MONITOR) {
-		err = ieee80211_set_mon_options(sdata,
-						mon_opts_params(params));
+		err = ieee80211_set_mon_options(sdata, params);
 		if (err) {
 			ieee80211_if_remove(sdata);
 			return NULL;
@@ -220,10 +209,7 @@ static int ieee80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 static int ieee80211_change_iface(struct wiphy *wiphy,
 				  struct net_device *dev,
 				  enum nl80211_iftype type,
-#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
-				  u32 *flags,
-#endif
-struct vif_params *params)
+				  struct vif_params *params)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
@@ -263,8 +249,7 @@ struct vif_params *params)
 	}
 
 	if (sdata->vif.type == NL80211_IFTYPE_MONITOR) {
-		ret = ieee80211_set_mon_options(sdata,
-						mon_opts_params(params));
+		ret = ieee80211_set_mon_options(sdata, params);
 		if (ret)
 			return ret;
 	}
@@ -293,7 +278,6 @@ static void ieee80211_stop_p2p_device(struct wiphy *wiphy,
 	ieee80211_sdata_stop(IEEE80211_WDEV_TO_SUB_IF(wdev));
 }
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static int ieee80211_start_nan(struct wiphy *wiphy,
 			       struct wireless_dev *wdev,
 			       struct cfg80211_nan_conf *conf)
@@ -319,9 +303,7 @@ static int ieee80211_start_nan(struct wiphy *wiphy,
 
 	return ret;
 }
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static void ieee80211_stop_nan(struct wiphy *wiphy,
 			       struct wireless_dev *wdev)
 {
@@ -330,9 +312,7 @@ static void ieee80211_stop_nan(struct wiphy *wiphy,
 	drv_stop_nan(sdata->local, sdata);
 	ieee80211_sdata_stop(sdata);
 }
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static int ieee80211_nan_change_conf(struct wiphy *wiphy,
 				     struct wireless_dev *wdev,
 				     struct cfg80211_nan_conf *conf,
@@ -342,7 +322,7 @@ static int ieee80211_nan_change_conf(struct wiphy *wiphy,
 	struct cfg80211_nan_conf new_conf;
 	int ret = 0;
 
-	if (!ieee80211_viftype_nan(sdata->vif.type))
+	if (sdata->vif.type != NL80211_IFTYPE_NAN)
 		return -EOPNOTSUPP;
 
 	if (!ieee80211_sdata_running(sdata))
@@ -353,13 +333,8 @@ static int ieee80211_nan_change_conf(struct wiphy *wiphy,
 	if (changes & CFG80211_NAN_CONF_CHANGED_PREF)
 		new_conf.master_pref = conf->master_pref;
 
-	if (changes & CFG80211_NAN_CONF_CHANGED_BANDS) {
-#if CFG80211_VERSION < KERNEL_VERSION(4,9,0) || CFG80211_VERSION >= KERNEL_VERSION(4,11,0)
-		new_conf.bands = ieee80211_nan_bands(conf);
-#else
-		new_conf.dual = conf->dual;
-#endif
-	}
+	if (changes & CFG80211_NAN_CONF_CHANGED_BANDS)
+		new_conf.bands = conf->bands;
 
 	ret = drv_nan_change_conf(sdata->local, sdata, &new_conf, changes);
 	if (!ret)
@@ -367,9 +342,7 @@ static int ieee80211_nan_change_conf(struct wiphy *wiphy,
 
 	return ret;
 }
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static int ieee80211_add_nan_func(struct wiphy *wiphy,
 				  struct wireless_dev *wdev,
 				  struct cfg80211_nan_func *nan_func)
@@ -377,7 +350,7 @@ static int ieee80211_add_nan_func(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	int ret;
 
-	if (!ieee80211_viftype_nan(sdata->vif.type))
+	if (sdata->vif.type != NL80211_IFTYPE_NAN)
 		return -EOPNOTSUPP;
 
 	if (!ieee80211_sdata_running(sdata))
@@ -407,9 +380,7 @@ static int ieee80211_add_nan_func(struct wiphy *wiphy,
 
 	return ret;
 }
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static struct cfg80211_nan_func *
 ieee80211_find_nan_func_by_cookie(struct ieee80211_sub_if_data *sdata,
 				  u64 cookie)
@@ -426,9 +397,7 @@ ieee80211_find_nan_func_by_cookie(struct ieee80211_sub_if_data *sdata,
 
 	return NULL;
 }
-#endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 static void ieee80211_del_nan_func(struct wiphy *wiphy,
 				  struct wireless_dev *wdev, u64 cookie)
 {
@@ -436,7 +405,7 @@ static void ieee80211_del_nan_func(struct wiphy *wiphy,
 	struct cfg80211_nan_func *func;
 	u8 instance_id = 0;
 
-	if (!ieee80211_viftype_nan(sdata->vif.type) ||
+	if (sdata->vif.type != NL80211_IFTYPE_NAN ||
 	    !ieee80211_sdata_running(sdata))
 		return;
 
@@ -451,7 +420,6 @@ static void ieee80211_del_nan_func(struct wiphy *wiphy,
 	if (instance_id)
 		drv_del_nan_func(sdata->local, sdata, instance_id);
 }
-#endif
 
 static int ieee80211_set_noack_map(struct wiphy *wiphy,
 				  struct net_device *dev,
@@ -2193,9 +2161,8 @@ static int sta_apply_parameters(struct ieee80211_local *local,
 	if (ret)
 		return ret;
 
-	if (cfg80211_sta_support_p2p_ps(params, sdata->vif.p2p) >= 0)
-		sta->sta.support_p2p_ps = cfg80211_sta_support_p2p_ps(params,
-								      sdata->vif.p2p);
+	if (params->support_p2p_ps >= 0)
+		sta->sta.support_p2p_ps = params->support_p2p_ps;
 
 	if (ieee80211_vif_is_mesh(&sdata->vif))
 		sta_apply_mesh_params(local, sta, params);
@@ -3110,12 +3077,10 @@ static int ieee80211_scan(struct wiphy *wiphy,
 	return ieee80211_request_scan(sdata, req);
 }
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,5,0)
 static void ieee80211_abort_scan(struct wiphy *wiphy, struct wireless_dev *wdev)
 {
 	ieee80211_scan_cancel(wiphy_priv(wiphy));
 }
-#endif
 
 static int
 ieee80211_sched_scan_start(struct wiphy *wiphy,
@@ -3131,12 +3096,8 @@ ieee80211_sched_scan_start(struct wiphy *wiphy,
 }
 
 static int
-ieee80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev
-#if CFG80211_VERSION >= KERNEL_VERSION(4,12,0)
-			  ,
-			  u64 reqid
-#endif
-)
+ieee80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev,
+			  u64 reqid)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 
@@ -3552,7 +3513,6 @@ static int ieee80211_set_cqm_rssi_config(struct wiphy *wiphy,
 	return 0;
 }
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,12,0)
 static int ieee80211_set_cqm_rssi_range_config(struct wiphy *wiphy,
 					       struct net_device *dev,
 					       s32 rssi_low, s32 rssi_high)
@@ -3578,7 +3538,6 @@ static int ieee80211_set_cqm_rssi_range_config(struct wiphy *wiphy,
 
 	return 0;
 }
-#endif
 
 static int ieee80211_set_bitrate_mask(struct wiphy *wiphy,
 				      struct net_device *dev,
@@ -4681,13 +4640,6 @@ static int ieee80211_del_tx_ts(struct wiphy *wiphy, struct net_device *dev,
 	return -ENOENT;
 }
 
-#if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
-void ieee80211_nan_func_terminated(struct ieee80211_vif *vif, u8 inst_id,
-				   enum nl80211_nan_func_term_reason reason,
-				   gfp_t gfp){
-}
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 void ieee80211_nan_func_terminated(struct ieee80211_vif *vif,
 				   u8 inst_id,
 				   enum nl80211_nan_func_term_reason reason,
@@ -4697,7 +4649,7 @@ void ieee80211_nan_func_terminated(struct ieee80211_vif *vif,
 	struct cfg80211_nan_func *func;
 	u64 cookie;
 
-	if (WARN_ON(!ieee80211_viftype_nan(vif->type)))
+	if (WARN_ON(vif->type != NL80211_IFTYPE_NAN))
 		return;
 
 	spin_lock_bh(&sdata->u.nan.func_lock);
@@ -4718,16 +4670,8 @@ void ieee80211_nan_func_terminated(struct ieee80211_vif *vif,
 	cfg80211_nan_func_terminated(ieee80211_vif_to_wdev(vif), inst_id,
 				     reason, cookie, gfp);
 }
-#endif
 EXPORT_SYMBOL(ieee80211_nan_func_terminated);
 
-#if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
-void ieee80211_nan_func_match(struct ieee80211_vif *vif,
-			      struct cfg80211_nan_match_params *match,
-			      gfp_t gfp){
-}
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 void ieee80211_nan_func_match(struct ieee80211_vif *vif,
 			      struct cfg80211_nan_match_params *match,
 			      gfp_t gfp)
@@ -4735,7 +4679,7 @@ void ieee80211_nan_func_match(struct ieee80211_vif *vif,
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct cfg80211_nan_func *func;
 
-	if (WARN_ON(!ieee80211_viftype_nan(vif->type)))
+	if (WARN_ON(vif->type != NL80211_IFTYPE_NAN))
 		return;
 
 	spin_lock_bh(&sdata->u.nan.func_lock);
@@ -4751,10 +4695,8 @@ void ieee80211_nan_func_match(struct ieee80211_vif *vif,
 
 	cfg80211_nan_match(ieee80211_vif_to_wdev(vif), match, gfp);
 }
-#endif
 EXPORT_SYMBOL(ieee80211_nan_func_match);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
 static int ieee80211_set_multicast_to_unicast(struct wiphy *wiphy,
 					      struct net_device *dev,
 					      const bool enabled)
@@ -4765,7 +4707,6 @@ static int ieee80211_set_multicast_to_unicast(struct wiphy *wiphy,
 
 	return 0;
 }
-#endif
 
 #if CFG80211_VERSION >= KERNEL_VERSION(4,18,0)
 void ieee80211_fill_txq_stats(struct cfg80211_txq_stats *txqstats,
@@ -5459,9 +5400,7 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.suspend = ieee80211_suspend,
 	.resume = ieee80211_resume,
 	.scan = ieee80211_scan,
-#if CFG80211_VERSION >= KERNEL_VERSION(4,5,0)
 	.abort_scan = ieee80211_abort_scan,
-#endif
 	.sched_scan_start = ieee80211_sched_scan_start,
 	.sched_scan_stop = ieee80211_sched_scan_stop,
 	.auth = ieee80211_auth,
@@ -5484,9 +5423,7 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.mgmt_tx = ieee80211_mgmt_tx,
 	.mgmt_tx_cancel_wait = ieee80211_mgmt_tx_cancel_wait,
 	.set_cqm_rssi_config = ieee80211_set_cqm_rssi_config,
-#if CFG80211_VERSION >= KERNEL_VERSION(4,12,0)
 	.set_cqm_rssi_range_config = ieee80211_set_cqm_rssi_range_config,
-#endif
 #if CFG80211_VERSION >= KERNEL_VERSION(5,8,0)
 	.update_mgmt_frame_registrations =
 		ieee80211_update_mgmt_frame_registrations,
@@ -5521,24 +5458,12 @@ const struct cfg80211_ops mac80211_config_ops = {
 
 	.add_tx_ts = ieee80211_add_tx_ts,
 	.del_tx_ts = ieee80211_del_tx_ts,
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	.start_nan = ieee80211_start_nan,
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	.stop_nan = ieee80211_stop_nan,
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	.nan_change_conf = ieee80211_nan_change_conf,
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	.add_nan_func = ieee80211_add_nan_func,
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	.del_nan_func = ieee80211_del_nan_func,
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
 	.set_multicast_to_unicast = ieee80211_set_multicast_to_unicast,
-#endif
 #if CFG80211_VERSION >= KERNEL_VERSION(4,17,0)
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
 	.tx_control_port = ieee80211_tx_control_port,

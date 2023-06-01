@@ -107,7 +107,7 @@ void ieee80211_offchannel_stop_vifs(struct ieee80211_local *local)
 			continue;
 
 		if (sdata->vif.type == NL80211_IFTYPE_P2P_DEVICE ||
-		    ieee80211_viftype_nan(sdata->vif.type))
+		    sdata->vif.type == NL80211_IFTYPE_NAN)
 			continue;
 
 		if (sdata->vif.type != NL80211_IFTYPE_MONITOR)

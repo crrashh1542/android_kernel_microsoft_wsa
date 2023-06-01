@@ -7157,21 +7157,15 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	case NL80211_AUTHTYPE_SAE:
 		auth_alg = WLAN_AUTH_SAE;
 		break;
-#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
 	case NL80211_AUTHTYPE_FILS_SK:
 		auth_alg = WLAN_AUTH_FILS_SK;
 		break;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
 	case NL80211_AUTHTYPE_FILS_SK_PFS:
 		auth_alg = WLAN_AUTH_FILS_SK_PFS;
 		break;
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
 	case NL80211_AUTHTYPE_FILS_PK:
 		auth_alg = WLAN_AUTH_FILS_PK;
 		break;
-#endif
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -7193,7 +7187,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	}
 	rcu_read_unlock();
 
-	auth_data = kzalloc(sizeof(*auth_data) + iwl7000_get_auth_data_len(req) +
+	auth_data = kzalloc(sizeof(*auth_data) + req->auth_data_len +
 			    req->ie_len, GFP_KERNEL);
 	if (!auth_data)
 		return -ENOMEM;
@@ -7204,16 +7198,16 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	auth_data->bss = req->bss;
 	auth_data->link_id = cfg80211_req_link_id(req);
 
-	if (iwl7000_get_auth_data_len(req) >= 4) {
+	if (req->auth_data_len >= 4) {
 		if (req->auth_type == NL80211_AUTHTYPE_SAE) {
-			__le16 *pos = (__le16 *) iwl7000_get_auth_data(req);
+			__le16 *pos = (__le16 *) req->auth_data;
 
 			auth_data->sae_trans = le16_to_cpu(pos[0]);
 			auth_data->sae_status = le16_to_cpu(pos[1]);
 		}
-		memcpy(auth_data->data, iwl7000_get_auth_data(req) + 4,
-		       iwl7000_get_auth_data_len(req) - 4);
-		auth_data->data_len += iwl7000_get_auth_data_len(req) - 4;
+		memcpy(auth_data->data, req->auth_data + 4,
+		       req->auth_data_len - 4);
+		auth_data->data_len += req->auth_data_len - 4;
 	}
 
 	/* Check if continuing authentication or trying to authenticate with the
@@ -7699,19 +7693,19 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		assoc_data->ie_pos = assoc_data->ie;
 	}
 
-	if (iwl7000_get_fils_kek(req)) {
+	if (req->fils_kek) {
 		/* should already be checked in cfg80211 - so warn */
-		if (WARN_ON(iwl7000_get_fils_kek_len(req) > FILS_MAX_KEK_LEN)) {
+		if (WARN_ON(req->fils_kek_len > FILS_MAX_KEK_LEN)) {
 			err = -EINVAL;
 			goto err_free;
 		}
-		memcpy(assoc_data->fils_kek, iwl7000_get_fils_kek(req),
-		       iwl7000_get_fils_kek_len(req));
-		assoc_data->fils_kek_len = iwl7000_get_fils_kek_len(req);
+		memcpy(assoc_data->fils_kek, req->fils_kek,
+		       req->fils_kek_len);
+		assoc_data->fils_kek_len = req->fils_kek_len;
 	}
 
-	if (iwl7000_get_fils_nonces(req))
-		memcpy(assoc_data->fils_nonces, iwl7000_get_fils_nonces(req),
+	if (req->fils_nonces)
+		memcpy(assoc_data->fils_nonces, req->fils_nonces,
 		       2 * FILS_NONCE_LEN);
 
 	/* default timeout */

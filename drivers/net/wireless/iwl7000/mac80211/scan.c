@@ -202,17 +202,11 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (scan_sdata && scan_sdata->vif.type == NL80211_IFTYPE_STATION &&
 	    scan_sdata->vif.cfg.assoc &&
 	    ieee80211_have_rx_timestamp(rx_status)) {
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		bss_meta.parent_tsf =
 			ieee80211_calculate_rx_timestamp(local, rx_status,
 							 len + FCS_LEN, 24);
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		ether_addr_copy(bss_meta.parent_bssid,
 				scan_sdata->vif.bss_conf.bssid);
-#else
-		scan_sdata->vif.bss_conf.bssid = scan_sdata->vif.bss_conf.bssid;
-#endif
 	}
 	rcu_read_unlock();
 
@@ -423,10 +417,7 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_sub_if_data *sdata)
 	ether_addr_copy(local->hw_scan_req->req.mac_addr, req->mac_addr);
 	ether_addr_copy(local->hw_scan_req->req.mac_addr_mask,
 			req->mac_addr_mask);
-#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
-	ether_addr_copy(local->hw_scan_req->req.bssid,
-			cfg80211_scan_req_bssid(req));
-#endif
+	ether_addr_copy(local->hw_scan_req->req.bssid, req->bssid);
 
 	return true;
 }
@@ -690,8 +681,7 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 
 	for (i = 0; i < scan_req->n_ssids; i++)
 		ieee80211_send_scan_probe_req(
-			sdata, local->scan_addr,
-			cfg80211_scan_req_bssid(scan_req),
+			sdata, local->scan_addr, scan_req->bssid,
 			scan_req->ssids[i].ssid, scan_req->ssids[i].ssid_len,
 			scan_req->ie, scan_req->ie_len,
 			scan_req->rates[band], flags,
@@ -761,16 +751,10 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			req->n_channels * sizeof(req->channels[0]);
 		local->hw_scan_req->req.ie = ies;
 		local->hw_scan_req->req.flags = req->flags;
-#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
 		eth_broadcast_addr(local->hw_scan_req->req.bssid);
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration = req->duration;
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration_mandatory =
 			req->duration_mandatory;
-#endif
 
 		local->hw_scan_band = 0;
 #if CFG80211_VERSION > KERNEL_VERSION(5,10,0)

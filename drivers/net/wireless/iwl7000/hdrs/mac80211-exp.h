@@ -13,13 +13,6 @@
 #define ieee80211_calc_tx_airtime __iwl7000_ieee80211_calc_tx_airtime
 #define arc4_setkey __iwl7000_arc4_setkey
 #define arc4_crypt __iwl7000_arc4_crypt
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-#define dev_coredumpsg __iwl7000_dev_coredumpsg
-#endif /* < 4.7.0 */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
-#define kstrtobool __iwl7000_kstrtobool
-#define kstrtobool_from_user __iwl7000_kstrtobool_from_user
-#endif /* < 4.6.0 */
 #ifdef CONFIG_THERMAL
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
 #define thermal_zone_device_register_with_trips __iwl7000_thermal_zone_device_register_with_trips

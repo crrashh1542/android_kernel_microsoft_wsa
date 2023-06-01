@@ -864,7 +864,7 @@ static int ieee80211_assign_link_chanctx(struct ieee80211_link_data *link,
 	struct ieee80211_chanctx *curr_ctx = NULL;
 	int ret = 0;
 
-	if (WARN_ON(ieee80211_viftype_nan(sdata->vif.type)))
+	if (WARN_ON(sdata->vif.type == NL80211_IFTYPE_NAN))
 		return -ENOTSUPP;
 
 	conf = rcu_dereference_protected(link->conf->chanctx_conf,

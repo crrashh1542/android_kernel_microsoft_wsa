@@ -2937,10 +2937,8 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	iwl_mvm_fill_scan_type(mvm, &params, vif);
 	iwl_mvm_fill_respect_p2p_go(mvm, &params, vif);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	if (req->duration)
 		params.iter_notif = true;
-#endif
 
 	iwl_mvm_build_scan_probe(mvm, vif, ies, &params);
 
