@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018, 2020, 2022 Intel Corporation
+ * Copyright (C) 2018, 2020, 2022-2023 Intel Corporation
  *
  * Backport functionality introduced in Linux 4.4.
  *
@@ -506,17 +506,6 @@ EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
-void drop_reasons_register_subsys(enum skb_drop_reason_subsys subsys,
-				  const struct drop_reason_list *list)
-{}
-EXPORT_SYMBOL(/* don't auto-generate a rename */
-	drop_reasons_register_subsys);
-
-void drop_reasons_unregister_subsys(enum skb_drop_reason_subsys subsys)
-{}
-EXPORT_SYMBOL(/* don't auto-generate a rename */
-	drop_reasons_unregister_subsys);
-
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
 {
 	return tzd->devdata;

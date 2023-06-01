@@ -1,28 +1,34 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
-#ifndef _LINUX_HDRS_DROPREASON_H
-#define _LINUX_HDRS_DROPREASON_H
-#include <net/dropreason-core.h>
+#ifndef __BACKPORT_DROPREASON_H
+#define __BACKPORT_DROPREASON_H
 
-/**
- * enum skb_drop_reason_subsys - subsystem tag for (extended) drop reasons
+#if LINUX_VERSION_IS_GEQ(6,0,0)
+#include_next <net/dropreason.h>
+#else
+#include <linux/skbuff.h>
+#endif
+
+#if LINUX_VERSION_IS_LESS(5,17,0)
+#define SKB_DROP_REASON_MAX	1
+#endif
+
+#if LINUX_VERSION_IS_LESS(5,18,0)
+/*
+ * Same as SKB_DROP_REASON_NOT_SPECIFIED on some kernels,
+ * but that's OK since we won't report these reasons to
+ * the kernel anyway until 6.4, see kfree_skb_reason().
  */
+#define SKB_NOT_DROPPED_YET	0
+#endif
+
+#if LINUX_VERSION_IS_LESS(6,2,0)
+#define SKB_CONSUMED		(SKB_DROP_REASON_MAX + 1)
+#endif
+
+#if LINUX_VERSION_IS_LESS(6,4,0)
 enum skb_drop_reason_subsys {
-	/** @SKB_DROP_REASON_SUBSYS_CORE: core drop reasons defined above */
 	SKB_DROP_REASON_SUBSYS_CORE,
-
-	/**
-	 * @SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE: mac80211 drop reasons
-	 * for unusable frames, see net/mac80211/drop.h
-	 */
 	SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE,
-
-	/**
-	 * @SKB_DROP_REASON_SUBSYS_MAC80211_MONITOR: mac80211 drop reasons
-	 * for frames still going to monitor, see net/mac80211/drop.h
-	 */
 	SKB_DROP_REASON_SUBSYS_MAC80211_MONITOR,
-
-	/** @SKB_DROP_REASON_SUBSYS_NUM: number of subsystems defined */
 	SKB_DROP_REASON_SUBSYS_NUM
 };
 
@@ -31,12 +37,17 @@ struct drop_reason_list {
 	size_t n_reasons;
 };
 
-/* Note: due to dynamic registrations, access must be under RCU */
-extern const struct drop_reason_list __rcu *
-drop_reasons_by_subsys[SKB_DROP_REASON_SUBSYS_NUM];
+#define SKB_DROP_REASON_SUBSYS_SHIFT	16
+#define SKB_DROP_REASON_SUBSYS_MASK	0xffff0000
 
-void drop_reasons_register_subsys(enum skb_drop_reason_subsys subsys,
-				  const struct drop_reason_list *list);
-void drop_reasons_unregister_subsys(enum skb_drop_reason_subsys subsys);
+static inline void
+drop_reasons_register_subsys(enum skb_drop_reason_subsys subsys,
+			     const struct drop_reason_list *list)
+{}
+
+static inline void
+drop_reasons_unregister_subsys(enum skb_drop_reason_subsys subsys)
+{}
+#endif /* <= 6.4 */
 
 #endif

@@ -7,7 +7,7 @@
 
 #ifndef MAC80211_DROP_H
 #define MAC80211_DROP_H
-#include <hdrs/net/dropreason.h>
+#include <net/dropreason.h>
 
 typedef unsigned int __bitwise ieee80211_rx_result;
 

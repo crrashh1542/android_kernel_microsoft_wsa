@@ -4060,7 +4060,7 @@ static void ieee80211_rx_cooked_monitor(struct ieee80211_rx_data *rx,
 	}
 
  out_free_skb:
-	dev_kfree_skb(skb);
+	kfree_skb_reason(skb, (__force u32)reason);
 }
 
 static void ieee80211_rx_handlers_result(struct ieee80211_rx_data *rx,
@@ -4083,7 +4083,7 @@ static void ieee80211_rx_handlers_result(struct ieee80211_rx_data *rx,
 
 	if (u32_get_bits((__force u32)res, SKB_DROP_REASON_SUBSYS_MASK) ==
 			SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE) {
-		dev_kfree_skb(rx->skb);
+		kfree_skb_reason(rx->skb, (__force u32)res);
 		return;
 	}
 

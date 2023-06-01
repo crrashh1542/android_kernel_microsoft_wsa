@@ -13,7 +13,6 @@
 #include <linux/idr.h>
 #include <linux/vmalloc.h>
 
-#include <hdrs/net/dropreason.h>
 /* get the CPTCFG_* preprocessor symbols */
 #include <hdrs/config.h>
 
@@ -46,6 +45,8 @@ struct lockdep_map { };
 #include <linux/if_vlan.h>
 #include <linux/overflow.h>
 #include "net/fq.h"
+
+#include <hdrs/net/dropreason.h>
 
 #if LINUX_VERSION_IS_LESS(3,20,0)
 #define get_net_ns_by_fd LINUX_BACKPORT(get_net_ns_by_fd)
