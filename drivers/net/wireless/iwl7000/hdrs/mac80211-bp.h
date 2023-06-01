@@ -2469,9 +2469,17 @@ bool ieee80211_valid_disable_subchannel_bitmap(u16 *bitmap,
 					       enum nl80211_chan_width bw);
 bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
 					      struct cfg80211_chan_def *chandef);
+#define ieee80211_amsdu_to_8023s(skb, list, addr, type, headroom, check_sa, check_da, mesh) \
+	ieee80211_amsdu_to_8023s(skb, list, addr, type, headroom, check_sa, check_da)
 #endif /* < 6.3  */
 
 #if LINUX_VERSION_IS_LESS(6,4,0)
+#define ieee80211_is_valid_amsdu LINUX_BACKPORT(ieee80211_is_valid_amsdu)
+static inline bool ieee80211_is_valid_amsdu(struct sk_buff *skb, u8 mesh_hdr)
+{
+	return mesh_hdr == 0;
+}
+
 static inline void
 LINUX_BACKPORT(kfree_skb_reason)(struct sk_buff *skb, u32 reason)
 {

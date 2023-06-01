@@ -3002,7 +3002,6 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 					  data_offset, true))
 		return RX_DROP_UNUSABLE;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(6,3,0)
 	if (rx->sta->amsdu_mesh_control < 0) {
 		s8 valid = -1;
 		int i;
@@ -3022,20 +3021,12 @@ __ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx, u8 data_offset)
 
 		rx->sta->amsdu_mesh_control = valid;
 	}
-#endif
-#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
 
 	ieee80211_amsdu_to_8023s(skb, &frame_list, dev->dev_addr,
 				 rx->sdata->vif.type,
 				 rx->local->hw.extra_tx_headroom,
 				 check_da, check_sa,
 				 rx->sta->amsdu_mesh_control);
-#else
-	ieee80211_amsdu_to_8023s(skb, &frame_list, dev->dev_addr,
-				 rx->sdata->vif.type,
-				 rx->local->hw.extra_tx_headroom, check_da,
-				 check_sa);
-#endif
 
 	while (!skb_queue_empty(&frame_list)) {
 		rx->skb = __skb_dequeue(&frame_list);
