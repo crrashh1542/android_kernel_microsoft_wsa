@@ -2020,7 +2020,7 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 						  link_sta);
 #endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(9,9,9)
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 	if (params->he_capa && params->eht_capa)
 		ieee80211_eht_cap_ie_to_sta_eht_cap(sdata, sband,
 						    (u8 *)params->he_capa,
