@@ -1350,6 +1350,8 @@ static int iwl_mvm_vendor_validate_aes_vector(struct nlattr **tb)
  *
  * This function returns the length of the command buffer (in bytes) in case of
  * success, or a negative error code on failure.
+ *
+ * Returns: an error code
  */
 static int iwl_mvm_vendor_build_vector(u8 **cmd_buf, struct nlattr *vector,
 				       u8 flags)
