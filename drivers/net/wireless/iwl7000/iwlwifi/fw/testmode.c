@@ -325,6 +325,7 @@ static int iwl_tm_get_fw_info(struct iwl_testmode *testmode,
  *		  length is valid.
  * @data_out:	  Will be allocated inside, freeing is in the caller's
  *		  responsibility
+ * Returns: an error code indicating success or failure
  */
 int iwl_tm_execute_cmd(struct iwl_testmode *testmode, u32 cmd,
 		       struct iwl_tm_data *data_in,
