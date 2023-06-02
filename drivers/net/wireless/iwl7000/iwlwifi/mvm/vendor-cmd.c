@@ -555,7 +555,9 @@ static int iwl_vendor_rfi_ddr_set_table(struct wiphy *wiphy,
 		}
 	}
 
+	mutex_lock(&mvm->mutex);
 	err = iwl_rfi_send_config_cmd(mvm, rfi_ddr_table);
+	mutex_unlock(&mvm->mutex);
 	if (err)
 		IWL_ERR(mvm, "Failed to send rfi table to FW, error %d\n", err);
 
