@@ -215,6 +215,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 #if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 	if (cbss) {
 		struct cfg80211_bss *non_tx_cbss;
+		rcu_read_lock();
 		ieee80211_inform_bss(local->hw.wiphy, cbss,
 				     rcu_dereference(cbss->ies),
 				     (void *)&update_data);
@@ -227,6 +228,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 					     (void *)&update_data);
 #endif
 
+		rcu_read_unlock();
 	}
 #endif
 	if (!cbss)
