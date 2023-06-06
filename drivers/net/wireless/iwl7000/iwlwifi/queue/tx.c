@@ -702,8 +702,8 @@ int iwl_txq_space(struct iwl_trans *trans, const struct iwl_txq *q)
 	 * If q->n_window is smaller than max_tfd_queue_size, there is no need
 	 * to reserve any queue entries for this purpose.
 	 */
-	if (q->n_reduced_win < trans->trans_cfg->base_params->max_tfd_queue_size)
-		max = q->n_reduced_win;
+	if (q->n_window < trans->trans_cfg->base_params->max_tfd_queue_size)
+		max = q->n_window;
 	else
 		max = trans->trans_cfg->base_params->max_tfd_queue_size - 1;
 
@@ -916,7 +916,6 @@ static void iwl_txq_gen2_free(struct iwl_trans *trans, int txq_id)
 static int iwl_queue_init(struct iwl_txq *q, int slots_num)
 {
 	q->n_window = slots_num;
-	q->n_reduced_win = slots_num;
 
 	/* slots_num must be power-of-two size, otherwise
 	 * iwl_txq_get_cmd_index is broken. */
@@ -1067,7 +1066,6 @@ int iwl_txq_alloc(struct iwl_trans *trans, struct iwl_txq *txq, int slots_num,
 	txq->trans = trans;
 
 	txq->n_window = slots_num;
-	txq->n_reduced_win = slots_num;
 
 	txq->entries = kcalloc(slots_num,
 			       sizeof(struct iwl_pcie_txq_entry),
@@ -1237,30 +1235,15 @@ int iwl_txq_dyn_alloc(struct iwl_trans *trans, u32 flags, u32 sta_mask,
 	struct iwl_host_cmd hcmd = {
 		.flags = CMD_WANT_SKB,
 	};
-	int org_size = 0;
 	int ret;
 
 	if (trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_BZ &&
-	    trans->hw_rev_step == SILICON_A_STEP) {
-		org_size = size;
+	    trans->hw_rev_step == SILICON_A_STEP)
 		size = 4096;
-	}
 
 	txq = iwl_txq_dyn_alloc_dma(trans, size, timeout);
 	if (IS_ERR(txq))
 		return PTR_ERR(txq);
-
-	if (org_size) {
-		txq->n_reduced_win = org_size;
-
-		txq->low_mark = org_size / 4;
-		if (txq->low_mark < 4)
-			txq->low_mark = 4;
-
-		txq->high_mark = org_size / 8;
-		if (txq->high_mark < 2)
-			txq->high_mark = 2;
-	}
 
 	if (trans->txqs.queue_alloc_cmd_ver == 0) {
 		memset(&cmd.old, 0, sizeof(cmd.old));

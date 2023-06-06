@@ -956,7 +956,6 @@ struct iwl_pcie_first_tb_buf {
  * @read_ptr: last used entry (index) host_r
  * @dma_addr:  physical addr for BD's
  * @n_window: safe queue window
- * @n_reduced_win: reduced @n_window in case of HW allocation workarounds
  * @id: queue id
  * @low_mark: low watermark, resume queue if free space more than this
  * @high_mark: high watermark, stop queue if free space less than this
@@ -999,7 +998,6 @@ struct iwl_txq {
 	int read_ptr;
 	dma_addr_t dma_addr;
 	int n_window;
-	int n_reduced_win;
 	u32 id;
 	int low_mark;
 	int high_mark;
