@@ -23,18 +23,26 @@
 #include "debugfs_netdev.h"
 #include "driver-ops.h"
 
-static ssize_t ieee80211_if_read(
-	void *data,
+static ssize_t ieee80211_if_read_sdata(
+	struct ieee80211_sub_if_data *sdata,
 	char __user *userbuf,
 	size_t count, loff_t *ppos,
-	ssize_t (*format)(const void *, char *, int))
+	ssize_t (*format)(const struct ieee80211_sub_if_data *sdata, char *, int))
 {
 	char buf[200];
 	ssize_t ret = -EINVAL;
 
-	read_lock(&dev_base_lock);
-	ret = (*format)(data, buf, sizeof(buf));
-	read_unlock(&dev_base_lock);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(sdata->local->hw.wiphy);
+#else
+	rtnl_lock();
+#endif
+	ret = (*format)(sdata, buf, sizeof(buf));
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(sdata->local->hw.wiphy);
+#else
+	rtnl_unlock();
+#endif
 
 	if (ret >= 0)
 		ret = simple_read_from_buffer(userbuf, count, ppos, buf, ret);
@@ -42,11 +50,11 @@ static ssize_t ieee80211_if_read(
 	return ret;
 }
 
-static ssize_t ieee80211_if_write(
-	void *data,
+static ssize_t ieee80211_if_write_sdata(
+	struct ieee80211_sub_if_data *sdata,
 	const char __user *userbuf,
 	size_t count, loff_t *ppos,
-	ssize_t (*write)(void *, const char *, int))
+	ssize_t (*write)(struct ieee80211_sub_if_data *sdata, const char *, int))
 {
 	char buf[64];
 	ssize_t ret;
@@ -58,9 +66,75 @@ static ssize_t ieee80211_if_write(
 		return -EFAULT;
 	buf[count] = '\0';
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(sdata->local->hw.wiphy);
+#else
 	rtnl_lock();
-	ret = (*write)(data, buf, count);
+#endif
+	ret = (*write)(sdata, buf, count);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(sdata->local->hw.wiphy);
+#else
 	rtnl_unlock();
+#endif
+
+	return ret;
+}
+
+static ssize_t ieee80211_if_read_link(
+	struct ieee80211_link_data *link,
+	char __user *userbuf,
+	size_t count, loff_t *ppos,
+	ssize_t (*format)(const struct ieee80211_link_data *link, char *, int))
+{
+	char buf[200];
+	ssize_t ret = -EINVAL;
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(link->sdata->local->hw.wiphy);
+#else
+	rtnl_lock();
+#endif
+	ret = (*format)(link, buf, sizeof(buf));
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(link->sdata->local->hw.wiphy);
+#else
+	rtnl_unlock();
+#endif
+
+	if (ret >= 0)
+		ret = simple_read_from_buffer(userbuf, count, ppos, buf, ret);
+
+	return ret;
+}
+
+static ssize_t ieee80211_if_write_link(
+	struct ieee80211_link_data *link,
+	const char __user *userbuf,
+	size_t count, loff_t *ppos,
+	ssize_t (*write)(struct ieee80211_link_data *link, const char *, int))
+{
+	char buf[64];
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -E2BIG;
+
+	if (copy_from_user(buf, userbuf, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(link->sdata->local->hw.wiphy);
+#else
+	rtnl_lock();
+#endif
+	ret = (*write)(link, buf, count);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(link->sdata->local->hw.wiphy);
+#else
+	rtnl_unlock();
+#endif
 
 	return ret;
 }
@@ -127,41 +201,37 @@ static const struct file_operations name##_ops = {			\
 	.llseek = generic_file_llseek,					\
 }
 
-#define _IEEE80211_IF_FILE_R_FN(name, type)				\
+#define _IEEE80211_IF_FILE_R_FN(name)					\
 static ssize_t ieee80211_if_read_##name(struct file *file,		\
 					char __user *userbuf,		\
 					size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(const void *, char *, int) = (void *)		\
-		((ssize_t (*)(const type, char *, int))			\
-		 ieee80211_if_fmt_##name);				\
-	return ieee80211_if_read(file->private_data,			\
-				 userbuf, count, ppos, fn);		\
+	return ieee80211_if_read_sdata(file->private_data,		\
+				       userbuf, count, ppos,		\
+				       ieee80211_if_fmt_##name);	\
 }
 
-#define _IEEE80211_IF_FILE_W_FN(name, type)				\
+#define _IEEE80211_IF_FILE_W_FN(name)					\
 static ssize_t ieee80211_if_write_##name(struct file *file,		\
 					 const char __user *userbuf,	\
 					 size_t count, loff_t *ppos)	\
 {									\
-	ssize_t (*fn)(void *, const char *, int) = (void *)		\
-		((ssize_t (*)(type, const char *, int))			\
-		 ieee80211_if_parse_##name);				\
-	return ieee80211_if_write(file->private_data, userbuf, count,	\
-				  ppos, fn);				\
+	return ieee80211_if_write_sdata(file->private_data, userbuf,	\
+					count, ppos,			\
+					ieee80211_if_parse_##name);	\
 }
 
 #define IEEE80211_IF_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
+	_IEEE80211_IF_FILE_R_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_FILE_W(name)					\
-	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
+	_IEEE80211_IF_FILE_W_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_sub_if_data *)	\
-	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_sub_if_data *)	\
+	_IEEE80211_IF_FILE_R_FN(name)					\
+	_IEEE80211_IF_FILE_W_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(name, ieee80211_if_read_##name,		\
 			       ieee80211_if_write_##name)
 
@@ -169,18 +239,37 @@ static ssize_t ieee80211_if_write_##name(struct file *file,		\
 	IEEE80211_IF_FMT_##format(name, struct ieee80211_sub_if_data, field) \
 	IEEE80211_IF_FILE_R(name)
 
-/* Same but with a link_ prefix in the ops variable name and different type */
+#define _IEEE80211_IF_LINK_R_FN(name)					\
+static ssize_t ieee80211_if_read_##name(struct file *file,		\
+					char __user *userbuf,		\
+					size_t count, loff_t *ppos)	\
+{									\
+	return ieee80211_if_read_link(file->private_data,		\
+				      userbuf, count, ppos,		\
+				      ieee80211_if_fmt_##name);	\
+}
+
+#define _IEEE80211_IF_LINK_W_FN(name)					\
+static ssize_t ieee80211_if_write_##name(struct file *file,		\
+					 const char __user *userbuf,	\
+					 size_t count, loff_t *ppos)	\
+{									\
+	return ieee80211_if_write_link(file->private_data, userbuf,	\
+				       count, ppos,			\
+				       ieee80211_if_parse_##name);	\
+}
+
 #define IEEE80211_IF_LINK_FILE_R(name)					\
-	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
+	_IEEE80211_IF_LINK_R_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name, NULL)
 
 #define IEEE80211_IF_LINK_FILE_W(name)					\
-	_IEEE80211_IF_FILE_W_FN(name)					\
+	_IEEE80211_IF_LINK_W_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(link_##name, NULL, ieee80211_if_write_##name)
 
 #define IEEE80211_IF_LINK_FILE_RW(name)					\
-	_IEEE80211_IF_FILE_R_FN(name, struct ieee80211_link_data *)	\
-	_IEEE80211_IF_FILE_W_FN(name, struct ieee80211_link_data *)	\
+	_IEEE80211_IF_LINK_R_FN(name)					\
+	_IEEE80211_IF_LINK_W_FN(name)					\
 	_IEEE80211_IF_FILE_OPS(link_##name, ieee80211_if_read_##name,	\
 			       ieee80211_if_write_##name)
 
