@@ -349,6 +349,7 @@ static void ieee80211_restart_work(struct work_struct *work)
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_lock(local->hw.wiphy);
 #endif
+	wiphy_work_flush(local->hw.wiphy, NULL);
 
 	WARN(test_bit(SCAN_HW_SCANNING, &local->scanning),
 	     "%s called with hardware scan in progress\n", __func__);

@@ -3014,7 +3014,7 @@ static int ieee80211_suspend(struct wiphy *wiphy,
 			     struct cfg80211_wowlan *wowlan)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
-	wiphy_work_flush(hw_to_local(wiphy_priv(wiphy)));
+	wiphy_work_flush(wiphy, NULL);
 #endif
 	return __ieee80211_suspend(wiphy_priv(wiphy), wowlan);
 }

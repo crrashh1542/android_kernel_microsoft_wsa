@@ -2683,7 +2683,9 @@ u32 ieee80211_calc_expected_tx_airtime(struct ieee80211_hw *hw,
 #if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 void wiphy_work_setup(struct ieee80211_local *local);
 void wiphy_work_teardown(struct ieee80211_local *local);
-void wiphy_work_flush(struct ieee80211_local *local);
+void wiphy_work_flush(struct wiphy *wiphy, struct wiphy_work *work);
+void wiphy_delayed_work_flush(struct wiphy *wiphy,
+			       struct wiphy_delayed_work *work);
 #endif
 
 void ieee80211_init_frag_cache(struct ieee80211_fragment_cache *cache);

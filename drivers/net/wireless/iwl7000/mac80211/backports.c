@@ -342,11 +342,15 @@ void wiphy_work_setup(struct ieee80211_local *local)
 	spin_lock_init(&local->wiphy_work_lock);
 }
 
-void wiphy_work_flush(struct ieee80211_local *local)
+void wiphy_work_flush(struct wiphy *wiphy, struct wiphy_work *end)
 {
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct ieee80211_local *local = hw_to_local(hw);
 	struct wiphy_work *wk;
 	unsigned long flags;
 	int runaway_limit = 100;
+
+	lockdep_assert_wiphy(wiphy);
 
 	spin_lock_irqsave(&local->wiphy_work_lock, flags);
 	while (!list_empty(&local->wiphy_work_list)) {
@@ -360,10 +364,21 @@ void wiphy_work_flush(struct ieee80211_local *local)
 		wk->func(local->hw.wiphy, wk);
 
 		spin_lock_irqsave(&local->wiphy_work_lock, flags);
+
+		if (wk == end)
+			break;
+
 		if (WARN_ON(--runaway_limit == 0))
 			INIT_LIST_HEAD(&local->wiphy_work_list);
 	}
 	spin_unlock_irqrestore(&local->wiphy_work_lock, flags);
+}
+
+void wiphy_delayed_work_flush(struct wiphy *wiphy,
+			      struct wiphy_delayed_work *dwork)
+{
+	del_timer_sync(&dwork->timer);
+	wiphy_work_flush(wiphy, &dwork->work);
 }
 
 void wiphy_work_teardown(struct ieee80211_local *local)
@@ -374,7 +389,7 @@ void wiphy_work_teardown(struct ieee80211_local *local)
 	wiphy_lock(local->hw.wiphy);
 #endif
 
-	wiphy_work_flush(local);
+	wiphy_work_flush(local->hw.wiphy, NULL);
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
 	rtnl_unlock();
