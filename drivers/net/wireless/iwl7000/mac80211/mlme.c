@@ -2512,8 +2512,10 @@ __ieee80211_sta_handle_tspec_ac_params(struct ieee80211_sub_if_data *sdata)
 					 ac);
 			tx_tspec->action = TX_TSPEC_ACTION_NONE;
 			ret = true;
-			schedule_delayed_work(&ifmgd->tx_tspec_wk,
-				tx_tspec->time_slice_start + HZ - now + 1);
+			wiphy_delayed_work_queue(local->hw.wiphy,
+						 &ifmgd->tx_tspec_wk,
+						 tx_tspec->time_slice_start +
+						 HZ - now + 1);
 			break;
 		case TX_TSPEC_ACTION_NONE:
 			/* nothing now */
@@ -2531,7 +2533,8 @@ void ieee80211_sta_handle_tspec_ac_params(struct ieee80211_sub_if_data *sdata)
 						  BSS_CHANGED_QOS);
 }
 
-static void ieee80211_sta_handle_tspec_ac_params_wk(struct work_struct *work)
+static void ieee80211_sta_handle_tspec_ac_params_wk(struct wiphy *wiphy,
+						    struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata;
 
@@ -3096,7 +3099,7 @@ static void ieee80211_set_disassoc(struct ieee80211_sub_if_data *sdata,
 
 	/* existing TX TSPEC sessions no longer exist */
 	memset(ifmgd->tx_tspec, 0, sizeof(ifmgd->tx_tspec));
-	cancel_delayed_work_sync(&ifmgd->tx_tspec_wk);
+	wiphy_delayed_work_cancel(local->hw.wiphy, &ifmgd->tx_tspec_wk);
 
 	sdata->vif.bss_conf.pwr_reduction = 0;
 	sdata->vif.bss_conf.tx_pwr_env_num = 0;
@@ -3167,7 +3170,8 @@ static void ieee80211_sta_tx_wmm_ac_notify(struct ieee80211_sub_if_data *sdata,
 
 		if (tx_tspec->downgraded) {
 			tx_tspec->action = TX_TSPEC_ACTION_STOP_DOWNGRADE;
-			schedule_delayed_work(&ifmgd->tx_tspec_wk, 0);
+			wiphy_delayed_work_queue(sdata->local->hw.wiphy,
+						 &ifmgd->tx_tspec_wk, 0);
 		}
 	}
 
@@ -3179,7 +3183,8 @@ static void ieee80211_sta_tx_wmm_ac_notify(struct ieee80211_sub_if_data *sdata,
 	if (tx_tspec->consumed_tx_time >= tx_tspec->admitted_time) {
 		tx_tspec->downgraded = true;
 		tx_tspec->action = TX_TSPEC_ACTION_DOWNGRADE;
-		schedule_delayed_work(&ifmgd->tx_tspec_wk, 0);
+		wiphy_delayed_work_queue(sdata->local->hw.wiphy,
+					 &ifmgd->tx_tspec_wk, 0);
 	}
 }
 
@@ -7149,8 +7154,8 @@ void ieee80211_sta_setup_sdata(struct ieee80211_sub_if_data *sdata)
 	timer_setup(&ifmgd->timer, ieee80211_sta_timer, 0);
 	timer_setup(&ifmgd->bcn_mon_timer, ieee80211_sta_bcn_mon_timer, 0);
 	timer_setup(&ifmgd->conn_mon_timer, ieee80211_sta_conn_mon_timer, 0);
-	INIT_DELAYED_WORK(&ifmgd->tx_tspec_wk,
-			  ieee80211_sta_handle_tspec_ac_params_wk);
+	wiphy_delayed_work_init(&ifmgd->tx_tspec_wk,
+				ieee80211_sta_handle_tspec_ac_params_wk);
 	wiphy_delayed_work_init(&ifmgd->t2l_map_work,
 				ieee80211_tid_to_link_map_work);
 
