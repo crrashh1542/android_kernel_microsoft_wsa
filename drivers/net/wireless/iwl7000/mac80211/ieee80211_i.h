@@ -1017,7 +1017,7 @@ struct ieee80211_link_data {
 	struct cfg80211_chan_def csa_chandef;
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
-	struct work_struct color_change_finalize_work;
+	struct wiphy_work color_change_finalize_work;
 #endif
 	struct delayed_work color_collision_detect_work;
 	u64 color_bitmap;
@@ -2039,7 +2039,8 @@ int ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 			     struct cfg80211_csa_settings *params);
 
 /* color change handling */
-void ieee80211_color_change_finalize_work(struct work_struct *work);
+void ieee80211_color_change_finalize_work(struct wiphy *wiphy,
+					  struct wiphy_work *work);
 void ieee80211_color_collision_detection_work(struct work_struct *work);
 
 /* interface handling */

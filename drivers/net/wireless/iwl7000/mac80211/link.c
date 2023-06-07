@@ -40,8 +40,8 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 	wiphy_work_init(&link->csa_finalize_work,
 			ieee80211_csa_finalize_work);
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
-	INIT_WORK(&link->color_change_finalize_work,
-		  ieee80211_color_change_finalize_work);
+	wiphy_work_init(&link->color_change_finalize_work,
+			ieee80211_color_change_finalize_work);
 #endif
 	INIT_DELAYED_WORK(&link->color_collision_detect_work,
 			  ieee80211_color_collision_detection_work);

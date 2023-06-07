@@ -5061,7 +5061,8 @@ static int ieee80211_color_change_finalize(struct ieee80211_sub_if_data *sdata)
 #endif
 
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
-void ieee80211_color_change_finalize_work(struct work_struct *work)
+void ieee80211_color_change_finalize_work(struct wiphy *wiphy,
+					  struct wiphy_work *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,
@@ -5108,8 +5109,8 @@ void ieee80211_color_change_finish(struct ieee80211_vif *vif)
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 
-	ieee80211_queue_work(&sdata->local->hw,
-			     &sdata->deflink.color_change_finalize_work);
+	wiphy_work_queue(sdata->local->hw.wiphy,
+			 &sdata->deflink.color_change_finalize_work);
 #endif
 }
 EXPORT_SYMBOL_GPL(ieee80211_color_change_finish);

@@ -545,11 +545,11 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 	mutex_unlock(&local->mtx);
 	sdata_unlock(sdata);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
-	cancel_work_sync(&sdata->deflink.color_change_finalize_work);
-#endif
-
 	wiphy_work_cancel(local->hw.wiphy, &sdata->deflink.csa_finalize_work);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
+	wiphy_work_cancel(local->hw.wiphy,
+			  &sdata->deflink.color_change_finalize_work);
+#endif
 	wiphy_delayed_work_cancel(local->hw.wiphy,
 				  &sdata->deflink.dfs_cac_timer_work);
 
