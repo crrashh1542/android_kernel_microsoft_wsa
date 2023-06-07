@@ -20,8 +20,6 @@
 #define VIRTIO_WL_F_TRANS_FLAGS 1
 /* Enables send fence support with virtio_wl_ctrl_vfd_send_vfd_v2 */
 #define VIRTIO_WL_F_SEND_FENCES 2
-/* Host buffers are exposed via the shared memory region with id 0, rather than as raw pfns */
-#define VIRTIO_WL_F_USE_SHMEM 3
 
 struct virtio_wl_config {
 };
