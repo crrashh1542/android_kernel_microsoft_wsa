@@ -1133,7 +1133,7 @@ struct ieee80211_sub_if_data {
 	struct ieee80211_link_data __rcu *link[IEEE80211_MLD_MAX_NUM_LINKS];
 
 	/* for ieee80211_set_active_links_async() */
-	struct work_struct activate_links_work;
+	struct wiphy_work activate_links_work;
 	u16 desired_active_links;
 
 #ifdef CPTCFG_MAC80211_DEBUGFS
