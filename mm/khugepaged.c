@@ -1871,7 +1871,6 @@ static void collapse_file(struct mm_struct *mm,
 			unmap_mapping_pages(mapping, index, 1, false);
 
 		xas_lock_irq(&xas);
-		xas_set(&xas, index);
 
 		VM_BUG_ON_PAGE(page != xas_load(&xas), page);
 		VM_BUG_ON_PAGE(page_mapped(page), page);
