@@ -3840,11 +3840,11 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif)
 			if (iter == sdata || iter->vif.mbssid_tx_vif != vif)
 				continue;
 
-			ieee80211_queue_work(&iter->local->hw,
-					     &iter->deflink.csa_finalize_work);
+			wiphy_work_queue(iter->local->hw.wiphy,
+					 &iter->deflink.csa_finalize_work);
 		}
 	}
-	ieee80211_queue_work(&local->hw, &sdata->deflink.csa_finalize_work);
+	wiphy_work_queue(local->hw.wiphy, &sdata->deflink.csa_finalize_work);
 
 	rcu_read_unlock();
 }
@@ -3976,7 +3976,7 @@ static void ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 	}
 }
 
-void ieee80211_csa_finalize_work(struct work_struct *work)
+void ieee80211_csa_finalize_work(struct wiphy *wiphy, struct wiphy_work *work)
 {
 	struct ieee80211_link_data *link =
 		container_of(work, struct ieee80211_link_data, csa_finalize_work);
