@@ -567,7 +567,7 @@ struct ieee80211_if_managed {
 	u8 *assoc_req_ies;
 	size_t assoc_req_ies_len;
 
-	struct delayed_work ml_reconf_work;
+	struct wiphy_delayed_work ml_reconf_work;
 	u16 removed_links;
 
 	/* TID-to-link mapping support */
