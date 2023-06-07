@@ -4,7 +4,7 @@
  *
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
- * Copyright (C) 2018 - 2019, 2021-2022 Intel Corporation
+ * Copyright (C) 2018 - 2019, 2021-2023 Intel Corporation
  */
 
 #include <linux/debugfs.h>
@@ -604,9 +604,17 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 	char buf[20];
 	int res;
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(local->hw.wiphy);
+#else
 	rtnl_lock();
+#endif
 	res = drv_get_stats(local, &stats);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(local->hw.wiphy);
+#else
 	rtnl_unlock();
+#endif
 	if (res)
 		return res;
 	res = printvalue(&stats, buf, sizeof(buf));
