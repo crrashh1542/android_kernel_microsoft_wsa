@@ -180,7 +180,7 @@ static void mwifiex_queue_rx_work(struct mwifiex_adapter *adapter)
 		spin_unlock_bh(&adapter->rx_proc_lock);
 	} else {
 		spin_unlock_bh(&adapter->rx_proc_lock);
-		queue_work(adapter->rx_workqueue, &adapter->rx_work);
+		kthread_queue_work(adapter->rx_thread, &adapter->rx_work);
 	}
 }
 
@@ -503,10 +503,10 @@ static void mwifiex_terminate_workqueue(struct mwifiex_adapter *adapter)
 		adapter->workqueue = NULL;
 	}
 
-	if (adapter->rx_workqueue) {
-		flush_workqueue(adapter->rx_workqueue);
-		destroy_workqueue(adapter->rx_workqueue);
-		adapter->rx_workqueue = NULL;
+	if (adapter->rx_thread) {
+		kthread_flush_worker(adapter->rx_thread);
+		kthread_destroy_worker(adapter->rx_thread);
+		adapter->rx_thread = NULL;
 	}
 }
 
@@ -1372,7 +1372,7 @@ int is_command_pending(struct mwifiex_adapter *adapter)
  *
  * It handles the RX operations.
  */
-static void mwifiex_rx_work_queue(struct work_struct *work)
+static void mwifiex_rx_work_queue(struct kthread_work *work)
 {
 	struct mwifiex_adapter *adapter =
 		container_of(work, struct mwifiex_adapter, rx_work);
@@ -1532,13 +1532,10 @@ mwifiex_reinit_sw(struct mwifiex_adapter *adapter)
 	INIT_WORK(&adapter->main_work, mwifiex_main_work_queue);
 
 	if (adapter->rx_work_enabled) {
-		adapter->rx_workqueue = alloc_workqueue("MWIFIEX_RX_WORK_QUEUE",
-							WQ_HIGHPRI |
-							WQ_MEM_RECLAIM |
-							WQ_UNBOUND, 1);
-		if (!adapter->rx_workqueue)
+		adapter->rx_thread = kthread_create_worker(0, "MWIFIEX_RX");
+		if (IS_ERR(adapter->rx_thread))
 			goto err_kmalloc;
-		INIT_WORK(&adapter->rx_work, mwifiex_rx_work_queue);
+		kthread_init_work(&adapter->rx_work, mwifiex_rx_work_queue);
 	}
 
 	/* Register the device. Fill up the private data structure with
@@ -1687,14 +1684,11 @@ mwifiex_add_card(void *card, struct completion *fw_done,
 	INIT_WORK(&adapter->main_work, mwifiex_main_work_queue);
 
 	if (adapter->rx_work_enabled) {
-		adapter->rx_workqueue = alloc_workqueue("MWIFIEX_RX_WORK_QUEUE",
-							WQ_HIGHPRI |
-							WQ_MEM_RECLAIM |
-							WQ_UNBOUND, 1);
-		if (!adapter->rx_workqueue)
+		adapter->rx_thread = kthread_create_worker(0, "MWIFIEX_RX");
+		if (!adapter->rx_thread)
 			goto err_kmalloc;
 
-		INIT_WORK(&adapter->rx_work, mwifiex_rx_work_queue);
+		kthread_init_work(&adapter->rx_work, mwifiex_rx_work_queue);
 	}
 
 	/* Register the device. Fill up the private data structure with relevant
