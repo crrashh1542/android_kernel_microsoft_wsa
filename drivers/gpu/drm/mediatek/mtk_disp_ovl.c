@@ -6,6 +6,7 @@
 #include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
+#include <drm/drm_print.h>
 
 #include <linux/clk.h>
 #include <linux/component.h>
@@ -107,11 +108,15 @@ void mtk_ovl_register_vblank_cb(struct device *dev,
 
 	ovl->vblank_cb = vblank_cb;
 	ovl->vblank_cb_data = vblank_cb_data;
+
+	DRM_INFO("%s %d 0x%px\n", __func__, __LINE__, vblank_cb_data);
 }
 
 void mtk_ovl_unregister_vblank_cb(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+
+	DRM_INFO("%s %d\n", __func__, __LINE__);
 
 	ovl->vblank_cb = NULL;
 	ovl->vblank_cb_data = NULL;
