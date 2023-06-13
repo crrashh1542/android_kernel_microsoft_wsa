@@ -113,6 +113,7 @@
 		pinctrl-0 = <&touchscreen_pins>;
 		reset-gpios = <&pio 60 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&pp3300_s3>;
+		goodix,no-reset-during-suspend;
 	};
 };
 
