@@ -168,9 +168,6 @@ static const struct edid_quirk {
 	EDID_QUIRK('S', 'A', 'M', 596, EDID_QUIRK_PREFER_LARGE_60),
 	EDID_QUIRK('S', 'A', 'M', 638, EDID_QUIRK_PREFER_LARGE_60),
 
-	/* 144 Hz should only be used when needed; it wastes power */
-	EDID_QUIRK('S', 'H', 'P', 0x1523, EDID_QUIRK_PREFER_LARGE_60),
-
 	/* Sony PVM-2541A does up to 12 bpc, but only reports max 8 bpc */
 	EDID_QUIRK('S', 'N', 'Y', 0x2541, EDID_QUIRK_FORCE_12BPC),
 
