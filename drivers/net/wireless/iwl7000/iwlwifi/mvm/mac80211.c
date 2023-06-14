@@ -126,7 +126,8 @@ iwl_mvm_iface_combinations_nan[] = {
 	},
 };
 
-#if CFG80211_VERSION >= KERNEL_VERSION(5,0,0)
+/* not used with older HW and needs a locking patch in cfg80211 */
+#if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 static const struct cfg80211_pmsr_capabilities iwl_mvm_pmsr_capa = {
 	.max_peers = IWL_MVM_TOF_MAX_APS,
 	.report_ap_tsf = 1,
@@ -545,7 +546,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	wiphy_ext_feature_set(hw->wiphy,
 			      NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(5,0,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 	if (fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_FTM_CALIBRATED)) {
 		wiphy_ext_feature_set(hw->wiphy,
