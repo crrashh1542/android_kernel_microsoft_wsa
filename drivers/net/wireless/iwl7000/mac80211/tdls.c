@@ -956,9 +956,10 @@ ieee80211_tdls_build_mgmt_packet_data(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_link_data *link;
 
 	link_id = link_id >= 0 ? link_id : 0;
-	link = sdata_dereference(sdata->link[link_id], sdata);
+	rcu_read_lock();
+	link = rcu_dereference(sdata->link[link_id]);
 	if (WARN_ON(!link))
-		return NULL;
+		goto unlock;
 
 	skb = netdev_alloc_skb(sdata->dev,
 			       local->hw.extra_tx_headroom +
@@ -985,7 +986,7 @@ ieee80211_tdls_build_mgmt_packet_data(struct ieee80211_sub_if_data *sdata,
 			       extra_ies_len +
 			       sizeof(struct ieee80211_tdls_lnkie));
 	if (!skb)
-		return NULL;
+		goto unlock;
 
 	skb_reserve(skb, local->hw.extra_tx_headroom);
 
@@ -1019,10 +1020,13 @@ ieee80211_tdls_build_mgmt_packet_data(struct ieee80211_sub_if_data *sdata,
 	ieee80211_tdls_add_ies(link, skb, peer, action_code, status_code,
 			       initiator, extra_ies, extra_ies_len, oper_class,
 			       chandef);
+	rcu_read_unlock();
 	return skb;
 
 fail:
 	dev_kfree_skb(skb);
+unlock:
+	rcu_read_unlock();
 	return NULL;
 }
 
