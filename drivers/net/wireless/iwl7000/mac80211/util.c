@@ -4483,6 +4483,7 @@ void ieee80211_dfs_radar_detected_work(struct work_struct *work)
 #else
 	rtnl_unlock();
 #endif
+
 	if (num_chanctx > 1)
 		/* XXX: multi-channel is not supported yet */
 		WARN_ON(1);
