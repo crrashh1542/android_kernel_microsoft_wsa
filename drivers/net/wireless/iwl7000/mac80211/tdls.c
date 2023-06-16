@@ -432,15 +432,11 @@ ieee80211_tdls_add_setup_start_ies(struct ieee80211_link_data *link,
 		offset = noffset;
 	}
 
-	mutex_lock(&local->sta_mtx);
-
 	/* we should have the peer STA if we're already responding */
 	if (action_code == WLAN_TDLS_SETUP_RESPONSE) {
 		sta = sta_info_get(sdata, peer);
-		if (WARN_ON_ONCE(!sta)) {
-			mutex_unlock(&local->sta_mtx);
+		if (WARN_ON_ONCE(!sta))
 			return;
-		}
 
 		sta->tdls_chandef = link->conf->chandef;
 	}
@@ -609,7 +605,6 @@ ieee80211_tdls_add_setup_start_ies(struct ieee80211_link_data *link,
 		pos = skb_put(skb, cap_size);
 		ieee80211_ie_build_eht_cap(pos, he_cap, eht_cap, pos + cap_size, false);
 	}
-	mutex_unlock(&local->sta_mtx);
 
 	/* add any remaining IEs */
 	if (extra_ies_len) {
@@ -636,15 +631,11 @@ ieee80211_tdls_add_setup_cfm_ies(struct ieee80211_link_data *link,
 	if (WARN_ON_ONCE(!sband))
 		return;
 
-	mutex_lock(&local->sta_mtx);
-
 	sta = sta_info_get(sdata, peer);
 	ap_sta = sta_info_get(sdata, sdata->vif.cfg.ap_addr);
 
-	if (WARN_ON_ONCE(!sta || !ap_sta)) {
-		mutex_unlock(&local->sta_mtx);
+	if (WARN_ON_ONCE(!sta || !ap_sta))
 		return;
-	}
 
 	sta->tdls_chandef = link->conf->chandef;
 
@@ -712,8 +703,6 @@ ieee80211_tdls_add_setup_cfm_ies(struct ieee80211_link_data *link,
 		ieee80211_ie_build_vht_oper(pos, &sta->sta.deflink.vht_cap,
 					    &sta->tdls_chandef);
 	}
-
-	mutex_unlock(&local->sta_mtx);
 
 	/* add any remaining IEs */
 	if (extra_ies_len) {
