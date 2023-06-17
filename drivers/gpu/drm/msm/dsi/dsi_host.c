@@ -855,11 +855,12 @@ static void dsi_update_dsc_timing(struct msm_dsi_host *msm_host, bool is_cmd_mod
 	intf_width = hdisplay;
 	slice_per_intf = DIV_ROUND_UP(intf_width, dsc->slice_width);
 
-	/* If slice_per_pkt is greater than slice_per_intf
+	/*
+	 * If slice_count is greater than slice_per_intf
 	 * then default to 1. This can happen during partial
 	 * update.
 	 */
-	if (slice_per_intf > dsc->slice_count)
+	if (dsc->slice_count > slice_per_intf)
 		dsc->slice_count = 1;
 
 	slice_per_intf = DIV_ROUND_UP(hdisplay, dsc->slice_width);
