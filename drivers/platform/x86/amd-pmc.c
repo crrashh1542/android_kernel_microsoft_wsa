@@ -828,7 +828,7 @@ static int amd_pmc_probe(struct platform_device *pdev)
 	if (enable_stb && dev->cpu_id == AMD_CPU_ID_YC) {
 		err = amd_pmc_s2d_init(dev);
 		if (err)
-			return err;
+			goto err_pci_dev_put;
 	}
 
 	amd_pmc_get_smu_version(dev);
