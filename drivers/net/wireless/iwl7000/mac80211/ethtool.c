@@ -5,7 +5,7 @@
  * Copied from cfg.c - originally
  * Copyright 2006-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2014	Intel Corporation (Author: Johannes Berg)
- * Copyright (C) 2018, 2022 Intel Corporation
+ * Copyright (C) 2018, 2022-2023 Intel Corporation
  */
 #include <linux/types.h>
 #include <net/cfg80211.h>
@@ -110,6 +110,9 @@ static void ieee80211_get_stats(struct net_device *dev,
 	 * network device.
 	 */
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(local->hw.wiphy);
+#endif
 	mutex_lock(&local->sta_mtx);
 
 	if (sdata->vif.type == NL80211_IFTYPE_STATION) {
@@ -208,10 +211,17 @@ do_survey:
 
 	mutex_unlock(&local->sta_mtx);
 
-	if (WARN_ON(i != STA_STATS_LEN))
+	if (WARN_ON(i != STA_STATS_LEN)) {
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+		wiphy_unlock(local->hw.wiphy);
+#endif
 		return;
+	}
 
 	drv_get_et_stats(sdata, stats, &(data[STA_STATS_LEN]));
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(local->hw.wiphy);
+#endif
 }
 
 static void ieee80211_get_strings(struct net_device *dev, u32 sset, u8 *data)
