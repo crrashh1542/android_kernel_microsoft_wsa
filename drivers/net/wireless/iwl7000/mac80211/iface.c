@@ -436,14 +436,15 @@ static int ieee80211_open(struct net_device *dev)
 	if (!is_valid_ether_addr(dev->dev_addr))
 		return -EADDRNOTAVAIL;
 
-	err = ieee80211_check_concurrent_iface(sdata, sdata->vif.type);
-	if (err)
-		return err;
-
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_lock(sdata->local->hw.wiphy);
 #endif
+	err = ieee80211_check_concurrent_iface(sdata, sdata->vif.type);
+	if (err)
+		goto out;
+
 	err = ieee80211_do_open(&sdata->wdev, true);
+out:
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_unlock(sdata->local->hw.wiphy);
 #endif
