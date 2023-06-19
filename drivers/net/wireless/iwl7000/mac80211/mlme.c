@@ -1716,7 +1716,7 @@ static void ieee80211_chswitch_work(struct wiphy *wiphy,
 
 	sdata_lock(sdata);
 	mutex_lock(&local->mtx);
-	mutex_lock(&local->chanctx_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!ifmgd->associated)
 		goto out;
@@ -1768,7 +1768,6 @@ static void ieee80211_chswitch_work(struct wiphy *wiphy,
 	ieee80211_sta_reset_conn_monitor(sdata);
 
 out:
-	mutex_unlock(&local->chanctx_mtx);
 	mutex_unlock(&local->mtx);
 	sdata_unlock(sdata);
 }
@@ -1850,14 +1849,14 @@ ieee80211_sta_abort_chanswitch(struct ieee80211_link_data *link)
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (!local->ops->abort_channel_switch)
 		return;
 
 	mutex_lock(&local->mtx);
 
-	mutex_lock(&local->chanctx_mtx);
 	ieee80211_link_unreserve_chanctx(link);
-	mutex_unlock(&local->chanctx_mtx);
 
 	if (link->csa_block_tx)
 		ieee80211_wake_vif_queues(local, sdata,
@@ -1891,6 +1890,7 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 	int res;
 
 	sdata_assert_lock(sdata);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!cbss)
 		return;
@@ -1973,9 +1973,8 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 	ieee80211_teardown_tdls_peers(sdata);
 
 	mutex_lock(&local->mtx);
-	mutex_lock(&local->chanctx_mtx);
 	conf = rcu_dereference_protected(link->conf->chanctx_conf,
-					 lockdep_is_held(&local->chanctx_mtx));
+					 lockdep_is_wiphy_held(local->hw.wiphy));
 	if (!conf) {
 		sdata_info(sdata,
 			   "no channel context assigned to vif?, disconnecting\n");
@@ -2005,7 +2004,6 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 			   res);
 		goto drop_connection;
 	}
-	mutex_unlock(&local->chanctx_mtx);
 
 	link->conf->csa_active = true;
 	link->csa_chandef = csa_ie.chandef;
@@ -2037,7 +2035,6 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 	return;
  lock_and_drop_connection:
 	mutex_lock(&local->mtx);
-	mutex_lock(&local->chanctx_mtx);
  drop_connection:
 	/*
 	 * This is just so that the disconnect flow will know that
@@ -2051,7 +2048,6 @@ ieee80211_sta_process_chanswitch(struct ieee80211_link_data *link,
 
 	wiphy_work_queue(sdata->local->hw.wiphy,
 			 &ifmgd->csa_connection_drop_work);
-	mutex_unlock(&local->chanctx_mtx);
 	mutex_unlock(&local->mtx);
 }
 
@@ -3225,6 +3221,8 @@ static void ieee80211_mgd_probe_ap_send(struct ieee80211_sub_if_data *sdata)
 	u8 unicast_limit = max(1, max_probe_tries - 3);
 	struct sta_info *sta;
 
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
 	if (WARN_ON(ieee80211_vif_is_mld(&sdata->vif)))
 		return;
 
@@ -3246,7 +3244,6 @@ static void ieee80211_mgd_probe_ap_send(struct ieee80211_sub_if_data *sdata)
 	ifmgd->probe_send_count++;
 
 	if (dst) {
-		lockdep_assert_wiphy(sdata->local->hw.wiphy);
 		sta = sta_info_get(sdata, dst);
 		if (!WARN_ON(!sta))
 			ieee80211_check_fast_rx(sta);
@@ -3669,6 +3666,8 @@ static bool ieee80211_mark_sta_auth(struct ieee80211_sub_if_data *sdata)
 	const u8 *ap_addr = ifmgd->auth_data->ap_addr;
 	struct sta_info *sta;
 
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
 	sdata_info(sdata, "authenticated\n");
 	ifmgd->auth_data->done = true;
 	ifmgd->auth_data->timeout = jiffies + IEEE80211_AUTH_WAIT_ASSOC;
@@ -3676,7 +3675,6 @@ static bool ieee80211_mark_sta_auth(struct ieee80211_sub_if_data *sdata)
 	run_again(sdata, ifmgd->auth_data->timeout);
 
 	/* move station state to auth */
-	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 	sta = sta_info_get(sdata, ap_addr);
 	if (!sta) {
 		WARN_ONCE(1, "%s: STA %pM not found", sdata->name, ap_addr);
@@ -6202,6 +6200,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	};
 
 	sdata_assert_lock(sdata);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	/* Process beacon from the current BSS */
 	bssid = ieee80211_get_bssid(hdr, len, sdata->vif.type);
@@ -6440,7 +6439,6 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 				le16_to_cpu(mgmt->u.beacon.capab_info),
 				erp_valid, erp_value);
 
-	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, sdata->vif.cfg.ap_addr);
 	if (WARN_ON(!sta)) {
 		goto free;

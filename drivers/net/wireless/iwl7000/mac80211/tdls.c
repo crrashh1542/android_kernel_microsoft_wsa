@@ -1358,9 +1358,10 @@ static void iee80211_tdls_recalc_chanctx(struct ieee80211_sub_if_data *sdata,
 	enum nl80211_chan_width width;
 	struct ieee80211_supported_band *sband;
 
-	mutex_lock(&local->chanctx_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	conf = rcu_dereference_protected(sdata->vif.bss_conf.chanctx_conf,
-					 lockdep_is_held(&local->chanctx_mtx));
+					 lockdep_is_wiphy_held(local->hw.wiphy));
 	if (conf) {
 		width = conf->def.width;
 		sband = local->hw.wiphy->bands[conf->def.chan->band];
@@ -1388,7 +1389,6 @@ static void iee80211_tdls_recalc_chanctx(struct ieee80211_sub_if_data *sdata,
 		}
 
 	}
-	mutex_unlock(&local->chanctx_mtx);
 }
 
 static int iee80211_tdls_have_ht_peers(struct ieee80211_sub_if_data *sdata)
@@ -1451,6 +1451,8 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 	struct ieee80211_local *local = sdata->local;
 	int ret;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (!(wiphy->flags & WIPHY_FLAG_SUPPORTS_TDLS))
 		return -ENOTSUPP;
 
@@ -1483,7 +1485,6 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 			break;
 		}
 
-		lockdep_assert_wiphy(local->hw.wiphy);
 		sta = sta_info_get(sdata, peer);
 		if (!sta) {
 			ret = -ENOLINK;
@@ -1516,7 +1517,6 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 
 		ret = sta_info_destroy_addr(sdata, peer);
 
-		lockdep_assert_wiphy(local->hw.wiphy);
 		iee80211_tdls_recalc_ht_protection(sdata, NULL);
 
 		iee80211_tdls_recalc_chanctx(sdata, NULL);
@@ -1671,11 +1671,12 @@ ieee80211_tdls_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 	u32 ch_sw_tm_ie;
 	int ret;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (cfg80211_chan_freq_offset(chandef->chan))
 		/* this may work, but is untested */
 		return -EOPNOTSUPP;
 
-	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, addr);
 	if (!sta) {
 		tdls_dbg(sdata,
@@ -1797,6 +1798,8 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_tdls_ch_sw_params params = {};
 	int ret;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	params.action_code = WLAN_TDLS_CHANNEL_SWITCH_RESPONSE;
 	params.timestamp = rx_status->device_timestamp;
 
@@ -1806,7 +1809,6 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 		return -EINVAL;
 	}
 
-	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, tf->sa);
 	if (!sta || !test_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH)) {
 		tdls_dbg(sdata, "TDLS chan switch from non-peer sta %pM\n",
@@ -1893,6 +1895,8 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 	int baselen = offsetof(typeof(*tf), u.chan_switch_req.variable);
 	struct ieee80211_tdls_ch_sw_params params = {};
 	int ret = 0;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	params.action_code = WLAN_TDLS_CHANNEL_SWITCH_REQUEST;
 	params.timestamp = rx_status->device_timestamp;
@@ -1982,7 +1986,6 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 		goto free;
 	}
 
-	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, tf->sa);
 	if (!sta || !test_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH)) {
 		tdls_dbg(sdata, "TDLS chan switch from non-peer sta %pM\n",

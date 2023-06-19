@@ -263,9 +263,9 @@ static int ieee80211_start_p2p_device(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	int ret;
 
-	mutex_lock(&sdata->local->chanctx_mtx);
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
 	ret = ieee80211_check_combinations(sdata, NULL, 0, 0);
-	mutex_unlock(&sdata->local->chanctx_mtx);
 	if (ret < 0)
 		return ret;
 
@@ -285,9 +285,9 @@ static int ieee80211_start_nan(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	int ret;
 
-	mutex_lock(&sdata->local->chanctx_mtx);
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
 	ret = ieee80211_check_combinations(sdata, NULL, 0, 0);
-	mutex_unlock(&sdata->local->chanctx_mtx);
 	if (ret < 0)
 		return ret;
 
@@ -3877,7 +3877,7 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 
 	sdata_assert_lock(sdata);
 	lockdep_assert_held(&local->mtx);
-	lockdep_assert_held(&local->chanctx_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (sdata->vif.bss_conf.eht_puncturing != sdata->vif.bss_conf.csa_punct_bitmap) {
 		sdata->vif.bss_conf.eht_puncturing =
@@ -3953,7 +3953,7 @@ void ieee80211_csa_finalize_work(struct wiphy *wiphy, struct wiphy_work *work)
 
 	sdata_lock(sdata);
 	mutex_lock(&local->mtx);
-	mutex_lock(&local->chanctx_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	/* AP might have been stopped while waiting for the lock. */
 	if (!link->conf->csa_active)
@@ -3965,7 +3965,6 @@ void ieee80211_csa_finalize_work(struct wiphy *wiphy, struct wiphy_work *work)
 	ieee80211_csa_finalize(link);
 
 unlock:
-	mutex_unlock(&local->chanctx_mtx);
 	mutex_unlock(&local->mtx);
 	sdata_unlock(sdata);
 }
@@ -4127,6 +4126,7 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 	sdata_assert_lock(sdata);
 	lockdep_assert_held(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!list_empty(&local->roc_list) || local->scanning)
 		return -EBUSY;
@@ -4142,9 +4142,8 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 	if (sdata->vif.bss_conf.csa_active)
 		return -EBUSY;
 
-	mutex_lock(&local->chanctx_mtx);
 	conf = rcu_dereference_protected(sdata->vif.bss_conf.chanctx_conf,
-					 lockdep_is_held(&local->chanctx_mtx));
+					 lockdep_is_wiphy_held(local->hw.wiphy));
 	if (!conf) {
 		err = -EBUSY;
 		goto out;
@@ -4225,7 +4224,6 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 out:
-	mutex_unlock(&local->chanctx_mtx);
 	return err;
 }
 
