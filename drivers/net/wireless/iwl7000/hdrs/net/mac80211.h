@@ -1770,8 +1770,8 @@ struct ieee80211_channel_switch {
  * @IEEE80211_VIF_GET_NOA_UPDATE: request to handle NOA attributes
  *	and send P2P_PS notification to the driver if NOA changed, even
  *	this is not pure P2P vif.
- * @IEEE80211_VIF_DISABLE_SMPS_OVERRIDE: disable user configuration of
- *	SMPS mode via debugfs.
+ * @IEEE80211_VIF_EML_ACTIVE: The driver indicates that EML operation is
+ *      enabled for the interface.
  * @IEEE80211_VIF_DISABLE_EML: disable EML in EHT
  */
 enum ieee80211_vif_flags {
@@ -1779,7 +1779,7 @@ enum ieee80211_vif_flags {
 	IEEE80211_VIF_SUPPORTS_CQM_RSSI		= BIT(1),
 	IEEE80211_VIF_SUPPORTS_UAPSD		= BIT(2),
 	IEEE80211_VIF_GET_NOA_UPDATE		= BIT(3),
-	IEEE80211_VIF_DISABLE_SMPS_OVERRIDE	= BIT(4),
+	IEEE80211_VIF_EML_ACTIVE	        = BIT(4),
 	IEEE80211_VIF_DISABLE_EML		= BIT(5),
 };
 
