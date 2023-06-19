@@ -316,6 +316,8 @@ void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta,
 {
 	int i;
 
+	lockdep_assert_wiphy(sta->local->hw.wiphy);
+
 	for (i = 0; i <  IEEE80211_NUM_TIDS; i++) {
 		__ieee80211_stop_rx_ba_session(sta, i, WLAN_BACK_RECIPIENT,
 					       WLAN_REASON_QSTA_LEAVE_QBSS,
@@ -334,7 +336,6 @@ void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta,
 	if(reason == AGG_STOP_DESTROY_STA) {
 		wiphy_work_cancel(sta->local->hw.wiphy, &sta->ampdu_mlme.work);
 
-		mutex_lock(&sta->ampdu_mlme.mtx);
 		for (i = 0; i < IEEE80211_NUM_TIDS; i++) {
 			struct tid_ampdu_tx *tid_tx =
 				rcu_dereference_protected_tid_tx(sta, i);
@@ -345,7 +346,6 @@ void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta,
 			if (test_and_clear_bit(HT_AGG_STATE_STOP_CB, &tid_tx->state))
 				ieee80211_stop_tx_ba_cb(sta, i, tid_tx);
 		}
-		mutex_unlock(&sta->ampdu_mlme.mtx);
 	}
 }
 
@@ -357,10 +357,11 @@ void ieee80211_ba_session_work(struct wiphy *wiphy, struct wiphy_work *work)
 	bool blocked;
 	int tid;
 
+	lockdep_assert_wiphy(sta->local->hw.wiphy);
+
 	/* When this flag is set, new sessions should be blocked. */
 	blocked = test_sta_flag(sta, WLAN_STA_BLOCK_BA);
 
-	mutex_lock(&sta->ampdu_mlme.mtx);
 	for (tid = 0; tid < IEEE80211_NUM_TIDS; tid++) {
 		if (test_and_clear_bit(tid, sta->ampdu_mlme.tid_rx_timer_expired))
 			___ieee80211_stop_rx_ba_session(
@@ -413,8 +414,6 @@ void ieee80211_ba_session_work(struct wiphy *wiphy, struct wiphy_work *work)
 				 */
 				synchronize_net();
 
-				mutex_unlock(&sta->ampdu_mlme.mtx);
-
 				wiphy_work_queue(sdata->local->hw.wiphy, work);
 				return;
 			}
@@ -447,12 +446,11 @@ void ieee80211_ba_session_work(struct wiphy *wiphy, struct wiphy_work *work)
 		    test_and_clear_bit(HT_AGG_STATE_START_CB, &tid_tx->state))
 			ieee80211_start_tx_ba_cb(sta, tid, tid_tx);
 		if (test_and_clear_bit(HT_AGG_STATE_WANT_STOP, &tid_tx->state))
-			___ieee80211_stop_tx_ba_session(sta, tid,
-							AGG_STOP_LOCAL_REQUEST);
+			__ieee80211_stop_tx_ba_session(sta, tid,
+						       AGG_STOP_LOCAL_REQUEST);
 		if (test_and_clear_bit(HT_AGG_STATE_STOP_CB, &tid_tx->state))
 			ieee80211_stop_tx_ba_cb(sta, tid, tid_tx);
 	}
-	mutex_unlock(&sta->ampdu_mlme.mtx);
 }
 
 void ieee80211_send_delba(struct ieee80211_sub_if_data *sdata,
