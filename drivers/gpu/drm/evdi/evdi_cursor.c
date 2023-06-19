@@ -21,12 +21,7 @@
 
 #include <linux/compiler.h>
 #include <linux/mutex.h>
-#include <linux/version.h>
 
-#if KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
-#else
-#include <drm/drmP.h>
-#endif
 #include <drm/drm_crtc_helper.h>
 
 #include "evdi_cursor.h"
@@ -55,11 +50,7 @@ static void evdi_cursor_set_gem(struct evdi_cursor *cursor,
 	if (obj)
 		drm_gem_object_get(&obj->base);
 	if (cursor->obj)
-#if KERNEL_VERSION(5, 9, 0) <= LINUX_VERSION_CODE || defined(EL8)
 		drm_gem_object_put(&cursor->obj->base);
-#else
-		drm_gem_object_put_unlocked(&cursor->obj->base);
-#endif
 
 	cursor->obj = obj;
 }

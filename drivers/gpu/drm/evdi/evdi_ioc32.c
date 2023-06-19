@@ -21,8 +21,6 @@
 
 #include <linux/compat.h>
 
-#include <linux/version.h>
-#include <drm/drm_ioctl.h>
 #include <drm/drm_edid.h>
 #include <uapi/drm/evdi_drm.h>
 
@@ -92,7 +90,7 @@ static int compat_evdi_grabpix(struct file *file,
 
 	req32.num_rects = krequest.num_rects;
 	if (copy_to_user((void __user *)arg, &req32, sizeof(req32)))
-                return -EFAULT;
+		return -EFAULT;
 	return 0;
 }
 
