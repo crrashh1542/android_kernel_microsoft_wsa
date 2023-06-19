@@ -1611,12 +1611,13 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 {
 	struct ieee80211_mgmt *mgmt = (void *)skb->data;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (ieee80211_is_action(mgmt->frame_control) &&
 	    mgmt->u.action.category == WLAN_CATEGORY_BACK) {
 		struct sta_info *sta;
 		int len = skb->len;
 
-		mutex_lock(&local->sta_mtx);
 		sta = sta_info_get_bss(sdata, mgmt->sa);
 		if (sta) {
 			switch (mgmt->u.action.u.addba_req.action_code) {
@@ -1637,7 +1638,6 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 				break;
 			}
 		}
-		mutex_unlock(&local->sta_mtx);
 	} else if (ieee80211_is_action(mgmt->frame_control) &&
 		   mgmt->u.action.category == WLAN_CATEGORY_VHT) {
 		switch (mgmt->u.action.u.vht_group_notif.action_code) {
@@ -1651,7 +1651,6 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 			band = status->band;
 			opmode = mgmt->u.action.u.vht_opmode_notif.operating_mode;
 
-			mutex_lock(&local->sta_mtx);
 			sta = sta_info_get_bss(sdata, mgmt->sa);
 
 			if (sta)
@@ -1659,7 +1658,6 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 							    &sta->deflink,
 							    opmode, band);
 
-			mutex_unlock(&local->sta_mtx);
 			break;
 		}
 		case WLAN_VHT_ACTION_GROUPID_MGMT:
@@ -1706,7 +1704,6 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 		 * a block-ack session was active. That cannot be
 		 * right, so terminate the session.
 		 */
-		mutex_lock(&local->sta_mtx);
 		sta = sta_info_get_bss(sdata, mgmt->sa);
 		if (sta) {
 			u16 tid = ieee80211_get_tid(hdr);
@@ -1716,7 +1713,6 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 				WLAN_REASON_QSTA_REQUIRE_SETUP,
 				true);
 		}
-		mutex_unlock(&local->sta_mtx);
 	} else switch (sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
 		ieee80211_sta_rx_queued_mgmt(sdata, skb);

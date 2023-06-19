@@ -1483,10 +1483,9 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 			break;
 		}
 
-		mutex_lock(&local->sta_mtx);
+		lockdep_assert_wiphy(local->hw.wiphy);
 		sta = sta_info_get(sdata, peer);
 		if (!sta) {
-			mutex_unlock(&local->sta_mtx);
 			ret = -ENOLINK;
 			break;
 		}
@@ -1495,7 +1494,6 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 		iee80211_tdls_recalc_ht_protection(sdata, sta);
 
 		set_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH);
-		mutex_unlock(&local->sta_mtx);
 
 		WARN_ON_ONCE(is_zero_ether_addr(sdata->u.mgd.tdls_peer) ||
 			     !ether_addr_equal(sdata->u.mgd.tdls_peer, peer));
@@ -1518,9 +1516,8 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 
 		ret = sta_info_destroy_addr(sdata, peer);
 
-		mutex_lock(&local->sta_mtx);
+		lockdep_assert_wiphy(local->hw.wiphy);
 		iee80211_tdls_recalc_ht_protection(sdata, NULL);
-		mutex_unlock(&local->sta_mtx);
 
 		iee80211_tdls_recalc_chanctx(sdata, NULL);
 		break;
@@ -1678,7 +1675,7 @@ ieee80211_tdls_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 		/* this may work, but is untested */
 		return -EOPNOTSUPP;
 
-	mutex_lock(&local->sta_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, addr);
 	if (!sta) {
 		tdls_dbg(sdata,
@@ -1708,7 +1705,6 @@ ieee80211_tdls_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 		set_sta_flag(sta, WLAN_STA_TDLS_OFF_CHANNEL);
 
 out:
-	mutex_unlock(&local->sta_mtx);
 	dev_kfree_skb_any(skb);
 	return ret;
 }
@@ -1722,26 +1718,24 @@ ieee80211_tdls_cancel_channel_switch(struct wiphy *wiphy,
 	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta;
 
-	mutex_lock(&local->sta_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	sta = sta_info_get(sdata, addr);
 	if (!sta) {
 		tdls_dbg(sdata,
 			 "Invalid TDLS peer %pM for channel switch cancel\n",
 			 addr);
-		goto out;
+		return;
 	}
 
 	if (!test_sta_flag(sta, WLAN_STA_TDLS_OFF_CHANNEL)) {
 		tdls_dbg(sdata, "TDLS channel switch not initiated by %pM\n",
 			 addr);
-		goto out;
+		return;
 	}
 
 	drv_tdls_cancel_channel_switch(local, sdata, &sta->sta);
 	clear_sta_flag(sta, WLAN_STA_TDLS_OFF_CHANNEL);
-
-out:
-	mutex_unlock(&local->sta_mtx);
 }
 
 static struct sk_buff *
@@ -1812,7 +1806,7 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 		return -EINVAL;
 	}
 
-	mutex_lock(&local->sta_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, tf->sa);
 	if (!sta || !test_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH)) {
 		tdls_dbg(sdata, "TDLS chan switch from non-peer sta %pM\n",
@@ -1875,7 +1869,6 @@ call_drv:
 		 tf->sa, params.status);
 
 out:
-	mutex_unlock(&local->sta_mtx);
 	dev_kfree_skb_any(params.tmpl_skb);
 	kfree(elems);
 	return ret;
@@ -1989,7 +1982,7 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 		goto free;
 	}
 
-	mutex_lock(&local->sta_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 	sta = sta_info_get(sdata, tf->sa);
 	if (!sta || !test_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH)) {
 		tdls_dbg(sdata, "TDLS chan switch from non-peer sta %pM\n",
@@ -2036,7 +2029,6 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 		 tf->sa, params.chandef->chan->center_freq,
 		 params.chandef->width);
 out:
-	mutex_unlock(&local->sta_mtx);
 	dev_kfree_skb_any(params.tmpl_skb);
 free:
 	kfree(elems);

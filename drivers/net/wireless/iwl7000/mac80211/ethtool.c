@@ -113,7 +113,6 @@ static void ieee80211_get_stats(struct net_device *dev,
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
 	wiphy_lock(local->hw.wiphy);
 #endif
-	mutex_lock(&local->sta_mtx);
 
 	if (sdata->vif.type == NL80211_IFTYPE_STATION) {
 		sta = sta_info_get_bss(sdata, sdata->deflink.u.mgd.bssid);
@@ -208,8 +207,6 @@ do_survey:
 		data[i++] = survey.time_tx;
 	else
 		data[i++] = -1LL;
-
-	mutex_unlock(&local->sta_mtx);
 
 	if (WARN_ON(i != STA_STATS_LEN)) {
 #if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
