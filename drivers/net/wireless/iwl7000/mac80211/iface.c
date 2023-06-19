@@ -34,14 +34,13 @@
  * The interface list in each struct ieee80211_local is protected
  * three-fold:
  *
- * (1) modifications may only be done under the RTNL
- * (2) modifications and readers are protected against each other by
- *     the iflist_mtx.
- * (3) modifications are done in an RCU manner so atomic readers
+ * (1) modifications may only be done under the RTNL *and* wiphy mutex
+ *     *and* iflist_mtx
+ * (2) modifications are done in an RCU manner so atomic readers
  *     can traverse the list in RCU-safe blocks.
  *
  * As a consequence, reads (traversals) of the list can be protected
- * by either the RTNL, the iflist_mtx or RCU.
+ * by either the RTNL, the wiphy mutex, the iflist_mtx or RCU.
  */
 
 static int num_txqs = 1;
@@ -166,6 +165,8 @@ static int ieee80211_verify_mac(struct ieee80211_sub_if_data *sdata, u8 *addr,
 	u8 *m;
 	int ret = 0;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (is_zero_ether_addr(local->hw.wiphy->addr_mask))
 		return 0;
 
@@ -182,7 +183,6 @@ static int ieee80211_verify_mac(struct ieee80211_sub_if_data *sdata, u8 *addr,
 	if (!check_dup)
 		return ret;
 
-	mutex_lock(&local->iflist_mtx);
 	list_for_each_entry(iter, &local->interfaces, list) {
 		if (iter == sdata)
 			continue;
@@ -201,7 +201,6 @@ static int ieee80211_verify_mac(struct ieee80211_sub_if_data *sdata, u8 *addr,
 			break;
 		}
 	}
-	mutex_unlock(&local->iflist_mtx);
 
 	return ret;
 }
@@ -1151,7 +1150,7 @@ void ieee80211_recalc_offload(struct ieee80211_local *local)
 	if (!ieee80211_hw_check(&local->hw, SUPPORTS_TX_ENCAP_OFFLOAD))
 		return;
 
-	mutex_lock(&local->iflist_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	list_for_each_entry(sdata, &local->interfaces, list) {
 		if (!ieee80211_sdata_running(sdata))
@@ -1159,8 +1158,6 @@ void ieee80211_recalc_offload(struct ieee80211_local *local)
 
 		ieee80211_recalc_sdata_offload(sdata);
 	}
-
-	mutex_unlock(&local->iflist_mtx);
 }
 
 void ieee80211_adjust_monitor_flags(struct ieee80211_sub_if_data *sdata,
@@ -2027,14 +2024,14 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 	u8 tmp_addr[ETH_ALEN];
 	int i;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	/* default ... something at least */
 	memcpy(perm_addr, local->hw.wiphy->perm_addr, ETH_ALEN);
 
 	if (is_zero_ether_addr(local->hw.wiphy->addr_mask) &&
 	    local->hw.wiphy->n_addresses <= 1)
 		return;
-
-	mutex_lock(&local->iflist_mtx);
 
 	switch (type) {
 	case NL80211_IFTYPE_MONITOR:
@@ -2059,7 +2056,7 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 				if (!ieee80211_sdata_running(sdata))
 					continue;
 				memcpy(perm_addr, sdata->vif.addr, ETH_ALEN);
-				goto out_unlock;
+				return;
 			}
 		}
 		fallthrough;
@@ -2145,9 +2142,6 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 
 		break;
 	}
-
- out_unlock:
-	mutex_unlock(&local->iflist_mtx);
 }
 
 int ieee80211_if_add(struct ieee80211_local *local, const char *name,
@@ -2161,6 +2155,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 	int ret, i;
 
 	ASSERT_RTNL();
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN) {
 		struct wireless_dev *wdev;
@@ -2338,6 +2333,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata)
 {
 	ASSERT_RTNL();
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
 	mutex_lock(&sdata->local->iflist_mtx);
 	list_del_rcu(&sdata->list);
