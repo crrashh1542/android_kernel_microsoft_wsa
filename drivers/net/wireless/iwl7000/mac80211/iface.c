@@ -2391,6 +2391,10 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 	 */
 	cfg80211_shutdown_all_interfaces(local->hw.wiphy);
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(local->hw.wiphy);
+#endif
+
 	WARN(local->open_count, "%s: open count remains %d\n",
 	     wiphy_name(local->hw.wiphy), local->open_count);
 
@@ -2400,9 +2404,6 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 	list_splice_init(&local->interfaces, &unreg_list);
 	mutex_unlock(&local->iflist_mtx);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
-	wiphy_lock(local->hw.wiphy);
-#endif
 	list_for_each_entry_safe(sdata, tmp, &unreg_list, list) {
 		bool netdev = sdata->dev;
 
