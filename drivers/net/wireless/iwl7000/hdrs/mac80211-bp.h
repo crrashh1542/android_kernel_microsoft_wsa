@@ -2104,3 +2104,23 @@ void wiphy_delayed_work_queue(struct wiphy *wiphy,
 void wiphy_delayed_work_cancel(struct wiphy *wiphy,
 			       struct wiphy_delayed_work *dwork);
 #endif
+
+/* older cfg80211 requires wdev to be locked */
+#if CFG80211_VERSION < KERNEL_VERSION(6,6,0)
+#define sdata_lock_old_cfg80211(sdata) mutex_lock(&(sdata)->wdev.mtx)
+#define sdata_unlock_old_cfg80211(sdata) mutex_unlock(&(sdata)->wdev.mtx)
+#define WRAP_LOCKED(sym) wdev_locked_ ## sym
+
+static inline void
+WRAP_LOCKED(cfg80211_cqm_links_state_change_notify)(struct net_device *dev,
+						    u16 removed_links)
+{
+	mutex_lock(&dev->ieee80211_ptr->mtx);
+	cfg80211_cqm_links_state_change_notify(dev, removed_links);
+	mutex_unlock(&dev->ieee80211_ptr->mtx);
+}
+#define cfg80211_cqm_links_state_change_notify WRAP_LOCKED(cfg80211_cqm_links_state_change_notify)
+#else
+#define sdata_lock_old_cfg80211(sdata) do {} while (0)
+#define sdata_unlock_old_cfg80211(sdata) do {} while (0)
+#endif
