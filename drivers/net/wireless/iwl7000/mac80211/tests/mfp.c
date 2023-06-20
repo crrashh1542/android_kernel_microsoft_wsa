@@ -13,7 +13,7 @@ MODULE_IMPORT_NS(EXPORTED_FOR_KUNIT_TESTING);
 
 static const struct mfp_test_case {
 	const char *desc;
-	bool sta, mfp, decrypted, unicast;
+	bool sta, mfp, decrypted, unicast, assoc;
 	u8 category;
 	u8 stype;
 	int result;
@@ -136,6 +136,60 @@ static const struct mfp_test_case {
 		.mfp = true,
 		.result = 0,
 	},
+	/* deauth/disassoc before keys are set */
+	{
+		.desc = "deauth: accept unicast with MFP but w/o key",
+		.stype = IEEE80211_STYPE_DEAUTH,
+		.sta = true,
+		.mfp = true,
+		.unicast = true,
+		.result = 0,
+	},
+	{
+		.desc = "disassoc: accept unicast with MFP but w/o key",
+		.stype = IEEE80211_STYPE_DEAUTH,
+		.sta = true,
+		.mfp = true,
+		.unicast = true,
+		.result = 0,
+	},
+	/* non-public robust action frame ... */
+	{
+		.desc = "BA action: drop unicast before assoc",
+		.stype = IEEE80211_STYPE_ACTION,
+		.category = WLAN_CATEGORY_BACK,
+		.unicast = true,
+		.sta = true,
+		.result = -EACCES,
+	},
+	{
+		.desc = "BA action: drop unprotected after assoc",
+		.stype = IEEE80211_STYPE_ACTION,
+		.category = WLAN_CATEGORY_BACK,
+		.unicast = true,
+		.sta = true,
+		.mfp = true,
+		.result = -EACCES,
+	},
+	{
+		.desc = "BA action: accept unprotected without MFP",
+		.stype = IEEE80211_STYPE_ACTION,
+		.category = WLAN_CATEGORY_BACK,
+		.unicast = true,
+		.sta = true,
+		.assoc = true,
+		.mfp = false,
+		.result = 0,
+	},
+	{
+		.desc = "BA action: drop unprotected with MFP",
+		.stype = IEEE80211_STYPE_ACTION,
+		.category = WLAN_CATEGORY_BACK,
+		.unicast = true,
+		.sta = true,
+		.mfp = true,
+		.result = -EACCES,
+	},
 };
 
 KUNIT_ARRAY_PARAM_DESC(accept_mfp, accept_mfp_cases, desc);
@@ -166,6 +220,9 @@ static void accept_mfp(struct kunit *test)
 	if (params->mfp)
 		set_sta_flag(&sta, WLAN_STA_MFP);
 
+	if (params->assoc)
+		set_bit(WLAN_STA_ASSOC, &sta._flags);
+
 	rx.skb = kunit_zalloc_skb(test, 128, GFP_KERNEL);
 	status = IEEE80211_SKB_RXCB(rx.skb);
 
@@ -184,6 +241,13 @@ static void accept_mfp(struct kunit *test)
 	switch (params->stype) {
 	case IEEE80211_STYPE_ACTION:
 		skb_put_u8(rx.skb, params->category);
+		break;
+	case IEEE80211_STYPE_DEAUTH:
+	case IEEE80211_STYPE_DISASSOC: {
+		__le16 reason = cpu_to_le16(WLAN_REASON_UNSPECIFIED);
+
+		skb_put_data(rx.skb, &reason, sizeof(reason));
+		}
 		break;
 	}
 
