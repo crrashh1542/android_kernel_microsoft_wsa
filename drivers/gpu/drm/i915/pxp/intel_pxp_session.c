@@ -269,6 +269,8 @@ int intel_pxp_sm_ioctl_query_pxp_tag(struct intel_pxp *pxp,
 		return -EINVAL;
 
 	session_id = *pxp_tag & DOWNSTREAM_DRM_I915_PXP_TAG_SESSION_ID_MASK;
+	if (session_id >= INTEL_PXP_MAX_HWDRM_SESSIONS)
+                return -EINVAL;
 
 	if (!pxp->hwdrm_sessions[session_id]) {
 		*pxp_tag = 0;
