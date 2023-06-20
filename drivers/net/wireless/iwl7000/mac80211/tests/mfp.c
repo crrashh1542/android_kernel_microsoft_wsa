@@ -122,7 +122,7 @@ KUNIT_ARRAY_PARAM_DESC(accept_public_action,
 
 static void accept_public_action(struct kunit *test)
 {
-	static struct sta_info sta = {};
+	static struct sta_info sta;
 	const struct mfp_test_case *params = test->param_value;
 	struct ieee80211_rx_data rx = {
 		.sta = params->sta ? &sta : NULL,
@@ -135,6 +135,8 @@ static void accept_public_action(struct kunit *test)
 		.addr2 = { 0x12, 0x22, 0x33, 0x44, 0x55, 0x66 },
 		/* A3/BSSID doesn't matter here */
 	};
+
+	memset(&sta, 0, sizeof(sta));
 
 	if (!params->sta) {
 		KUNIT_ASSERT_FALSE(test, params->mfp);
