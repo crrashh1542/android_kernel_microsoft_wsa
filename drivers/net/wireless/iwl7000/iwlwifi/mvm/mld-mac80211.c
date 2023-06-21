@@ -107,8 +107,6 @@ static int iwl_mvm_mld_mac_add_interface(struct ieee80211_hw *hw,
 		ieee80211_hw_set(mvm->hw, RX_INCLUDES_FCS);
 	}
 
-	iwl_mvm_vif_dbgfs_register(mvm, vif);
-
 	if (!test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status) &&
 	    vif->type == NL80211_IFTYPE_STATION && !vif->p2p &&
 	    !mvm->csme_vif && mvm->mei_registered) {
@@ -183,7 +181,7 @@ static void iwl_mvm_mld_mac_remove_interface(struct ieee80211_hw *hw,
 	if (vif->bss_conf.ftm_responder)
 		memset(&mvm->ftm_resp_stats, 0, sizeof(mvm->ftm_resp_stats));
 
-	iwl_mvm_vif_dbgfs_clean(mvm, vif);
+	iwl_mvm_vif_dbgfs_rm_link(mvm, vif);
 
 	/*
 	 * For AP/GO interface, the tear down of the resources allocated to the
@@ -1249,6 +1247,7 @@ const struct ieee80211_ops iwl_mvm_mld_hw_ops = {
 	.add_nan_func = iwl_mvm_add_nan_func,
 	.del_nan_func = iwl_mvm_del_nan_func,
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
+	.vif_add_debugfs = iwl_mvm_vif_add_debugfs,
 	.link_sta_add_debugfs = iwl_mvm_link_sta_add_debugfs,
 #endif
 	.set_hw_timestamp = iwl_mvm_set_hw_timestamp,
