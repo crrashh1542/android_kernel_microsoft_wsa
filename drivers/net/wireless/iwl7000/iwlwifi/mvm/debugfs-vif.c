@@ -921,6 +921,10 @@ void iwl_mvm_vif_dbgfs_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	char buf[100];
 
+	/* this will happen in monitor mode */
+	if (!dbgfs_dir)
+		return;
+
 	/*
 	 * Create symlink for convenience pointing to interface specific
 	 * debugfs entries for the driver. For example, under
@@ -928,9 +932,7 @@ void iwl_mvm_vif_dbgfs_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	 * find
 	 * netdev:wlan0 -> ../../../ieee80211/phy0/netdev:wlan0/iwlmvm/
 	 */
-	snprintf(buf, 100, "../../../%pd3/%pd",
-		 dbgfs_dir,
-		 mvmvif->dbgfs_dir);
+	snprintf(buf, 100, "../../../%pd3/iwlmvm", dbgfs_dir);
 
 	mvmvif->dbgfs_slink = debugfs_create_symlink(dbgfs_dir->d_name.name,
 						     mvm->debugfs_dir, buf);
