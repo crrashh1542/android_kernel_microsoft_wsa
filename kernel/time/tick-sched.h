@@ -98,4 +98,8 @@ __tick_broadcast_oneshot_control(enum tick_broadcast_state state)
 }
 #endif
 
+#if defined CONFIG_HIGH_RES_TIMERS
+extern void tick_nohz_hres_to_lres(void);
+#endif
+
 #endif
