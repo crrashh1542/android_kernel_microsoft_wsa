@@ -337,7 +337,7 @@ static int snapshot_write_block_device(struct snapshot_data *data) {
 		res = submit_bio_wait(&bio);
 
 		if (res) {
-			pr_err("submitting bio failed at sector: %llu block number: %llu\n",
+			pr_err("submitting bio failed at sector: %llu block number: %lu\n",
 			       (unsigned long long)bio.bi_iter.bi_sector,
 			       sbdev->nr_blocks_used);
 			res = -EFAULT;
