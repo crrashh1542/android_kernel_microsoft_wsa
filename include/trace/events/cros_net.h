@@ -110,7 +110,7 @@ TRACE_EVENT_CONDITION(cros_inet_sendmsg_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%z-prot:%d",
+		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu-prot:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -184,7 +184,7 @@ TRACE_EVENT_CONDITION(cros_inet_sendpage_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%z",
+		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -219,7 +219,7 @@ TRACE_EVENT_CONDITION(cros_inet_recvmsg_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%z-prot:%d",
+		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu-prot:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
