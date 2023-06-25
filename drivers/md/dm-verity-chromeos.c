@@ -385,7 +385,7 @@ static int chromeos_handle_retries(struct bio *bio,
 	bdev = blkdev_get_by_dev(devt, dev_mode,
 				 chromeos_handle_retries);
 	if (IS_ERR(bdev)) {
-		DMERR("update_tries: could not open device for reading: %d",
+		DMERR("update_tries: could not open device for reading: %ld",
 		      PTR_ERR(bdev));
 		dev_mode = 0;
 		ret = -1;
