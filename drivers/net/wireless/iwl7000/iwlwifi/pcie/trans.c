@@ -620,7 +620,8 @@ int iwl_pcie_prepare_card_hw(struct iwl_trans *trans)
 
 	iwl_set_bit(trans, CSR_DBG_LINK_PWR_MGMT_REG,
 		    CSR_RESET_LINK_PWR_MGMT_DISABLED);
-	usleep_range(1000, 2000);
+	usleep_range(1000 * CPTCFG_IWL_DELAY_FACTOR,
+		     2000 * CPTCFG_IWL_DELAY_FACTOR);
 
 	for (iter = 0; iter < 10; iter++) {
 		int t = 0;
