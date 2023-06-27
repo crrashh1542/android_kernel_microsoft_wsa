@@ -2404,7 +2404,7 @@ static int ieee80211_drop_unencrypted(struct ieee80211_rx_data *rx, __le16 fc)
 	return 0;
 }
 
-VISIBLE_IF_KUNIT int
+VISIBLE_IF_MAC80211_KUNIT int
 ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(rx->skb);
@@ -2467,7 +2467,7 @@ ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 
 	return 0;
 }
-EXPORT_SYMBOL_IF_KUNIT(ieee80211_drop_unencrypted_mgmt);
+EXPORT_SYMBOL_IF_MAC80211_KUNIT(ieee80211_drop_unencrypted_mgmt);
 
 static int
 __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
