@@ -112,7 +112,9 @@
 /* KVM "vendor specific" services */
 #define ARM_SMCCC_KVM_FUNC_FEATURES		0
 #define ARM_SMCCC_KVM_FUNC_PTP			1
-#define ARM_SMCCC_KVM_FUNC_UCLAMP		64
+#define ARM_SMCCC_KVM_FUNC_GET_CUR_CPUFREQ	65
+#define ARM_SMCCC_KVM_FUNC_UTIL_HINT		66
+#define ARM_SMCCC_KVM_FUNC_GET_CPUFREQ_TBL	67
 #define ARM_SMCCC_KVM_FUNC_FEATURES_2		127
 #define ARM_SMCCC_KVM_NUM_FUNCS			128
 
@@ -139,16 +141,23 @@
 #define KVM_PTP_VIRT_COUNTER			0
 #define KVM_PTP_PHYS_COUNTER			1
 
-/*
- * uclamp sync service is a feature used to sync the guest task's uclamp
- * value to the host vcpu task. kvm-uclamp code in guest kernel will sync
- * the uclamp when switching the tasks using this hypercall ID.
- */
-#define ARM_SMCCC_VENDOR_HYP_KVM_UCLAMP_FUNC_ID				\
+#define ARM_SMCCC_VENDOR_HYP_KVM_GET_CUR_CPUFREQ_FUNC_ID		\
 	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,				\
 			   ARM_SMCCC_SMC_32,				\
 			   ARM_SMCCC_OWNER_VENDOR_HYP,			\
-			   ARM_SMCCC_KVM_FUNC_UCLAMP)
+			   ARM_SMCCC_KVM_FUNC_GET_CUR_CPUFREQ)
+
+#define ARM_SMCCC_VENDOR_HYP_KVM_UTIL_HINT_FUNC_ID			\
+	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,				\
+			   ARM_SMCCC_SMC_32,				\
+			   ARM_SMCCC_OWNER_VENDOR_HYP,			\
+			   ARM_SMCCC_KVM_FUNC_UTIL_HINT)
+
+#define ARM_SMCCC_VENDOR_HYP_KVM_GET_CPUFREQ_TBL_FUNC_ID		\
+	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,				\
+			   ARM_SMCCC_SMC_32,				\
+			   ARM_SMCCC_OWNER_VENDOR_HYP,			\
+			   ARM_SMCCC_KVM_FUNC_GET_CPUFREQ_TBL)
 
 /* Paravirtualised time calls (defined by ARM DEN0057A) */
 #define ARM_SMCCC_HV_PV_TIME_FEATURES				\

@@ -909,7 +909,7 @@ static u32 get_allowed_dc_mask(const struct drm_i915_private *dev_priv,
 		return 0;
 
 	if (IS_DG2(dev_priv))
-		max_dc = 0;
+		max_dc = 1;
 	else if (IS_DG1(dev_priv))
 		max_dc = 3;
 	else if (DISPLAY_VER(dev_priv) >= 12)
@@ -1102,7 +1102,7 @@ static void icl_mbus_init(struct drm_i915_private *dev_priv)
 	unsigned long abox_regs = INTEL_INFO(dev_priv)->display.abox_mask;
 	u32 mask, val, i;
 
-	if (IS_ALDERLAKE_P(dev_priv))
+	if (IS_ALDERLAKE_P(dev_priv) || DISPLAY_VER(dev_priv) >= 14)
 		return;
 
 	mask = MBUS_ABOX_BT_CREDIT_POOL1_MASK |
@@ -1617,14 +1617,6 @@ static void icl_display_core_init(struct drm_i915_private *dev_priv,
 	    INTEL_PCH_TYPE(dev_priv) < PCH_DG1)
 		intel_de_rmw(dev_priv, SOUTH_DSPCLK_GATE_D, 0,
 			     PCH_DPMGUNIT_CLOCK_GATE_DISABLE);
-
-	/* Wa_16015201720:adl-p,dg2 */
-	if (DISPLAY_VER(dev_priv) == 13) {
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL_EXT(PIPE_A),
-			     0, PIPEDMC_GATING_DIS);
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL_EXT(PIPE_B),
-			     0, PIPEDMC_GATING_DIS);
-	}
 
 	/* 1. Enable PCH reset handshake. */
 	intel_pch_reset_handshake(dev_priv, !HAS_PCH_NOP(dev_priv));

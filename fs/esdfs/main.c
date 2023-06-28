@@ -352,7 +352,7 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
 	struct path lower_path;
 	struct esdfs_sb_info *sbi;
 	struct inode *inode;
-	struct dentry *lower_dl_dentry;
+	struct dentry *lower_dl_dentry, *root_dentry;
 	struct user_namespace *user_ns;
 	kuid_t dl_kuid = INVALID_UID;
 	kgid_t dl_kgid = INVALID_GID;
@@ -488,16 +488,16 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
 		err = PTR_ERR(inode);
 		goto out_sput;
 	}
-	sb->s_root = d_make_root(inode);
-	if (!sb->s_root) {
+	root_dentry = d_make_root(inode);
+	if (!root_dentry) {
 		err = -ENOMEM;
 		goto out_sput;
 	}
-	d_set_d_op(sb->s_root, &esdfs_dops);
+	d_set_d_op(root_dentry, &esdfs_dops);
 
 	/* link the upper and lower dentries */
-	sb->s_root->d_fsdata = NULL;
-	err = esdfs_new_dentry_private_data(sb->s_root);
+	root_dentry->d_fsdata = NULL;
+	err = esdfs_new_dentry_private_data(root_dentry);
 	if (err)
 		goto out_freeroot;
 
@@ -548,14 +548,16 @@ static int esdfs_read_super(struct super_block *sb, const char *dev_name,
 	/* if get here: cannot have error */
 
 	/* set the lower dentries for s_root */
-	esdfs_set_lower_path(sb->s_root, &lower_path);
+	esdfs_set_lower_path(root_dentry, &lower_path);
 
 	/*
 	 * No need to call interpose because we already have a positive
 	 * dentry, which was instantiated by d_make_root.  Just need to
 	 * d_rehash it.
 	 */
-	d_rehash(sb->s_root);
+	d_rehash(root_dentry);
+	sb->s_root = root_dentry;
+
 	if (!silent)
 		esdfs_msg(sb, KERN_INFO, "mounted on top of %s type %s\n",
 			dev_name, lower_sb->s_type->name);
@@ -614,8 +616,8 @@ out_dlput:
 	sbi->dl_path.dentry = NULL;
 	sbi->dl_path.mnt = NULL;
 out_freeroot:
-	dput(sb->s_root);
-	sb->s_root = NULL;
+	dput(root_dentry);
+	root_dentry = NULL;
 out_sput:
 	/* drop refs we took earlier */
 	atomic_dec(&lower_sb->s_active);

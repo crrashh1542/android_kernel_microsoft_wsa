@@ -14,7 +14,7 @@
 /delete-node/ &usb_c1;
 
 / {
-	ppvar_lcd: ppvar-lcd {
+	ppvar_lcd: ppvar-lcd-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "ppvar_lcd";
 
@@ -26,7 +26,7 @@
 		vin-supply = <&pp5000_a>;
 	};
 
-	v1p8_disp: v1p8-disp {
+	v1p8_disp: v1p8-disp-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "v1p8_disp";
 
@@ -93,10 +93,6 @@
 			};
 		};
 	};
-};
-
-&mdp {
-	chromium-enable-overlays;
 };
 
 &gpio_keys {

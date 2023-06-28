@@ -363,6 +363,7 @@ static struct platform_driver arizona_micsupp_driver = {
 	.probe = arizona_micsupp_probe,
 	.driver		= {
 		.name	= "arizona-micsupp",
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 
@@ -370,6 +371,7 @@ static struct platform_driver madera_micsupp_driver = {
 	.probe = madera_micsupp_probe,
 	.driver		= {
 		.name	= "madera-micsupp",
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

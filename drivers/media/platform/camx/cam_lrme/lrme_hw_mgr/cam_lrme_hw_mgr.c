@@ -28,7 +28,7 @@
 #include "cam_lrme_hw_mgr_intf.h"
 #include "cam_lrme_hw_mgr.h"
 
-static struct cam_lrme_hw_mgr g_lrme_hw_mgr;
+static struct cam_lrme_hw_mgr *g_lrme_hw_mgr;
 
 static int cam_lrme_mgr_util_reserve_device(struct cam_lrme_hw_mgr *hw_mgr,
 	struct cam_lrme_acquire_args *lrme_acquire_args)
@@ -520,7 +520,7 @@ static int cam_lrme_mgr_util_release(struct cam_lrme_hw_mgr *hw_mgr,
 static int cam_lrme_mgr_cb(void *data,
 	struct cam_lrme_hw_cb_args *cb_args)
 {
-	struct cam_lrme_hw_mgr *hw_mgr = &g_lrme_hw_mgr;
+	struct cam_lrme_hw_mgr *hw_mgr = g_lrme_hw_mgr;
 	int rc = 0;
 	bool frame_abort = true;
 	struct cam_lrme_frame_request *frame_req;
@@ -714,10 +714,7 @@ static int cam_lrme_mgr_hw_dump(void *hw_mgr_priv, void *hw_dump_args)
 		sizeof(struct cam_lrme_hw_dump_args));
 	dump_args->offset = lrme_dump_args.offset;
 
-	rc  = cam_mem_put_cpu_buf(dump_args->buf_handle);
-	if (rc)
-		CAM_ERR(CAM_LRME, "Cpu put failed handle %u",
-			dump_args->buf_handle);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 
@@ -855,7 +852,7 @@ static int cam_lrme_mgr_hw_start(void *hw_mgr_priv, void *hw_start_args)
 	rc = hw_device->hw_intf.hw_ops.process_cmd(
 			hw_device->hw_intf.hw_priv,
 			CAM_LRME_HW_CMD_DUMP_REGISTER,
-			&g_lrme_hw_mgr.debugfs_entry.dump_register,
+			&g_lrme_hw_mgr->debugfs_entry.dump_register,
 			sizeof(bool));
 
 	return rc;
@@ -1059,17 +1056,17 @@ static int cam_lrme_mgr_hw_config(void *hw_mgr_priv,
 
 static int cam_lrme_mgr_create_debugfs_entry(void)
 {
-	g_lrme_hw_mgr.debugfs_entry.dentry =
+	g_lrme_hw_mgr->debugfs_entry.dentry =
 		debugfs_create_dir("camera_lrme", NULL);
-	if (!g_lrme_hw_mgr.debugfs_entry.dentry) {
+	if (!g_lrme_hw_mgr->debugfs_entry.dentry) {
 		CAM_ERR(CAM_LRME, "failed to create dentry");
 		return -ENOMEM;
 	}
 
 	debugfs_create_bool("dump_register",
 		0644,
-		g_lrme_hw_mgr.debugfs_entry.dentry,
-		&g_lrme_hw_mgr.debugfs_entry.dump_register);
+		g_lrme_hw_mgr->debugfs_entry.dentry,
+		&g_lrme_hw_mgr->debugfs_entry.dump_register);
 
 	return 0;
 }
@@ -1084,10 +1081,14 @@ int cam_lrme_mgr_register_device(
 	char buf[128];
 	int i, rc;
 
-	hw_device = &g_lrme_hw_mgr.hw_device[lrme_hw_intf->hw_idx];
+	g_lrme_hw_mgr = kzalloc(sizeof(struct cam_lrme_hw_mgr), GFP_KERNEL);
+	if (!g_lrme_hw_mgr)
+		return -ENOMEM;
 
-	g_lrme_hw_mgr.device_iommu = *device_iommu;
-	g_lrme_hw_mgr.cdm_iommu = *cdm_iommu;
+	hw_device = &g_lrme_hw_mgr->hw_device[lrme_hw_intf->hw_idx];
+
+	g_lrme_hw_mgr->device_iommu = *device_iommu;
+	g_lrme_hw_mgr->cdm_iommu = *cdm_iommu;
 
 	memcpy(&hw_device->hw_intf, lrme_hw_intf, sizeof(struct cam_hw_intf));
 
@@ -1106,6 +1107,8 @@ int cam_lrme_mgr_register_device(
 	if (rc) {
 		CAM_ERR(CAM_LRME,
 			"Unable to create a worker, rc=%d", rc);
+		kfree(g_lrme_hw_mgr);
+		g_lrme_hw_mgr = NULL;
 		return rc;
 	}
 
@@ -1140,12 +1143,12 @@ int cam_lrme_mgr_register_device(
 		CAM_ERR(CAM_LRME, "No get_hw_caps function");
 		goto destroy_workqueue;
 	}
-	g_lrme_hw_mgr.lrme_caps.dev_caps[lrme_hw_intf->hw_idx] =
+	g_lrme_hw_mgr->lrme_caps.dev_caps[lrme_hw_intf->hw_idx] =
 		hw_device->hw_caps;
-	g_lrme_hw_mgr.device_count++;
-	g_lrme_hw_mgr.lrme_caps.device_iommu = g_lrme_hw_mgr.device_iommu;
-	g_lrme_hw_mgr.lrme_caps.cdm_iommu = g_lrme_hw_mgr.cdm_iommu;
-	g_lrme_hw_mgr.lrme_caps.num_devices = g_lrme_hw_mgr.device_count;
+	g_lrme_hw_mgr->device_count++;
+	g_lrme_hw_mgr->lrme_caps.device_iommu = g_lrme_hw_mgr->device_iommu;
+	g_lrme_hw_mgr->lrme_caps.cdm_iommu = g_lrme_hw_mgr->cdm_iommu;
+	g_lrme_hw_mgr->lrme_caps.num_devices = g_lrme_hw_mgr->device_count;
 
 	hw_device->valid = true;
 
@@ -1153,6 +1156,8 @@ int cam_lrme_mgr_register_device(
 	return 0;
 
 destroy_workqueue:
+	kfree(g_lrme_hw_mgr);
+	g_lrme_hw_mgr = NULL;
 	cam_req_mgr_workq_destroy(&hw_device->work);
 
 	return rc;
@@ -1162,18 +1167,19 @@ int cam_lrme_mgr_deregister_device(int device_index)
 {
 	struct cam_lrme_device *hw_device;
 
-	hw_device = &g_lrme_hw_mgr.hw_device[device_index];
+	hw_device = &g_lrme_hw_mgr->hw_device[device_index];
 	cam_req_mgr_workq_destroy(&hw_device->work);
 	memset(hw_device, 0x0, sizeof(struct cam_lrme_device));
-	g_lrme_hw_mgr.device_count--;
+	g_lrme_hw_mgr->device_count--;
 
 	return 0;
 }
 
 int cam_lrme_hw_mgr_deinit(void)
 {
-	mutex_destroy(&g_lrme_hw_mgr.hw_mgr_mutex);
-	memset(&g_lrme_hw_mgr, 0x0, sizeof(g_lrme_hw_mgr));
+	mutex_destroy(&g_lrme_hw_mgr->hw_mgr_mutex);
+	kfree(g_lrme_hw_mgr);
+	g_lrme_hw_mgr = NULL;
 
 	return 0;
 }
@@ -1187,30 +1193,30 @@ int cam_lrme_hw_mgr_init(struct cam_hw_mgr_intf *hw_mgr_intf,
 	if (!hw_mgr_intf)
 		return -EINVAL;
 
-	CAM_DBG(CAM_LRME, "device count %d", g_lrme_hw_mgr.device_count);
-	if (g_lrme_hw_mgr.device_count > CAM_LRME_HW_MAX) {
+	CAM_DBG(CAM_LRME, "device count %d", g_lrme_hw_mgr->device_count);
+	if (g_lrme_hw_mgr->device_count > CAM_LRME_HW_MAX) {
 		CAM_ERR(CAM_LRME, "Invalid count of devices");
 		return -EINVAL;
 	}
 
 	memset(hw_mgr_intf, 0, sizeof(*hw_mgr_intf));
 
-	mutex_init(&g_lrme_hw_mgr.hw_mgr_mutex);
-	spin_lock_init(&g_lrme_hw_mgr.free_req_lock);
-	INIT_LIST_HEAD(&g_lrme_hw_mgr.frame_free_list);
+	mutex_init(&g_lrme_hw_mgr->hw_mgr_mutex);
+	spin_lock_init(&g_lrme_hw_mgr->free_req_lock);
+	INIT_LIST_HEAD(&g_lrme_hw_mgr->frame_free_list);
 
 	/* Init hw mgr frame requests and add to free list */
 	for (i = 0; i < CAM_CTX_REQ_MAX * CAM_CTX_MAX; i++) {
-		frame_req = &g_lrme_hw_mgr.frame_req[i];
+		frame_req = &g_lrme_hw_mgr->frame_req[i];
 
 		memset(frame_req, 0x0, sizeof(*frame_req));
 		INIT_LIST_HEAD(&frame_req->frame_list);
 
 		list_add_tail(&frame_req->frame_list,
-			&g_lrme_hw_mgr.frame_free_list);
+			&g_lrme_hw_mgr->frame_free_list);
 	}
 
-	hw_mgr_intf->hw_mgr_priv = &g_lrme_hw_mgr;
+	hw_mgr_intf->hw_mgr_priv = g_lrme_hw_mgr;
 	hw_mgr_intf->hw_get_caps = cam_lrme_mgr_get_caps;
 	hw_mgr_intf->hw_acquire = cam_lrme_mgr_hw_acquire;
 	hw_mgr_intf->hw_release = cam_lrme_mgr_hw_release;
@@ -1224,7 +1230,7 @@ int cam_lrme_hw_mgr_init(struct cam_hw_mgr_intf *hw_mgr_intf,
 	hw_mgr_intf->hw_flush = cam_lrme_mgr_hw_flush;
 	hw_mgr_intf->hw_dump = cam_lrme_mgr_hw_dump;
 
-	g_lrme_hw_mgr.event_cb = cam_lrme_dev_buf_done_cb;
+	g_lrme_hw_mgr->event_cb = cam_lrme_dev_buf_done_cb;
 
 	cam_lrme_mgr_create_debugfs_entry();
 

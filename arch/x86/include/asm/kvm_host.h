@@ -1184,6 +1184,12 @@ struct kvm_arch {
 	 *	the MMU lock in read mode + the tdp_mmu_pages_lock or
 	 *	the MMU lock in write mode
 	 *
+	 * kvm_arch_test_clear_young() is a special case. It relies on two
+	 * techniques, RCU and cmpxchg, to safely test and clear the accessed
+	 * bit without taking the MMU lock. The former protects KVM page tables
+	 * from being freed while the latter clears the accessed bit atomically
+	 * against both the hardware and other software page table walkers.
+	 *
 	 * Roots will remain in the list until their tdp_mmu_root_count
 	 * drops to zero, at which point the thread that decremented the
 	 * count to zero should removed the root from the list and clean
@@ -1950,5 +1956,15 @@ static inline int kvm_cpu_get_apicid(int mps_cpu)
 int kvm_cpu_dirty_log_size(void);
 
 int alloc_all_memslots_rmaps(struct kvm *kvm);
+
+extern u64 __read_mostly shadow_accessed_mask;
+
+/* see the comments on the generic kvm_arch_has_test_clear_young() */
+#define kvm_arch_has_test_clear_young kvm_arch_has_test_clear_young
+static inline bool kvm_arch_has_test_clear_young(void)
+{
+	return IS_ENABLED(CONFIG_KVM) && IS_ENABLED(CONFIG_X86_64) &&
+	       (!IS_REACHABLE(CONFIG_KVM) || (tdp_enabled && shadow_accessed_mask));
+}
 
 #endif /* _ASM_X86_KVM_HOST_H */

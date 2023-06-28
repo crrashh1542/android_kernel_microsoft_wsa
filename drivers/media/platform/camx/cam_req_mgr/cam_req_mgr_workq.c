@@ -148,7 +148,7 @@ int cam_req_mgr_workq_enqueue_task(struct crm_workq_task *task,
 		cam_req_mgr_workq_put_task(task);
 		CAM_WARN(CAM_CRM, "task aborted and queued back to pool");
 		rc = 0;
-		goto end;
+		goto abort;
 	}
 	task->priv = priv;
 	task->priority =
@@ -159,7 +159,7 @@ int cam_req_mgr_workq_enqueue_task(struct crm_workq_task *task,
 		if (!workq->job) {
 			rc = -EINVAL;
 			WORKQ_RELEASE_LOCK(workq, flags);
-			goto end;
+			goto abort;
 		}
 
 	list_add_tail(&task->entry,
@@ -172,6 +172,10 @@ int cam_req_mgr_workq_enqueue_task(struct crm_workq_task *task,
 	queue_work(workq->job, &workq->work);
 	WORKQ_RELEASE_LOCK(workq, flags);
 end:
+	return rc;
+abort:
+	cam_req_mgr_workq_put_task(task);
+	CAM_INFO(CAM_CRM, "task aborted and queued back to pool");
 	return rc;
 }
 

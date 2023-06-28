@@ -1291,6 +1291,10 @@ static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 		goto failed;
 	}
 
+	/* Cancel potentially blocking sync operation before power off */
+	if (cp->val == 0x00)
+		__hci_cmd_sync_cancel(hdev, -EHOSTDOWN);
+
 	err = hci_cmd_sync_queue(hdev, set_powered_sync, cmd,
 				 mgmt_set_powered_complete);
 
@@ -1336,6 +1340,10 @@ static void cmd_status_rsp(struct mgmt_pending_cmd *cmd, void *data)
 
 static void cmd_complete_rsp(struct mgmt_pending_cmd *cmd, void *data)
 {
+	if (cmd->opcode == MGMT_OP_REMOVE_ADV_MONITOR ||
+	    cmd->opcode == MGMT_OP_SET_SSP)
+		return;
+
 	if (cmd->cmd_complete) {
 		u8 *status = data;
 
@@ -8652,18 +8660,21 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 				total_size += sizeof(struct mgmt_bt_codec);
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				/* 0x01 - HCI Transport (Codec supported over BR/EDR SCO and eSCO)
-				 * 0x05 - mSBC Codec ID
-				 */
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					/* 0x01 - HCI Transport (Codec supported over
+					 *          BR/EDR SCO and eSCO)
+					 * 0x05 - mSBC Codec ID
+					 */
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				break;
+					total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
@@ -8697,28 +8708,31 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 			}
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				/* Need to read the support from the controller and then assign
-				 * to TRUE for now by default enable it as TRUE
-				 */
-				rp->offload_capable = true;
+					/* Need to read the support from the controller
+					 * and then assign to TRUE for now by default
+					 * enable it as TRUE
+					 */
+					rp->offload_capable = true;
 
-				if (hdev->get_data_path_id)
-					hdev->get_data_path_id(hdev, &rc->data_path);
+					if (hdev->get_data_path_id)
+						hdev->get_data_path_id(hdev, &rc->data_path);
 
-				rc->codec = cp->codecs[i];
-				rc->packet_size = c->len;
-				rc->data_length = c->caps->len;
-				memcpy(rc->data, c->caps, c->caps->len);
-				ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				num_rp_codecs++;
-				break;
+					rc->codec = cp->codecs[i];
+					rc->packet_size = c->len;
+					rc->data_length = c->caps->len;
+					memcpy(rc->data, c->caps, c->caps->len);
+					ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					num_rp_codecs++;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			break;
@@ -8823,6 +8837,37 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 				MGMT_OP_GET_VS_OPCODE,
 				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	return err;
+}
+
+static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_notify_suspend_state *cp = data;
+	struct hci_dev *found_hdev;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	found_hdev = floss_get_hdev(cp->hci_id);
+	if (found_hdev)
+		hdev = found_hdev;
+
+	// Make sure we have a valid hdev.
+	if (!hdev) {
+		BT_DBG("Cannot find hdev 0x%4.4x", cp->hci_id);
+		return mgmt_cmd_status(sk, 0, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_INDEX);
+	}
+
+	if (cp->suspended != 0x00 && cp->suspended != 0x01)
+		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	hci_dev_lock(hdev);
+
+	hdev->suspended = cp->suspended;
+
+	hci_dev_unlock(hdev);
+
+	return 0;
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -8968,6 +9013,10 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 	{ floss_get_vs_opcode,     MGMT_GET_VS_OPCODE_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED },
+	{ floss_notify_suspend_state,
+				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 };

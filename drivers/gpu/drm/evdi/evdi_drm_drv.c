@@ -29,10 +29,10 @@
 #endif
 #include <drm/drm_atomic_helper.h>
 #include "evdi_drm_drv.h"
+#include <uapi/drm/evdi_drm.h>
 #include "evdi_platform_drv.h"
 #include "evdi_cursor.h"
 #include "evdi_debug.h"
-#include "evdi_drm.h"
 
 static struct drm_driver driver;
 

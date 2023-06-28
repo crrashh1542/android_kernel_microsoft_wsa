@@ -26,7 +26,7 @@
 
 #define CAM_JPEG_DEV_NAME "cam-jpeg"
 
-static struct cam_jpeg_dev g_jpeg_dev;
+static struct cam_jpeg_dev *g_jpeg_dev;
 
 static void cam_jpeg_dev_iommu_fault_handler(
 	struct iommu_domain *domain, struct device *dev, unsigned long iova,
@@ -58,9 +58,9 @@ static int cam_jpeg_subdev_open(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
 {
 
-	mutex_lock(&g_jpeg_dev.jpeg_mutex);
-	g_jpeg_dev.open_cnt++;
-	mutex_unlock(&g_jpeg_dev.jpeg_mutex);
+	mutex_lock(&g_jpeg_dev->jpeg_mutex);
+	g_jpeg_dev->open_cnt++;
+	mutex_unlock(&g_jpeg_dev->jpeg_mutex);
 
 	return 0;
 }
@@ -72,14 +72,13 @@ static int cam_jpeg_subdev_close(struct v4l2_subdev *sd,
 	struct cam_node *node = v4l2_get_subdevdata(sd);
 
 
-	mutex_lock(&g_jpeg_dev.jpeg_mutex);
-	if (g_jpeg_dev.open_cnt <= 0) {
+	mutex_lock(&g_jpeg_dev->jpeg_mutex);
+	if (g_jpeg_dev->open_cnt <= 0) {
 		CAM_DBG(CAM_JPEG, "JPEG subdev is already closed");
 		rc = -EINVAL;
 		goto end;
 	}
 
-	g_jpeg_dev.open_cnt--;
 
 	if (!node) {
 		CAM_ERR(CAM_JPEG, "Node ptr is NULL");
@@ -87,11 +86,12 @@ static int cam_jpeg_subdev_close(struct v4l2_subdev *sd,
 		goto end;
 	}
 
-	if (g_jpeg_dev.open_cnt == 0)
+	g_jpeg_dev->open_cnt--;
+	if (g_jpeg_dev->open_cnt == 0)
 		cam_node_shutdown(node);
 
 end:
-	mutex_unlock(&g_jpeg_dev.jpeg_mutex);
+	mutex_unlock(&g_jpeg_dev->jpeg_mutex);
 	return rc;
 }
 
@@ -106,13 +106,13 @@ static int cam_jpeg_dev_remove(struct platform_device *pdev)
 	int i;
 
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_jpeg_context_deinit(&g_jpeg_dev.ctx_jpeg[i]);
+		rc = cam_jpeg_context_deinit(&g_jpeg_dev->ctx_jpeg[i]);
 		if (rc)
 			CAM_ERR(CAM_JPEG, "JPEG context %d deinit failed %d",
 				i, rc);
 	}
 
-	rc = cam_subdev_remove(&g_jpeg_dev.sd);
+	rc = cam_subdev_remove(&g_jpeg_dev->sd);
 	if (rc)
 		CAM_ERR(CAM_JPEG, "Unregister failed %d", rc);
 
@@ -145,14 +145,20 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 		goto unregister;
 	}
 
-	g_jpeg_dev.sd.internal_ops = &cam_jpeg_subdev_internal_ops;
-	rc = cam_subdev_probe(&g_jpeg_dev.sd, pdev, CAM_JPEG_DEV_NAME,
+	g_jpeg_dev = devm_kzalloc(&pdev->dev,
+		sizeof(struct cam_jpeg_dev), GFP_KERNEL);
+	if (!g_jpeg_dev) {
+		rc = -ENOMEM;
+		goto unregister;
+	}
+	g_jpeg_dev->sd.internal_ops = &cam_jpeg_subdev_internal_ops;
+	rc = cam_subdev_probe(&g_jpeg_dev->sd, pdev, CAM_JPEG_DEV_NAME,
 		CAM_JPEG_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "JPEG cam_subdev_probe failed %d", rc);
 		goto err_depopulate;
 	}
-	node = (struct cam_node *)g_jpeg_dev.sd.token;
+	node = (struct cam_node *)g_jpeg_dev->sd.token;
 
 	rc = cam_jpeg_hw_mgr_init(pdev->dev.of_node,
 		(uint64_t *)&hw_mgr_intf, &iommu_hdl);
@@ -162,8 +168,8 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_jpeg_context_init(&g_jpeg_dev.ctx_jpeg[i],
-			&g_jpeg_dev.ctx[i],
+		rc = cam_jpeg_context_init(&g_jpeg_dev->ctx_jpeg[i],
+			&g_jpeg_dev->ctx[i],
 			&node->hw_mgr_intf,
 			i);
 		if (rc) {
@@ -173,7 +179,7 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = cam_node_init(node, &hw_mgr_intf, g_jpeg_dev.ctx, CAM_CTX_MAX,
+	rc = cam_node_init(node, &hw_mgr_intf, g_jpeg_dev->ctx, CAM_CTX_MAX,
 		CAM_JPEG_DEV_NAME);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "JPEG node init failed %d", rc);
@@ -183,7 +189,7 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 	cam_smmu_set_client_page_fault_handler(iommu_hdl,
 		cam_jpeg_dev_iommu_fault_handler, node);
 
-	mutex_init(&g_jpeg_dev.jpeg_mutex);
+	mutex_init(&g_jpeg_dev->jpeg_mutex);
 
 	pr_info("%s driver probed successfully\n", KBUILD_MODNAME);
 
@@ -191,12 +197,12 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 
 ctx_init_fail:
 	for (--i; i >= 0; i--)
-		if (cam_jpeg_context_deinit(&g_jpeg_dev.ctx_jpeg[i]))
+		if (cam_jpeg_context_deinit(&g_jpeg_dev->ctx_jpeg[i]))
 			CAM_ERR(CAM_JPEG, "deinit fail %d %d", i, rc);
 err_depopulate:
 	devm_of_platform_depopulate(&pdev->dev);
 unregister:
-	if (cam_subdev_remove(&g_jpeg_dev.sd))
+	if (cam_subdev_remove(&g_jpeg_dev->sd))
 		CAM_ERR(CAM_JPEG, "remove fail %d", rc);
 
 	return rc;

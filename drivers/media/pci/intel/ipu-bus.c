@@ -91,6 +91,9 @@ static int ipu_bus_probe(struct device *dev)
 	struct ipu_bus_driver *adrv = to_ipu_bus_driver(dev->driver);
 	int rval;
 
+	if (!adev->isp->ipu_bus_ready_to_probe)
+		return -EPROBE_DEFER;
+
 	dev_dbg(dev, "bus probe dev %s\n", dev_name(dev));
 
 	adev->adrv = adrv;
@@ -98,7 +101,8 @@ static int ipu_bus_probe(struct device *dev)
 		rval = -ENODEV;
 		goto out_err;
 	}
-	rval = pm_runtime_get_sync(&adev->dev);
+
+	rval = pm_runtime_resume_and_get(&adev->dev);
 	if (rval < 0) {
 		dev_err(&adev->dev, "Failed to get runtime PM\n");
 		goto out_err;
@@ -140,18 +144,22 @@ static struct mutex ipu_bus_mutex;
 
 static void ipu_bus_release(struct device *dev)
 {
+	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
+
+	kfree(adev->pdata);
+	kfree(adev);
 }
 
-struct ipu_bus_device *ipu_bus_add_device(struct pci_dev *pdev,
-					  struct device *parent, void *pdata,
-					  struct ipu_buttress_ctrl *ctrl,
-					  char *name, unsigned int nr)
+struct ipu_bus_device *ipu_bus_initialize_device(struct pci_dev *pdev,
+						 struct device *parent,
+						 void *pdata,
+						 struct ipu_buttress_ctrl *ctrl,
+						 char *name, unsigned int nr)
 {
 	struct ipu_bus_device *adev;
 	struct ipu_device *isp = pci_get_drvdata(pdev);
-	int rval;
 
-	adev = devm_kzalloc(&pdev->dev, sizeof(*adev), GFP_KERNEL);
+	adev = kzalloc(sizeof(*adev), GFP_KERNEL);
 	if (!adev)
 		return ERR_PTR(-ENOMEM);
 
@@ -171,20 +179,29 @@ struct ipu_bus_device *ipu_bus_add_device(struct pci_dev *pdev,
 	mutex_init(&adev->resume_lock);
 	dev_set_name(&adev->dev, "%s%d", name, nr);
 
-	rval = device_register(&adev->dev);
-	if (rval) {
-		put_device(&adev->dev);
-		return ERR_PTR(rval);
-	}
-
-	mutex_lock(&ipu_bus_mutex);
-	list_add(&adev->list, &isp->devices);
-	mutex_unlock(&ipu_bus_mutex);
-
-	pm_runtime_allow(&adev->dev);
+	device_initialize(&adev->dev);
+	pm_runtime_forbid(&adev->dev);
 	pm_runtime_enable(&adev->dev);
 
 	return adev;
+}
+
+int ipu_bus_add_device(struct ipu_bus_device *adev)
+{
+	int rval;
+
+	rval = device_add(&adev->dev);
+	if (rval) {
+		put_device(&adev->dev);
+		return rval;
+	}
+
+	mutex_lock(&ipu_bus_mutex);
+	list_add(&adev->list, &adev->isp->devices);
+	mutex_unlock(&ipu_bus_mutex);
+
+	pm_runtime_allow(&adev->dev);
+	return 0;
 }
 
 void ipu_bus_del_devices(struct pci_dev *pdev)

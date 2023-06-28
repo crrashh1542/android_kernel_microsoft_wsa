@@ -27,7 +27,7 @@
 #include "cam_debug_util.h"
 #include "cam_smmu_api.h"
 
-static struct cam_isp_dev g_isp_dev;
+static struct cam_isp_dev *g_isp_dev;
 
 static void cam_isp_dev_iommu_fault_handler(
 	struct iommu_domain *domain, struct device *dev, unsigned long iova,
@@ -58,9 +58,9 @@ static const struct of_device_id cam_isp_dt_match[] = {
 static int cam_isp_subdev_open(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
 {
-	mutex_lock(&g_isp_dev.isp_mutex);
-	g_isp_dev.open_cnt++;
-	mutex_unlock(&g_isp_dev.isp_mutex);
+	mutex_lock(&g_isp_dev->isp_mutex);
+	g_isp_dev->open_cnt++;
+	mutex_unlock(&g_isp_dev->isp_mutex);
 
 	return 0;
 }
@@ -71,25 +71,25 @@ static int cam_isp_subdev_close(struct v4l2_subdev *sd,
 	int rc = 0;
 	struct cam_node *node = v4l2_get_subdevdata(sd);
 
-	mutex_lock(&g_isp_dev.isp_mutex);
-	if (g_isp_dev.open_cnt <= 0) {
+	mutex_lock(&g_isp_dev->isp_mutex);
+	if (g_isp_dev->open_cnt <= 0) {
 		CAM_DBG(CAM_ISP, "ISP subdev is already closed");
 		rc = -EINVAL;
 		goto end;
 	}
 
-	g_isp_dev.open_cnt--;
 	if (!node) {
 		CAM_ERR(CAM_ISP, "Node ptr is NULL");
 		rc = -EINVAL;
 		goto end;
 	}
 
-	if (g_isp_dev.open_cnt == 0)
+	g_isp_dev->open_cnt--;
+	if (g_isp_dev->open_cnt == 0)
 		cam_node_shutdown(node);
 
 end:
-	mutex_unlock(&g_isp_dev.isp_mutex);
+	mutex_unlock(&g_isp_dev->isp_mutex);
 	return rc;
 }
 
@@ -105,17 +105,18 @@ static int cam_isp_dev_remove(struct platform_device *pdev)
 
 	/* clean up resources */
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_isp_context_deinit(&g_isp_dev.ctx_isp[i]);
+		rc = cam_isp_context_deinit(&g_isp_dev->ctx_isp[i]);
 		if (rc)
 			CAM_ERR(CAM_ISP, "ISP context %d deinit failed",
 				 i);
 	}
 
-	rc = cam_subdev_remove(&g_isp_dev.sd);
+	rc = cam_subdev_remove(&g_isp_dev->sd);
 	if (rc)
 		CAM_ERR(CAM_ISP, "Unregister failed");
 
-	memset(&g_isp_dev, 0, sizeof(g_isp_dev));
+	cam_isp_hw_mgr_deinit();
+
 	return 0;
 }
 
@@ -138,15 +139,20 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 	}
 	put_device(&cpas_pdev->dev);
 
-	g_isp_dev.sd.internal_ops = &cam_isp_subdev_internal_ops;
+	g_isp_dev = devm_kzalloc(&pdev->dev,
+		sizeof(struct cam_isp_dev), GFP_KERNEL);
+	if (!g_isp_dev)
+		return -ENOMEM;
+
+	g_isp_dev->sd.internal_ops = &cam_isp_subdev_internal_ops;
 	/* Initialize the v4l2 subdevice first. (create cam_node) */
-	rc = cam_subdev_probe(&g_isp_dev.sd, pdev, CAM_ISP_DEV_NAME,
+	rc = cam_subdev_probe(&g_isp_dev->sd, pdev, CAM_ISP_DEV_NAME,
 		CAM_IFE_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "ISP cam_subdev_probe failed!");
 		return rc;
 	}
-	node = (struct cam_node *) g_isp_dev.sd.token;
+	node = (struct cam_node *) g_isp_dev->sd.token;
 
 	/* Probe child nodes, before the call of "cam_icp_hw_mgr_init" */
 	rc = devm_of_platform_populate(&pdev->dev);
@@ -163,8 +169,8 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_isp_context_init(&g_isp_dev.ctx_isp[i],
-			&g_isp_dev.ctx[i],
+		rc = cam_isp_context_init(&g_isp_dev->ctx_isp[i],
+			&g_isp_dev->ctx[i],
 			&node->crm_node_intf,
 			&node->hw_mgr_intf,
 			i);
@@ -174,7 +180,7 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = cam_node_init(node, &hw_mgr_intf, g_isp_dev.ctx, CAM_CTX_MAX,
+	rc = cam_node_init(node, &hw_mgr_intf, g_isp_dev->ctx, CAM_CTX_MAX,
 		CAM_ISP_DEV_NAME);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "ISP node init failed!");
@@ -184,7 +190,7 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 	cam_smmu_set_client_page_fault_handler(iommu_hdl,
 		cam_isp_dev_iommu_fault_handler, node);
 
-	mutex_init(&g_isp_dev.isp_mutex);
+	mutex_init(&g_isp_dev->isp_mutex);
 
 	pr_info("%s driver probed successfully\n", KBUILD_MODNAME);
 
@@ -193,7 +199,7 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 err_depopulate:
 	devm_of_platform_depopulate(&pdev->dev);
 unregister:
-	rc = cam_subdev_remove(&g_isp_dev.sd);
+	rc = cam_subdev_remove(&g_isp_dev->sd);
 
 	return rc;
 }
