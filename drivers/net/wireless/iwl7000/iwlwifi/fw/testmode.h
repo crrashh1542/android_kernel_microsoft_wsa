@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2013-2014, 2018 Intel Corporation
+ * Copyright (C) 2013-2014, 2018, 2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  */
 #ifndef __IWL_TESTMODE_H__
@@ -55,7 +55,7 @@ struct iwl_testmode {
 };
 
 /**
- * iwl_tm_data - A data packet for testmode usages
+ * struct iwl_tm_data - A data packet for testmode usages
  * @data:   Pointer to be casted to relevant data type
  *          (According to usage)
  * @len:    Size of data in bytes

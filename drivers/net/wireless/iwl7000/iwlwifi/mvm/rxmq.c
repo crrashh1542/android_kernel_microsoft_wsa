@@ -278,7 +278,8 @@ static void iwl_mvm_get_signal_strength(struct iwl_mvm *mvm,
 static int iwl_mvm_rx_mgmt_prot(struct ieee80211_sta *sta,
 				struct ieee80211_hdr *hdr,
 				struct iwl_rx_mpdu_desc *desc,
-				u32 status)
+				u32 status,
+				struct ieee80211_rx_status *stats)
 {
 	struct iwl_mvm_sta *mvmsta;
 	struct iwl_mvm_vif *mvmvif;
@@ -307,8 +308,10 @@ static int iwl_mvm_rx_mgmt_prot(struct ieee80211_sta *sta,
 
 	/* good cases */
 	if (likely(status & IWL_RX_MPDU_STATUS_MIC_OK &&
-		   !(status & IWL_RX_MPDU_STATUS_REPLAY_ERROR)))
+		   !(status & IWL_RX_MPDU_STATUS_REPLAY_ERROR))) {
+		stats->flag |= RX_FLAG_DECRYPTED;
 		return 0;
+	}
 
 	if (!sta)
 		return -1;
@@ -372,12 +375,14 @@ static int iwl_mvm_rx_crypto(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 	 */
 	if (phy_info & IWL_RX_MPDU_PHY_AMPDU &&
 	    (status & IWL_RX_MPDU_STATUS_SEC_MASK) ==
-	    IWL_RX_MPDU_STATUS_SEC_UNKNOWN && !mvm->monitor_on)
+	    IWL_RX_MPDU_STATUS_SEC_UNKNOWN && !mvm->monitor_on) {
+		IWL_DEBUG_DROP(mvm, "Dropping packets, bad enc status\n");
 		return -1;
+	}
 
 	if (unlikely(ieee80211_is_mgmt(hdr->frame_control) &&
 		     !ieee80211_has_protected(hdr->frame_control)))
-		return iwl_mvm_rx_mgmt_prot(sta, hdr, desc, status);
+		return iwl_mvm_rx_mgmt_prot(sta, hdr, desc, status, stats);
 
 	if (!ieee80211_has_protected(hdr->frame_control) ||
 	    (status & IWL_RX_MPDU_STATUS_SEC_MASK) ==
@@ -1478,13 +1483,40 @@ static void iwl_mvm_decode_he_phy_data(struct iwl_mvm *mvm,
 	(_usig)->value |= LE32_DEC_ENC(in_value, dec_bits, _enc_bits); \
 } while (0)
 
-#define IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru) \
+#define __IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru) \
 	eht->data[(rt_data)] |= \
 		(cpu_to_le32 \
 		 (IEEE80211_RADIOTAP_EHT_DATA ## rt_data ## _RU_ALLOC_CC_ ## rt_ru ## _KNOWN) | \
 		 LE32_DEC_ENC(data ## fw_data, \
 			      IWL_RX_PHY_DATA ## fw_data ## _EHT_MU_EXT_RU_ALLOC_ ## fw_ru, \
 			      IEEE80211_RADIOTAP_EHT_DATA ## rt_data ## _RU_ALLOC_CC_ ## rt_ru))
+
+#define _IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru)	\
+	__IWL_MVM_ENC_EHT_RU(rt_data, rt_ru, fw_data, fw_ru)
+
+#define IEEE80211_RADIOTAP_RU_DATA_1_1_1	1
+#define IEEE80211_RADIOTAP_RU_DATA_2_1_1	2
+#define IEEE80211_RADIOTAP_RU_DATA_1_1_2	2
+#define IEEE80211_RADIOTAP_RU_DATA_2_1_2	2
+#define IEEE80211_RADIOTAP_RU_DATA_1_2_1	3
+#define IEEE80211_RADIOTAP_RU_DATA_2_2_1	3
+#define IEEE80211_RADIOTAP_RU_DATA_1_2_2	3
+#define IEEE80211_RADIOTAP_RU_DATA_2_2_2	4
+
+#define IWL_RX_RU_DATA_A1			2
+#define IWL_RX_RU_DATA_A2			2
+#define IWL_RX_RU_DATA_B1			2
+#define IWL_RX_RU_DATA_B2			3
+#define IWL_RX_RU_DATA_C1			3
+#define IWL_RX_RU_DATA_C2			3
+#define IWL_RX_RU_DATA_D1			4
+#define IWL_RX_RU_DATA_D2			4
+
+#define IWL_MVM_ENC_EHT_RU(rt_ru, fw_ru)				\
+	_IWL_MVM_ENC_EHT_RU(IEEE80211_RADIOTAP_RU_DATA_ ## rt_ru,	\
+			    rt_ru,					\
+			    IWL_RX_RU_DATA_ ## fw_ru,			\
+			    fw_ru)
 
 static void iwl_mvm_decode_eht_ext_mu(struct iwl_mvm *mvm,
 				      struct iwl_mvm_rx_phy_data *phy_data,
@@ -1523,37 +1555,45 @@ static void iwl_mvm_decode_eht_ext_mu(struct iwl_mvm *mvm,
 			(data5, IWL_RX_PHY_DATA5_EHT_MU_NUM_USR_NON_OFDMA,
 			 IEEE80211_RADIOTAP_EHT_DATA7_NUM_OF_NON_OFDMA_USERS);
 
-		IWL_MVM_ENC_EHT_RU(1, 1_1_1, 2, A1);
-		if (phy_bw >= RATE_MCS_CHAN_WIDTH_80)
-			IWL_MVM_ENC_EHT_RU(2, 2_1_1, 3, C1);
-
-		if (phy_bw >= RATE_MCS_CHAN_WIDTH_160) {
-			IWL_MVM_ENC_EHT_RU(2, 1_1_2, 2, A2);
-			IWL_MVM_ENC_EHT_RU(2, 2_1_2, 3, C2);
-		}
+		/*
+		 * Hardware labels the content channels/RU allocation values
+		 * as follows:
+		 *           Content Channel 1		Content Channel 2
+		 *   20 MHz: A1
+		 *   40 MHz: A1				B1
+		 *   80 MHz: A1 C1			B1 D1
+		 *  160 MHz: A1 C1 A2 C2		B1 D1 B2 D2
+		 *  320 MHz: A1 C1 A2 C2 A3 C3 A4 C4	B1 D1 B2 D2 B3 D3 B4 D4
+		 *
+		 * However firmware can only give us A1-D2, so the higher
+		 * frequencies are missing.
+		 */
 
 		switch (phy_bw) {
-		case RATE_MCS_CHAN_WIDTH_40:
-			IWL_MVM_ENC_EHT_RU(2, 2_1_1, 2, B1);
-			break;
-		case RATE_MCS_CHAN_WIDTH_80:
-			IWL_MVM_ENC_EHT_RU(2, 1_1_2, 2, B1);
-			IWL_MVM_ENC_EHT_RU(2, 2_1_2, 4, D1);
-			break;
-		case RATE_MCS_CHAN_WIDTH_160:
-			IWL_MVM_ENC_EHT_RU(3, 1_2_1, 2, B1);
-			IWL_MVM_ENC_EHT_RU(3, 2_2_1, 4, D1);
-			IWL_MVM_ENC_EHT_RU(3, 1_2_2, 3, B2);
-			IWL_MVM_ENC_EHT_RU(4, 2_2_2, 4, D2);
-			break;
 		case RATE_MCS_CHAN_WIDTH_320:
-			IWL_MVM_ENC_EHT_RU(4, 1_2_3, 2, B1);
-			IWL_MVM_ENC_EHT_RU(4, 2_2_3, 4, D1);
-			IWL_MVM_ENC_EHT_RU(5, 1_2_4, 3, B2);
-			IWL_MVM_ENC_EHT_RU(5, 2_2_4, 4, D2);
+			/* additional values are missing in RX metadata */
+		case RATE_MCS_CHAN_WIDTH_160:
+			/* content channel 1 */
+			IWL_MVM_ENC_EHT_RU(1_2_1, A2);
+			IWL_MVM_ENC_EHT_RU(1_2_2, C2);
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_2_1, B2);
+			IWL_MVM_ENC_EHT_RU(2_2_2, D2);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_80:
+			/* content channel 1 */
+			IWL_MVM_ENC_EHT_RU(1_1_2, C1);
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_1_2, D1);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_40:
+			/* content channel 2 */
+			IWL_MVM_ENC_EHT_RU(2_1_1, B1);
+			fallthrough;
+		case RATE_MCS_CHAN_WIDTH_20:
+			IWL_MVM_ENC_EHT_RU(1_1_1, A1);
 			break;
 		}
-
 	} else {
 		__le32 usig_a1 = phy_data->rx_vec[0];
 		__le32 usig_a2 = phy_data->rx_vec[1];
@@ -2544,6 +2584,8 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 #endif /* CPTCFG_IWLMVM_TDLS_PEER_CACHE */
 
 		if (iwl_mvm_is_dup(sta, queue, rx_status, hdr, desc)) {
+			IWL_DEBUG_DROP(mvm, "Dropping duplicate packet 0x%x\n",
+				       le16_to_cpu(hdr->seq_ctrl));
 			kfree_skb(skb);
 			goto out;
 		}
@@ -2784,6 +2826,9 @@ void iwl_mvm_rx_bar_frame_release(struct iwl_mvm *mvm, struct napi_struct *napi,
 		 baid, baid_data->sta_mask, baid_data->tid, sta_id,
 		 tid))
 		goto out;
+
+	IWL_DEBUG_DROP(mvm, "Received a BAR, expect packet loss: nssn %d\n",
+		       nssn);
 
 	iwl_mvm_release_frames_from_notif(mvm, napi, baid, nssn, queue, 0);
 out:

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018-2021 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2021, 2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2015 Intel Deutschland GmbH
  */
@@ -136,6 +136,9 @@ struct iwl_op_mode_ops {
 			   enum iwl_fw_ini_time_point tp_id,
 			   union iwl_dbg_tlv_tp_data *tp_data);
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
+	/**
+	 * @test_ops: testmode methods
+	 */
 	struct iwl_test_ops test_ops;
 #endif
 };

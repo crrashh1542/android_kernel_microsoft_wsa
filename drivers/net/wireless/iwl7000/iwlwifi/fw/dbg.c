@@ -3057,8 +3057,15 @@ void iwl_fw_error_dump_wk(struct work_struct *work)
 {
 	struct iwl_fwrt_wk_data *wks =
 		container_of(work, typeof(*wks), wk.work);
-	struct iwl_fw_runtime *fwrt =
-		container_of(wks, typeof(*fwrt), dump.wks[wks->idx]);
+	struct iwl_fw_runtime *fwrt;
+
+	if (wks->idx >= IWL_FW_RUNTIME_DUMP_WK_NUM) {
+		fwrt = container_of(wks, typeof(*fwrt), dump.wks[0]);
+		IWL_ERR(fwrt, "invalid worker index %d\n", wks->idx);
+		return;
+	}
+
+	fwrt = container_of(wks, typeof(*fwrt), dump.wks[wks->idx]);
 
 	/* assumes the op mode mutex is locked in dump_start since
 	 * iwl_fw_dbg_collect_sync can't run in parallel
@@ -3225,7 +3232,7 @@ void iwl_fw_dbg_stop_restart_recording(struct iwl_fw_runtime *fwrt,
 	if (fw_has_capa(&fwrt->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_DBG_SUSPEND_RESUME_CMD_SUPP)) {
 		if (stop)
-			ret = iwl_fw_send_timestamp_marker_cmd(fwrt);
+			iwl_fw_send_timestamp_marker_cmd(fwrt);
 		ret = iwl_fw_dbg_suspend_resume_hcmd(fwrt->trans, stop);
 	} else if (stop) {
 		iwl_fw_dbg_stop_recording(fwrt->trans, params);
@@ -3242,3 +3249,38 @@ void iwl_fw_dbg_stop_restart_recording(struct iwl_fw_runtime *fwrt,
 #endif
 }
 IWL_EXPORT_SYMBOL(iwl_fw_dbg_stop_restart_recording);
+
+void iwl_fw_disable_dbg_asserts(struct iwl_fw_runtime *fwrt)
+{
+	struct iwl_fw_dbg_config_cmd cmd = {
+		.type = cpu_to_le32(DEBUG_TOKEN_CONFIG_TYPE),
+		.conf = cpu_to_le32(IWL_FW_DBG_CONFIG_TOKEN),
+	};
+	struct iwl_host_cmd hcmd = {
+		.id = WIDE_ID(LONG_GROUP, LDBG_CONFIG_CMD),
+		.data[0] = &cmd,
+		.len[0] = sizeof(cmd),
+	};
+	u32 preset = u32_get_bits(fwrt->trans->dbg.domains_bitmap,
+				  GENMASK(31, IWL_FW_DBG_DOMAIN_POS + 1));
+
+	/* supported starting from 9000 devices */
+	if (fwrt->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_9000)
+		return;
+
+	if (fwrt->trans->dbg.yoyo_bin_loaded || (preset && preset != 1))
+		return;
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	/* don't send this command when explicitly asked to enable
+	 * debug asserts or FW_DBG_PRESET is present in ini file with
+	 * any value.
+	 */
+	if (fwrt->trans->dbg_cfg.enable_dbg_asserts ||
+	    fwrt->trans->dbg_cfg.FW_DBG_DOMAIN != IWL_FW_DBG_DOMAIN)
+		return;
+#endif
+
+	iwl_trans_send_cmd(fwrt->trans, &hcmd);
+}
+IWL_EXPORT_SYMBOL(iwl_fw_disable_dbg_asserts);

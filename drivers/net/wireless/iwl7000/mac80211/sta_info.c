@@ -355,8 +355,9 @@ static void sta_remove_link(struct sta_info *sta, unsigned int link_id,
 	struct sta_link_alloc *alloc = NULL;
 	struct link_sta_info *link_sta;
 
-	link_sta = rcu_dereference_protected(sta->link[link_id],
-					     lockdep_is_held(&sta->local->sta_mtx));
+	link_sta = rcu_access_pointer(sta->link[link_id]);
+	if (link_sta != &sta->deflink)
+		lockdep_assert_held(&sta->local->sta_mtx);
 
 	if (WARN_ON(!link_sta))
 		return;
@@ -1408,8 +1409,12 @@ static void __sta_info_destroy_part2(struct sta_info *sta, bool recalc)
 	 * frames sitting on hardware queues might be sent out without
 	 * any encryption at all.
 	 */
-	if (local->ops->set_key)
-		ieee80211_flush_queues(local, sta->sdata, false);
+	if (local->ops->set_key) {
+		if (local->ops->flush_sta)
+			drv_flush_sta(local, sta->sdata, sta);
+		else
+			ieee80211_flush_queues(local, sta->sdata, false);
+	}
 
 	/* now keys can no longer be reached */
 	ieee80211_free_sta_keys(local, sta);
@@ -2886,6 +2891,8 @@ int ieee80211_sta_allocate_link(struct sta_info *sta, unsigned int link_id)
 
 	lockdep_assert_held(&sdata->local->sta_mtx);
 
+	WARN_ON(!test_sta_flag(sta, WLAN_STA_INSERTED));
+
 	/* must represent an MLD from the start */
 	if (WARN_ON(!sta->sta.valid_links))
 		return -EINVAL;
@@ -2915,6 +2922,8 @@ void ieee80211_sta_free_link(struct sta_info *sta, unsigned int link_id)
 {
 	lockdep_assert_held(&sta->sdata->local->sta_mtx);
 
+	WARN_ON(!test_sta_flag(sta, WLAN_STA_INSERTED));
+
 	sta_remove_link(sta, link_id, false);
 }
 
@@ -2942,7 +2951,7 @@ int ieee80211_sta_activate_link(struct sta_info *sta, unsigned int link_id)
 
 	sta->sta.valid_links = new_links;
 
-	if (!test_sta_flag(sta, WLAN_STA_INSERTED))
+	if (WARN_ON(!test_sta_flag(sta, WLAN_STA_INSERTED)))
 		goto hash;
 
 	ieee80211_recalc_min_chandef(sdata, link_id);
@@ -2975,7 +2984,7 @@ void ieee80211_sta_remove_link(struct sta_info *sta, unsigned int link_id)
 
 	sta->sta.valid_links &= ~BIT(link_id);
 
-	if (test_sta_flag(sta, WLAN_STA_INSERTED))
+	if (!WARN_ON(!test_sta_flag(sta, WLAN_STA_INSERTED)))
 		drv_change_sta_links(sdata->local, sdata, &sta->sta,
 				     old_links, sta->sta.valid_links);
 
@@ -3002,7 +3011,7 @@ void ieee80211_sta_set_max_amsdu_subframes(struct sta_info *sta,
 				   WLAN_EXT_CAPA9_MAX_MSDU_IN_AMSDU_MSB) << 1;
 
 	if (val)
-		sta->sta.max_amsdu_subframes = 4 << val;
+		sta->sta.max_amsdu_subframes = 4 << (4 - val);
 }
 
 #ifdef CONFIG_LOCKDEP

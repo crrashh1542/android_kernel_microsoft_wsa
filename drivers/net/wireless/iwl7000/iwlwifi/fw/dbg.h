@@ -327,6 +327,8 @@ void iwl_send_dbg_dump_complete_cmd(struct iwl_fw_runtime *fwrt,
 				    u32 timepoint,
 				    u32 timepoint_data);
 
+void iwl_fw_disable_dbg_asserts(struct iwl_fw_runtime *fwrt);
+
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #define IWL_FW_CHECK_FAILED(_obj, _fmt, ...)				\
 	do {								\

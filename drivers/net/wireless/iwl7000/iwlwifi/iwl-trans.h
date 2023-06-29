@@ -119,6 +119,7 @@ static inline u32 iwl_rx_packet_payload_len(const struct iwl_rx_packet *pkt)
  * @CMD_ASYNC: Return right away and don't wait for the response
  * @CMD_WANT_SKB: Not valid with CMD_ASYNC. The caller needs the buffer of
  *	the response. The caller needs to call iwl_free_resp when done.
+ * @CMD_SEND_IN_RFKILL: Send the command even if the NIC is in RF-kill.
  * @CMD_WANT_ASYNC_CALLBACK: the op_mode's async callback function must be
  *	called after this command completes. Valid only with CMD_ASYNC.
  * @CMD_SEND_IN_D3: Allow the command to be sent in D3 mode, relevant to
@@ -752,15 +753,16 @@ struct iwl_dram_data {
 };
 
 /**
+ * struct iwl_dram_regions - DRAM regions container structure
  * @drams: array of several DRAM areas that contains the
  *	pnvm/power reduction table payloads.
  * @n_regions: number of DRAM regions that were allocated
- * @prph_scrath_mem_desc: points to a structure allocated in dram,
+ * @prph_scratch_mem_desc: points to a structure allocated in dram,
  *	designed to show FW where all the payloads are.
  */
 struct iwl_dram_regions {
 	struct iwl_dram_data drams[IPC_DRAM_MAP_ENTRY_NUM_MAX];
-	struct iwl_dram_data prph_scrath_mem_desc;
+	struct iwl_dram_data prph_scratch_mem_desc;
 	u8 n_regions;
 };
 
@@ -851,6 +853,7 @@ struct iwl_pc_data {
  * @dump_file_name_ext_valid: dump file name extension if valid or not
  * @num_pc: number of program counter for cpu
  * @pc_data: details of the program counter
+ * @yoyo_bin_loaded: tells if a yoyo debug file has been loaded
  */
 struct iwl_trans_debug {
 	u8 n_dest_reg;
@@ -880,8 +883,7 @@ struct iwl_trans_debug {
 	u64 unsupported_region_msk;
 	struct iwl_ucode_tlv *active_regions[IWL_FW_INI_MAX_REGION_ID];
 	struct list_head debug_info_tlv_list;
-	struct iwl_dbg_tlv_time_point_data
-		time_point[IWL_FW_INI_TIME_POINT_NUM];
+	struct iwl_dbg_tlv_time_point_data time_point[IWL_FW_INI_TIME_POINT_NUM];
 	struct list_head periodic_trig_list;
 
 	u32 domains_bitmap;
@@ -893,6 +895,7 @@ struct iwl_trans_debug {
 	bool dump_file_name_ext_valid;
 	u32 num_pc;
 	struct iwl_pc_data *pc_data;
+	bool yoyo_bin_loaded;
 };
 
 struct iwl_dma_ptr {
@@ -934,7 +937,6 @@ struct iwl_pcie_first_tb_buf {
 
 /**
  * struct iwl_txq - Tx Queue for DMA
- * @q: generic Rx/Tx queue descriptor
  * @tfds: transmit frame descriptors (DMA memory)
  * @first_tb_bufs: start of command headers, including scratch buffers, for
  *	the writeback -- this is DMA memory and an array holding one buffer
@@ -1078,15 +1080,15 @@ struct iwl_trans_txqs {
  *	starting the firmware, used for tracing
  * @rx_mpdu_cmd_hdr_size: used for tracing, amount of data before the
  *	start of the 802.11 header in the @rx_mpdu_cmd
- * @dflt_pwr_limit: default power limit fetched from the platform (ACPI)
  * @system_pm_mode: the system-wide power management mode in use.
  *	This mode is set dynamically, depending on the WoWLAN values
  *	configured from the userspace at runtime.
- * @iwl_trans_txqs: transport tx queues data.
+ * @txqs: transport tx queues data.
  * @mbx_addr_0_step: step address data 0
  * @mbx_addr_1_step: step address data 1
  * @pcie_link_speed: current PCIe link speed (%PCI_EXP_LNKSTA_CLS_*),
  *	only valid for discrete (not integrated) NICs
+ * @invalid_tx_cmd: invalid TX command buffer
  */
 struct iwl_trans {
 	bool csme_own;
@@ -1158,6 +1160,8 @@ struct iwl_trans {
 	u32 mbx_addr_1_step;
 
 	u8 pcie_link_speed;
+
+	struct iwl_dma_ptr invalid_tx_cmd;
 
 	/* pointer to trans specific struct */
 	/*Ensure that this pointer will always be aligned to sizeof pointer */
@@ -1653,9 +1657,9 @@ static inline int iwl_trans_load_reduce_power
 	return trans->ops->load_reduce_power(trans, payloads, capa);
 }
 
-static inline void iwl_trans_set_reduce_power
-				(struct iwl_trans *trans,
-				 const struct iwl_ucode_capabilities *capa)
+static inline void
+iwl_trans_set_reduce_power(struct iwl_trans *trans,
+			   const struct iwl_ucode_capabilities *capa)
 {
 	if (trans->ops->set_reduce_power)
 		trans->ops->set_reduce_power(trans, capa);

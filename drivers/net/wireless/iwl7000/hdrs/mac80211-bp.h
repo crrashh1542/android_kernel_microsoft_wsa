@@ -1456,6 +1456,8 @@ int ieee80211_get_vht_max_nss(struct ieee80211_vht_cap *cap,
 ssize_t cfg80211_defragment_element(const struct element *elem, const u8 *ies,
 				    size_t ieslen, u8 *data, size_t data_len,
 				    u8 frag_id);
+
+void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id);
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,8,0)
@@ -2211,13 +2213,14 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,19,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
-
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 struct cfg80211_set_hw_timestamp {
 	const u8 *macaddr;
 	bool enable;
 };
-
+#define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
+#else
+#define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
@@ -2352,13 +2355,7 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 #define cfg80211_req_link_elems_len(req, link)	((req)->links[link].elems_len)
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0)
-#define set_hw_timestamp_max_peers(hw, val)	do { } while (0)
-#else
-#define set_hw_timestamp_max_peers(hw, val)	(hw)->wiphy->hw_timestamp_max_peers = val
-#endif
-
-#if CFG80211_VERSION < KERNEL_VERSION(6,2,0) && \
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0) && \
     !defined(cfg80211_rx_control_port)
 static inline bool
 iwl7000_cfg80211_rx_control_port(struct net_device *dev, struct sk_buff *skb,
@@ -2388,7 +2385,7 @@ static inline void backport_netif_napi_add(struct net_device *dev,
 #define netif_napi_add LINUX_BACKPORT(netif_napi_add)
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,3,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 static inline void
 _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 				 const struct ieee80211_sband_iftype_data *iftd,
@@ -2409,11 +2406,15 @@ _ieee80211_set_sband_iftype_data(struct ieee80211_supported_band *sband,
 	     i < (sband)->n_iftype_data;		\
 	     i++, iftd = &(sband)->iftype_data[i])
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,19,0) */
-#endif /* CFG80211_VERSION < KERNEL_VERSION(6,3,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
 #define cfg80211_req_link_disabled(req, link)	0
 #define NL80211_RRF_NO_EHT 0
+static inline void
+cfg80211_cqm_links_state_change_notify(struct net_device *dev,
+				       u16 removed_links)
+{
+}
+
 #else
 #define cfg80211_req_link_disabled(req, link)	((req)->links[link].disabled)
 #endif
