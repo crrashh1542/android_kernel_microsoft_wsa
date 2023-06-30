@@ -27,7 +27,7 @@
 #include <linux/vgaarb.h>
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
-#include <linux/acpi.h>
+#include <linux/vfio_acpi_notify.h>
 
 #include <linux/vfio_pci_core.h>
 
@@ -655,6 +655,7 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 {
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
 
 	if (vdev->sriov_pf_core_dev) {
 		mutex_lock(&vdev->sriov_pf_core_dev->vf_token->lock);
@@ -674,6 +675,8 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 		eventfd_ctx_put(vdev->req_trigger);
 		vdev->req_trigger = NULL;
 	}
+	if (adev)
+		vfio_remove_acpi_notify(&vdev->acpi_notification, adev);
 	mutex_unlock(&vdev->igate);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_close_device);
@@ -693,6 +696,8 @@ EXPORT_SYMBOL_GPL(vfio_pci_core_finish_enable);
 
 static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_type)
 {
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
+
 	if (irq_type == VFIO_PCI_INTX_IRQ_INDEX) {
 		u8 pin;
 
@@ -728,6 +733,8 @@ static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_typ
 		if (pci_is_pcie(vdev->pdev))
 			return 1;
 	} else if (irq_type == VFIO_PCI_REQ_IRQ_INDEX) {
+		return 1;
+	} else if (adev && irq_type == VFIO_PCI_ACPI_IRQ_INDEX) {
 		return 1;
 	}
 
@@ -1188,6 +1195,7 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 
 	} else if (cmd == VFIO_DEVICE_GET_IRQ_INFO) {
 		struct vfio_irq_info info;
+		struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
 
 		minsz = offsetofend(struct vfio_irq_info, count);
 
@@ -1201,6 +1209,10 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		case VFIO_PCI_INTX_IRQ_INDEX ... VFIO_PCI_MSIX_IRQ_INDEX:
 		case VFIO_PCI_REQ_IRQ_INDEX:
 			break;
+		case VFIO_PCI_ACPI_IRQ_INDEX:
+			if (adev)
+				break;
+			return -EINVAL;
 		case VFIO_PCI_ERR_IRQ_INDEX:
 			if (pci_is_pcie(vdev->pdev))
 				break;
