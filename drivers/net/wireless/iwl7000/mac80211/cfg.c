@@ -999,24 +999,30 @@ static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
 	if (cfg80211_chandef_identical(&local->monitor_chandef, chandef))
 		return 0;
 
-	mutex_lock(&local->mtx);
 	if (local->use_chanctx) {
 		sdata = wiphy_dereference(local->hw.wiphy,
 					  local->monitor_sdata);
 		if (sdata) {
+			sdata_lock(sdata);
+			mutex_lock(&local->mtx);
 			ieee80211_link_release_channel(&sdata->deflink);
 			ret = ieee80211_link_use_channel(&sdata->deflink,
 							 chandef,
 							 IEEE80211_CHANCTX_EXCLUSIVE);
+			mutex_unlock(&local->mtx);
+			sdata_unlock(sdata);
 		}
-	} else if (local->open_count == local->monitors) {
-		local->_oper_chandef = *chandef;
-		ieee80211_hw_config(local, 0);
+	} else {
+		mutex_lock(&local->mtx);
+		if (local->open_count == local->monitors) {
+			local->_oper_chandef = *chandef;
+			ieee80211_hw_config(local, 0);
+		}
+		mutex_unlock(&local->mtx);
 	}
 
 	if (ret == 0)
 		local->monitor_chandef = *chandef;
-	mutex_unlock(&local->mtx);
 
 	return ret;
 }
@@ -1904,7 +1910,8 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 	/* VHT can override some HT caps such as the A-MSDU max length */
 	if (params->vht_capa)
 		ieee80211_vht_cap_ie_to_sta_vht_cap(sdata, sband,
-						    params->vht_capa, link_sta);
+						    params->vht_capa, NULL,
+						    link_sta);
 
 #if CFG80211_VERSION >= KERNEL_VERSION(4,19,0)
 	if (params->he_capa)
@@ -5058,7 +5065,7 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 }
 #endif
 
-#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
 static int ieee80211_set_hw_timestamp(struct wiphy *wiphy,
 				      struct net_device *dev,
 				      struct cfg80211_set_hw_timestamp *hwts)
@@ -5376,7 +5383,7 @@ const struct cfg80211_ops mac80211_config_ops = {
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
 	.del_intf_link = ieee80211_del_intf_link,
 #endif
-#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
 	.set_hw_timestamp = ieee80211_set_hw_timestamp,
 #endif
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)

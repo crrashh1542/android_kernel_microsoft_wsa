@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2014 Intel Corporation
+ * Copyright (C) 2014, 2023 Intel Corporation
  * Copyright (C) 2014 Intel Mobile Communications GmbH
  */
 #ifndef __iwl_dnt_cfg_h__
@@ -100,8 +100,10 @@ struct dnt_collect_entry {
 };
 
 /**
- * @list_read_ptr: list read pointer
- * @list_wr_ptr: list write pointer
+ * struct dnt_collect_db - crash data collection struct
+ * @collect_array: data collection entries
+ * @read_ptr: list read pointer
+ * @wr_ptr: list write pointer
  * @waitq: waitqueue for new data
  * @db_lock: lock for the list
  */
@@ -116,10 +118,15 @@ struct dnt_collect_db {
 /**
  * struct dnt_crash_data - holds pointers for crash data
  * @sram: sram data pointer
+ * @sram_buf_size: sram buffer size
  * @dbgm: monitor data pointer
+ * @dbgm_buf_size: monitor data size
  * @rx: rx fifo data pointer
+ * @rx_buf_size: RX FIFO data size
  * @tx: tx fifo data pointer
+ * @tx_buf_size: TX FIFO data size
  * @periph: periphery registers data pointer
+ * @periph_buf_size: periphery registers size
  */
 struct dnt_crash_data {
 	u8 *sram;
@@ -134,13 +141,13 @@ struct dnt_crash_data {
 	u32 periph_buf_size;
 };
 
-/**
+/*
  * struct iwl_dnt_dispatch - the iwl Debug and Trace Dispatch
  *
- * @in_mode: The dispatch incoming data mode
- * @out_mode: The dispatch outgoing data mode
- * @dbgm_list: dbgm link list
- * @um_list: uCodeMessages link list
+ * @mon_in_mode: The dispatch incoming data mode
+ * @mon_out_mode: The dispatch outgoing data mode
+ * @dbgm_db: dbgm link list
+ * @um_db: uCodeMessages link list
  */
 struct iwl_dnt_dispatch {
 	u32 mon_in_mode;
@@ -159,10 +166,9 @@ struct iwl_dnt_dispatch {
 	struct dnt_crash_data crash;
 };
 
-/**
+/*
  * struct iwl_dnt - the iwl Debug and Trace
  *
- * @cfg: pointer to user configuration
  * @dev: pointer to struct device for printing purposes
  * @iwl_dnt_status: represents the DnT status
  * @is_configuration_valid: indicates whether the persistent configuration
@@ -204,28 +210,9 @@ struct iwl_dnt {
 };
 
 
-/**
- * iwl_dnt_init - initialize iwl_dnt.
- *
- */
 void iwl_dnt_init(struct iwl_trans *trans, struct dentry *dbgfs_dir);
-
-/**
- * iwl_dnt_free - free iwl_dnt.
- *
- */
 void iwl_dnt_free(struct iwl_trans *trans);
-
-/**
- * iwl_dnt_configure - configures iwl_dnt.
- *
- */
 void iwl_dnt_configure(struct iwl_trans *trans, const struct fw_img *image);
-
-/**
- * iwl_dnt_start - starts monitor and set log level
- *
- */
 void iwl_dnt_start(struct iwl_trans *trans);
 
 #endif

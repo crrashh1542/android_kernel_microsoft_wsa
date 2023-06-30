@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2018, 2020-2022 Intel Corporation
+ * Copyright (C) 2018, 2020-2023 Intel Corporation
  */
 #ifndef __iwl_context_info_file_gen3_h__
 #define __iwl_context_info_file_gen3_h__
@@ -44,7 +44,7 @@ enum iwl_prph_scratch_mtr_format {
  * @IWL_PRPH_SCRATCH_EDBG_DEST_ST_ARBITER: use st arbiter, mainly for
  *	multicomm.
  * @IWL_PRPH_SCRATCH_EDBG_DEST_TB22DTF: route debug data to SoC HW
- * @IWL_PRPH_SCTATCH_RB_SIZE_4K: Use 4K RB size (the default is 2K)
+ * @IWL_PRPH_SCRATCH_RB_SIZE_4K: Use 4K RB size (the default is 2K)
  * @IWL_PRPH_SCRATCH_MTR_MODE: format used for completion - 0: for
  *	completion descriptor, 1 for responses (legacy)
  * @IWL_PRPH_SCRATCH_MTR_FORMAT: a mask for the size of the tfd.
@@ -98,9 +98,9 @@ struct iwl_prph_scratch_control {
 } __packed; /* PERIPH_SCRATCH_CONTROL_S */
 
 /*
- * struct iwl_prph_scratch_pnvm_cfg - ror config
+ * struct iwl_prph_scratch_pnvm_cfg - PNVM scratch
  * @pnvm_base_addr: PNVM start address
- * @pnvm_size: PNVM size in DWs
+ * @pnvm_size: the size of the PNVM image in bytes
  * @reserved: reserved
  */
 struct iwl_prph_scratch_pnvm_cfg {
@@ -111,7 +111,7 @@ struct iwl_prph_scratch_pnvm_cfg {
 
 /**
  * struct iwl_prph_scrath_mem_desc_addr_array
- * @mem_descs - array of dram addresses.
+ * @mem_descs: array of dram addresses.
  * Each address is the beggining of a pnvm payload.
  */
 struct iwl_prph_scrath_mem_desc_addr_array {
@@ -142,7 +142,7 @@ struct iwl_prph_scratch_rbd_cfg {
 /*
  * struct iwl_prph_scratch_uefi_cfg - prph scratch reduce power table
  * @base_addr: reduce power table address
- * @size: table size in dwords
+ * @size: the size of the entire power table image
  */
 struct iwl_prph_scratch_uefi_cfg {
 	__le64 base_addr;
@@ -292,13 +292,13 @@ int iwl_trans_pcie_ctx_info_gen3_load_pnvm(struct iwl_trans *trans,
 					   const struct iwl_ucode_capabilities *capa);
 void iwl_trans_pcie_ctx_info_gen3_set_pnvm(struct iwl_trans *trans,
 					   const struct iwl_ucode_capabilities *capa);
-int iwl_trans_pcie_ctx_info_gen3_load_reduce_power
-				(struct iwl_trans *trans,
-				 const struct iwl_pnvm_image *payloads,
-				 const struct iwl_ucode_capabilities *capa);
-void iwl_trans_pcie_ctx_info_gen3_set_reduce_power
-				(struct iwl_trans *trans,
-				 const struct iwl_ucode_capabilities *capa);
+int
+iwl_trans_pcie_ctx_info_gen3_load_reduce_power(struct iwl_trans *trans,
+					       const struct iwl_pnvm_image *payloads,
+					       const struct iwl_ucode_capabilities *capa);
+void
+iwl_trans_pcie_ctx_info_gen3_set_reduce_power(struct iwl_trans *trans,
+					      const struct iwl_ucode_capabilities *capa);
 int iwl_trans_pcie_ctx_info_gen3_set_step(struct iwl_trans *trans,
 					  u32 mbx_addr_0_step, u32 mbx_addr_1_step);
 #endif /* __iwl_context_info_file_gen3_h__ */

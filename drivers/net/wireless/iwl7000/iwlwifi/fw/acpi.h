@@ -138,7 +138,8 @@ enum iwl_dsm_funcs_rev_0 {
 	DSM_FUNC_11AX_ENABLEMENT = 6,
 	DSM_FUNC_ENABLE_UNII4_CHAN = 7,
 	DSM_FUNC_ACTIVATE_CHANNEL = 8,
-	DSM_FUNC_FORCE_DISABLE_CHANNELS = 9
+	DSM_FUNC_FORCE_DISABLE_CHANNELS = 9,
+	DSM_FUNC_RFI_DLVR_CONFIG = 11
 };
 
 enum iwl_dsm_values_srd {
@@ -157,12 +158,18 @@ enum iwl_dsm_values_indonesia {
 
 /* DSM RFI uses a different GUID, so need separate definitions */
 
-#define DSM_RFI_FUNC_ENABLE 3
+#define DSM_RFI_DDR_FUNC_ENABLE 3
 
-enum iwl_dsm_values_rfi {
-	DSM_VALUE_RFI_ENABLE,
-	DSM_VALUE_RFI_DISABLE,
-	DSM_VALUE_RFI_MAX
+enum iwl_dsm_values_rfi_ddr {
+	DSM_VALUE_RFI_DDR_ENABLE,
+	DSM_VALUE_RFI_DDR_DISABLE,
+	DSM_VALUE_RFI_DDR_MAX
+};
+
+enum iwl_dsm_values_rfi_dlvr {
+	DSM_VALUE_RFI_DLVR_ENABLE,
+	DSM_VALUE_RFI_DLVR_DISABLE,
+	DSM_VALUE_RFI_DLVR_MAX
 };
 
 enum iwl_dsm_masks_reg {

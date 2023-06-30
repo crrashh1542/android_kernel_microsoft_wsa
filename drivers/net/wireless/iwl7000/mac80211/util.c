@@ -24,6 +24,7 @@
 #include <net/net_namespace.h>
 #include <net/cfg80211.h>
 #include <net/rtnetlink.h>
+#include <kunit/visibility.h>
 
 #include "ieee80211_i.h"
 #include "driver-ops.h"
@@ -930,6 +931,7 @@ ieee80211_parse_extension_element(u32 *crc,
 				  struct ieee80211_elems_parse_params *params)
 {
 	const void *data = elem->data + 1;
+	bool calc_crc = false;
 	u8 len;
 
 	if (!elem->datalen)
@@ -939,12 +941,9 @@ ieee80211_parse_extension_element(u32 *crc,
 
 	switch (elem->data[0]) {
 	case WLAN_EID_EXT_HE_MU_EDCA:
-		if (len >= sizeof(*elems->mu_edca_param_set)) {
+		calc_crc = true;
+		if (len >= sizeof(*elems->mu_edca_param_set))
 			elems->mu_edca_param_set = data;
-			if (crc)
-				*crc = crc32_be(*crc, (void *)elem,
-						elem->datalen + 2);
-		}
 		break;
 	case WLAN_EID_EXT_HE_CAPABILITY:
 		if (ieee80211_he_capa_size_ok(data, len)) {
@@ -953,13 +952,10 @@ ieee80211_parse_extension_element(u32 *crc,
 		}
 		break;
 	case WLAN_EID_EXT_HE_OPERATION:
+		calc_crc = true;
 		if (len >= sizeof(*elems->he_operation) &&
-		    len >= ieee80211_he_oper_size(data) - 1) {
-			if (crc)
-				*crc = crc32_be(*crc, (void *)elem,
-						elem->datalen + 2);
+		    len >= ieee80211_he_oper_size(data) - 1)
 			elems->he_operation = data;
-		}
 		break;
 	case WLAN_EID_EXT_UORA:
 		if (len >= 1)
@@ -993,15 +989,14 @@ ieee80211_parse_extension_element(u32 *crc,
 	case WLAN_EID_EXT_EHT_OPERATION:
 		if (ieee80211_eht_oper_size_ok(data, len))
 			elems->eht_operation = data;
+		calc_crc = true;
 		break;
 	case WLAN_EID_EXT_EHT_MULTI_LINK:
+		calc_crc = true;
+
 		if (ieee80211_mle_size_ok(data, len)) {
 			const struct ieee80211_multi_link_elem *mle =
 				(void *)data;
-
-			if (crc)
-				*crc = crc32_be(*crc, (void *)elem,
-						elem->datalen + 2);
 
 			switch (le16_get_bits(mle->control,
 					      IEEE80211_ML_CONTROL_TYPE)) {
@@ -1021,6 +1016,9 @@ ieee80211_parse_extension_element(u32 *crc,
 		}
 		break;
 	}
+
+	if (crc && calc_crc)
+		*crc = crc32_be(*crc, (void *)elem, elem->datalen + 2);
 }
 
 static u32
@@ -1514,7 +1512,7 @@ static void ieee80211_mle_get_sta_prof(struct ieee802_11_elems *elems,
 
 	for_each_mle_subelement(sub, (u8 *)ml, ml_len) {
 		struct ieee80211_mle_per_sta_profile *prof = (void *)sub->data;
-		size_t sta_prof_len;
+		ssize_t sta_prof_len;
 		u16 control;
 
 		if (sub->id != IEEE80211_MLE_SUBELEM_PER_STA_PROFILE)
@@ -1563,7 +1561,7 @@ static void ieee80211_mle_parse_link(struct ieee802_11_elems *elems,
 		.from_ap = params->from_ap,
 		.link_id = -1,
 	};
-	size_t ml_len = elems->ml_basic_len;
+	ssize_t ml_len = elems->ml_basic_len;
 	const struct element *non_inherit = NULL;
 	const u8 *end;
 
@@ -1677,6 +1675,7 @@ ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params)
 
 	return elems;
 }
+EXPORT_SYMBOL_IF_KUNIT(ieee802_11_parse_elems_full);
 
 void ieee80211_regulatory_limit_wmm_params(struct ieee80211_sub_if_data *sdata,
 					   struct ieee80211_tx_queue_params
@@ -5133,32 +5132,4 @@ u8 *ieee80211_ie_build_eht_cap(u8 *pos,
 	}
 
 	return pos;
-}
-
-void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id)
-{
-	unsigned int elem_len;
-
-	if (!len_pos)
-		return;
-
-	elem_len = skb->data + skb->len - len_pos - 1;
-
-	while (elem_len > 255) {
-		/* this one is 255 */
-		*len_pos = 255;
-		/* remaining data gets smaller */
-		elem_len -= 255;
-		/* make space for the fragment ID/len in SKB */
-		skb_put(skb, 2);
-		/* shift back the remaining data to place fragment ID/len */
-		memmove(len_pos + 255 + 3, len_pos + 255 + 1, elem_len);
-		/* place the fragment ID */
-		len_pos += 255 + 1;
-		*len_pos = frag_id;
-		/* and point to fragment length to update later */
-		len_pos++;
-	}
-
-	*len_pos = elem_len;
 }

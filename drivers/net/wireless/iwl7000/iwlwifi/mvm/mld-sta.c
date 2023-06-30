@@ -71,6 +71,11 @@ static int iwl_mvm_mld_add_int_sta_to_fw(struct iwl_mvm *mvm,
 
 	cmd.station_type = cpu_to_le32(sta->type);
 
+	if (fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_STA_EXP_MFP_SUPPORT) &&
+	    sta->type == STATION_TYPE_BCAST_MGMT)
+		cmd.mfp = cpu_to_le32(1);
+
 	if (addr) {
 		memcpy(cmd.peer_mld_address, addr, ETH_ALEN);
 		memcpy(cmd.peer_link_address, addr, ETH_ALEN);

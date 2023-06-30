@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -111,6 +111,10 @@
  *	&IWL_MVM_VENDOR_ATTR_GEO_SAR_VER attributes.
  * @IWL_MVM_VENDOR_CMD_SGOM_GET_TABLE: retrieves the full SGOM table.
  *	Contains a &IWL_MVM_VENDOR_ATTR_SGOM_TABLE attributes.
+ * @IWL_MVM_VENDOR_CMD_RFIM_SET_TABLE: Set the RFIM (RF interference mitigation)
+ *	table
+ * @IWL_MVM_VENDOR_CMD_RFIM_GET_TABLE: Retrieve the RFIM table
+ * @IWL_MVM_VENDOR_CMD_RFIM_GET_CAPA: Retrieve RFIM capabilities
  */
 
 enum iwl_mvm_vendor_cmd {
@@ -148,8 +152,8 @@ enum iwl_mvm_vendor_cmd {
 	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE		= 0x1f,
 	IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE			= 0x20,
 	IWL_MVM_VENDOR_CMD_TEST_FIPS				= 0x21,
-	IWL_MVM_VENDOR_CMD_RES_22				= 0x22,
-	IWL_MVM_VENDOR_CMD_RES_23				= 0x23,
+	/* 0x22 is reserved */
+	/* 0x23 is reserved */
 	IWL_MVM_VENDOR_CMD_CSI_EVENT				= 0x24,
 	IWL_MVM_VENDOR_CMD_ADD_PASN_STA				= 0x25,
 	IWL_MVM_VENDOR_CMD_REMOVE_PASN_STA			= 0x26,
@@ -472,7 +476,6 @@ enum iwl_mvm_vendor_phy_type {
  * @NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT: num of neighbor report attributes
  * @MAX_IWL_MVM_VENDOR_NEIGHBOR_REPORT: highest neighbor report attribute
  *	number.
-
  */
 enum iwl_mvm_vendor_neighbor_report {
 	__IWL_MVM_VENDOR_NEIGHBOR_INVALID,
@@ -627,9 +630,9 @@ enum iwl_vendor_auth_akm_mode {
  * @IWL_MVM_VENDOR_ATTR_LOW_LATENCY: low-latency flag attribute
  * @IWL_MVM_VENDOR_ATTR_VIF_ADDR: interface MAC address
  * @IWL_MVM_VENDOR_ATTR_COUNTRY: MCC to set, for regulatory information (u16)
- * IWL_MVM_VENDOR_ATTR_FILTER_ARP_NA: filter gratuitous ARP and unsolicited
+ * @IWL_MVM_VENDOR_ATTR_FILTER_ARP_NA: filter gratuitous ARP and unsolicited
  *	Neighbor Advertisement frames
- * IWL_MVM_VENDOR_ATTR_FILTER_GTK: filter Filtering Frames Encrypted using
+ * @IWL_MVM_VENDOR_ATTR_FILTER_GTK: filter Filtering Frames Encrypted using
  *	the GTK
  * @IWL_MVM_VENDOR_ATTR_ADDR: MAC address
  * @IWL_MVM_VENDOR_ATTR_TX_BYTES: number of bytes transmitted to peer
@@ -785,13 +788,17 @@ enum iwl_vendor_auth_akm_mode {
  *	nested attribute for each profile, each of them contains
  *	a nested attribute for each band. See &enum
  *	iwl_vendor_sar_per_chain_geo_table.
- * @IWL_MVM_VNDOR_ATTR_GEO_SAR_VER: u32 attribute. Contains the GEO SAR
+ * @IWL_MVM_VENDOR_ATTR_GEO_SAR_VER: u32 attribute. Contains the GEO SAR
  *	table version
  * @IWL_MVM_VENDOR_ATTR_SGOM_TABLE: binary attribute.
+ * @IWL_MVM_VENDOR_ATTR_RFIM_BANDS: RFIM bands
+ * @IWL_MVM_VENDOR_ATTR_RFIM_CAPA: RFIM capabilities (u16)
+ * @IWL_MVM_VENDOR_ATTR_RFIM_CHANNELS: RFIM channels
+ * @IWL_MVM_VENDOR_ATTR_RFIM_FREQ: RFIM frequency (u16)
+ * @IWL_MVM_VENDOR_ATTR_RFIM_INFO: overall RFIM info (nested)
  *
  * @NUM_IWL_MVM_VENDOR_ATTR: number of vendor attributes
  * @MAX_IWL_MVM_VENDOR_ATTR: highest vendor attribute number
-
  */
 enum iwl_mvm_vendor_attr {
 	__IWL_MVM_VENDOR_ATTR_INVALID				= 0x00,
@@ -867,10 +874,7 @@ enum iwl_mvm_vendor_attr {
 	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES		= 0x46,
 	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM		= 0x47,
 	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM		= 0x48,
-	IWL_MVM_VENDOR_ATTR_RES_49				= 0x49,
-	IWL_MVM_VENDOR_ATTR_RES_4A				= 0x4a,
-	IWL_MVM_VENDOR_ATTR_RES_4B				= 0x4b,
-	IWL_MVM_VENDOR_ATTR_RES_4C				= 0x4c,
+	/* 0x49 - 0x4c are reserved */
 	IWL_MVM_VENDOR_ATTR_CSI_HDR				= 0x4d,
 	IWL_MVM_VENDOR_ATTR_CSI_DATA				= 0x4e,
 	IWL_MVM_VENDOR_ATTR_STA_TK				= 0x4f,

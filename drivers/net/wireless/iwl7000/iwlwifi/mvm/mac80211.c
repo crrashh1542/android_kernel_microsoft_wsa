@@ -1023,7 +1023,10 @@ void iwl_mvm_mac_itxq_xmit(struct ieee80211_hw *hw, struct ieee80211_txq *txq)
 
 	rcu_read_lock();
 	do {
-		while (likely(!mvmtxq->stopped &&
+		while (likely(!test_bit(IWL_MVM_TXQ_STATE_STOP_FULL,
+					&mvmtxq->state) &&
+			      !test_bit(IWL_MVM_TXQ_STATE_STOP_REDIRECT,
+					&mvmtxq->state) &&
 			      !test_bit(IWL_MVM_STATUS_IN_D3, &mvm->status))) {
 			skb = ieee80211_tx_dequeue(hw, txq);
 
@@ -1048,42 +1051,25 @@ void iwl_mvm_mac_wake_tx_queue(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_txq *mvmtxq = iwl_mvm_txq_from_mac80211(txq);
 
-	/*
-	 * Please note that racing is handled very carefully here:
-	 * mvmtxq->txq_id is updated during allocation, and mvmtxq->list is
-	 * deleted afterwards.
-	 * This means that if:
-	 * mvmtxq->txq_id != INVALID_QUEUE && list_empty(&mvmtxq->list):
-	 *	queue is allocated and we can TX.
-	 * mvmtxq->txq_id != INVALID_QUEUE && !list_empty(&mvmtxq->list):
-	 *	a race, should defer the frame.
-	 * mvmtxq->txq_id == INVALID_QUEUE && list_empty(&mvmtxq->list):
-	 *	need to allocate the queue and defer the frame.
-	 * mvmtxq->txq_id == INVALID_QUEUE && !list_empty(&mvmtxq->list):
-	 *	queue is already scheduled for allocation, no need to allocate,
-	 *	should defer the frame.
-	 */
-
-	/* If the queue is allocated TX and return. */
-	if (!txq->sta || mvmtxq->txq_id != IWL_MVM_INVALID_QUEUE) {
-		/*
-		 * Check that list is empty to avoid a race where txq_id is
-		 * already updated, but the queue allocation work wasn't
-		 * finished
-		 */
-		if (unlikely(txq->sta && !list_empty(&mvmtxq->list)))
-			return;
-
+	if (likely(test_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state)) ||
+	    !txq->sta) {
 		iwl_mvm_mac_itxq_xmit(hw, txq);
 		return;
 	}
 
-	/* The list is being deleted only after the queue is fully allocated. */
-	if (!list_empty(&mvmtxq->list))
-		return;
+	/* iwl_mvm_mac_itxq_xmit() will later be called by the worker
+	 * to handle any packets we leave on the txq now
+	 */
 
-	list_add_tail(&mvmtxq->list, &mvm->add_stream_txqs);
-	schedule_work(&mvm->add_stream_wk);
+	spin_lock_bh(&mvm->add_stream_lock);
+	/* The list is being deleted only after the queue is fully allocated. */
+	if (list_empty(&mvmtxq->list) &&
+	    /* recheck under lock */
+	    !test_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state)) {
+		list_add_tail(&mvmtxq->list, &mvm->add_stream_txqs);
+		schedule_work(&mvm->add_stream_wk);
+	}
+	spin_unlock_bh(&mvm->add_stream_lock);
 }
 
 #define CHECK_BA_TRIGGER(_mvm, _trig, _tid_bm, _tid, _fmt...)		\
@@ -1236,6 +1222,7 @@ static void iwl_mvm_cleanup_iterator(void *data, u8 *mac,
 	spin_unlock_bh(&mvm->time_event_lock);
 
 	memset(&mvmvif->bf_data, 0, sizeof(mvmvif->bf_data));
+	mvmvif->ap_sta = NULL;
 
 	for_each_mvm_vif_valid_link(mvmvif, link_id) {
 		mvmvif->link[link_id]->ap_sta_id = IWL_MVM_INVALID_STA;
@@ -2928,6 +2915,10 @@ static void iwl_mvm_bss_info_changed_station(struct iwl_mvm *mvm,
 
 	if (changes & BSS_CHANGED_ASSOC) {
 		if (vif->cfg.assoc) {
+#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
+			iwl_debug_session_prot(false);
+#endif
+
 			/* clear statistics to get clean beacon counter */
 			iwl_mvm_request_statistics(mvm, true);
 			memset(&mvmvif->deflink.beacon_stats, 0,
@@ -4083,6 +4074,7 @@ int iwl_mvm_mac_sta_state_common(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mvm_sta *mvm_sta = iwl_mvm_sta_from_mac80211(sta);
+	struct ieee80211_link_sta *link_sta;
 	unsigned int link_id;
 	int ret;
 
@@ -4123,9 +4115,14 @@ int iwl_mvm_mac_sta_state_common(struct ieee80211_hw *hw,
 
 	mutex_lock(&mvm->mutex);
 
-	/* this would be a mac80211 bug ... but don't crash */
-	for_each_mvm_vif_valid_link(mvmvif, link_id) {
-		if (WARN_ON_ONCE(!mvmvif->link[link_id]->phy_ctxt)) {
+	/* this would be a mac80211 bug ... but don't crash, unless we had a
+	 * firmware crash while we were activating a link, in which case it is
+	 * legit to have phy_ctxt = NULL. Don't bother not to WARN if we are in
+	 * recovery flow since we spit tons of error messages anyway.
+	 */
+	for_each_sta_active_link(vif, sta, link_sta, link_id) {
+		if (WARN_ON_ONCE(!mvmvif->link[link_id] ||
+				 !mvmvif->link[link_id]->phy_ctxt)) {
 			mutex_unlock(&mvm->mutex);
 			return test_bit(IWL_MVM_STATUS_HW_RESTART_REQUESTED,
 					&mvm->status) ? 0 : -EINVAL;
@@ -5779,7 +5776,8 @@ int iwl_mvm_pre_channel_switch(struct ieee80211_hw *hw,
 			goto out_unlock;
 		}
 
-		if (chsw->delay > IWL_MAX_CSA_BLOCK_TX)
+		if (chsw->delay > IWL_MAX_CSA_BLOCK_TX &&
+		    hweight16(vif->valid_links) <= 1)
 			schedule_delayed_work(&mvmvif->csa_work, 0);
 
 		if (chsw->block_tx) {
@@ -5969,6 +5967,30 @@ void iwl_mvm_mac_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	 */
 	if (!drop && !iwl_mvm_has_new_tx_api(mvm))
 		iwl_trans_wait_tx_queues_empty(mvm->trans, msk);
+}
+
+void iwl_mvm_mac_flush_sta(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			   struct ieee80211_sta *sta)
+{
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	int i;
+
+	mutex_lock(&mvm->mutex);
+	for (i = 0; i < mvm->fw->ucode_capa.num_stations; i++) {
+		struct iwl_mvm_sta *mvmsta;
+		struct ieee80211_sta *tmp;
+
+		tmp = rcu_dereference_protected(mvm->fw_id_to_mac_id[i],
+						lockdep_is_held(&mvm->mutex));
+		if (tmp != sta)
+			continue;
+
+		mvmsta = iwl_mvm_sta_from_mac80211(sta);
+
+		if (iwl_mvm_flush_sta(mvm, mvmsta, false))
+			IWL_ERR(mvm, "flush request fail\n");
+	}
+	mutex_unlock(&mvm->mutex);
 }
 
 int iwl_mvm_mac_get_survey(struct ieee80211_hw *hw, int idx,
@@ -6466,8 +6488,8 @@ static bool iwl_mvm_mac_can_aggregate(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 
 	if (iwl_mvm_has_new_tx_csum(mvm))
-		return iwl_mvm_tx_csum_bz(mvm, head, true) ==
-		       iwl_mvm_tx_csum_bz(mvm, skb, true);
+		return iwl_mvm_tx_csum_sc(mvm, head, true) ==
+		       iwl_mvm_tx_csum_sc(mvm, skb, true);
 
 	/* For now don't aggregate IPv6 in AMSDU */
 	if (skb->protocol != htons(ETH_P_IP))
@@ -6531,6 +6553,7 @@ const struct ieee80211_ops iwl_mvm_hw_ops = {
 	.mgd_complete_tx = iwl_mvm_mac_mgd_complete_tx,
 	.mgd_protect_tdls_discover = iwl_mvm_mac_mgd_protect_tdls_discover,
 	.flush = iwl_mvm_mac_flush,
+	.flush_sta = iwl_mvm_mac_flush_sta,
 	.sched_scan_start = iwl_mvm_mac_sched_scan_start,
 	.sched_scan_stop = iwl_mvm_mac_sched_scan_stop,
 	.set_key = iwl_mvm_mac_set_key,

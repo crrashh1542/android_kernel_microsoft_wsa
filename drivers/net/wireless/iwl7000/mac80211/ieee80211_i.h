@@ -560,6 +560,9 @@ struct ieee80211_if_managed {
 	 */
 	u8 *assoc_req_ies;
 	size_t assoc_req_ies_len;
+
+	struct delayed_work ml_reconf_work;
+	u16 removed_links;
 };
 
 struct ieee80211_if_ibss {
@@ -621,8 +624,9 @@ struct ieee80211_if_ocb {
  * these declarations define the interface, which enables
  * vendor-specific mesh synchronization
  *
+ * @rx_bcn_presp: beacon/probe response was received
+ * @adjust_tsf: TSF adjustment method
  */
-struct ieee802_11_elems;
 struct ieee80211_mesh_sync_ops {
 	void (*rx_bcn_presp)(struct ieee80211_sub_if_data *sdata, u16 stype,
 			     struct ieee80211_mgmt *mgmt, unsigned int len,
@@ -848,12 +852,13 @@ enum txq_info_flags {
  * struct txq_info - per tid queue
  *
  * @tin: contains packets split into multiple flows
- * @def_flow: used as a fallback flow when a packet destined to @tin hashes to
- *	a fq_flow which is already owned by a different tin
- * @def_cvars: codel vars for @def_flow
+ * @def_cvars: codel vars for the @tin's default_flow
+ * @cstats: code statistics for this queue
  * @frags: used to keep fragments created after dequeue
  * @schedule_order: used with ieee80211_local->active_txqs
  * @schedule_round: counter to prevent infinite loops on TXQ scheduling
+ * @flags: TXQ flags from &enum txq_info_flags
+ * @txq: the driver visible part
  */
 struct txq_info {
 	struct fq_tin tin;
@@ -882,7 +887,8 @@ struct ieee80211_if_mntr {
  * struct ieee80211_if_nan - NAN state
  *
  * @conf: current NAN configuration
- * @func_ids: a bitmap of available instance_id's
+ * @func_lock: lock for @func_inst_ids
+ * @function_inst_ids: a bitmap of available instance_id's
  */
 struct ieee80211_if_nan {
 	struct cfg80211_nan_conf conf;
@@ -940,6 +946,8 @@ struct ieee80211_link_data_managed {
 
 	int wmm_last_param_set;
 	int mu_edca_last_param_set;
+
+	u8 bss_param_ch_cnt;
 
 	struct cfg80211_bss *bss;
 };
@@ -1226,7 +1234,7 @@ struct tpt_led_trigger {
 #endif
 
 /**
- * mac80211 scan flags - currently active scan mode
+ * enum mac80211_scan_flags - currently active scan mode
  *
  * @SCAN_SW_SCANNING: We're currently in the process of scanning but may as
  *	well be on the operating channel
@@ -1244,7 +1252,7 @@ struct tpt_led_trigger {
  *	and could send a probe request after receiving a beacon.
  * @SCAN_BEACON_DONE: Beacon received, we can now send a probe request
  */
-enum {
+enum mac80211_scan_flags {
 	SCAN_SW_SCANNING,
 	SCAN_HW_SCANNING,
 	SCAN_ONCHANNEL_SCANNING,
@@ -2110,6 +2118,7 @@ void
 ieee80211_vht_cap_ie_to_sta_vht_cap(struct ieee80211_sub_if_data *sdata,
 				    struct ieee80211_supported_band *sband,
 				    const struct ieee80211_vht_cap *vht_cap_ie,
+				    const struct ieee80211_vht_cap *vht_cap_ie2,
 				    struct link_sta_info *link_sta);
 enum ieee80211_sta_rx_bandwidth
 ieee80211_sta_cap_rx_bw(struct link_sta_info *link_sta);
@@ -2174,7 +2183,7 @@ void ieee80211_process_measurement_req(struct ieee80211_sub_if_data *sdata,
  *	flags from &enum ieee80211_conn_flags.
  * @bssid: the currently connected bssid (for reporting)
  * @csa_ie: parsed 802.11 csa elements on count, mode, chandef and mesh ttl.
-	All of them will be filled with if success only.
+ *	All of them will be filled with if success only.
  * Return: 0 on success, <0 on error and >0 if there is nothing to parse.
  */
 int ieee80211_parse_ch_switch_ie(struct ieee80211_sub_if_data *sdata,
@@ -2301,8 +2310,6 @@ ieee802_11_parse_elems(const u8 *start, size_t len, bool action,
 {
 	return ieee802_11_parse_elems_crc(start, len, action, 0, 0, bss);
 }
-
-void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id);
 
 extern const int ieee802_1d_to_ac[8];
 
@@ -2552,7 +2559,7 @@ void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 /* TDLS */
 int ieee80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 			const u8 *peer,
-#if CFG80211_VERSION >= KERNEL_VERSION(6,2,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
  int link_id,
 #endif
 			u8 action_code, u8 dialog_token, u16 status_code,
@@ -2609,4 +2616,13 @@ ieee80211_eht_cap_ie_to_sta_eht_cap(struct ieee80211_sub_if_data *sdata,
 				    const struct ieee80211_eht_cap_elem *eht_cap_ie_elem,
 				    u8 eht_cap_len,
 				    struct link_sta_info *link_sta);
+
+#if IS_ENABLED(CPTCFG_MAC80211_KUNIT_TEST)
+#define EXPORT_SYMBOL_IF_MAC80211_KUNIT(sym) EXPORT_SYMBOL(sym)
+#define VISIBLE_IF_MAC80211_KUNIT
+int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx);
+#else
+#define EXPORT_SYMBOL_IF_MAC80211_KUNIT(sym)
+#define VISIBLE_IF_MAC80211_KUNIT static
+#endif
 #endif /* IEEE80211_I_H */
