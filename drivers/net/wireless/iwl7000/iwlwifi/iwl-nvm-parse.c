@@ -2382,6 +2382,14 @@ struct iwl_nvm_data *iwl_get_nvm(struct iwl_trans *trans,
 				"mac address from config file is invalid\n");
 	}
 #endif
+
+	/* WA for wrong multicast MAC address */
+	if ((CSR_HW_REV_TYPE(trans->hw_rev) == IWL_CFG_MAC_TYPE_GL) &&
+	    (CSR_HW_REV_STEP_DASH(trans->hw_rev) == SILICON_C_STEP) &&
+	    (CSR_HW_RFID_TYPE(trans->hw_rf_id) == IWL_CFG_RF_TYPE_FM) &&
+	    (CSR_HW_RFID_STEP(trans->hw_rf_id) == SILICON_C_STEP))
+		nvm->hw_addr[0] &= ~BIT(0);
+
 	if (!is_valid_ether_addr(nvm->hw_addr)) {
 		IWL_ERR(trans, "no valid mac address was found\n");
 		ret = -EINVAL;
