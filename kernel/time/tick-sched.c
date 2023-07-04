@@ -940,8 +940,8 @@ static void tick_nohz_stop_tick(struct tick_sched *ts, int cpu)
 		hrtimer_start(&ts->sched_timer, tick,
 			      HRTIMER_MODE_ABS_PINNED_HARD);
 	} else {
-		hrtimer_forward(&ts->sched_timer, tick, TICK_NSEC);
-		tick_program_event(hrtimer_get_expires(&ts->sched_timer), 1);
+		hrtimer_set_expires(&ts->sched_timer, tick);
+		tick_program_event(tick, 1);
 	}
 }
 
