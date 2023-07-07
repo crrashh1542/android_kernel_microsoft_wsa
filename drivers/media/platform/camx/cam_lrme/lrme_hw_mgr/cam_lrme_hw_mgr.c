@@ -263,8 +263,6 @@ static int cam_lrme_mgr_util_prepare_hw_update_entries(
 	uint32_t kmd_buf_used_bytes = 0;
 	struct cam_hw_update_entry *hw_entry;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
-	uintptr_t vaddr_ptr = 0;
-	size_t len = 0;
 
 	hw_device = config_args->hw_device;
 	if (!hw_device) {
@@ -332,17 +330,6 @@ static int cam_lrme_mgr_util_prepare_hw_update_entries(
 
 		if ((num_entry + 1) >= prepare->max_hw_update_entries) {
 			CAM_ERR(CAM_LRME, "Exceed max num of entry");
-			return -EINVAL;
-		}
-		rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
-			 &vaddr_ptr, &len);
-
-		if (rc || (!vaddr_ptr) || (!len)) {
-			CAM_ERR(CAM_LRME,
-				"hdl=%x vaddr=%pK offset=%d cmdBufflen=%d cmdlen=%ld index=%d num_cmd_buf=%d",
-				cmd_desc[i].mem_handle, (void *)vaddr_ptr,
-				cmd_desc[i].offset, cmd_desc[i].length, len, i,
-				prepare->packet->num_cmd_buf);
 			return -EINVAL;
 		}
 		hw_entry[num_entry].handle = cmd_desc[i].mem_handle;
