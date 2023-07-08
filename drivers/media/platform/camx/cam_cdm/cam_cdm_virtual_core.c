@@ -202,7 +202,7 @@ int cam_virtual_cdm_submit_bl(struct cam_hw_info *cdm_hw,
 
 				payload = kzalloc(sizeof(
 					struct cam_cdm_work_payload),
-					GFP_ATOMIC);
+					GFP_KERNEL);
 				if (payload) {
 					payload->irq_status = 0x2;
 					payload->irq_data = core->bl_tag;
