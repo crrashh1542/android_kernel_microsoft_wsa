@@ -499,7 +499,7 @@ static int cam_smmu_iommu_fault_handler(struct iommu_domain *domain,
 		return -EINVAL;
 	}
 
-	payload = kzalloc(sizeof(struct cam_smmu_work_payload), GFP_ATOMIC);
+	payload = kzalloc(sizeof(struct cam_smmu_work_payload), GFP_KERNEL);
 	if (!payload)
 		return -EINVAL;
 
