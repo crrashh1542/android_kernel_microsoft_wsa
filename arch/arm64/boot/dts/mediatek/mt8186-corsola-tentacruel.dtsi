@@ -6,11 +6,6 @@
 /dts-v1/;
 #include "mt8186-corsola-krabby.dtsi"
 
-/ {
-	model = "Google Tentacruel board";
-	compatible = "google,tentacruel", "google,corsola", "mediatek,mt8186";
-};
-
 &keyboard_controller {
 	function-row-physmap = <
 		MATRIX_KEY(0x00, 0x02, 0)	/* T1 */
