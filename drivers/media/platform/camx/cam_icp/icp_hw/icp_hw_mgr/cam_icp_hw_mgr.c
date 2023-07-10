@@ -5445,6 +5445,9 @@ static int cam_icp_util_dump_frame_data(struct cam_packet *packet,
 			bps_frame_process_data->cdm_prog_addr);
 	}
 
+	if (num_cmd_buf < packet->num_cmd_buf &&
+	    cmd_desc[num_cmd_buf].type == CAM_CMD_BUF_FW)
+		cam_mem_put_cpu_buf(cmd_desc[num_cmd_buf].mem_handle);
 	return rc;
 }
 
