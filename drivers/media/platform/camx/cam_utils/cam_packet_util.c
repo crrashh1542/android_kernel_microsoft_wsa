@@ -334,6 +334,7 @@ int cam_packet_util_process_generic_cmd_buffer(
 		((size_t)cmd_buf->offset > (buf_size - sizeof(uint32_t)))) {
 		CAM_ERR(CAM_UTIL, "Invalid offset for cmd buf: %zu",
 			(size_t)cmd_buf->offset);
+		rc = -EINVAL;
 		goto rel_cmd_buf;
 	}
 	remain_len -= (size_t)cmd_buf->offset;
@@ -341,6 +342,7 @@ int cam_packet_util_process_generic_cmd_buffer(
 	if (remain_len < (size_t)cmd_buf->length) {
 		CAM_ERR(CAM_UTIL, "Invalid length for cmd buf: %zu",
 			(size_t)cmd_buf->length);
+		rc = -EINVAL;
 		goto rel_cmd_buf;
 	}
 
