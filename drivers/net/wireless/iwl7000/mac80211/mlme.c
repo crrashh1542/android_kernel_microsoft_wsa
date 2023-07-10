@@ -5986,8 +5986,11 @@ static void ieee80211_tid_to_link_map_work(struct wiphy *wiphy,
 
 	new_active_links = BIT(ffs(new_active_links) - 1);
 	ieee80211_set_active_links(&sdata->vif, new_active_links);
-	ieee80211_vif_set_links(sdata, sdata->vif.valid_links,
-				new_dormant_links);
+	if (!ieee80211_vif_set_links(sdata, sdata->vif.valid_links,
+				     new_dormant_links))
+		ieee80211_vif_cfg_change_notify(sdata,
+						BSS_CHANGED_MLD_VALID_LINKS);
+
 	sdata_lock(sdata);
 	sdata->u.mgd.t2l_map_info.active = true;
 	sdata->u.mgd.t2l_map_info.switch_time = 0;
@@ -6106,6 +6109,8 @@ static void ieee80211_process_adv_t2l_map(struct ieee80211_sub_if_data *sdata,
 				sdata_info(sdata, "Failed setting valid/dormant links\n");
 				return;
 			}
+			ieee80211_vif_cfg_change_notify(sdata,
+							BSS_CHANGED_MLD_VALID_LINKS);
 		}
 		memset(&sdata->u.mgd.t2l_map_info, 0,
 		       sizeof(sdata->u.mgd.t2l_map_info));
