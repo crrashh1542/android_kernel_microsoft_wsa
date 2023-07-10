@@ -3402,7 +3402,8 @@ int __ieee80211_request_smps_mgd(struct ieee80211_sub_if_data *sdata,
 	if (WARN_ON_ONCE(sdata->vif.type != NL80211_IFTYPE_STATION))
 		return -EINVAL;
 
-	if (!(sdata->vif.active_links & BIT(link->link_id)))
+	if (ieee80211_vif_is_mld(&sdata->vif) &&
+	    !(sdata->vif.active_links & BIT(link->link_id)))
 		return 0;
 
 	old_req = link->u.mgd.req_smps;
@@ -3449,7 +3450,9 @@ int __ieee80211_request_smps_mgd(struct ieee80211_sub_if_data *sdata,
 
 	/* send SM PS frame to AP */
 	err = ieee80211_send_smps_action(sdata, smps_mode,
-					 ap, ap, link->link_id);
+					 ap, ap,
+					 ieee80211_vif_is_mld(&sdata->vif) ?
+					 link->link_id : -1);
 	if (err)
 		link->u.mgd.req_smps = old_req;
 	else if (smps_mode != IEEE80211_SMPS_OFF && tdls_peer_found)
