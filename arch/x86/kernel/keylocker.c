@@ -13,7 +13,7 @@
 #include <asm/tlbflush.h>
 #include <asm/msr.h>
 
-static __initdata struct keylocker_setup_data {
+static struct keylocker_setup_data {
 	bool initialized;
 	struct iwkey key;
 } kl_setup;
@@ -52,7 +52,7 @@ void __init destroy_keylocker_data(void)
 	valid_kl = true;
 }
 
-static void __init load_keylocker(void)
+static void load_keylocker(void)
 {
 	kernel_fpu_begin();
 	load_xmm_iwkey(&kl_setup.key);
