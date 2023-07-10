@@ -94,6 +94,10 @@ int cam_sync_register_callback(sync_callback cb_func,
 	if (sync_obj >= CAM_SYNC_MAX_OBJS || sync_obj <= 0 || !cb_func)
 		return -EINVAL;
 
+	sync_cb = kzalloc(sizeof(*sync_cb), GFP_KERNEL);
+	if (!sync_cb)
+		return -ENOMEM;
+
 	spin_lock_bh(&sync_dev->row_spinlocks[sync_obj]);
 	row = sync_dev->sync_table + sync_obj;
 
@@ -102,13 +106,8 @@ int cam_sync_register_callback(sync_callback cb_func,
 			"Error: accessing an uninitialized sync obj %d",
 			sync_obj);
 		spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
+		kfree(sync_cb);
 		return -EINVAL;
-	}
-
-	sync_cb = kzalloc(sizeof(*sync_cb), GFP_ATOMIC);
-	if (!sync_cb) {
-		spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
-		return -ENOMEM;
 	}
 
 	/* Trigger callback if sync object is already in SIGNALED state */
@@ -119,8 +118,8 @@ int cam_sync_register_callback(sync_callback cb_func,
 			CAM_DBG(CAM_SYNC, "Invoke callback for sync object:%d",
 				sync_obj);
 			status = row->state;
-			kfree(sync_cb);
 			spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
+			kfree(sync_cb);
 			cb_func(sync_obj, status, userdata);
 		} else {
 			sync_cb->callback_func = cb_func;
@@ -538,7 +537,7 @@ static int cam_sync_handle_merge(struct cam_private_ioctl_arg *k_ioctl)
 		return -EINVAL;
 
 	size = sizeof(uint32_t) * sync_merge.num_objs;
-	sync_objs = kzalloc(size, GFP_ATOMIC);
+	sync_objs = kzalloc(size, GFP_KERNEL);
 
 	if (!sync_objs)
 		return -ENOMEM;
