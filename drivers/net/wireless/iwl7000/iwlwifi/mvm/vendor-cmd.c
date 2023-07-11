@@ -606,7 +606,7 @@ static int iwl_vendor_rfi_set_cnvi_master(struct wiphy *wiphy,
 	/* rfi_master_conf can be 0 or 3 only.
 	 * i.e 0 means CNVI is master. 3 means user-space application is master.
 	 * 1 and 2 are invalid configurations, which means there is no way for
-	 * the user-spcae to take partial control.
+	 * the user space to take partial control.
 	 */
 	if (!rfi_master_conf) {
 		mvm->rfi_wlan_master = true;
@@ -622,12 +622,21 @@ static int iwl_vendor_rfi_set_cnvi_master(struct wiphy *wiphy,
 	 * driver will not send the same table to the firmware
 	 */
 	if (old_rfi_wlan_master != mvm->rfi_wlan_master ||
-	    mvm->force_enable_rfi != mvm->rfi_wlan_master)
-		err = iwl_rfi_send_config_cmd(mvm, NULL, true);
-	else
+	    mvm->force_enable_rfi != mvm->rfi_wlan_master) {
+		/* By-pass sending of RFI_CONFIG command, if user space
+		 * takes control when "fw_rfi_state" is not PMC_SUPPORTED.
+		 */
+		if (mvm->fw_rfi_state == IWL_RFI_PMC_SUPPORTED ||
+		    mvm->rfi_wlan_master)
+			err = iwl_rfi_send_config_cmd(mvm, NULL, true);
+	} else {
 		IWL_ERR(mvm,
 			"Wlan RFI master configuration is same as old:%d\n",
 			old_rfi_wlan_master);
+	}
+
+	if (err)
+		mvm->rfi_wlan_master = old_rfi_wlan_master;
 
 	mutex_unlock(&mvm->mutex);
 free:
