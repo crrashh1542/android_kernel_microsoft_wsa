@@ -541,6 +541,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	}
 
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
+	cam_common_mem_free(packet_local);
 
 	return rc;
 
