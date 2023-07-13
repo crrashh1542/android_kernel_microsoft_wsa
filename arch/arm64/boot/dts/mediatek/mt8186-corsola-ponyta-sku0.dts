@@ -7,9 +7,8 @@
 #include "mt8186-corsola-ponyta.dtsi"
 
 / {
-	model = "Google Ponyta rev2 sku0 board";
-	compatible = "google,ponyta-rev2-sku0", "google,ponyta-rev2", "google,ponyta-sku0",
-		     "google,ponyta", "mediatek,mt8186";
+	model = "Google Ponyta sku0 board";
+	compatible = "google,ponyta-sku0", "google,ponyta", "mediatek,mt8186";
 };
 
 &i2c2 {
