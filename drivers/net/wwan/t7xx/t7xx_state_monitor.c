@@ -235,6 +235,7 @@ static void t7xx_lk_stage_event_handling(struct t7xx_fsm_ctl *ctl, unsigned int 
 	dev = &md->t7xx_dev->pdev->dev;
 	lk_event = FIELD_GET(LK_EVENT_MASK, dev_status);
 	dev_info(dev, "Device enter next stage from LK stage/n");
+	ctl->curr_state = FSM_STATE_STARTING;
 	switch (lk_event) {
 	case LK_EVENT_NORMAL:
 		break;
@@ -424,7 +425,7 @@ static void fsm_routine_start(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_command 
 	t7xx_md_event_notify(md, FSM_PRE_START);
 
 	device_stage = FIELD_GET(MISC_STAGE_MASK, dev_status);
-	if (dev_status == ctl->prev_dev_status) {
+	if (dev_status == ctl->prev_dev_status && cmd->flag == 0) {
 		if (ctl->device_stage_check_cnt++ >= DEVICE_STAGE_POLL_COUNT) {
 			dev_err(dev, "Timeout at device stage 0x%x\n", device_stage);
 			ctl->device_stage_check_cnt = 0;
@@ -450,6 +451,8 @@ static void fsm_routine_start(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_command 
 		break;
 
 	case LINUX_STAGE:
+		if (cmd->flag == 0)
+			break;
 		t7xx_cldma_hif_hw_init(md->md_ctrl[CLDMA_ID_AP]);
 		t7xx_cldma_hif_hw_init(md->md_ctrl[CLDMA_ID_MD]);
 		t7xx_port_proxy_set_cfg(md, PORT_CFG_ID_NORMAL);
