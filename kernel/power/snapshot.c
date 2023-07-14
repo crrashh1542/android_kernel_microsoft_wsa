@@ -2811,7 +2811,7 @@ void snapshot_write_finalize(struct snapshot_handle *handle)
 int snapshot_image_loaded(struct snapshot_handle *handle)
 {
 	return !(!nr_copy_pages || !last_highmem_page_copied() ||
-			handle->cur <= nr_meta_pages + nr_copy_pages);
+			handle->cur <= nr_meta_pages + nr_copy_pages + nr_zero_pages);
 }
 
 #ifdef CONFIG_HIGHMEM
