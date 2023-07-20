@@ -371,37 +371,6 @@ static inline void reverse_planes_order(struct dc_surface_update *array_of_surfa
 }
 
 /**
- * update_planes_and_stream_adapter() - Send planes to be updated in DC
- *
- * DC has a generic way to update planes and stream via
- * dc_update_planes_and_stream function; however, DM might need some
- * adjustments and preparation before calling it. This function is a wrapper
- * for the dc_update_planes_and_stream that does any required configuration
- * before passing control to DC.
- */
-static inline bool update_planes_and_stream_adapter(struct dc *dc,
-						    int update_type,
-						    int planes_count,
-						    struct dc_stream_state *stream,
-						    struct dc_stream_update *stream_update,
-						    struct dc_surface_update *array_of_surface_update)
-{
-	reverse_planes_order(array_of_surface_update, planes_count);
-
-	/*
-	 * Previous frame finished and HW is ready for optimization.
-	 */
-	if (update_type == UPDATE_TYPE_FAST)
-		dc_post_update_surfaces_to_stream(dc);
-
-	return dc_update_planes_and_stream(dc,
-					   array_of_surface_update,
-					   planes_count,
-					   stream,
-					   stream_update);
-}
-
-/**
  * dm_pflip_high_irq() - Handle pageflip interrupt
  * @interrupt_params: ignored
  *
@@ -2671,12 +2640,11 @@ static void dm_gpureset_commit_state(struct dc_state *dc_state,
 				true;
 		}
 
-		update_planes_and_stream_adapter(dm->dc,
-					 UPDATE_TYPE_FULL,
-					 dc_state->stream_status->plane_count,
-					 dc_state->streams[k],
-					 &bundle->stream_update,
-					 bundle->surface_updates);
+		dc_update_planes_and_stream(dm->dc,
+			bundle->surface_updates,
+			dc_state->stream_status->plane_count,
+			dc_state->streams[k],
+			&bundle->stream_update);
 	}
 
 cleanup:
@@ -7950,13 +7918,15 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 		}
 		mutex_lock(&dm->dc_lock);
+		if ((acrtc_state->update_type > UPDATE_TYPE_FAST) &&
+				acrtc_state->stream->link->psr_settings.psr_allow_active)
+			amdgpu_dm_psr_disable(acrtc_state->stream);
 
-		update_planes_and_stream_adapter(dm->dc,
-					 acrtc_state->update_type,
-					 planes_count,
-					 acrtc_state->stream,
-					 &bundle->stream_update,
-					 bundle->surface_updates);
+		dc_update_planes_and_stream(dm->dc,
+					    bundle->surface_updates,
+					    planes_count,
+					    acrtc_state->stream,
+					    &bundle->stream_update);
 
 		/**
 		 * Enable or disable the interrupts on the backend.
