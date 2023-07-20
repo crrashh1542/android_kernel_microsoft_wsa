@@ -89,8 +89,8 @@ static int cam_cdm_get_buffer(struct cam_cdm_hw_intf_cmd_submit_bl *req,
 					   len);
 
 	if (req->data->type == CAM_CDM_BL_CMD_TYPE_KERNEL_IOVA) {
-		vaddr_ptr = cdm_cmd->cmd[idx].bl_addr.kernel_iova;
-		len = cdm_cmd->cmd[idx].offset + cdm_cmd->cmd[idx].len;
+		*vaddr_ptr = cdm_cmd->cmd[idx].bl_addr.kernel_iova;
+		*len = cdm_cmd->cmd[idx].offset + cdm_cmd->cmd[idx].len;
 		return 0;
 	}
 
