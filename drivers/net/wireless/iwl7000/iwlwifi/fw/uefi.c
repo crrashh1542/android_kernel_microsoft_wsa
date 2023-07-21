@@ -394,5 +394,85 @@ void iwl_uefi_get_sgom_table(struct iwl_trans *trans,
 	kfree(data);
 }
 IWL_EXPORT_SYMBOL(iwl_uefi_get_sgom_table);
+
+static int iwl_uefi_uats_parse(struct uefi_cnv_wlan_uats_data *uats_data,
+			       struct iwl_fw_runtime *fwrt)
+{
+	int row, col;
+
+	if (uats_data->revision != 1)
+		return -EINVAL;
+
+	memcpy(fwrt->uats_table.offset_map, uats_data->offset_map,
+	       sizeof(fwrt->uats_table.offset_map));
+
+	for (row = 0; row < UATS_TABLE_ROW_SIZE; row++) {
+		for (col = 0; col < UATS_TABLE_COL_SIZE; col++) {
+			/* since each byte is composed of two values,
+			 * one for each letter,
+			 * extract and check each of them separately
+			 */
+			u8 vlp_ap = fwrt->uats_table.offset_map[row][col] &
+					 UATS_VLP_AP_TYPE;
+			u8 afc_ap = (fwrt->uats_table.offset_map[row][col] &
+					 UATS_AFC_AP_TYPE) >> 4;
+
+			if (vlp_ap) {
+				IWL_DEBUG_FW(fwrt->trans,
+					     "VLP supported for MCC: %c%c\n",
+					     row + 'A', col + 'A');
+			}
+
+			if (afc_ap) {
+				IWL_DEBUG_FW(fwrt->trans,
+					     "AFC supported for MCC: %c%c\n",
+					     row + 'A', col + 'A');
+			}
+
+			fwrt->uats_table.offset_map[row][col] =
+				(afc_ap << 4) | vlp_ap;
+		}
+	}
+	return 0;
+}
+
+int iwl_uefi_get_uats_table(struct iwl_trans *trans,
+			    struct iwl_fw_runtime *fwrt)
+{
+	struct uefi_cnv_wlan_uats_data *data;
+	unsigned long package_size;
+	int ret;
+
+	data = iwl_uefi_get_variable(IWL_UEFI_UATS_NAME, &IWL_EFI_VAR_GUID,
+				     &package_size);
+	if (IS_ERR(data)) {
+		IWL_DEBUG_FW(trans,
+			     "UATS UEFI variable not found 0x%lx\n",
+			     PTR_ERR(data));
+		return -EINVAL;
+	}
+
+	if (package_size < sizeof(*data)) {
+		IWL_DEBUG_FW(trans,
+			     "Invalid UATS table UEFI variable len (%lu)\n",
+			     package_size);
+		kfree(data);
+		return -EINVAL;
+	}
+
+	IWL_DEBUG_FW(trans, "Read UATS from UEFI with size %lu\n",
+		     package_size);
+
+	ret = iwl_uefi_uats_parse(data, fwrt);
+	if (ret < 0) {
+		IWL_DEBUG_FW(trans, "Cannot read UATS table. rev is invalid\n");
+		kfree(data);
+		return ret;
+	}
+
+	kfree(data);
+	return 0;
+}
+IWL_EXPORT_SYMBOL(iwl_uefi_get_uats_table);
 #endif /* CONFIG_ACPI */
 #endif /* >= 5.4 */
