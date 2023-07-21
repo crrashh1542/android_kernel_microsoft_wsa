@@ -4600,6 +4600,8 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 			       u8 reason)
 {
 	struct hci_cp_disconnect cp;
+	unsigned long timeout;
+	int err;
 
 	if (conn->type == AMP_LINK)
 		return hci_disconnect_phy_link_sync(hdev, conn->handle, reason);
@@ -4608,19 +4610,29 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 	cp.handle = cpu_to_le16(conn->handle);
 	cp.reason = reason;
 
-	/* Wait for HCI_EV_DISCONN_COMPLETE, not HCI_EV_CMD_STATUS, when the
-	 * reason is anything but HCI_ERROR_REMOTE_POWER_OFF. This reason is
-	 * used when suspending or powering off, where we don't want to wait
-	 * for the peer's response.
+	/* The HCI_ERROR_REMOTE_POWER_OFF is used when suspending or powering off,
+	 * so we don't need to make sure the disconnection has completed.
+	 * CHROMIUM ONLY: However, for some controllers, there is a known issue where the
+	 * LMP_Detach might not be sent if they receive HCI_Reset in the next few milliseconds.
+	 * To mitigate this issue, wait up-to 300 ms before sending the next command.
 	 */
-	if (reason != HCI_ERROR_REMOTE_POWER_OFF)
-		return __hci_cmd_sync_status_sk(hdev, HCI_OP_DISCONNECT,
-						sizeof(cp), &cp,
-						HCI_EV_DISCONN_COMPLETE,
-						HCI_CMD_TIMEOUT, NULL);
+	if (reason == HCI_ERROR_REMOTE_POWER_OFF)
+		timeout = msecs_to_jiffies(DEFAULT_DISCON_TIMEOUT_ON_POWEROFF);
+	else
+		timeout = HCI_CMD_TIMEOUT;
 
-	return __hci_cmd_sync_status(hdev, HCI_OP_DISCONNECT, sizeof(cp), &cp,
-				     HCI_CMD_TIMEOUT);
+	err = __hci_cmd_sync_status_sk(hdev, HCI_OP_DISCONNECT,
+				       sizeof(cp), &cp,
+				       HCI_EV_DISCONN_COMPLETE,
+				       timeout, NULL);
+
+	/* Ignore the error in suspending or powering off case to avoid the procudures being
+	 * aborted.
+	 */
+	if (reason == HCI_ERROR_REMOTE_POWER_OFF)
+		return 0;
+
+	return err;
 }
 
 static int hci_le_connect_cancel_sync(struct hci_dev *hdev,

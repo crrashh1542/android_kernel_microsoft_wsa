@@ -320,6 +320,9 @@ struct adv_monitor {
 /* Default authenticated payload timeout 30s */
 #define DEFAULT_AUTH_PAYLOAD_TIMEOUT   0x0bb8
 
+/* CHROMIUM ONLY: Default disconnect timeout when powering off or suspending (300ms) */
+#define DEFAULT_DISCON_TIMEOUT_ON_POWEROFF	300
+
 struct amp_assoc {
 	__u16	len;
 	__u16	offset;
