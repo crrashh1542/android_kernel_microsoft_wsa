@@ -56,6 +56,8 @@
 #include <net/lwtunnel.h>
 #include <net/ip_tunnels.h>
 
+#include <trace/events/cros_net.h>
+
 static int ip6_finish_output2(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -67,6 +69,7 @@ static int ip6_finish_output2(struct net *net, struct sock *sk, struct sk_buff *
 	struct neighbour *neigh;
 	int ret;
 
+	trace_cros_ip6_finish_output2_enter(net, sk, skb);
 	/* Be paranoid, rather than too clever. */
 	if (unlikely(hh_len > skb_headroom(skb)) && dev->header_ops) {
 		skb = skb_expand_head(skb, hh_len);

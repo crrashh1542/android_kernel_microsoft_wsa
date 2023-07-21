@@ -7,6 +7,7 @@
 #define _TRACE_CROS_NET_H
 
 #include <linux/net.h>
+#include <linux/if.h>
 #include <linux/tracepoint.h>
 
 // @rv: return value of the socket listen.
@@ -23,7 +24,146 @@
 		entry->daddr4 = sk->__sk_common.skc_daddr;	\
 		entry->protocol = sk->sk_protocol;		\
 	} while (0)
+	//protocol is also avable in sk_buff
+	//skb_network_header from skba
+	// struct iphdr *ip_header = (struct iphdr *) (skb_network_header(skb))
+#define CROS_IP_PROTOCOL_NAME(val) { IPPROTO_#val, #val }
+#define CROS_SHOW_IP_PROTOCOL(val)				\
+	__print_symbolic(val,					\
+		{IPPROTO_UDP, "UDP"},				\
+		{IPPROTO_TCP, "TCP"},				\
+		{IPPROTO_ICMP, "ICMP"},				\
+		{IPPROTO_RAW, "RAW"})
 
+TRACE_EVENT(cros_ip6_finish_output2_enter,
+	TP_PROTO(struct net *net, struct sock *sk, struct sk_buff *skb),
+	TP_ARGS(net, sk, skb),
+	TP_STRUCT__entry(
+		__array(__u8, saddr, 16)
+		__array(__u8, daddr, 16)
+		__array(char, dev_name, IFNAMSIZ)
+	),
+	TP_fast_assign(
+		struct ipv6hdr *ip_header = (struct ipv6hdr *)(skb_network_header(skb));
+		struct net_device *dev;
+
+		memmove(__entry->saddr, ip_header->saddr.in6_u.u6_addr8, 16);
+		memmove(__entry->daddr, ip_header->daddr.in6_u.u6_addr8, 16);
+		dev = ((struct dst_entry *)(skb->_skb_refdst & SKB_DST_PTRMASK))->dev;
+		strscpy(__entry->dev_name, dev->name, IFNAMSIZ);
+	),
+	TP_printk("do_not_depend:%pI6c %pI6c %s", __entry->saddr, __entry->daddr,
+		  __entry->dev_name))
+
+TRACE_EVENT(cros_ip6_input_finish_enter,
+	TP_PROTO(struct net *net, struct sock *sk, struct sk_buff *skb),
+	TP_ARGS(net, sk, skb),
+	TP_STRUCT__entry(
+		__array(__u8, saddr, 16)
+		__array(__u8, daddr, 16)
+		__array(char, dev_name, IFNAMSIZ)
+	),
+	TP_fast_assign(
+		struct ipv6hdr *ip_header = (struct ipv6hdr *)(skb_network_header(skb));
+		struct net_device *dev;
+
+		memmove(__entry->saddr, ip_header->saddr.in6_u.u6_addr8, 16);
+		memmove(__entry->daddr, ip_header->daddr.in6_u.u6_addr8, 16);
+		dev = skb->dev;
+		strscpy(__entry->dev_name, dev->name, IFNAMSIZ);
+	),
+	TP_printk("do_not_depend:%pI6c %pI6c %s", __entry->saddr, __entry->daddr,
+		  __entry->dev_name))
+
+TRACE_EVENT(cros_ip_protocol_deliver_rcu_enter,
+	TP_PROTO(struct net *net, struct sk_buff *skb, int protocol),
+	TP_ARGS(net, skb, protocol),
+	TP_STRUCT__entry(
+		__field(__be32, saddr)
+		__field(__be32, daddr)
+		__array(char, dev_name, IFNAMSIZ)
+		__field(int, dev_if)
+		__field(short, source_port)
+		__field(short, dest_port)
+		__field(int, proto)
+	),
+	TP_fast_assign(
+		struct iphdr *ip_header = (struct iphdr *)(skb->head + skb->network_header);
+		char *transport = (char *)(skb->head + skb->transport_header);
+		struct tcphdr *tcp = (struct tcphdr *)transport;
+		struct udphdr *udp = (struct udphdr *)transport;
+		struct net_device *dev;
+		bool has_transport = skb->transport_header != (typeof(skb->transport_header))~0U;
+
+		__entry->saddr = ip_header->saddr;
+		__entry->daddr = ip_header->daddr;
+		__entry->proto = ip_header->protocol;
+		if (has_transport) {
+			switch (ip_header->protocol) {
+			case IPPROTO_TCP:
+				__entry->source_port = ntohs(tcp->source);
+				__entry->dest_port = ntohs(tcp->dest);
+				break;
+			case IPPROTO_UDP:
+				__entry->source_port = ntohs(udp->source);
+				__entry->dest_port = ntohs(udp->dest);
+				break;
+			default:
+				break;
+			};
+		}
+		dev = ((struct dst_entry *)(skb->_skb_refdst & SKB_DST_PTRMASK))->dev;
+		strscpy(__entry->dev_name, dev->name, IFNAMSIZ);
+		__entry->dev_if = dev->ifindex;
+	),
+	TP_printk("do_not_depend:%pI4 %u %pI4 %u %s %s", &__entry->saddr, __entry->source_port,
+		  &__entry->daddr, __entry->dest_port, CROS_SHOW_IP_PROTOCOL(__entry->proto),
+		  __entry->dev_name))
+
+TRACE_EVENT(cros__ip_local_out_exit,
+	TP_PROTO(struct net *net, struct sock *sk, struct sk_buff *skb, int rv),
+	TP_ARGS(net, sk, skb, rv),
+	TP_STRUCT__entry(
+		__field(__be32, saddr)
+		__field(__be32, daddr)
+		__field(int, rv)
+		__array(char, dev_name, IFNAMSIZ)
+		__field(short, source_port)
+		__field(short, dest_port)
+		__field(int, proto)
+	),
+	TP_fast_assign(
+		struct iphdr *ip_header = (struct iphdr *)(skb->head + skb->network_header);
+		char *transport = (char *)(skb->head + skb->transport_header);
+		struct tcphdr *tcp = (struct tcphdr *)transport;
+		struct udphdr *udp = (struct udphdr *)transport;
+		struct net_device *dev;
+		bool has_transport = skb->transport_header != (typeof(skb->transport_header))~0U;
+
+		__entry->saddr = ip_header->saddr;
+		__entry->daddr = ip_header->daddr;
+		__entry->rv = rv;
+		__entry->proto = ip_header->protocol;
+		if (has_transport) {
+			switch (ip_header->protocol) {
+			case IPPROTO_TCP:
+				__entry->source_port = ntohs(tcp->source);
+				__entry->dest_port = ntohs(tcp->dest);
+				break;
+			case IPPROTO_UDP:
+				__entry->source_port = ntohs(udp->source);
+				__entry->dest_port = ntohs(udp->dest);
+				break;
+			default:
+				break;
+			};
+		}
+		dev = ((struct dst_entry *)(skb->_skb_refdst & SKB_DST_PTRMASK))->dev;
+		strscpy(__entry->dev_name, dev->name, IFNAMSIZ);
+	),
+	TP_printk("do_not_depend:%pI4 %u %pI4 %u %s %s", &__entry->saddr, __entry->source_port,
+		  &__entry->daddr, __entry->dest_port, CROS_SHOW_IP_PROTOCOL(__entry->proto),
+		  __entry->dev_name))
 
 TRACE_EVENT(cros_inet_listen_exit,
 	/* The tracepoint signature matches the signature of inet_listen with
@@ -46,7 +186,7 @@ TRACE_EVENT(cros_inet_listen_exit,
 		__entry->port = socket->sk->__sk_common.skc_num;
 	),
 	TP_printk(
-		"cros_inet_listen:informational_only_will_be_removed:%d:%d:%04d",
+		"do_not_depend:%d %d %04d",
 		__entry->dev_if,
 		__entry->type,
 		__entry->port)
@@ -76,7 +216,7 @@ TRACE_EVENT_CONDITION(cros_inet_accept_exit,
 		CROS_NET_FILL_ADDR_PORT(sk, __entry);
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d",
+		":%pI4 %d %pI4 %d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -110,7 +250,7 @@ TRACE_EVENT_CONDITION(cros_inet_sendmsg_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu-prot:%d",
+		"do_not_depend:%pI4:%d-%pI4:%d-%zu-prot:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -147,7 +287,7 @@ TRACE_EVENT_CONDITION(cros_inet_stream_connect_exit,
 		__entry->is_sendmsg = is_sendmsg;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-prot:%d-issendmsg:%d",
+		"do_not_depend: %pI4 %d %pI4 %d prot:%d issendmsg:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -184,7 +324,7 @@ TRACE_EVENT_CONDITION(cros_inet_sendpage_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu",
+		"do_not_depend:%pI4 %d %pI4 %d %zu",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -219,7 +359,7 @@ TRACE_EVENT_CONDITION(cros_inet_recvmsg_exit,
 		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"informational_only_will_be_removed:%pi4:%d-%pi4:%d-%zu-prot:%d",
+		"do_not_depend:%pI4 %d %pI4 %d %zu prot:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
@@ -245,7 +385,7 @@ TRACE_EVENT_CONDITION(cros_inet_release_enter,
 
 		CROS_NET_FILL_ADDR_PORT(sk, __entry);
 	),
-	TP_printk("informational_only_will_be_removed:%pI4:%d-%pI4:%d",
+	TP_printk("do_not_depend:%pI4 %d %pI4 %d",
 	&__entry->saddr4, __entry->sport, &__entry->daddr4, __entry->dport));
 #endif // _TRACE_CROS_NET_H
 /* This part must be outside protection */

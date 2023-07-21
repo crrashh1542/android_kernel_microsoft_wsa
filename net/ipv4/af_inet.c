@@ -124,6 +124,8 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cros_net.h>
+EXPORT_TRACEPOINT_SYMBOL(cros_ip6_input_finish_enter);
+EXPORT_TRACEPOINT_SYMBOL(cros_ip6_finish_output2_enter);
 #undef CREATE_TRACE_POINTS
 
 /* The inetsw table contains everything that inet_create needs to

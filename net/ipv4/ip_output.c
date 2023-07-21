@@ -83,6 +83,8 @@
 #include <linux/netlink.h>
 #include <linux/tcp.h>
 
+#include <trace/events/cros_net.h>
+
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	    unsigned int mtu,
@@ -99,6 +101,7 @@ EXPORT_SYMBOL(ip_send_check);
 int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct iphdr *iph = ip_hdr(skb);
+	int rv;
 
 	iph->tot_len = htons(skb->len);
 	ip_send_check(iph);
@@ -111,10 +114,11 @@ int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return 0;
 
 	skb->protocol = htons(ETH_P_IP);
-
-	return nf_hook(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
-		       net, sk, skb, NULL, skb_dst(skb)->dev,
-		       dst_output);
+	rv = nf_hook(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
+		     net, sk, skb, NULL, skb_dst(skb)->dev,
+		     dst_output);
+	trace_cros__ip_local_out_exit(net, sk, skb, rv);
+	return rv;
 }
 
 int ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)

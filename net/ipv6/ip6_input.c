@@ -45,6 +45,8 @@
 #include <net/inet_ecn.h>
 #include <net/dst_metadata.h>
 
+#include <trace/events/cros_net.h>
+
 static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 				struct sk_buff *skb)
 {
@@ -462,6 +464,7 @@ discard:
 
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	trace_cros_ip6_input_finish_enter(net, sk, skb);
 	rcu_read_lock();
 	ip6_protocol_deliver_rcu(net, skb, 0, false);
 	rcu_read_unlock();
@@ -473,8 +476,8 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 int ip6_input(struct sk_buff *skb)
 {
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
-		       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
-		       ip6_input_finish);
+		     dev_net(skb->dev), NULL, skb, skb->dev, NULL,
+		     ip6_input_finish);
 }
 EXPORT_SYMBOL_GPL(ip6_input);
 
