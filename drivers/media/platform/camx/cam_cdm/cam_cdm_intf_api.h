@@ -44,7 +44,6 @@ enum cam_cdm_cb_status {
 enum cam_cdm_bl_cmd_addr_type {
 	CAM_CDM_BL_CMD_TYPE_MEM_HANDLE,
 	CAM_CDM_BL_CMD_TYPE_HW_IOVA,
-	CAM_CDM_BL_CMD_TYPE_KERNEL_IOVA,
 };
 
 /**
@@ -106,7 +105,6 @@ struct cam_cdm_bl_cmd {
 	union {
 		int32_t mem_handle;
 		uint32_t *hw_iova;
-		uintptr_t kernel_iova;
 	} bl_addr;
 	uint32_t offset;
 	uint32_t len;

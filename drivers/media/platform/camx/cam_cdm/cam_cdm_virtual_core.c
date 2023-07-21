@@ -88,14 +88,7 @@ static int cam_cdm_get_buffer(struct cam_cdm_hw_intf_cmd_submit_bl *req,
 					   vaddr_ptr,
 					   len);
 
-	if (req->data->type == CAM_CDM_BL_CMD_TYPE_KERNEL_IOVA) {
-		*vaddr_ptr = cdm_cmd->cmd[idx].bl_addr.kernel_iova;
-		*len = cdm_cmd->cmd[idx].offset + cdm_cmd->cmd[idx].len;
-		return 0;
-	}
-
-	CAM_ERR(CAM_CDM, "Only mem hdl/Kernel va type is supported %d",
-		req->data->type);
+	CAM_ERR(CAM_CDM, "Only mem hdl type is supported %d", req->data->type);
 	return -EINVAL;
 }
 
