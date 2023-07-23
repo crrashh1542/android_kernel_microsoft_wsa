@@ -5974,6 +5974,7 @@ static void ieee80211_tid_to_link_map_work(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,
 			     u.mgd.t2l_map_work.work);
+	int ret;
 
 	new_active_links = sdata->u.mgd.t2l_map_info.map &
 			   sdata->vif.valid_links;
@@ -5984,17 +5985,22 @@ static void ieee80211_tid_to_link_map_work(struct wiphy *wiphy,
 		return;
 	}
 
-	new_active_links = BIT(ffs(new_active_links) - 1);
-	ieee80211_set_active_links(&sdata->vif, new_active_links);
-	if (!ieee80211_vif_set_links(sdata, sdata->vif.valid_links,
-				     new_dormant_links))
-		ieee80211_vif_cfg_change_notify(sdata,
-						BSS_CHANGED_MLD_VALID_LINKS);
-
 	sdata_lock(sdata);
+
+	ieee80211_vif_set_links(sdata, sdata->vif.valid_links, 0);
+	new_active_links = BIT(ffs(new_active_links) - 1);
+	__ieee80211_set_active_links(&sdata->vif, new_active_links);
+
+	ret = ieee80211_vif_set_links(sdata, sdata->vif.valid_links,
+				      new_dormant_links);
+
 	sdata->u.mgd.t2l_map_info.active = true;
 	sdata->u.mgd.t2l_map_info.switch_time = 0;
 	sdata_unlock(sdata);
+
+	if (!ret)
+		ieee80211_vif_cfg_change_notify(sdata,
+						BSS_CHANGED_MLD_VALID_LINKS);
 }
 
 static u16 ieee80211_get_t2l_map(u8 bm_size, u8 *data)
