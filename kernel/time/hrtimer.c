@@ -984,6 +984,7 @@ out_timerfd:
 	timerfd_clock_was_set();
 }
 
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
 /*
  * Switch to low resolution mode
  */
@@ -998,6 +999,7 @@ void hrtimer_switch_to_lres(void)
 	base->hres_active = 0;
 	hrtimer_resolution = LOW_RES_NSEC;
 }
+#endif
 
 static void clock_was_set_work(struct work_struct *work)
 {
@@ -2290,7 +2292,7 @@ int hrtimers_dead_cpu(unsigned int scpu)
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
-#ifdef CONFIG_HIGH_RES_TIMERS
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
 
 static void hrtimer_smp_call(void *info)
 {
@@ -2342,9 +2344,9 @@ void __init hrtimers_init(void)
 {
 	hrtimers_prepare_cpu(smp_processor_id());
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
-#ifdef CONFIG_HIGH_RES_TIMERS
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
 	register_sysctl("kernel", timer_hres_sysctl);
-#endif /* CONFIG_HIGH_RES_TIMERS */
+#endif
 }
 
 /**

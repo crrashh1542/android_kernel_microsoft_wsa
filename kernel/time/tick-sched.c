@@ -1361,7 +1361,7 @@ static inline void tick_nohz_activate(struct tick_sched *ts, int mode)
 		timers_update_nohz();
 }
 
-#ifdef CONFIG_HIGH_RES_TIMERS
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
 /**
  * tick_nohz_hres_to_lres - switch from Highres to Lowres
  */
