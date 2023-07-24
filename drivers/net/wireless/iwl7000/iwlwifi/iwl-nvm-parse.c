@@ -1273,6 +1273,9 @@ static void iwl_init_he_override(struct iwl_trans *trans,
 				 IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G |
 				 IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_5G);
 		}
+		if (trans->no_160)
+			iftype_data->he_cap.he_cap_elem.phy_cap_info[0] &=
+				 ~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
 
 		IWL_COPY_BIN(he_mac_cap, he_cap.he_cap_elem.mac_cap_info);
 
