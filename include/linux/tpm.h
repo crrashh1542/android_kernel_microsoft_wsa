@@ -138,8 +138,6 @@ struct tpm_chip {
 	int dev_num;		/* /dev/tpm# */
 	unsigned long is_open;	/* only one allowed */
 
-	bool is_suspended;
-
 	char hwrng_name[64];
 	struct hwrng hwrng;
 
