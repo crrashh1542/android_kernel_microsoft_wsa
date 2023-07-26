@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2014, 2018 Intel Corporation
+ * Copyright (C) 2014, 2018, 2023 Intel Corporation
  * Copyright (C) 2014 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -270,6 +270,8 @@ void iwl_dnt_free(struct iwl_trans *trans)
 
 	if (!dnt)
 		return;
+
+	trans->tmdev->dnt = NULL;
 
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	debugfs_remove_recursive(dnt->debugfs_entry);
