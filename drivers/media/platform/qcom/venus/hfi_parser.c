@@ -14,10 +14,25 @@
 typedef void (*func)(struct hfi_plat_caps *cap, const void *data,
 		     unsigned int size);
 
+static int count_setbits(u32 input)
+{
+	u32 count = 0;
+
+	while (input > 0) {
+		if ((input & 1) == 1)
+			count++;
+		input >>= 1;
+	}
+	return count;
+}
+
 static void init_codecs(struct venus_core *core)
 {
 	struct hfi_plat_caps *caps = core->caps, *cap;
 	unsigned long bit;
+
+	if ((count_setbits(core->dec_codecs) + count_setbits(core->enc_codecs)) > MAX_CODEC_NUM)
+		return;
 
 	for_each_set_bit(bit, &core->dec_codecs, MAX_CODEC_NUM) {
 		cap = &caps[core->codecs_count++];
