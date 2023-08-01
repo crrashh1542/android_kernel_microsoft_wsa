@@ -55,13 +55,33 @@ struct ili9882t {
 	struct gpio_desc *enable_gpio;
 };
 
+/* ILI9882-specific commands, add new commands as you decode them */
+#define ILI9882T_DCS_SWITCH_PAGE	0xFF
+
+static int ili9882t_switch_page(struct mipi_dsi_device *dsi, u8 page)
+{
+	u8 switch_cmd[] = {0x98, 0x82, 0x00};
+	int ret;
+
+	switch_cmd[2] = page;
+
+	ret = mipi_dsi_dcs_write(dsi, ILI9882T_DCS_SWITCH_PAGE, switch_cmd, 3);
+	if (ret) {
+		dev_err(&dsi->dev,
+			"error switching panel controller page (%d)\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 {
 	int ret;
 
 	msleep(5);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x01);
+	ili9882t_switch_page(dsi, 0x01);
 	mipi_dsi_dcs_write_seq(dsi, 0x00, 0x42);
 	mipi_dsi_dcs_write_seq(dsi, 0x01, 0x11);
 	mipi_dsi_dcs_write_seq(dsi, 0x02, 0x00);
@@ -192,7 +212,7 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0x8B, 0x07);
 	mipi_dsi_dcs_write_seq(dsi, 0x8C, 0x07);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x02);
+	ili9882t_switch_page(dsi, 0x02);
 	mipi_dsi_dcs_write_seq(dsi, 0x29, 0x3A);
 	mipi_dsi_dcs_write_seq(dsi, 0x2A, 0x3B);
 
@@ -211,12 +231,12 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0x5E, 0x40);
 	mipi_dsi_dcs_write_seq(dsi, 0x84, 0x00);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x03);
+	ili9882t_switch_page(dsi, 0x03);
 	mipi_dsi_dcs_write_seq(dsi, 0x20, 0x01);
 	mipi_dsi_dcs_write_seq(dsi, 0x21, 0x3C);
 	mipi_dsi_dcs_write_seq(dsi, 0x22, 0xFA);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x0A);
+	ili9882t_switch_page(dsi, 0x0a);
 	mipi_dsi_dcs_write_seq(dsi, 0xE0, 0x01);
 	mipi_dsi_dcs_write_seq(dsi, 0xE2, 0x01);
 	mipi_dsi_dcs_write_seq(dsi, 0xE5, 0x91);
@@ -224,10 +244,10 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0xE7, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0xE8, 0xFA);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x12);
+	ili9882t_switch_page(dsi, 0x12);
 	mipi_dsi_dcs_write_seq(dsi, 0x87, 0x2C);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x05);
+	ili9882t_switch_page(dsi, 0x05);
 	mipi_dsi_dcs_write_seq(dsi, 0x73, 0xE5);
 	mipi_dsi_dcs_write_seq(dsi, 0x7F, 0x6B);
 	mipi_dsi_dcs_write_seq(dsi, 0x6D, 0xA4);
@@ -242,7 +262,7 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0x1D, 0x90);
 	mipi_dsi_dcs_write_seq(dsi, 0x86, 0x87);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x06);
+	ili9882t_switch_page(dsi, 0x06);
 	mipi_dsi_dcs_write_seq(dsi, 0xC0, 0x80);
 	mipi_dsi_dcs_write_seq(dsi, 0xC1, 0x07);
 	mipi_dsi_dcs_write_seq(dsi, 0xCA, 0x58);
@@ -256,7 +276,7 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0xD6, 0x55);
 	mipi_dsi_dcs_write_seq(dsi, 0xDC, 0x38);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x08);
+	ili9882t_switch_page(dsi, 0x08);
 	mipi_dsi_dcs_write_seq(dsi, 0xE0, 0x00, 0x10, 0x2A, 0x4D, 0x61, 0x56, 0x6A, 0x6E, 0x79,
 			       0x76, 0x8F, 0x95, 0x98, 0xAE, 0xAA, 0xB2, 0xBB, 0xCE, 0xC6, 0xBD,
 			       0xD5, 0xE2, 0xE8);
@@ -264,10 +284,10 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 			       0x76, 0x8F, 0x95, 0x98, 0xAE, 0xAA, 0xB2, 0xBB, 0xCE, 0xC6, 0xBD,
 			       0xD5, 0xE2, 0xE8);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x04);
+	ili9882t_switch_page(dsi, 0x04);
 	mipi_dsi_dcs_write_seq(dsi, 0xBA, 0x81);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x0C);
+	ili9882t_switch_page(dsi, 0x0c);
 	mipi_dsi_dcs_write_seq(dsi, 0x00, 0x02);
 	mipi_dsi_dcs_write_seq(dsi, 0x01, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0x02, 0x03);
@@ -333,10 +353,10 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0x3E, 0x0A);
 	mipi_dsi_dcs_write_seq(dsi, 0x3F, 0x1F);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x04);
+	ili9882t_switch_page(dsi, 0x04);
 	mipi_dsi_dcs_write_seq(dsi, 0xBA, 0x01);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x0E);
+	ili9882t_switch_page(dsi, 0x0e);
 	mipi_dsi_dcs_write_seq(dsi, 0x02, 0x0C);
 	mipi_dsi_dcs_write_seq(dsi, 0x20, 0x10);
 	mipi_dsi_dcs_write_seq(dsi, 0x25, 0x16);
@@ -373,12 +393,12 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0x07, 0x21);
 	mipi_dsi_dcs_write_seq(dsi, 0x04, 0x10);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x1E);
+	ili9882t_switch_page(dsi, 0x1e);
 	mipi_dsi_dcs_write_seq(dsi, 0x60, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0x64, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0x6D, 0x00);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x0B);
+	ili9882t_switch_page(dsi, 0x0b);
 	mipi_dsi_dcs_write_seq(dsi, 0xA6, 0x44);
 	mipi_dsi_dcs_write_seq(dsi, 0xA7, 0xB6);
 	mipi_dsi_dcs_write_seq(dsi, 0xA8, 0x03);
@@ -389,13 +409,13 @@ static int starry_ili9882t_init(struct mipi_dsi_device *dsi)
 	mipi_dsi_dcs_write_seq(dsi, 0xBD, 0x92);
 	mipi_dsi_dcs_write_seq(dsi, 0xBE, 0xA1);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x05);
+	ili9882t_switch_page(dsi, 0x05);
 	mipi_dsi_dcs_write_seq(dsi, 0x86, 0x87);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x06);
+	ili9882t_switch_page(dsi, 0x06);
 	mipi_dsi_dcs_write_seq(dsi, 0x92, 0x22);
 
-	mipi_dsi_dcs_write_seq(dsi, 0xFF, 0x98, 0x82, 0x00);
+	ili9882t_switch_page(dsi, 0x00);
 
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret)
