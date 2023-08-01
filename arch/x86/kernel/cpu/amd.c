@@ -980,9 +980,6 @@ void init_spectral_chicken(struct cpuinfo_x86 *c)
 	 * the XSAVEC instruction (which works fine) is equivalent.
 	 */
 	clear_cpu_cap(c, X86_FEATURE_XSAVES);
-
-	if (cpu_has(c, X86_FEATURE_AMD_STIBP))	/* Zen 2 */
-		msr_set_bit(MSR_AMD64_DE_CFG, 9);
 }
 
 static void init_amd_zn(struct cpuinfo_x86 *c)
