@@ -474,7 +474,7 @@ static void inx_panel_shutdown(struct mipi_dsi_device *dsi)
 	drm_panel_unprepare(&inx->base);
 }
 
-static void inx_panel_remove(struct mipi_dsi_device *dsi)
+static int inx_panel_remove(struct mipi_dsi_device *dsi)
 {
 	struct inx_panel *inx = mipi_dsi_get_drvdata(dsi);
 	int ret;
@@ -487,6 +487,8 @@ static void inx_panel_remove(struct mipi_dsi_device *dsi)
 
 	if (inx->base.dev)
 		drm_panel_remove(&inx->base);
+
+	return 0;
 }
 
 static const struct of_device_id inx_of_match[] = {
