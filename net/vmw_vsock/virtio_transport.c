@@ -84,6 +84,46 @@ out_rcu:
 	return ret;
 }
 
+/* Create sg_table from a vmalloc'd buffer. */
+static struct sg_table *vmalloc_to_sgt(char *data, uint32_t size, int *sg_ents)
+{
+	int ret, s, i;
+	struct sg_table *sgt;
+	struct scatterlist *sg;
+	struct page *pg;
+
+	if (WARN_ON(!PAGE_ALIGNED(data)))
+		return NULL;
+
+	sgt = kmalloc(sizeof(*sgt), GFP_KERNEL);
+	if (!sgt)
+		return NULL;
+
+	*sg_ents = DIV_ROUND_UP(size, PAGE_SIZE);
+	ret = sg_alloc_table(sgt, *sg_ents, GFP_KERNEL);
+	if (ret) {
+		kfree(sgt);
+		return NULL;
+	}
+
+	for_each_sgtable_sg(sgt, sg, i) {
+		pg = vmalloc_to_page(data);
+		if (!pg) {
+			sg_free_table(sgt);
+			kfree(sgt);
+			return NULL;
+		}
+
+		s = min_t(int, PAGE_SIZE, size);
+		sg_set_page(sg, pg, s, 0);
+
+		size -= s;
+		data += s;
+	}
+
+	return sgt;
+}
+
 static void
 virtio_transport_send_pkt_work(struct work_struct *work)
 {
@@ -103,8 +143,9 @@ virtio_transport_send_pkt_work(struct work_struct *work)
 	for (;;) {
 		struct virtio_vsock_pkt *pkt;
 		struct scatterlist hdr, buf, *sgs[2];
-		int ret, in_sg = 0, out_sg = 0;
+		int ret, in_sg = 0, out_sg = 0, sg_ents;
 		bool reply;
+		struct sg_table *sgt;
 
 		spin_lock_bh(&vsock->send_pkt_list_lock);
 		if (list_empty(&vsock->send_pkt_list)) {
@@ -124,11 +165,27 @@ virtio_transport_send_pkt_work(struct work_struct *work)
 		sg_init_one(&hdr, &pkt->hdr, sizeof(pkt->hdr));
 		sgs[out_sg++] = &hdr;
 		if (pkt->buf) {
-			sg_init_one(&buf, pkt->buf, pkt->len);
-			sgs[out_sg++] = &buf;
+			if (is_vmalloc_addr(pkt->buf)) {
+				sgt = vmalloc_to_sgt(pkt->buf, pkt->len, &sg_ents);
+				if (!sgt) {
+					spin_lock_bh(&vsock->send_pkt_list_lock);
+					list_add(&pkt->list,
+						 &vsock->send_pkt_list);
+					spin_unlock_bh(&vsock->send_pkt_list_lock);
+					break;
+				}
+				sgs[out_sg++] = sgt->sgl;
+			} else {
+				sg_init_one(&buf, pkt->buf, pkt->len);
+				sgs[out_sg++] = &buf;
+			}
 		}
 
 		ret = virtqueue_add_sgs(vq, sgs, out_sg, in_sg, pkt, GFP_KERNEL);
+		if (pkt->buf && is_vmalloc_addr(pkt->buf)) {
+			sg_free_table(sgt);
+			kfree(sgt);
+		}
 		/* Usually this means that there is no more space available in
 		 * the vq
 		 */
