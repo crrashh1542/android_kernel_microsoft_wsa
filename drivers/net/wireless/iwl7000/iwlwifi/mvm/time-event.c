@@ -410,8 +410,8 @@ void iwl_mvm_rx_roc_notif(struct iwl_mvm *mvm,
 		set_bit(IWL_MVM_STATUS_ROC_AUX_RUNNING, &mvm->status);
 		ieee80211_ready_on_channel(mvm->hw);
 	} else {
-		ieee80211_remain_on_channel_expired(mvm->hw);
 		iwl_mvm_roc_finished(mvm);
+		ieee80211_remain_on_channel_expired(mvm->hw);
 	}
 }
 
