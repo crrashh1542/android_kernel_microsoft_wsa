@@ -1649,6 +1649,11 @@ static int gen11_dsi_dsc_compute_config(struct intel_encoder *encoder,
 	if (ret)
 		return ret;
 
+	/* From Table E-2 in DSC 1.1*/
+	if (vdsc_cfg->dsc_version_minor == 1 &&
+	    vdsc_cfg->bits_per_pixel == 128)
+		vdsc_cfg->first_line_bpg_offset = 12;
+
 	/* DSI specific sanity checks on the common code */
 	drm_WARN_ON(&dev_priv->drm, vdsc_cfg->vbr_enable);
 	drm_WARN_ON(&dev_priv->drm, vdsc_cfg->simple_422);
