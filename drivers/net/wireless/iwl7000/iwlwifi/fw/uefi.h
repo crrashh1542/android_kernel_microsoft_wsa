@@ -14,8 +14,8 @@
 #define IWL_SGOM_MAP_SIZE		339
 #define IWL_UATS_MAP_SIZE		339
 
-#define UATS_VLP_AP_TYPE 0x01
-#define UATS_AFC_AP_TYPE 0x10
+#define UATS_AFC_AP_TYPE 0x01
+#define UATS_VLP_AP_TYPE 0x02
 
 struct pnvm_sku_package {
 	u8 rev;

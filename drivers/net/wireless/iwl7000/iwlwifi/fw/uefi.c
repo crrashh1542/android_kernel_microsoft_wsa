@@ -399,6 +399,7 @@ static int iwl_uefi_uats_parse(struct uefi_cnv_wlan_uats_data *uats_data,
 			       struct iwl_fw_runtime *fwrt)
 {
 	int row, col;
+	u8 vlp_afc_ap_mcc1, vlp_afc_ap_mcc2, vlp_ap, afc_ap;
 
 	if (uats_data->revision != 1)
 		return -EINVAL;
@@ -412,25 +413,39 @@ static int iwl_uefi_uats_parse(struct uefi_cnv_wlan_uats_data *uats_data,
 			 * one for each letter,
 			 * extract and check each of them separately
 			 */
-			u8 vlp_ap = fwrt->uats_table.offset_map[row][col] &
-					 UATS_VLP_AP_TYPE;
-			u8 afc_ap = (fwrt->uats_table.offset_map[row][col] &
-					 UATS_AFC_AP_TYPE) >> 4;
+			vlp_afc_ap_mcc1 =
+				fwrt->uats_table.offset_map[row][col] & 0x03;
+			vlp_afc_ap_mcc2 =
+				(fwrt->uats_table.offset_map[row][col] & 0x30)
+				 >> 4;
+
+			vlp_ap = vlp_afc_ap_mcc1 & UATS_VLP_AP_TYPE;
+			afc_ap = (vlp_afc_ap_mcc1 & UATS_AFC_AP_TYPE) >> 1;
 
 			if (vlp_ap) {
 				IWL_DEBUG_FW(fwrt->trans,
 					     "VLP supported for MCC: %c%c\n",
-					     row + 'A', col + 'A');
+					     row + 'A', 2 * col + 'A');
 			}
-
 			if (afc_ap) {
 				IWL_DEBUG_FW(fwrt->trans,
 					     "AFC supported for MCC: %c%c\n",
-					     row + 'A', col + 'A');
+					     row + 'A', 2 * col + 'A');
 			}
 
-			fwrt->uats_table.offset_map[row][col] =
-				(afc_ap << 4) | vlp_ap;
+			vlp_ap = vlp_afc_ap_mcc2 & UATS_VLP_AP_TYPE;
+			afc_ap = (vlp_afc_ap_mcc2 & UATS_AFC_AP_TYPE) >> 1;
+
+			if (vlp_ap) {
+				IWL_DEBUG_FW(fwrt->trans,
+					     "VLP supported for MCC: %c%c\n",
+					     row + 'A', 2 * col + 1 + 'A');
+			}
+			if (afc_ap) {
+				IWL_DEBUG_FW(fwrt->trans,
+					     "AFC supported for MCC: %c%c\n",
+					     row + 'A', 2 * col + 1 + 'A');
+			}
 		}
 	}
 	return 0;
