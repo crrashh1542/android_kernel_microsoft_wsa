@@ -7455,9 +7455,11 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	ecsa_elem = ieee80211_bss_get_elem(req->bss,
 					   WLAN_EID_EXT_CHANSWITCH_ANN);
 	if ((csa_elem &&
-	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie)) ||
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie) &&
+	     ((struct ieee80211_channel_sw_ie *)csa_elem->data)->count != 0) ||
 	    (ecsa_elem &&
-	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie))) {
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie) &&
+	     ((struct ieee80211_ext_chansw_ie *)ecsa_elem->data)->count != 0)) {
 		rcu_read_unlock();
 		sdata_info(sdata, "AP is in CSA process, reject auth\n");
 		return -EINVAL;
@@ -7815,9 +7817,11 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	csa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_CHANNEL_SWITCH);
 	ecsa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_EXT_CHANSWITCH_ANN);
 	if ((csa_elem &&
-	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie)) ||
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie) &&
+	     ((struct ieee80211_channel_sw_ie *)csa_elem->data)->count != 0) ||
 	    (ecsa_elem &&
-	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie))) {
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie) &&
+	     ((struct ieee80211_ext_chansw_ie *)ecsa_elem->data)->count != 0)) {
 		sdata_info(sdata, "AP is in CSA process, reject assoc\n");
 		rcu_read_unlock();
 		kfree(assoc_data);
