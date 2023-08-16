@@ -2405,6 +2405,7 @@ static int cam_populate_smmu_context_banks(struct device *dev,
 	/* increment count to next bank */
 	iommu_cb_set.cb_init_count++;
 
+	dma_set_max_seg_size(dev, UINT_MAX);
 	CAM_DBG(CAM_SMMU, "X: cb init count :%d", iommu_cb_set.cb_init_count);
 
 cb_init_fail:
