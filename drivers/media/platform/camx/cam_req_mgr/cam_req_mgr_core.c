@@ -2722,6 +2722,10 @@ static int __cam_req_mgr_setup_link_info(struct cam_req_mgr_core_link *link,
 			subscribe_event |= (uint32_t)dev->dev_info.trigger;
 		}
 		if (dev->dev_info.dev_id == CAM_REQ_MGR_DEVICE_IFE) {
+			if (link->num_sof_src >= ARRAY_SIZE(link->dev_sof_evt)) {
+				rc = -ENXIO;
+				goto error;
+			}
 			link->dev_sof_evt[link->num_sof_src].dev_hdl =
 				dev->dev_hdl;
 			link->dev_sof_evt[link->num_sof_src].sof_done = false;
