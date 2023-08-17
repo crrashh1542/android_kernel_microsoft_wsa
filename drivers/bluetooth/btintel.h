@@ -144,10 +144,9 @@ struct intel_offload_use_cases {
 #define INTEL_TLV_DEBUG_EXCEPTION	0x02
 #define INTEL_TLV_TEST_EXCEPTION	0xDE
 
-struct btintel_loc_aware_reg {
-	__le32 mcc;
-	__le32 sel;
-	__le32 delta;
+#define INTEL_OP_PPAG_CMD		0xFE0B
+struct hci_ppag_enable_cmd {
+	__le32	ppag_enable_flags;
 } __packed;
 
 #define INTEL_HW_PLATFORM(cnvx_bt)	((u8)(((cnvx_bt) & 0x0000ff00) >> 8))
