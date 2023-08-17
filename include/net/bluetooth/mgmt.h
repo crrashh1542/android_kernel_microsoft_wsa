@@ -1183,9 +1183,12 @@ struct mgmt_ev_adv_monitor_device_lost {
 	struct mgmt_addr_info addr;
 } __packed;
 
-#define MGMT_EV_QUALITY_REPORT			0x0031
+
+/* CHROMIUM Only Events Start */
+#define MGMT_EV_QUALITY_REPORT			0x0070
 struct mgmt_ev_quality_report {
 	__u8 quality_spec;
 	__u8 data_len;
 	__u8 data[0];
 } __packed;
+/* CHROMIUM Only Events End */
