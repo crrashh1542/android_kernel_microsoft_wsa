@@ -842,7 +842,6 @@ iwl_mvm_stat_iterator_all_links(struct iwl_mvm *mvm,
 	u32 rx_bytes[MAC_INDEX_AUX] = {};
 	int fw_link_id;
 
-	rcu_read_lock();
 	for (fw_link_id = 0; fw_link_id < ARRAY_SIZE(mvm->link_id_to_link_conf);
 	     fw_link_id++) {
 		struct iwl_stats_ntfy_per_link *link_stats;
@@ -852,7 +851,7 @@ iwl_mvm_stat_iterator_all_links(struct iwl_mvm *mvm,
 		int sig;
 
 		bss_conf = iwl_mvm_rcu_fw_link_id_to_link_conf(mvm, fw_link_id,
-							       true);
+							       false);
 		if (!bss_conf)
 			continue;
 
@@ -897,7 +896,6 @@ iwl_mvm_stat_iterator_all_links(struct iwl_mvm *mvm,
 		rx_bytes[mvmvif->id] +=
 			le32_to_cpu(per_link[fw_link_id].rx_bytes);
 	}
-	rcu_read_unlock();
 
 	/* Don't update in case the statistics are not cleared, since
 	 * we will end up counting twice the same airtime, once in TCM
