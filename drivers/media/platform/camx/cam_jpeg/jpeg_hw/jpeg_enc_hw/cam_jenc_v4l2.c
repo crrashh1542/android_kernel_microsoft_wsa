@@ -524,6 +524,9 @@ static int op_jenc_file_open(struct file *file)
 	jctx->jenc	= jenc;
 	jctx->dev	= jenc->dev;
 	jctx->iommu_hdl	= cam_jpeg_get_iommu_hd();
+	mutex_init(&jctx->vb_mutex);
+	mutex_init(&jctx->quality_mutex);
+	spin_lock_init(&jctx->irqlock);
 
 	if (atomic_inc_return(&jenc->ref_count) == 1)
 		hw_reset = true;
@@ -559,10 +562,6 @@ static int op_jenc_file_open(struct file *file)
 		rc = PTR_ERR(jctx->fh.m2m_ctx);
 		goto err_handler_free;
 	}
-
-	mutex_init(&jctx->vb_mutex);
-	mutex_init(&jctx->quality_mutex);
-	spin_lock_init(&jctx->irqlock);
 
 	v4l2_fh_add(&jctx->fh);
 
