@@ -2450,6 +2450,7 @@ void ieee80211_txq_init(struct ieee80211_sub_if_data *sdata,
 			struct txq_info *txq, int tid);
 void ieee80211_txq_purge(struct ieee80211_local *local,
 			 struct txq_info *txqi);
+void ieee80211_purge_sta_txqs(struct sta_info *sta);
 void ieee80211_txq_remove_vlan(struct ieee80211_local *local,
 			       struct ieee80211_sub_if_data *sdata);
 #if CFG80211_VERSION >= KERNEL_VERSION(4,18,0)
