@@ -1804,21 +1804,11 @@ static void ieee80211_chswitch_post_beacon(struct ieee80211_link_data *link)
 void ieee80211_chswitch_done(struct ieee80211_vif *vif, bool success,
 			     unsigned int link_id)
 {
-	struct ieee80211_link_data *link;
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_link_data_managed *ifmgd;
 
-	trace_api_chswitch_done(sdata, success);
+	trace_api_chswitch_done(sdata, success, link_id);
 
 	rcu_read_lock();
-
-	link = rcu_dereference(sdata->link[link_id]);
-	if (WARN_ON(!link)) {
-		rcu_read_unlock();
-		return;
-	}
-
-	ifmgd = &link->u.mgd;
 
 	if (!success) {
 		sdata_info(sdata,
@@ -1826,8 +1816,16 @@ void ieee80211_chswitch_done(struct ieee80211_vif *vif, bool success,
 		wiphy_work_queue(sdata->local->hw.wiphy,
 				 &sdata->u.mgd.csa_connection_drop_work);
 	} else {
+		struct ieee80211_link_data *link =
+			rcu_dereference(sdata->link[link_id]);
+
+		if (WARN_ON(!link)) {
+			rcu_read_unlock();
+			return;
+		}
+
 		wiphy_delayed_work_queue(sdata->local->hw.wiphy,
-					 &ifmgd->chswitch_work, 0);
+					 &link->u.mgd.chswitch_work, 0);
 	}
 
 	rcu_read_unlock();
