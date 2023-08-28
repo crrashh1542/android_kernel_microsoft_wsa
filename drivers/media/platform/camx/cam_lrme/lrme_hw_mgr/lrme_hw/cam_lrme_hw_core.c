@@ -124,6 +124,14 @@ static int cam_lrme_hw_dump(struct cam_hw_info *lrme_hw,
 		 tm.tv_nsec / NSEC_PER_USEC,
 		 cur_tm.tv_sec,
 		 cur_tm.tv_nsec / NSEC_PER_USEC);
+
+	if (dump_args->buf_len <= dump_args->offset) {
+		CAM_WARN(CAM_LRME, "dump buffer overshoot len %zu offset %llu",
+			dump_args->buf_len, dump_args->offset);
+		mutex_unlock(&lrme_hw->hw_mutex);
+		return -ENOSPC;
+	}
+
 	remain_len = dump_args->buf_len - dump_args->offset;
 	min_len =  2 * (sizeof(struct cam_lrme_hw_dump_header) +
 		    CAM_LRME_HW_DUMP_TAG_MAX_LEN);

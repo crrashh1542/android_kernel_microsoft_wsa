@@ -52,8 +52,8 @@
 
 #define DISPLAY_VER12_DMC_MAX_FW_SIZE	ICL_DMC_MAX_FW_SIZE
 
-#define DG2_DMC_PATH			DMC_PATH(dg2, 2, 07)
-#define DG2_DMC_VERSION_REQUIRED	DMC_VERSION(2, 07)
+#define DG2_DMC_PATH			DMC_PATH(dg2, 2, 08)
+#define DG2_DMC_VERSION_REQUIRED	DMC_VERSION(2, 8)
 MODULE_FIRMWARE(DG2_DMC_PATH);
 
 #define ADLP_DMC_PATH			DMC_PATH(adlp, 2, 16)
@@ -107,6 +107,8 @@ MODULE_FIRMWARE(BXT_DMC_PATH);
 #define DMC_V1_MAX_MMIO_COUNT		8
 #define DMC_V3_MAX_MMIO_COUNT		20
 #define DMC_V1_MMIO_START_RANGE		0x80000
+
+#define PIPE_TO_DMC_ID(pipe)		 (DMC_FW_PIPEA + ((pipe) - PIPE_A))
 
 struct intel_css_header {
 	/* 0x09 for DMC */
@@ -383,6 +385,52 @@ static void disable_all_event_handlers(struct drm_i915_private *i915)
 	}
 }
 
+static void pipedmc_clock_gating_wa(struct drm_i915_private *i915, bool enable)
+{
+	enum pipe pipe;
+
+	if (DISPLAY_VER(i915) != 13)
+		return;
+
+	/*
+	 * Wa_16015201720:adl-p,dg2
+	 * The WA requires clock gating to be disabled all the time
+	 * for pipe A and B.
+	 * For pipe C and D clock gating needs to be disabled only
+	 * during initializing the firmware.
+	 */
+	if (enable)
+		for (pipe = PIPE_A; pipe <= PIPE_D; pipe++)
+			intel_de_rmw(i915, CLKGATE_DIS_PSL_EXT(pipe),
+				     0, PIPEDMC_GATING_DIS);
+	else
+		for (pipe = PIPE_C; pipe <= PIPE_D; pipe++)
+			intel_de_rmw(i915, CLKGATE_DIS_PSL_EXT(pipe),
+				     PIPEDMC_GATING_DIS, 0);
+}
+
+void intel_dmc_enable_pipe(struct drm_i915_private *i915, enum pipe pipe)
+{
+	if (!has_dmc_id_fw(i915, PIPE_TO_DMC_ID(pipe)))
+		return;
+
+	if (DISPLAY_VER(i915) >= 14)
+		intel_de_rmw(i915, MTL_PIPEDMC_CONTROL, 0, PIPEDMC_ENABLE_MTL(pipe));
+	else
+		intel_de_rmw(i915, PIPEDMC_CONTROL(pipe), 0, PIPEDMC_ENABLE);
+}
+
+void intel_dmc_disable_pipe(struct drm_i915_private *i915, enum pipe pipe)
+{
+	if (!has_dmc_id_fw(i915, PIPE_TO_DMC_ID(pipe)))
+		return;
+
+	if (DISPLAY_VER(i915) >= 14)
+		intel_de_rmw(i915, MTL_PIPEDMC_CONTROL, PIPEDMC_ENABLE_MTL(pipe), 0);
+	else
+		intel_de_rmw(i915, PIPEDMC_CONTROL(pipe), PIPEDMC_ENABLE, 0);
+}
+
 /**
  * intel_dmc_load_program() - write the firmware from memory to register.
  * @dev_priv: i915 drm device.
@@ -399,6 +447,8 @@ void intel_dmc_load_program(struct drm_i915_private *dev_priv)
 	if (!intel_dmc_has_payload(dev_priv))
 		return;
 
+	pipedmc_clock_gating_wa(dev_priv, true);
+
 	disable_all_event_handlers(dev_priv);
 
 	assert_rpm_wakelock_held(&dev_priv->runtime_pm);
@@ -407,9 +457,9 @@ void intel_dmc_load_program(struct drm_i915_private *dev_priv)
 
 	for (id = 0; id < DMC_FW_MAX; id++) {
 		for (i = 0; i < dmc->dmc_info[id].dmc_fw_size; i++) {
-			intel_uncore_write_fw(&dev_priv->uncore,
-					      DMC_PROGRAM(dmc->dmc_info[id].start_mmioaddr, i),
-					      dmc->dmc_info[id].payload[i]);
+			intel_de_write_fw(dev_priv,
+					  DMC_PROGRAM(dmc->dmc_info[id].start_mmioaddr, i),
+					  dmc->dmc_info[id].payload[i]);
 		}
 	}
 
@@ -432,6 +482,8 @@ void intel_dmc_load_program(struct drm_i915_private *dev_priv)
 	 * here.
 	 */
 	disable_all_flip_queue_events(dev_priv);
+
+	pipedmc_clock_gating_wa(dev_priv, false);
 }
 
 /**
@@ -446,7 +498,9 @@ void intel_dmc_disable_program(struct drm_i915_private *i915)
 	if (!intel_dmc_has_payload(i915))
 		return;
 
+	pipedmc_clock_gating_wa(i915, true);
 	disable_all_event_handlers(i915);
+	pipedmc_clock_gating_wa(i915, false);
 }
 
 void assert_dmc_loaded(struct drm_i915_private *i915)

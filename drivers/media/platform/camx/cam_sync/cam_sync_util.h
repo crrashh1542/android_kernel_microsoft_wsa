@@ -22,19 +22,6 @@
 extern struct sync_device *sync_dev;
 
 /**
- * @brief: Finds an empty row in the sync table and sets its corresponding bit
- * in the bit array
- *
- * @param sync_dev : Pointer to the sync device instance
- * @param idx      : Pointer to an long containing the index found in the bit
- *                   array
- *
- * @return Status of operation. Negative in case of error. Zero otherwise.
- */
-int cam_sync_util_find_and_set_empty_row(struct sync_device *sync_dev,
-	long *idx);
-
-/**
  * @brief: Function to initialize an empty row in the sync table. This should be
  *         called only for individual sync objects.
  *

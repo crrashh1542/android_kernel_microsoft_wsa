@@ -514,6 +514,8 @@ static int cam_video_device_setup(void)
 	g_dev.video->minor = -1;
 	g_dev.video->vfl_type = VFL_TYPE_VIDEO;
 	g_dev.video->device_caps = V4L2_CAP_DEVICE_CAPS;
+	g_dev.video->lock = &g_dev.video_lock;
+
 	rc = video_register_device(g_dev.video, g_dev.video->vfl_type, -1);
 	if (rc)
 		goto v4l2_fail;
@@ -642,6 +644,7 @@ static int cam_req_mgr_remove(struct platform_device *pdev)
 	cam_v4l2_device_cleanup();
 	cam_mem_mgr_exit(pdev);
 	mutex_destroy(&g_dev.dev_lock);
+	mutex_destroy(&g_dev.video_lock);
 	g_dev.state = false;
 	g_dev.subdev_nodes_created = false;
 
@@ -698,6 +701,7 @@ static int cam_req_mgr_probe(struct platform_device *pdev)
 	spin_lock_init(&g_dev.cam_eventq_lock);
 	g_dev.subdev_nodes_created = false;
 	mutex_init(&g_dev.dev_lock);
+	mutex_init(&g_dev.video_lock);
 
 	rc = cam_req_mgr_util_init();
 	if (rc) {
@@ -724,6 +728,7 @@ req_mgr_core_fail:
 req_mgr_util_fail:
 	mutex_destroy(&g_dev.dev_lock);
 	mutex_destroy(&g_dev.cam_lock);
+	mutex_destroy(&g_dev.video_lock);
 	cam_video_device_cleanup();
 video_setup_fail:
 	cam_media_device_cleanup();

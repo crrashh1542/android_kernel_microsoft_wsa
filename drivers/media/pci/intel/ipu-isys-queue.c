@@ -133,7 +133,7 @@ static void buf_cleanup(struct vb2_buffer *vb)
 		__func__);
 
 	if (aq->buf_cleanup)
-		return aq->buf_cleanup(vb);
+		aq->buf_cleanup(vb);
 }
 
 /*
@@ -475,7 +475,7 @@ out_requeue:
 	return rval;
 }
 
-static void __buf_queue(struct vb2_buffer *vb, bool force)
+static void buf_queue(struct vb2_buffer *vb)
 {
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
@@ -518,7 +518,7 @@ static void __buf_queue(struct vb2_buffer *vb, bool force)
 	mutex_unlock(&av->mutex);
 	mutex_lock(&pipe_av->mutex);
 
-	if (!force && ip->nr_streaming != ip->nr_queues) {
+	if (ip->nr_streaming != ip->nr_queues) {
 		dev_dbg(&av->isys->adev->dev,
 			"not streaming yet, adding to incoming\n");
 		goto out;
@@ -583,11 +583,6 @@ static void __buf_queue(struct vb2_buffer *vb, bool force)
 out:
 	mutex_unlock(&pipe_av->mutex);
 	mutex_lock(&av->mutex);
-}
-
-static void buf_queue(struct vb2_buffer *vb)
-{
-	__buf_queue(vb, false);
 }
 
 int ipu_isys_link_fmt_validate(struct ipu_isys_queue *aq)

@@ -43,6 +43,7 @@
 #include <linux/compat.h>
 
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 
 #include <trace/events/timer.h>
 
@@ -736,6 +737,9 @@ static void hrtimer_switch_to_hres(void)
 {
 	struct hrtimer_cpu_base *base = this_cpu_ptr(&hrtimer_bases);
 
+	if (__hrtimer_hres_active(base))
+		return;
+
 	if (tick_init_highres()) {
 		pr_warn("Could not switch to high resolution mode on CPU %u\n",
 			base->cpu);
@@ -979,6 +983,23 @@ void clock_was_set(unsigned int bases)
 out_timerfd:
 	timerfd_clock_was_set();
 }
+
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
+/*
+ * Switch to low resolution mode
+ */
+void hrtimer_switch_to_lres(void)
+{
+	struct hrtimer_cpu_base *base = this_cpu_ptr(&hrtimer_bases);
+
+	if (!__hrtimer_hres_active(base))
+		return;
+
+	tick_nohz_hres_to_lres();
+	base->hres_active = 0;
+	hrtimer_resolution = LOW_RES_NSEC;
+}
+#endif
 
 static void clock_was_set_work(struct work_struct *work)
 {
@@ -1785,7 +1806,15 @@ void hrtimer_interrupt(struct clock_event_device *dev)
 	unsigned long flags;
 	int retries = 0;
 
-	BUG_ON(!cpu_base->hres_active);
+	/*
+	 * TODO: This is a BUG_ON() in upstream, but is required
+	 * to prevent a crash when transitioning from high to low res.
+	 * We need to find a way to keep the BUG_ON in highres mode.
+	 * UPDATE (6/2023): crash cannot be reproduced with recent changes.
+	 * Will keep it just in case, but will drop for upstream.
+	 */
+	if (!cpu_base->hres_active)
+		return;
 	cpu_base->nr_events++;
 	dev->next_event = KTIME_MAX;
 
@@ -2126,6 +2155,7 @@ SYSCALL_DEFINE2(nanosleep, struct __kernel_timespec __user *, rqtp,
 	if (!timespec64_valid(&tu))
 		return -EINVAL;
 
+	current->restart_block.fn = do_no_restart_syscall;
 	current->restart_block.nanosleep.type = rmtp ? TT_NATIVE : TT_NONE;
 	current->restart_block.nanosleep.rmtp = rmtp;
 	return hrtimer_nanosleep(timespec64_to_ktime(tu), HRTIMER_MODE_REL,
@@ -2147,6 +2177,7 @@ SYSCALL_DEFINE2(nanosleep_time32, struct old_timespec32 __user *, rqtp,
 	if (!timespec64_valid(&tu))
 		return -EINVAL;
 
+	current->restart_block.fn = do_no_restart_syscall;
 	current->restart_block.nanosleep.type = rmtp ? TT_COMPAT : TT_NONE;
 	current->restart_block.nanosleep.compat_rmtp = rmtp;
 	return hrtimer_nanosleep(timespec64_to_ktime(tu), HRTIMER_MODE_REL,
@@ -2261,10 +2292,61 @@ int hrtimers_dead_cpu(unsigned int scpu)
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
+
+static void hrtimer_smp_call(void *info)
+{
+	bool hres = *((bool *)info);
+
+	if (!hres)
+		hrtimer_switch_to_lres();
+	else
+		hrtimer_switch_to_hres();
+}
+
+static int hrtimer_hres_handler(struct ctl_table *table, int write,
+			      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	bool hres;
+
+	if (!write)
+		return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+
+	hres = ((char *)buffer)[0] != '0';
+	if (hrtimer_hres_enabled == hres)
+		return 0;
+
+	pr_info("Trying to switch to %s res\n", hres ? "high" : "low");
+
+	on_each_cpu(hrtimer_smp_call, &hres, true);
+	hrtimer_hres_enabled = hres;
+	return 0;
+}
+
+static unsigned int zero;
+static unsigned int one = 1;
+static struct ctl_table timer_hres_sysctl[] = {
+	{
+		.procname	= "timer_highres",
+		.data		= &hrtimer_hres_enabled,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= hrtimer_hres_handler,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
+	{}
+};
+
+#endif /* CONFIG_HIGH_RES_TIMERS */
+
 void __init hrtimers_init(void)
 {
 	hrtimers_prepare_cpu(smp_processor_id());
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
+	register_sysctl("kernel", timer_hres_sysctl);
+#endif
 }
 
 /**

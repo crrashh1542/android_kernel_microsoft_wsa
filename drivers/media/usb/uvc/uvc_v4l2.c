@@ -6,6 +6,7 @@
  *          Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  */
 
+#include <linux/bits.h>
 #include <linux/compat.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -51,7 +52,7 @@ static int uvc_ioctl_ctrl_map(struct uvc_video_chain *chain,
 	}
 	memcpy(map->entity, xmap->entity, sizeof(map->entity));
 	map->selector = xmap->selector;
-	map->size = xmap->size;
+	map->data_size = xmap->size;
 	map->offset = xmap->offset;
 	map->v4l2_type = xmap->v4l2_type;
 	map->data_type = xmap->data_type;
@@ -79,7 +80,7 @@ static int uvc_ioctl_ctrl_map(struct uvc_video_chain *chain,
 			goto free_map;
 		}
 
-		map->menu_count = xmap->menu_count;
+		map->menu_mask = GENMASK(xmap->menu_count - 1, 0);
 		break;
 
 	default:
@@ -684,8 +685,6 @@ static int uvc_ioctl_enum_fmt(struct uvc_streaming *stream,
 	fmt->flags = 0;
 	if (format->flags & UVC_FMT_FLAG_COMPRESSED)
 		fmt->flags |= V4L2_FMT_FLAG_COMPRESSED;
-	strscpy(fmt->description, format->name, sizeof(fmt->description));
-	fmt->description[sizeof(fmt->description) - 1] = 0;
 	fmt->pixelformat = format->fcc;
 	return 0;
 }
@@ -1041,7 +1040,10 @@ static int uvc_ioctl_query_ext_ctrl(struct file *file, void *fh,
 	qec->step = qc.step;
 	qec->default_value = qc.default_value;
 	qec->flags = qc.flags;
-	qec->elem_size = 4;
+	if (qc.type == V4L2_CTRL_TYPE_RECT)
+		qec->elem_size = sizeof(struct v4l2_rect);
+	else
+		qec->elem_size = 4;
 	qec->elems = 1;
 	qec->nr_of_dims = 0;
 	memset(qec->dims, 0, sizeof(qec->dims));
@@ -1059,8 +1061,7 @@ static int uvc_ctrl_check_access(struct uvc_video_chain *chain,
 	int ret = 0;
 
 	for (i = 0; i < ctrls->count; ++ctrl, ++i) {
-		ret = uvc_ctrl_is_accessible(chain, ctrl->id,
-					    ioctl == VIDIOC_G_EXT_CTRLS);
+		ret = uvc_ctrl_is_accessible(chain, ctrl->id, ctrls, ioctl);
 		if (ret)
 			break;
 	}
@@ -1083,17 +1084,16 @@ static int uvc_ioctl_g_ext_ctrls(struct file *file, void *fh,
 	if (ret < 0)
 		return ret;
 
-	if (ctrls->which == V4L2_CTRL_WHICH_DEF_VAL) {
+	switch (ctrls->which) {
+	case V4L2_CTRL_WHICH_DEF_VAL:
+	case V4L2_CTRL_WHICH_MIN_VAL:
+	case V4L2_CTRL_WHICH_MAX_VAL:
 		for (i = 0; i < ctrls->count; ++ctrl, ++i) {
-			struct v4l2_queryctrl qc = { .id = ctrl->id };
-
-			ret = uvc_query_v4l2_ctrl(chain, &qc);
+			ret = uvc_ctrl_get_boundary(chain, ctrl, ctrls->which);
 			if (ret < 0) {
 				ctrls->error_idx = i;
 				return ret;
 			}
-
-			ctrl->value = qc.default_value;
 		}
 
 		return 0;
@@ -1177,71 +1177,15 @@ static int uvc_ioctl_querymenu(struct file *file, void *fh,
 	return uvc_query_v4l2_menu(chain, qm);
 }
 
-static int uvc_ioctl_g_roi_target(struct file *file, void *fh,
-				  struct v4l2_selection *sel)
+
+static int uvc_ioctl_g_selection(struct file *file, void *fh,
+				 struct v4l2_selection *sel)
 {
 	struct uvc_fh *handle = fh;
 	struct uvc_streaming *stream = handle->stream;
-	struct uvc_video_chain *chain = handle->chain;
-	struct uvc_roi *roi;
-	u8 query;
-	int ret;
 
-	switch (sel->target) {
-	case V4L2_SEL_TGT_ROI:
-		query = UVC_GET_CUR;
-		break;
-	case V4L2_SEL_TGT_ROI_DEFAULT:
-		query = UVC_GET_DEF;
-		break;
-	case V4L2_SEL_TGT_ROI_BOUNDS_MIN:
-		query = UVC_GET_MIN;
-		break;
-	case V4L2_SEL_TGT_ROI_BOUNDS_MAX:
-		query = UVC_GET_MAX;
-		break;
-	default:
+	if (sel->type != stream->type)
 		return -EINVAL;
-	}
-
-	/*
-	 * Synchronize with uvc_ioctl_query_ext_ctrl() that can set
-	 * ROI auto_controls concurrently.
-	 */
-	mutex_lock(&chain->ctrl_mutex);
-
-	roi = uvc_ctrl_roi(chain, query);
-	if (!roi) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/*
-	 * This reads actual configuration from the firmware and at the
-	 * same updates cached UVC control data.
-	 */
-	ret = uvc_query_ctrl(stream->dev, query, 1, stream->dev->intfnum,
-			     UVC_CT_REGION_OF_INTEREST_CONTROL, roi,
-			     sizeof(struct uvc_roi));
-	if (ret)
-		goto out;
-
-	/* ROI left, top, right, bottom are global coordinates. */
-	sel->r.top	= roi->wROI_Top;
-	sel->r.left	= roi->wROI_Left;
-	sel->r.height	= roi->wROI_Bottom - roi->wROI_Top + 1;
-	sel->r.width	= roi->wROI_Right - roi->wROI_Left + 1;
-
-out:
-	mutex_unlock(&chain->ctrl_mutex);
-	return ret;
-}
-
-static int uvc_ioctl_g_sel_target(struct file *file, void *fh,
-				  struct v4l2_selection *sel)
-{
-	struct uvc_fh *handle = fh;
-	struct uvc_streaming *stream = handle->stream;
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP_DEFAULT:
@@ -1266,121 +1210,6 @@ static int uvc_ioctl_g_sel_target(struct file *file, void *fh,
 	mutex_unlock(&stream->mutex);
 
 	return 0;
-}
-
-static int uvc_ioctl_g_selection(struct file *file, void *fh,
-				 struct v4l2_selection *sel)
-{
-	struct uvc_fh *handle = fh;
-	struct uvc_streaming *stream = handle->stream;
-
-	if (sel->type != stream->type)
-		return -EINVAL;
-
-	switch (sel->target) {
-	case V4L2_SEL_TGT_CROP_DEFAULT:
-	case V4L2_SEL_TGT_CROP_BOUNDS:
-	case V4L2_SEL_TGT_COMPOSE_DEFAULT:
-	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
-		return uvc_ioctl_g_sel_target(file, fh, sel);
-	case V4L2_SEL_TGT_ROI:
-	case V4L2_SEL_TGT_ROI_DEFAULT:
-	case V4L2_SEL_TGT_ROI_BOUNDS_MIN:
-	case V4L2_SEL_TGT_ROI_BOUNDS_MAX:
-		return uvc_ioctl_g_roi_target(file, fh, sel);
-	}
-
-	return -EINVAL;
-}
-
-static void validate_roi_bounds(struct uvc_streaming *stream,
-				struct v4l2_selection *sel)
-{
-	lockdep_assert_held(&stream->mutex);
-
-	if (sel->r.left > USHRT_MAX)
-		sel->r.left = 0;
-
-	if (sel->r.top > USHRT_MAX)
-		sel->r.top = 0;
-
-	if (sel->r.width + sel->r.left > USHRT_MAX || !sel->r.width) {
-		sel->r.left = 0;
-		sel->r.width = stream->cur_frame->wWidth;
-	}
-
-	if (sel->r.height + sel->r.top > USHRT_MAX || !sel->r.height) {
-		sel->r.top = 0;
-		sel->r.height = stream->cur_frame->wHeight;
-	}
-}
-
-static int uvc_ioctl_s_roi(struct file *file, void *fh,
-			   struct v4l2_selection *sel)
-{
-	struct uvc_fh *handle = fh;
-	struct uvc_streaming *stream = handle->stream;
-	struct uvc_video_chain *chain = handle->chain;
-	struct uvc_roi roi_backup;
-	struct uvc_roi *roi;
-	int ret;
-
-	/*
-	 * Synchronize with uvc_ioctl_query_ext_ctrl() that can set
-	 * ROI auto_controls concurrently.
-	 */
-	mutex_lock(&chain->ctrl_mutex);
-
-	roi = uvc_ctrl_roi(chain, UVC_GET_CUR);
-	if (!roi) {
-		mutex_unlock(&chain->ctrl_mutex);
-		return -EINVAL;
-	}
-
-	mutex_lock(&stream->mutex);
-
-	validate_roi_bounds(stream, sel);
-
-	roi_backup = *roi;
-
-	/*
-	 * ROI left, top, right, bottom are global coordinates.
-	 * Note that we use ->auto_controls value which we read earlier.
-	 */
-	roi->wROI_Top		= sel->r.top;
-	roi->wROI_Left		= sel->r.left;
-	roi->wROI_Bottom	= sel->r.height + sel->r.top - 1;
-	roi->wROI_Right		= sel->r.width + sel->r.left - 1;
-
-	ret = uvc_query_ctrl(stream->dev, UVC_SET_CUR, 1, stream->dev->intfnum,
-			     UVC_CT_REGION_OF_INTEREST_CONTROL, roi,
-			     sizeof(struct uvc_roi));
-	if (ret) {
-		*roi = roi_backup;
-		goto out;
-	}
-
-out:
-	mutex_unlock(&stream->mutex);
-	mutex_unlock(&chain->ctrl_mutex);
-	return ret;
-}
-
-static int uvc_ioctl_s_selection(struct file *file, void *fh,
-				 struct v4l2_selection *sel)
-{
-	struct uvc_fh *handle = fh;
-	struct uvc_streaming *stream = handle->stream;
-
-	if (sel->type != stream->type)
-		return -EINVAL;
-
-	switch (sel->target) {
-	case V4L2_SEL_TGT_ROI:
-		return uvc_ioctl_s_roi(file, fh, sel);
-	}
-
-	return -EINVAL;
 }
 
 static int uvc_ioctl_g_parm(struct file *file, void *fh,
@@ -1741,7 +1570,6 @@ const struct v4l2_ioctl_ops uvc_ioctl_ops = {
 	.vidioc_try_ext_ctrls = uvc_ioctl_try_ext_ctrls,
 	.vidioc_querymenu = uvc_ioctl_querymenu,
 	.vidioc_g_selection = uvc_ioctl_g_selection,
-	.vidioc_s_selection = uvc_ioctl_s_selection,
 	.vidioc_g_parm = uvc_ioctl_g_parm,
 	.vidioc_s_parm = uvc_ioctl_s_parm,
 	.vidioc_enum_framesizes = uvc_ioctl_enum_framesizes,

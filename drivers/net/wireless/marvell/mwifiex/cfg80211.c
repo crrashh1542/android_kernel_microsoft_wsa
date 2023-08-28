@@ -876,7 +876,7 @@ static int mwifiex_deinit_priv_params(struct mwifiex_private *priv)
 	adapter->rx_locked = true;
 	if (adapter->rx_processing) {
 		spin_unlock_bh(&adapter->rx_proc_lock);
-		flush_workqueue(adapter->rx_workqueue);
+		kthread_flush_worker(adapter->rx_thread);
 	} else {
 	spin_unlock_bh(&adapter->rx_proc_lock);
 	}

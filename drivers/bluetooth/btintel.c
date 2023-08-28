@@ -32,11 +32,10 @@ struct cmd_write_boot_params {
 	u8  fw_build_yy;
 } __packed;
 
-#define DRIVER_NAME_LEN		16
 static struct {
-	char driver_name[DRIVER_NAME_LEN];
-	u8   hw_variant;
-	u32  fw_build_num;
+	const char *driver_name;
+	u8         hw_variant;
+	u32        fw_build_num;
 } coredump_info;
 
 int btintel_check_bdaddr(struct hci_dev *hdev)
@@ -1453,42 +1452,34 @@ EXPORT_SYMBOL_GPL(btintel_pull_quality_report_data);
 
 static void btintel_coredump(struct hci_dev *hdev)
 {
-	static const u8 param[] = { 0x00, 0x00 };
 	struct sk_buff *skb;
 
-	skb = __hci_cmd_sync(hdev, 0xfc4d, 2, param, HCI_CMD_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, 0xfc4e, 0, NULL, HCI_CMD_TIMEOUT);
 	if (IS_ERR(skb)) {
 		bt_dev_err(hdev, "Coredump failed (%ld)", PTR_ERR(skb));
 		return;
 	}
+
 	kfree_skb(skb);
 }
 
-static int btintel_dmp_hdr(struct hci_dev *hdev, char *buf, size_t size)
+static void btintel_dmp_hdr(struct hci_dev *hdev, struct sk_buff *skb)
 {
-	char *ptr = buf;
-	size_t rem = size;
-	size_t read = 0;
+	char buf[80];
 
-	read = snprintf(ptr, rem, "Controller Name: 0x%X\n",
-			coredump_info.hw_variant);
-	rem -= read;
-	ptr += read;
+	snprintf(buf, sizeof(buf), "Controller Name: 0x%X\n",
+		 coredump_info.hw_variant);
+	skb_put_data(skb, buf, strlen(buf));
 
-	read = snprintf(ptr, rem, "Firmware Version: 0x%X\n",
-			coredump_info.fw_build_num);
-	rem -= read;
-	ptr += read;
+	snprintf(buf, sizeof(buf), "Firmware Version: 0x%X\n",
+		 coredump_info.fw_build_num);
+	skb_put_data(skb, buf, strlen(buf));
 
-	read = snprintf(ptr, rem, "Driver: %s\n", coredump_info.driver_name);
-	rem -= read;
-	ptr += read;
+	snprintf(buf, sizeof(buf), "Driver: %s\n", coredump_info.driver_name);
+	skb_put_data(skb, buf, strlen(buf));
 
-	read = snprintf(ptr, rem, "Vendor: Intel\n");
-	rem -= read;
-	ptr += read;
-
-	return size - rem;
+	snprintf(buf, sizeof(buf), "Vendor: Intel\n");
+	skb_put_data(skb, buf, strlen(buf));
 }
 
 static int btintel_register_devcoredump_support(struct hci_dev *hdev)
@@ -1503,11 +1494,11 @@ static int btintel_register_devcoredump_support(struct hci_dev *hdev)
 	}
 
 	if (!(features.page1[0] & 0x3f)) {
-		bt_dev_info(hdev, "Telemetry exception format not supported");
+		bt_dev_dbg(hdev, "Telemetry exception format not supported");
 		return -EOPNOTSUPP;
 	}
 
-	hci_devcoredump_register(hdev, btintel_coredump, btintel_dmp_hdr, NULL);
+	hci_devcd_register(hdev, btintel_coredump, btintel_dmp_hdr, NULL);
 
 	return err;
 }
@@ -2304,7 +2295,7 @@ static int btintel_get_codec_config_data(struct hci_dev *hdev,
 	}
 
 	*ven_data = kmalloc(sizeof(__u8), GFP_KERNEL);
-	if (!ven_data) {
+	if (!*ven_data) {
 		err = -ENOMEM;
 		goto error;
 	}
@@ -2681,9 +2672,8 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 		 */
 		set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
 
-		/* Valid LE States quirk for GfP */
-		if (INTEL_HW_VARIANT(ver_tlv.cnvi_bt) == 0x18)
-			set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
+		/* Apply LE States quirk from solar onwards */
+		set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
 
 		/* Setup MSFT Extension support */
 		btintel_set_msft_opcode(hdev,
@@ -2749,7 +2739,7 @@ int btintel_configure_setup(struct hci_dev *hdev, const char *driver_name)
 	hdev->set_diag = btintel_set_diag_combined;
 	hdev->set_bdaddr = btintel_set_bdaddr;
 
-	strncpy(coredump_info.driver_name, driver_name, DRIVER_NAME_LEN - 1);
+	coredump_info.driver_name = driver_name;
 
 	return 0;
 }

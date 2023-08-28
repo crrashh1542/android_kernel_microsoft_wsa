@@ -1195,15 +1195,15 @@ static void restart_le_actions(struct hci_dev *hdev)
 		/* Needed for AUTO_OFF case where might not "really"
 		 * have been powered off.
 		 */
-		list_del_init(&p->action);
+		hci_pend_le_list_del_init(p);
 
 		switch (p->auto_connect) {
 		case HCI_AUTO_CONN_DIRECT:
 		case HCI_AUTO_CONN_ALWAYS:
-			list_add(&p->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(p, &hdev->pend_le_conns);
 			break;
 		case HCI_AUTO_CONN_REPORT:
-			list_add(&p->action, &hdev->pend_le_reports);
+			hci_pend_le_list_add(p, &hdev->pend_le_reports);
 			break;
 		default:
 			break;
@@ -1291,6 +1291,10 @@ static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 		goto failed;
 	}
 
+	/* Cancel potentially blocking sync operation before power off */
+	if (cp->val == 0x00)
+		__hci_cmd_sync_cancel(hdev, -EHOSTDOWN);
+
 	err = hci_cmd_sync_queue(hdev, set_powered_sync, cmd,
 				 mgmt_set_powered_complete);
 
@@ -1336,6 +1340,10 @@ static void cmd_status_rsp(struct mgmt_pending_cmd *cmd, void *data)
 
 static void cmd_complete_rsp(struct mgmt_pending_cmd *cmd, void *data)
 {
+	if (cmd->opcode == MGMT_OP_REMOVE_ADV_MONITOR ||
+	    cmd->opcode == MGMT_OP_SET_SSP)
+		return;
+
 	if (cmd->cmd_complete) {
 		u8 *status = data;
 
@@ -2499,6 +2507,37 @@ static int device_unpaired(struct hci_dev *hdev, bdaddr_t *bdaddr,
 			  skip_sk);
 }
 
+static void unpair_device_complete(struct hci_dev *hdev, void *data, int err)
+{
+	struct mgmt_pending_cmd *cmd = data;
+	struct mgmt_cp_unpair_device *cp = cmd->param;
+
+	if (!err)
+		device_unpaired(hdev, &cp->addr.bdaddr, cp->addr.type, cmd->sk);
+
+	cmd->cmd_complete(cmd, err);
+	mgmt_pending_free(cmd);
+}
+
+static int unpair_device_sync(struct hci_dev *hdev, void *data)
+{
+	struct mgmt_pending_cmd *cmd = data;
+	struct mgmt_cp_unpair_device *cp = cmd->param;
+	struct hci_conn *conn;
+
+	if (cp->addr.type == BDADDR_BREDR)
+		conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK,
+					       &cp->addr.bdaddr);
+	else
+		conn = hci_conn_hash_lookup_le(hdev, &cp->addr.bdaddr,
+					       le_addr_type(cp->addr.type));
+
+	if (!conn)
+		return 0;
+
+	return hci_abort_conn_sync(hdev, conn, HCI_ERROR_REMOTE_USER_TERM);
+}
+
 static int unpair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 			 u16 len)
 {
@@ -2609,7 +2648,7 @@ done:
 		goto unlock;
 	}
 
-	cmd = mgmt_pending_add(sk, MGMT_OP_UNPAIR_DEVICE, hdev, cp,
+	cmd = mgmt_pending_new(sk, MGMT_OP_UNPAIR_DEVICE, hdev, cp,
 			       sizeof(*cp));
 	if (!cmd) {
 		err = -ENOMEM;
@@ -2618,9 +2657,10 @@ done:
 
 	cmd->cmd_complete = addr_cmd_complete;
 
-	err = hci_abort_conn(conn, HCI_ERROR_REMOTE_USER_TERM);
+	err = hci_cmd_sync_queue(hdev, unpair_device_sync, cmd,
+				 unpair_device_complete);
 	if (err < 0)
-		mgmt_pending_remove(cmd);
+		mgmt_pending_free(cmd);
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -4526,7 +4566,7 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 						le_addr_type(cp->addr.type));
 		if (params) {
-			params->flags = current_flags;
+			WRITE_ONCE(params->flags, current_flags);
 			status = MGMT_STATUS_SUCCESS;
 
 			/* Update passive scan if HCI_CONN_FLAG_DEVICE_PRIVACY
@@ -6941,7 +6981,7 @@ static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
 	if (params->auto_connect == auto_connect)
 		return 0;
 
-	list_del_init(&params->action);
+	hci_pend_le_list_del_init(params);
 
 	switch (auto_connect) {
 	case HCI_AUTO_CONN_DISABLED:
@@ -6950,18 +6990,18 @@ static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
 		 * connect to device, keep connecting.
 		 */
 		if (params->explicit_connect)
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		break;
 	case HCI_AUTO_CONN_REPORT:
 		if (params->explicit_connect)
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		else
-			list_add(&params->action, &hdev->pend_le_reports);
+			hci_pend_le_list_add(params, &hdev->pend_le_reports);
 		break;
 	case HCI_AUTO_CONN_DIRECT:
 	case HCI_AUTO_CONN_ALWAYS:
 		if (!is_connected(hdev, addr, addr_type))
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		break;
 	}
 
@@ -7184,9 +7224,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 			goto unlock;
 		}
 
-		list_del(&params->action);
-		list_del(&params->list);
-		kfree(params);
+		hci_conn_params_free(params);
 
 		device_removed(sk, hdev, &cp->addr.bdaddr, cp->addr.type);
 	} else {
@@ -7217,9 +7255,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 				p->auto_connect = HCI_AUTO_CONN_EXPLICIT;
 				continue;
 			}
-			list_del(&p->action);
-			list_del(&p->list);
-			kfree(p);
+			hci_conn_params_free(p);
 		}
 
 		bt_dev_dbg(hdev, "All LE connection parameters were removed");
@@ -8652,18 +8688,21 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 				total_size += sizeof(struct mgmt_bt_codec);
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				/* 0x01 - HCI Transport (Codec supported over BR/EDR SCO and eSCO)
-				 * 0x05 - mSBC Codec ID
-				 */
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					/* 0x01 - HCI Transport (Codec supported over
+					 *          BR/EDR SCO and eSCO)
+					 * 0x05 - mSBC Codec ID
+					 */
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				break;
+					total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
@@ -8697,28 +8736,31 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 			}
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				/* Need to read the support from the controller and then assign
-				 * to TRUE for now by default enable it as TRUE
-				 */
-				rp->offload_capable = true;
+					/* Need to read the support from the controller
+					 * and then assign to TRUE for now by default
+					 * enable it as TRUE
+					 */
+					rp->offload_capable = true;
 
-				if (hdev->get_data_path_id)
-					hdev->get_data_path_id(hdev, &rc->data_path);
+					if (hdev->get_data_path_id)
+						hdev->get_data_path_id(hdev, &rc->data_path);
 
-				rc->codec = cp->codecs[i];
-				rc->packet_size = c->len;
-				rc->data_length = c->caps->len;
-				memcpy(rc->data, c->caps, c->caps->len);
-				ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				num_rp_codecs++;
-				break;
+					rc->codec = cp->codecs[i];
+					rc->packet_size = c->len;
+					rc->data_length = c->caps->len;
+					memcpy(rc->data, c->caps, c->caps->len);
+					ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					num_rp_codecs++;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			break;
@@ -8823,6 +8865,37 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 				MGMT_OP_GET_VS_OPCODE,
 				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	return err;
+}
+
+static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_notify_suspend_state *cp = data;
+	struct hci_dev *found_hdev;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	found_hdev = floss_get_hdev(cp->hci_id);
+	if (found_hdev)
+		hdev = found_hdev;
+
+	// Make sure we have a valid hdev.
+	if (!hdev) {
+		BT_DBG("Cannot find hdev 0x%4.4x", cp->hci_id);
+		return mgmt_cmd_status(sk, 0, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_INDEX);
+	}
+
+	if (cp->suspended != 0x00 && cp->suspended != 0x01)
+		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	hci_dev_lock(hdev);
+
+	hdev->suspended = cp->suspended;
+
+	hci_dev_unlock(hdev);
+
+	return 0;
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -8968,6 +9041,10 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 	{ floss_get_vs_opcode,     MGMT_GET_VS_OPCODE_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED },
+	{ floss_notify_suspend_state,
+				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 };

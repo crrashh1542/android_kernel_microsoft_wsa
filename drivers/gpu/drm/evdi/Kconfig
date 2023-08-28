@@ -19,3 +19,4 @@ config DRM_EVDI
 		register a virtual display (that imitates physical monitor) and
 		retrieve contents (as a frame buffer) that system renders on it.
 		Say M/Y to add support for these devices via DRM/KMS interfaces.
+

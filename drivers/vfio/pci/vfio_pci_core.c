@@ -27,6 +27,7 @@
 #include <linux/vgaarb.h>
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
+#include <linux/vfio_acpi_notify.h>
 
 #include <linux/vfio_pci_core.h>
 
@@ -654,6 +655,7 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 {
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
 
 	if (vdev->sriov_pf_core_dev) {
 		mutex_lock(&vdev->sriov_pf_core_dev->vf_token->lock);
@@ -673,6 +675,8 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 		eventfd_ctx_put(vdev->req_trigger);
 		vdev->req_trigger = NULL;
 	}
+	if (adev)
+		vfio_remove_acpi_notify(&vdev->acpi_notification, adev);
 	mutex_unlock(&vdev->igate);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_close_device);
@@ -692,6 +696,8 @@ EXPORT_SYMBOL_GPL(vfio_pci_core_finish_enable);
 
 static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_type)
 {
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
+
 	if (irq_type == VFIO_PCI_INTX_IRQ_INDEX) {
 		u8 pin;
 
@@ -727,6 +733,8 @@ static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_typ
 		if (pci_is_pcie(vdev->pdev))
 			return 1;
 	} else if (irq_type == VFIO_PCI_REQ_IRQ_INDEX) {
+		return 1;
+	} else if (adev && irq_type == VFIO_PCI_ACPI_IRQ_INDEX) {
 		return 1;
 	}
 
@@ -848,6 +856,133 @@ int vfio_pci_register_dev_region(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_register_dev_region);
+
+/* Free the memory allocated with vfio_read_acpi_objs() */
+static void vfio_free_acpi_obj(union acpi_object *obj)
+{
+	u32 i;
+	switch (obj->type) {
+	case ACPI_TYPE_STRING:
+		ACPI_FREE(obj->string.pointer);
+		break;
+	case ACPI_TYPE_BUFFER:
+		ACPI_FREE(obj->buffer.pointer);
+		break;
+	case ACPI_TYPE_PACKAGE:
+		for (i = 0; i < obj->package.count; i++) {
+			vfio_free_acpi_obj(&obj->package.elements[i]);
+		}
+		ACPI_FREE(obj->package.elements);
+		break;
+	}
+}
+
+/*
+ * Parse the buffer and make an acpi_object.
+ * This method will internally do the memory allocation for strings, buffer
+ * and package objects. Once ACPI call is done, then the free the memory
+ * with vfio_free_acpi_obj() method.
+ */
+static u8* vfio_read_acpi_obj(union acpi_object *obj, u8* buffer)
+{
+	u32 type, size, i, k;
+	type = *(u32*)buffer; buffer += sizeof(type);
+	size = *(u32*)buffer; buffer += sizeof(size);
+	switch (type) {
+		case 1: // Integer
+			obj->type = ACPI_TYPE_INTEGER;
+			obj->integer.value = size == sizeof(u64) ? *(u64*)buffer : *(u32*)buffer;
+			buffer += size;
+			break;
+		case 2: // String
+			obj->type = ACPI_TYPE_STRING;
+			obj->string.length = size;
+			obj->string.pointer = ACPI_ALLOCATE(size);
+			if (obj->string.pointer == NULL)
+				return NULL;
+			memcpy(obj->string.pointer, buffer, size);
+			buffer += size;
+			break;
+		case 3: // Buffer
+			obj->type = ACPI_TYPE_BUFFER;
+			obj->buffer.length = size;
+			obj->buffer.pointer = ACPI_ALLOCATE(size);
+			if (obj->buffer.pointer == NULL)
+				return NULL;
+			memcpy(obj->buffer.pointer, buffer, size);
+			buffer += size;
+			break;
+		case 4: // Package
+			obj->type = ACPI_TYPE_PACKAGE;
+			obj->package.count =  size;
+			obj->package.elements = ACPI_ALLOCATE(size * sizeof(union acpi_object));
+			if (obj->package.elements == NULL)
+				return NULL;
+			for (i = 0; i < size; i++) {
+				buffer = vfio_read_acpi_obj(&obj->package.elements[i], buffer);
+				if (buffer == NULL) {
+					for (k = 0; k < i; k++) {
+						vfio_free_acpi_obj(&obj->package.elements[k]);
+					}
+					return NULL;
+				}
+			}
+			break;
+		default:
+			printk(KERN_ERR "vfio_read_acpi_obj: unsupported type %d\n", type);
+			return NULL;
+	}
+	return buffer;
+}
+
+/*
+ * Serialize an acpi_object and write it to a buffer.
+ */
+static u8* vfio_write_acpi_obj(union acpi_object *obj, u8* buffer, u8* buffer_end)
+{
+	u32 i;
+	switch (obj->type) {
+		case ACPI_TYPE_INTEGER:
+			if (buffer_end < buffer + sizeof(u32) + sizeof(u32) + sizeof(u64))
+				return NULL;
+			*(u32*)buffer = 1; buffer += sizeof(u32);
+			*(u32*)buffer = sizeof(u64); buffer += sizeof(u32);
+			*(u64*)buffer = obj->integer.value; buffer += sizeof(u64);
+			break;
+		case ACPI_TYPE_STRING:
+			if (buffer_end < buffer + sizeof(u32) + sizeof(u32) + obj->string.length)
+				return NULL;
+			*(u32*)buffer = 2; buffer += sizeof(u32);
+			*(u32*)buffer = obj->string.length; buffer += sizeof(u32);
+			memcpy(buffer, obj->string.pointer, obj->string.length);
+			buffer += obj->string.length;
+			break;
+		case ACPI_TYPE_BUFFER:
+			if (buffer_end < buffer + sizeof(u32) + sizeof(u32) + obj->buffer.length)
+				return NULL;
+			*(u32*)buffer = 3; buffer += sizeof(u32);
+			*(u32*)buffer = obj->buffer.length; buffer += sizeof(u32);
+			memcpy(buffer, obj->buffer.pointer, obj->buffer.length);
+			buffer += obj->buffer.length;
+			break;
+		case ACPI_TYPE_PACKAGE:
+			if (buffer_end < buffer + sizeof(u32) + sizeof(u32))
+				return NULL;
+			*(u32*)buffer = 4; buffer += sizeof(u32);
+			*(u32*)buffer = obj->package.count; buffer += sizeof(u32);
+			for (i = 0; i < obj->package.count; i++) {
+				buffer = vfio_write_acpi_obj(&obj->package.elements[i], buffer, buffer_end);
+				if (buffer == NULL)
+					return NULL;
+			}
+			break;
+		default:
+			printk(KERN_ERR "vfio_write_acpi_obj: unsupported type %d\n", obj->type);
+			return NULL;
+	}
+	return buffer;
+}
+
 
 long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		unsigned long arg)
@@ -1060,6 +1195,7 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 
 	} else if (cmd == VFIO_DEVICE_GET_IRQ_INFO) {
 		struct vfio_irq_info info;
+		struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
 
 		minsz = offsetofend(struct vfio_irq_info, count);
 
@@ -1073,6 +1209,10 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		case VFIO_PCI_INTX_IRQ_INDEX ... VFIO_PCI_MSIX_IRQ_INDEX:
 		case VFIO_PCI_REQ_IRQ_INDEX:
 			break;
+		case VFIO_PCI_ACPI_IRQ_INDEX:
+			if (adev)
+				break;
+			return -EINVAL;
 		case VFIO_PCI_ERR_IRQ_INDEX:
 			if (pci_is_pcie(vdev->pdev))
 				break;
@@ -1342,6 +1482,58 @@ hot_reset_release:
 
 		return vfio_pci_ioeventfd(vdev, ioeventfd.offset,
 					  ioeventfd.data, count, ioeventfd.fd);
+	} else if (cmd == VFIO_DEVICE_ACPI_DSM) {
+		acpi_handle handle = ACPI_HANDLE(&vdev->pdev->dev);
+		union acpi_object arg3;
+		union acpi_object *result;
+		struct vfio_device_acpi_dsm *vfio_acpi_dsm;
+		u32 argsz;
+		int ret = 0;
+
+		if (!handle)
+			return -ENODEV;
+
+		ret = copy_from_user(&argsz, (void __user *)arg, sizeof(argsz));
+		if (ret)
+			goto exit;
+
+		vfio_acpi_dsm = kzalloc(argsz, GFP_KERNEL);
+		if (vfio_acpi_dsm == NULL) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+
+		ret = copy_from_user(vfio_acpi_dsm, (void __user *)arg, argsz);
+		if (ret)
+			goto free_dsm;
+
+		if (vfio_read_acpi_obj(&arg3, vfio_acpi_dsm->arg3) == NULL) {
+			ret = -ENOSPC;
+			goto free_dsm;
+		}
+
+		result = acpi_evaluate_dsm(handle, (guid_t*)vfio_acpi_dsm->arg0, vfio_acpi_dsm->arg1,
+						vfio_acpi_dsm->arg2, &arg3);
+		if (result == NULL) {
+			ret = -ENODEV;
+			goto free_arg3;
+		}
+
+		if (vfio_write_acpi_obj(result, vfio_acpi_dsm->arg3, (u8*)vfio_acpi_dsm + argsz) == NULL) {
+			ret = -ENOSPC;
+			goto free_result;
+		}
+
+		ret = copy_to_user((void __user *)arg, vfio_acpi_dsm, argsz);
+
+free_result:
+		ACPI_FREE(result);
+free_arg3:
+		vfio_free_acpi_obj(&arg3);
+free_dsm:
+		kfree(vfio_acpi_dsm);
+exit:
+		return ret;
 	}
 	return -ENOTTY;
 }

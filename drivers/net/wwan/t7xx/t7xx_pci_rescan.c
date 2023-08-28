@@ -7,6 +7,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ":t7xx:%s: " fmt, __func__
 #define dev_fmt(fmt) "t7xx: " fmt
 
+#include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
@@ -47,15 +48,41 @@ static void t7xx_remove_rescan(struct work_struct *work)
 	struct pci_dev *pdev;
 	int num_retries = RESCAN_RETRIES;
 	unsigned long flags;
+#ifdef CONFIG_ACPI
+	acpi_status status;
+	acpi_handle handle;
+	bool cold_reboot;
+#endif
 
 	spin_lock_irqsave(&g_mtk_rescan_context.dev_lock, flags);
 	g_mtk_rescan_context.rescan_done = 0;
+#ifdef CONFIG_ACPI
+	cold_reboot = g_mtk_rescan_context.cold_reboot;
+#endif
 	pdev = g_mtk_rescan_context.dev;
 	spin_unlock_irqrestore(&g_mtk_rescan_context.dev_lock, flags);
 
 	if (pdev) {
-		pci_stop_and_remove_bus_device_locked(pdev);
+#ifdef CONFIG_ACPI
+		handle = ACPI_HANDLE(&pdev->dev);
+#endif
 		pr_debug("start remove and rescan flow\n");
+		pci_stop_and_remove_bus_device_locked(pdev);
+#ifdef CONFIG_ACPI
+		if (cold_reboot) {
+			pr_info("Performing cold modem reboot\n");
+			status = acpi_execute_simple_method(handle, "FHRF", 1);
+			if (ACPI_FAILURE(status)) {
+				dev_err(&pdev->dev, "Failed to call _FHRF: %d\n",
+					status);
+			}
+			status = acpi_evaluate_object(handle, "SHRF", NULL, NULL);
+			if (ACPI_FAILURE(status)) {
+				dev_err(&pdev->dev, "Failed to call _SHRF: %d\n",
+					status);
+			}
+		}
+#endif
 	}
 
 	do {
@@ -71,7 +98,7 @@ static void t7xx_remove_rescan(struct work_struct *work)
 	} while (num_retries--);
 }
 
-void t7xx_rescan_queue_work(struct pci_dev *pdev)
+void t7xx_rescan_queue_work(struct pci_dev *pdev, bool cold_reboot)
 {
 	unsigned long flags;
 
@@ -84,6 +111,7 @@ void t7xx_rescan_queue_work(struct pci_dev *pdev)
 	}
 
 	g_mtk_rescan_context.dev = pdev;
+	g_mtk_rescan_context.cold_reboot = cold_reboot;
 	spin_unlock_irqrestore(&g_mtk_rescan_context.dev_lock, flags);
 	queue_work(g_mtk_rescan_context.pcie_rescan_wq, &g_mtk_rescan_context.service_task);
 }

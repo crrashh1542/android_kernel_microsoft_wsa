@@ -137,11 +137,12 @@ struct intel_offload_use_cases {
 	__u8	preset[8];
 } __packed;
 
-#define INTEL_TLV_TYPE_ID		0x1
+#define INTEL_TLV_TYPE_ID		0x01
 
-#define INTEL_TLV_SYSTEM_EXCEPTION	0x0
-#define INTEL_TLV_FATAL_EXCEPTION	0x1
-#define INTEL_TLV_DEBUG_EXCEPTION	0x2
+#define INTEL_TLV_SYSTEM_EXCEPTION	0x00
+#define INTEL_TLV_FATAL_EXCEPTION	0x01
+#define INTEL_TLV_DEBUG_EXCEPTION	0x02
+#define INTEL_TLV_TEST_EXCEPTION	0xDE
 
 #define INTEL_HW_PLATFORM(cnvx_bt)	((u8)(((cnvx_bt) & 0x0000ff00) >> 8))
 #define INTEL_HW_VARIANT(cnvx_bt)	((u8)(((cnvx_bt) & 0x003f0000) >> 16))

@@ -426,7 +426,7 @@ int cam_cdm_process_cmd(void *hw_priv,
 		}
 		req = (struct cam_cdm_hw_intf_cmd_submit_bl *)cmd_args;
 		if ((req->data->type < 0) ||
-			(req->data->type > CAM_CDM_BL_CMD_TYPE_KERNEL_IOVA)) {
+			(req->data->type > CAM_CDM_BL_CMD_TYPE_HW_IOVA)) {
 			CAM_ERR(CAM_CDM, "Invalid req bl cmd addr type=%d",
 				req->data->type);
 			break;

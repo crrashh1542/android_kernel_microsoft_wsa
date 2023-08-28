@@ -245,6 +245,8 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_set_spte_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
+bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
+			       gfn_t lsb_gfn, unsigned long *bitmap);
 #endif
 
 enum {
@@ -2012,5 +2014,31 @@ static inline u64 vcpu_suspend_time_injected(struct kvm_vcpu *vcpu)
 	return 0;
 }
 #endif /* CONFIG_KVM_VIRT_SUSPEND_TIMING */
+
+/*
+ * Architectures that implement kvm_arch_test_clear_young() should override
+ * kvm_arch_has_test_clear_young().
+ *
+ * kvm_arch_has_test_clear_young() is allowed to return false positive. It can
+ * return true if kvm_arch_test_clear_young() is supported but disabled due to
+ * some runtime constraint. In this case, kvm_arch_test_clear_young() should
+ * return false.
+ *
+ * The last parameter to kvm_arch_test_clear_young() is a bitmap with the
+ * following specifications:
+ * 1. The offset of each bit is relative to the second to the last parameter
+ *    lsb_gfn. E.g., the offset corresponding to gfn is lsb_gfn-gfn. This is
+ *    convenient for batching while forward looping.
+ * 2. For each KVM PTE with the accessed bit set, the implementation should flip
+ *    the corresponding bit in the bitmap. It should only clear the accessed bit
+ *    if the old value is 1. This allows the caller to test or test and clear
+ *    the accessed bit.
+ */
+#ifndef kvm_arch_has_test_clear_young
+static inline bool kvm_arch_has_test_clear_young(void)
+{
+	return false;
+}
+#endif
 
 #endif

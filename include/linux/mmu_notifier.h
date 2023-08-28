@@ -122,6 +122,11 @@ struct mmu_notifier_ops {
 			  struct mm_struct *mm,
 			  unsigned long address);
 
+	/* see the comments on mmu_notifier_test_clear_young() */
+	bool (*test_clear_young)(struct mmu_notifier *mn, struct mm_struct *mm,
+				 unsigned long start, unsigned long end,
+				 unsigned long *bitmap);
+
 	/*
 	 * change_pte is called in cases that pte mapping to page is changed:
 	 * for example, when ksm remaps pte to point to a new shared page.
@@ -393,6 +398,9 @@ extern int __mmu_notifier_clear_young(struct mm_struct *mm,
 				      unsigned long end);
 extern int __mmu_notifier_test_young(struct mm_struct *mm,
 				     unsigned long address);
+extern int __mmu_notifier_test_clear_young(struct mm_struct *mm,
+					   unsigned long start, unsigned long end,
+					   bool fallback, unsigned long *bitmap);
 extern void __mmu_notifier_change_pte(struct mm_struct *mm,
 				      unsigned long address, pte_t pte);
 extern int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *r);
@@ -438,6 +446,31 @@ static inline int mmu_notifier_test_young(struct mm_struct *mm,
 {
 	if (mm_has_notifiers(mm))
 		return __mmu_notifier_test_young(mm, address);
+	return 0;
+}
+
+/*
+ * This function always returns 0 if fallback is not allowed. If fallback
+ * happens, its return value is similar to that of mmu_notifier_clear_young().
+ *
+ * The bitmap has the following specifications:
+ * 1. The number of bits should be at least (end-start)/PAGE_SIZE.
+ * 2. The offset of each bit is relative to the end. E.g., the offset
+ *    corresponding to addr is (end-addr)/PAGE_SIZE-1. This is convenient for
+ *    batching while forward looping.
+ * 3. For each KVM PTE with the accessed bit set (young), this function flips
+ *    the corresponding bit in the bitmap. It only clears the accessed bit if
+ *    the old value is 1. A caller can test or test and clear the accessed bit
+ *    by setting the corresponding bit in the bitmap to 0 or 1, and the new
+ *    value will be 1 or 0 for a young KVM PTE.
+ */
+static inline int mmu_notifier_test_clear_young(struct mm_struct *mm,
+						unsigned long start, unsigned long end,
+						bool fallback, unsigned long *bitmap)
+{
+	if (mm_has_notifiers(mm))
+		return __mmu_notifier_test_clear_young(mm, start, end, fallback, bitmap);
+
 	return 0;
 }
 
@@ -689,6 +722,13 @@ static inline int mmu_notifier_clear_flush_young(struct mm_struct *mm,
 
 static inline int mmu_notifier_test_young(struct mm_struct *mm,
 					  unsigned long address)
+{
+	return 0;
+}
+
+static inline int mmu_notifier_test_clear_young(struct mm_struct *mm,
+						unsigned long start, unsigned long end,
+						bool fallback, unsigned long *bitmap)
 {
 	return 0;
 }

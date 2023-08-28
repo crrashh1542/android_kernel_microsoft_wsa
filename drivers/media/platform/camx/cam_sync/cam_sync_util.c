@@ -13,25 +13,6 @@
 
 #include "cam_sync_util.h"
 
-int cam_sync_util_find_and_set_empty_row(struct sync_device *sync_dev,
-	long *idx)
-{
-	int rc = 0;
-
-	mutex_lock(&sync_dev->table_lock);
-
-	*idx = find_first_zero_bit(sync_dev->bitmap, CAM_SYNC_MAX_OBJS);
-
-	if (*idx < CAM_SYNC_MAX_OBJS)
-		set_bit(*idx, sync_dev->bitmap);
-	else
-		rc = -1;
-
-	mutex_unlock(&sync_dev->table_lock);
-
-	return rc;
-}
-
 int cam_sync_init_row(struct sync_table_row *table,
 	uint32_t idx, const char *name, uint32_t type)
 {

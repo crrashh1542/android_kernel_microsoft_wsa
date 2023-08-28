@@ -2350,8 +2350,7 @@ kbase_ctx_reg_zone_get(struct kbase_context *kctx, unsigned long zone_bits)
  * kbase_mem_allow_alloc - Check if allocation of GPU memory is allowed
  * @kctx: Pointer to kbase context
  *
- * Don't allow the allocation of GPU memory until user space has set up the
- * tracking page (which sets kctx->process_mm) or if the ioctl has been issued
+ * Don't allow the allocation of GPU memory if the ioctl has been issued
  * from the forked child process using the mali device file fd inherited from
  * the parent process.
  *
@@ -2359,13 +2358,7 @@ kbase_ctx_reg_zone_get(struct kbase_context *kctx, unsigned long zone_bits)
  */
 static inline bool kbase_mem_allow_alloc(struct kbase_context *kctx)
 {
-	bool allow_alloc = true;
-
-	rcu_read_lock();
-	allow_alloc = (rcu_dereference(kctx->process_mm) == current->mm);
-	rcu_read_unlock();
-
-	return allow_alloc;
+	return (kctx->process_mm == current->mm);
 }
 
 /**

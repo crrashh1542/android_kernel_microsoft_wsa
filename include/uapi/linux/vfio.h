@@ -817,6 +817,7 @@ enum {
 	VFIO_PCI_MSIX_IRQ_INDEX,
 	VFIO_PCI_ERR_IRQ_INDEX,
 	VFIO_PCI_REQ_IRQ_INDEX,
+	VFIO_PCI_ACPI_IRQ_INDEX,
 	VFIO_PCI_NUM_IRQS
 };
 
@@ -992,6 +993,31 @@ struct vfio_device_feature {
 };
 
 #define VFIO_DEVICE_FEATURE		_IO(VFIO_TYPE, VFIO_BASE + 17)
+
+/**
+ * VFIO_DEVICE_ACPI_DSM - _IOWR(VFIO_TYPE, VFIO_BASE + 18,
+ *                              struct vfio_device_acpi_dsm)
+ *
+ * Perform an ACPI _DSM call for the ACPI object handle corresponds to the
+ * VFIO device. Hypervisor can implement ACPI emulation in which
+ * whenever there is an ACPI _DSM call for the vfio device then emulated
+ * ACPI code will tap the request. It will extract all parameters and
+ * object pathname and use this IOCTL. It will evaluate the ACPI object
+ * in the host and will return the result back to the hypervisor.
+ * Hypervisor will then forward the same result back to the guest OS.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+struct vfio_device_acpi_dsm {
+	__u32 argsz;
+	__u32 padding;
+	__u32 arg0[4];
+	__u64 arg1;
+	__u64 arg2;
+	__u8 arg3[];
+};
+
+#define VFIO_DEVICE_ACPI_DSM		_IO(VFIO_TYPE, VFIO_BASE + 18)
 
 /*
  * Provide support for setting a PCI VF Token, which is used as a shared

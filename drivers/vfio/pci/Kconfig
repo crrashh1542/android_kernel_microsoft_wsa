@@ -4,6 +4,7 @@ config VFIO_PCI_CORE
 	tristate
 	select VFIO_VIRQFD
 	select IRQ_BYPASS_MANAGER
+	select VFIO_ACPI_NOTIFY if ACPI
 
 config VFIO_PCI_MMAP
 	def_bool y if !S390

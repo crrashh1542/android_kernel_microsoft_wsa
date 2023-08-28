@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2022 Google Corporation
  */
@@ -10,13 +10,15 @@
 
 typedef bool (*coredump_enabled_t)(struct hci_dev *hdev);
 typedef void (*coredump_t)(struct hci_dev *hdev);
-typedef int  (*dmp_hdr_t)(struct hci_dev *hdev, char *buf, size_t size);
+typedef void (*dmp_hdr_t)(struct hci_dev *hdev, struct sk_buff *skb);
 typedef void (*notify_change_t)(struct hci_dev *hdev, int state);
 
 /* struct hci_devcoredump - Devcoredump state
  *
  * @supported: Indicates if FW dump collection is supported by driver
  * @state: Current state of dump collection
+ * @timeout: Indicates a timeout for collecting the devcoredump
+ *
  * @alloc_size: Total size of the dump
  * @head: Start of the dump
  * @tail: Pointer to current end of dump
@@ -40,8 +42,10 @@ struct hci_devcoredump {
 		HCI_DEVCOREDUMP_ACTIVE,
 		HCI_DEVCOREDUMP_DONE,
 		HCI_DEVCOREDUMP_ABORT,
-		HCI_DEVCOREDUMP_TIMEOUT
+		HCI_DEVCOREDUMP_TIMEOUT,
 	} state;
+
+	unsigned long	timeout;
 
 	size_t		alloc_size;
 	char		*head;
@@ -61,55 +65,53 @@ struct hci_devcoredump {
 
 #ifdef CONFIG_DEV_COREDUMP
 
-void hci_devcoredump_reset(struct hci_dev *hdev);
-void hci_devcoredump_rx(struct work_struct *work);
-void hci_devcoredump_timeout(struct work_struct *work);
+void hci_devcd_reset(struct hci_dev *hdev);
+void hci_devcd_rx(struct work_struct *work);
+void hci_devcd_timeout(struct work_struct *work);
 
-int hci_devcoredump_register(struct hci_dev *hdev, coredump_t coredump,
-			     dmp_hdr_t dmp_hdr, notify_change_t notify_change);
-int hci_devcoredump_init(struct hci_dev *hdev, u32 dmp_size);
-int hci_devcoredump_append(struct hci_dev *hdev, struct sk_buff *skb);
-int hci_devcoredump_append_pattern(struct hci_dev *hdev, u8 pattern, u32 len);
-int hci_devcoredump_complete(struct hci_dev *hdev);
-int hci_devcoredump_abort(struct hci_dev *hdev);
+int hci_devcd_register(struct hci_dev *hdev, coredump_t coredump,
+		       dmp_hdr_t dmp_hdr, notify_change_t notify_change);
+int hci_devcd_init(struct hci_dev *hdev, u32 dump_size);
+int hci_devcd_append(struct hci_dev *hdev, struct sk_buff *skb);
+int hci_devcd_append_pattern(struct hci_dev *hdev, u8 pattern, u32 len);
+int hci_devcd_complete(struct hci_dev *hdev);
+int hci_devcd_abort(struct hci_dev *hdev);
 
 #else
 
-static inline void hci_devcoredump_reset(struct hci_dev *hdev) {}
-static inline void hci_devcoredump_rx(struct work_struct *work) {}
-static inline void hci_devcoredump_timeout(struct work_struct *work) {}
+static inline void hci_devcd_reset(struct hci_dev *hdev) {}
+static inline void hci_devcd_rx(struct work_struct *work) {}
+static inline void hci_devcd_timeout(struct work_struct *work) {}
 
-static inline int hci_devcoredump_register(struct hci_dev *hdev,
-					   coredump_t coredump,
-					   dmp_hdr_t dmp_hdr,
-					   notify_change_t notify_change)
+static inline int hci_devcd_register(struct hci_dev *hdev, coredump_t coredump,
+				     dmp_hdr_t dmp_hdr,
+				     notify_change_t notify_change)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int hci_devcoredump_init(struct hci_dev *hdev, u32 dmp_size)
+static inline int hci_devcd_init(struct hci_dev *hdev, u32 dump_size)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int hci_devcoredump_append(struct hci_dev *hdev,
-					 struct sk_buff *skb)
+static inline int hci_devcd_append(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int hci_devcoredump_append_pattern(struct hci_dev *hdev,
-						 u8 pattern, u32 len)
+static inline int hci_devcd_append_pattern(struct hci_dev *hdev,
+					   u8 pattern, u32 len)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int hci_devcoredump_complete(struct hci_dev *hdev)
+static inline int hci_devcd_complete(struct hci_dev *hdev)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int hci_devcoredump_abort(struct hci_dev *hdev)
+static inline int hci_devcd_abort(struct hci_dev *hdev)
 {
 	return -EOPNOTSUPP;
 }

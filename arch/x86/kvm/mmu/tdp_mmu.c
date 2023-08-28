@@ -10,7 +10,7 @@
 #include <asm/cmpxchg.h>
 #include <trace/events/kvm.h>
 
-static bool __read_mostly tdp_mmu_enabled = true;
+static bool __read_mostly tdp_mmu_enabled = false;
 module_param_named(tdp_mmu, tdp_mmu_enabled, bool, 0644);
 
 /* Initializes the TDP MMU for the VM, if enabled. */
@@ -1176,6 +1176,47 @@ static bool test_age_gfn(struct kvm *kvm, struct tdp_iter *iter,
 bool kvm_tdp_mmu_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 {
 	return kvm_tdp_mmu_handle_gfn(kvm, range, test_age_gfn);
+}
+
+bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
+			       gfn_t lsb_gfn, unsigned long *bitmap)
+{
+	struct kvm_mmu_page *root;
+
+	if (WARN_ON_ONCE(!kvm_arch_has_test_clear_young()))
+		return false;
+
+	if (kvm_memslots_have_rmaps(kvm))
+		return false;
+
+	/* see the comments on kvm_arch->tdp_mmu_roots */
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(root, &kvm->arch.tdp_mmu_roots, link) {
+		struct tdp_iter iter;
+
+		if (kvm_mmu_page_as_id(root) != range->slot->as_id)
+			continue;
+
+		tdp_root_for_each_leaf_pte(iter, root, range->start, range->end) {
+			u64 *sptep = rcu_dereference(iter.sptep);
+			u64 new_spte = iter.old_spte & ~shadow_accessed_mask;
+
+			VM_WARN_ON_ONCE(!page_count(virt_to_page(sptep)));
+			VM_WARN_ON_ONCE(iter.gfn < range->start || iter.gfn >= range->end);
+
+			if (new_spte == iter.old_spte)
+				continue;
+
+			/* see the comments on the generic kvm_arch_has_test_clear_young() */
+			if (__test_and_change_bit(lsb_gfn - iter.gfn, bitmap))
+				cmpxchg64(sptep, iter.old_spte, new_spte);
+		}
+	}
+
+	rcu_read_unlock();
+
+	return true;
 }
 
 static bool set_spte_gfn(struct kvm *kvm, struct tdp_iter *iter,

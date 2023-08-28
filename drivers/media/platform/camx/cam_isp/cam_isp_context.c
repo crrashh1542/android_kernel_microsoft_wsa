@@ -303,10 +303,7 @@ static void cam_isp_ctx_dump_req(struct cam_isp_ctx_req *req_isp,
 			}
 put:
 			if (need_put) {
-				if (cam_mem_put_cpu_buf(req_isp->cfg[i].handle))
-					CAM_WARN(CAM_ISP,
-						"Failed to put cpu buf: 0x%x",
-						req_isp->cfg[i].handle);
+				cam_mem_put_cpu_buf(req_isp->cfg[i].handle);
 				need_put = false;
 				continue;
 			}
@@ -330,9 +327,7 @@ put:
 			} else {
 				cam_cdm_util_dump_cmd_buf(buf_start, buf_end);
 			}
-			if (cam_mem_put_cpu_buf(req_isp->cfg[i].handle))
-				CAM_WARN(CAM_ISP, "Failed to put cpu buf: 0x%x",
-					req_isp->cfg[i].handle);
+			cam_mem_put_cpu_buf(req_isp->cfg[i].handle);
 		}
 	}
 }
@@ -452,6 +447,8 @@ static int __cam_isp_ctx_enqueue_init_request(
 				sizeof(req_isp_new->cfg[0])*
 				req_isp_new->num_cfg);
 			req_isp_old->num_cfg += req_isp_new->num_cfg;
+			cam_common_mem_free(req_old->pf_data.packet);
+			req_old->pf_data.packet = NULL;
 
 			memcpy(&req_old->pf_data, &req->pf_data,
 				sizeof(struct cam_hw_mgr_dump_pf_data));
@@ -731,8 +728,11 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 		__cam_isp_ctx_update_event_record(ctx_isp,
 			CAM_ISP_CTX_EVENT_BUFDONE, req);
 	} else {
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->free_req_list);
+
 		req_isp->reapply = false;
 
 		CAM_DBG(CAM_REQ,
@@ -764,8 +764,11 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 					rc);
 			req_isp->fence_map_out[j].sync_id = -1;
 		}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->free_req_list);
+
 		ctx_isp->active_req_cnt--;
 	}
 	ctx_isp->irq_delay_detect = false;
@@ -914,7 +917,10 @@ static int __cam_isp_ctx_reg_upd_in_activated_state(
 
 	} else {
 		/* no io config, so the request is completed. */
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
+
 		CAM_DBG(CAM_ISP,
 			"move active request %lld to free list(cnt = %d), ctx %u",
 			req->request_id, ctx_isp->active_req_cnt, ctx->ctx_id);
@@ -1057,6 +1063,8 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 		CAM_INFO_RATE_LIMIT(CAM_REQ,
 			"Move active req %lld to free [all fences done] ctx %u",
 			req->request_id, ctx->ctx_id);
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
@@ -1163,8 +1171,11 @@ static int __cam_isp_ctx_reg_upd_in_sof(struct cam_isp_context *ctx_isp,
 			struct cam_ctx_request, list);
 		list_del_init(&req->list);
 		req_isp = (struct cam_isp_ctx_req *) req->req_priv;
-		if (req_isp->num_fence_map_out == req_isp->num_acked)
+		if (req_isp->num_fence_map_out == req_isp->num_acked) {
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			list_add_tail(&req->list, &ctx->free_req_list);
+		}
 		else
 			CAM_ERR(CAM_ISP,
 				"receive rup in unexpected state");
@@ -1545,8 +1556,11 @@ static int __cam_isp_ctx_handle_error(struct cam_isp_context *ctx_isp,
 					fence_map_out->sync_id = -1;
 				}
 			}
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			list_del_init(&req->list);
 			list_add_tail(&req->list, &ctx->free_req_list);
+
 			ctx_isp->active_req_cnt--;
 		} else {
 			found = 1;
@@ -1576,8 +1590,11 @@ static int __cam_isp_ctx_handle_error(struct cam_isp_context *ctx_isp,
 					fence_map_out->sync_id = -1;
 				}
 			}
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			list_del_init(&req->list);
 			list_add_tail(&req->list, &ctx->free_req_list);
+
 			ctx_isp->active_req_cnt--;
 		} else {
 			found = 1;
@@ -1639,6 +1656,8 @@ end:
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 			req_isp->fence_map_out[i].sync_id = -1;
 		}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->free_req_list);
 
@@ -1849,8 +1868,11 @@ static int __cam_isp_ctx_fs2_reg_upd_in_sof(struct cam_isp_context *ctx_isp,
 			struct cam_ctx_request, list);
 		list_del_init(&req->list);
 		req_isp = (struct cam_isp_ctx_req *) req->req_priv;
-		if (req_isp->num_fence_map_out == req_isp->num_acked)
+		if (req_isp->num_fence_map_out == req_isp->num_acked) {
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			list_add_tail(&req->list, &ctx->free_req_list);
+		}
 		else
 			CAM_ERR(CAM_ISP,
 				"receive rup in unexpected state");
@@ -1889,6 +1911,8 @@ static int __cam_isp_ctx_fs2_reg_upd_in_applied_state(
 			 req->request_id, ctx_isp->active_req_cnt);
 	} else {
 		/* no io config, so the request is completed. */
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
 
@@ -2350,6 +2374,14 @@ hw_dump:
 				dump_info->buf_handle, buf_len, rc);
 			return rc;
 		}
+
+		if (buf_len <= dump_info->offset) {
+			CAM_WARN(CAM_ISP, "buf overshoot len %zu offset %u",
+				buf_len, dump_info->offset);
+			rc = -ENOSPC;
+			goto end;
+		}
+
 		/* we take for isp sw information to be max as 2048*/
 		if ((buf_len - dump_info->offset) <
 			CAM_ISP_CTX_DUMP_MIN_LENGTH) {
@@ -2398,10 +2430,7 @@ hw_dump:
 			dump_info->offset = dump_args.offset;
 		}
 end:
-		rc  = cam_mem_put_cpu_buf(dump_info->buf_handle);
-		if (rc)
-			CAM_ERR(CAM_ISP, "Cpu put failed handle %u",
-				dump_info->buf_handle);
+		cam_mem_put_cpu_buf(dump_info->buf_handle);
 	}
 	return rc;
 }
@@ -2460,6 +2489,8 @@ static int __cam_isp_ctx_flush_req(struct cam_context *ctx,
 			}
 		}
 		req_isp->reapply = false;
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
 
@@ -2918,6 +2949,8 @@ static int __cam_isp_ctx_rdi_only_sof_in_bubble_state(
 					req_isp->fence_map_out[i].sync_id,
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 			}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 		ctx_isp->active_req_cnt--;
 	}
@@ -2990,7 +3023,10 @@ static int __cam_isp_ctx_rdi_only_reg_upd_in_bubble_applied_state(
 			request_id = req->request_id;
 		} else {
 			/* no io config, so the request is completed. */
+			cam_common_mem_free(req->pf_data.packet);
+			req->pf_data.packet = NULL;
 			list_add_tail(&req->list, &ctx->free_req_list);
+
 			CAM_DBG(CAM_ISP,
 				"move active req %lld to free list(cnt=%d)",
 				req->request_id, ctx_isp->active_req_cnt);
@@ -3300,12 +3336,14 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	struct cam_isp_ctx_req           *req_isp = NULL;
 	uintptr_t                         packet_addr;
 	struct cam_packet                *packet;
+	struct cam_packet                *packet_local = NULL;
 	size_t                            len = 0;
 	size_t                            remain_len = 0;
 	struct cam_hw_prepare_update_args cfg;
 	struct cam_req_mgr_add_request    add_req;
 	struct cam_isp_context           *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
+	uint32_t header_size;
 
 	CAM_DBG(CAM_ISP, "get free request object......");
 
@@ -3345,27 +3383,42 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 
 	remain_len -= (size_t)cmd->offset;
 	packet = (struct cam_packet *)(packet_addr + (uint32_t)cmd->offset);
+
+	header_size = packet->header.size;
+	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
+	if (!packet_local) {
+		CAM_ERR(CAM_ISP, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
+
+	if (header_size != packet->header.size) {
+		CAM_ERR(CAM_CTXT, "Header size mismatch, reject packet");
+		rc = -EINVAL;
+		goto free_cpu_buf;
+	}
+
 	CAM_DBG(CAM_ISP, "pack_handle %llx", cmd->packet_handle);
 	CAM_DBG(CAM_ISP, "packet address is 0x%zx", packet_addr);
 	CAM_DBG(CAM_ISP, "packet with length %zu, offset 0x%llx",
 		len, cmd->offset);
 	CAM_DBG(CAM_ISP, "Packet request id %lld",
-		packet->header.request_id);
-	CAM_DBG(CAM_ISP, "Packet size 0x%x", packet->header.size);
-	CAM_DBG(CAM_ISP, "packet op %d", packet->header.op_code);
+		packet_local->header.request_id);
+	CAM_DBG(CAM_ISP, "Packet size 0x%x", packet_local->header.size);
+	CAM_DBG(CAM_ISP, "packet op %d", packet_local->header.op_code);
 
-	if ((((packet->header.op_code + 1) & 0xF) == CAM_ISP_PACKET_UPDATE_DEV)
-		&& (packet->header.request_id <= ctx->last_flush_req)) {
+	if ((((packet_local->header.op_code + 1) & 0xF) == CAM_ISP_PACKET_UPDATE_DEV)
+		&& (packet_local->header.request_id <= ctx->last_flush_req)) {
 		CAM_INFO(CAM_ISP,
 			"request %lld has been flushed, reject packet",
-			packet->header.request_id);
+			packet_local->header.request_id);
 		rc = -EBADR;
 		goto free_cpu_buf;
 	}
 
 	/* preprocess the configuration */
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.packet = packet;
+	cfg.packet = packet_local;
 	cfg.remain_len = remain_len;
 	cfg.ctxt_to_hw_map = ctx_isp->hw_ctx;
 	cfg.max_hw_update_entries = CAM_ISP_CTX_CFG_MAX;
@@ -3392,6 +3445,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	req_isp->num_fence_map_in = cfg.num_in_map_entries;
 	req_isp->num_acked = 0;
 	req_isp->bubble_detected = false;
+	req->pf_data.packet = packet_local;
 
 	for (i = 0; i < req_isp->num_fence_map_out; i++) {
 		rc = cam_sync_get_obj_ref(req_isp->fence_map_out[i].sync_id);
@@ -3406,11 +3460,11 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 		req_isp->num_cfg, req_isp->num_fence_map_out,
 		req_isp->num_fence_map_in);
 
-	req->request_id = packet->header.request_id;
+	req->request_id = packet_local->header.request_id;
 	req->status = 1;
 
 	CAM_DBG(CAM_ISP, "Packet request id %lld packet opcode:%d",
-		packet->header.request_id,
+		packet_local->header.request_id,
 		req_isp->hw_update_data.packet_opcode_type);
 
 	if (req_isp->hw_update_data.packet_opcode_type ==
@@ -3446,9 +3500,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	if (rc)
 		goto put_ref;
 
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_ISP, "Can not put packet address : 0x%llx",
-			cmd->packet_handle);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 
 	CAM_DBG(CAM_REQ,
 		"Preprocessing Config req_id %lld successful on ctx %u",
@@ -3463,10 +3515,9 @@ put_ref:
 				req_isp->fence_map_out[i].sync_id);
 	}
 free_cpu_buf:
-	if (cam_mem_put_cpu_buf((int32_t) cmd->packet_handle))
-		CAM_WARN(CAM_ISP, "Can not put packet address: 0x%llx",
-			cmd->packet_handle);
+	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
+	cam_common_mem_free(packet_local);
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	spin_unlock_bh(&ctx->lock);
@@ -3992,6 +4043,8 @@ static int __cam_isp_ctx_stop_dev_in_activated_unlock(
 					req_isp->fence_map_out[i].sync_id,
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 			}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
 
@@ -4008,6 +4061,8 @@ static int __cam_isp_ctx_stop_dev_in_activated_unlock(
 					req_isp->fence_map_out[i].sync_id,
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 			}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
 
@@ -4024,6 +4079,8 @@ static int __cam_isp_ctx_stop_dev_in_activated_unlock(
 					req_isp->fence_map_out[i].sync_id,
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 			}
+		cam_common_mem_free(req->pf_data.packet);
+		req->pf_data.packet = NULL;
 		list_add_tail(&req->list, &ctx->free_req_list);
 	}
 	ctx_isp->frame_id = 0;

@@ -13,6 +13,7 @@
 
 #include <linux/kernel.h>
 #include "cam_sensor_util.h"
+#include "cam_common_util.h"
 #include <cam_mem_mgr.h>
 #include "cam_res_mgr_api.h"
 
@@ -301,6 +302,8 @@ int cam_sensor_i2c_command_parser(
 	uint16_t                  cmd_length_in_bytes = 0;
 	size_t                    remain_len = 0;
 	size_t                    tot_size = 0;
+	uint32_t                 *cmd_buf_local = NULL;
+	uint32_t                 *cmd_buf_local_head = NULL;
 
 	for (i = 0; i < num_cmd_buffers; i++) {
 		uint32_t                  *cmd_buf = NULL;
@@ -334,15 +337,27 @@ int cam_sensor_i2c_command_parser(
 			(cmd_desc[i].offset >
 			(len_of_buff - sizeof(struct common_header)))) {
 			CAM_ERR(CAM_SENSOR, "buffer provided too small");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto rel_buf;
 		}
 		cmd_buf = (uint32_t *)generic_ptr;
 		cmd_buf += cmd_desc[i].offset / sizeof(uint32_t);
 
+		cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, cmd_desc[i].length);
+
+		if (!cmd_buf_local) {
+			CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+			rc = -EINVAL;
+			goto rel_buf;
+		}
+
+		cmd_buf_local_head = cmd_buf_local;
+
 		remain_len -= cmd_desc[i].offset;
 		if (remain_len < cmd_desc[i].length) {
 			CAM_ERR(CAM_SENSOR, "buffer provided too small");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto rel_buf;
 		}
 
 		while (byte_cnt < cmd_desc[i].length) {
@@ -352,14 +367,14 @@ int cam_sensor_i2c_command_parser(
 				rc = -EINVAL;
 				goto rel_buf;
 			}
-			cmm_hdr = (struct common_header *)cmd_buf;
+			cmm_hdr = (struct common_header *)cmd_buf_local;
 			generic_op_code = cmm_hdr->third_byte;
 			switch (cmm_hdr->cmd_type) {
 			case CAMERA_SENSOR_CMD_TYPE_I2C_RNDM_WR: {
 				uint16_t cmd_length_in_bytes   = 0;
 				struct cam_cmd_i2c_random_wr
 					*cam_cmd_i2c_random_wr =
-					(struct cam_cmd_i2c_random_wr *)cmd_buf;
+					(struct cam_cmd_i2c_random_wr *)cmd_buf_local;
 
 				if ((remain_len - byte_cnt) <
 					sizeof(struct cam_cmd_i2c_random_wr)) {
@@ -390,7 +405,7 @@ int cam_sensor_i2c_command_parser(
 					goto rel_buf;
 				}
 
-				cmd_buf += cmd_length_in_bytes /
+				cmd_buf_local += cmd_length_in_bytes /
 					sizeof(uint32_t);
 				byte_cnt += cmd_length_in_bytes;
 				break;
@@ -400,7 +415,7 @@ int cam_sensor_i2c_command_parser(
 				struct cam_cmd_i2c_continuous_wr
 				*cam_cmd_i2c_continuous_wr =
 				(struct cam_cmd_i2c_continuous_wr *)
-				cmd_buf;
+				cmd_buf_local;
 
 				if ((remain_len - byte_cnt) <
 				sizeof(struct cam_cmd_i2c_continuous_wr)) {
@@ -432,7 +447,7 @@ int cam_sensor_i2c_command_parser(
 					goto rel_buf;
 				}
 
-				cmd_buf += cmd_length_in_bytes /
+				cmd_buf_local += cmd_length_in_bytes /
 					sizeof(uint32_t);
 				byte_cnt += cmd_length_in_bytes;
 				break;
@@ -450,7 +465,7 @@ int cam_sensor_i2c_command_parser(
 					generic_op_code ==
 						CAMERA_SENSOR_WAIT_OP_SW_UCND) {
 					rc = cam_sensor_handle_delay(
-						&cmd_buf, generic_op_code,
+						&cmd_buf_local, generic_op_code,
 						i2c_reg_settings, j, &byte_cnt,
 						list);
 					if (rc < 0) {
@@ -463,7 +478,7 @@ int cam_sensor_i2c_command_parser(
 				} else if (generic_op_code ==
 					CAMERA_SENSOR_WAIT_OP_COND) {
 					rc = cam_sensor_handle_poll(
-						&cmd_buf, i2c_reg_settings,
+						&cmd_buf_local, i2c_reg_settings,
 						&byte_cnt, &j, &list);
 					if (rc < 0) {
 						CAM_ERR(CAM_SENSOR,
@@ -489,7 +504,7 @@ int cam_sensor_i2c_command_parser(
 					goto rel_buf;
 				}
 				rc = cam_sensor_handle_slave_info(
-					io_master, cmd_buf);
+					io_master, cmd_buf_local);
 				if (rc) {
 					CAM_ERR(CAM_SENSOR,
 					"Handle slave info failed with rc: %d",
@@ -498,7 +513,7 @@ int cam_sensor_i2c_command_parser(
 				}
 				cmd_length_in_bytes =
 					sizeof(struct cam_cmd_i2c_info);
-				cmd_buf +=
+				cmd_buf_local +=
 					cmd_length_in_bytes / sizeof(uint32_t);
 				byte_cnt += cmd_length_in_bytes;
 				break;
@@ -511,17 +526,17 @@ int cam_sensor_i2c_command_parser(
 			}
 		}
 		i2c_reg_settings->is_settings_valid = 1;
-		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-			CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
-				cmd_desc[i].mem_handle);
+		cam_common_mem_free(cmd_buf_local_head);
+		cmd_buf_local = NULL;
+		cmd_buf_local_head = NULL;
+		cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	}
 
 	return rc;
 
 rel_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-		CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
-			cmd_desc[i].mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
+	cam_common_mem_free(cmd_buf_local_head);
 	return rc;
 }
 
@@ -2084,4 +2099,3 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 
 	return 0;
 }
-

@@ -210,7 +210,7 @@ mwifiex_del_rx_reorder_entry(struct mwifiex_private *priv,
 	priv->adapter->rx_locked = true;
 	if (priv->adapter->rx_processing) {
 		spin_unlock_bh(&priv->adapter->rx_proc_lock);
-		flush_workqueue(priv->adapter->rx_workqueue);
+		kthread_flush_worker(priv->adapter->rx_thread);
 	} else {
 		spin_unlock_bh(&priv->adapter->rx_proc_lock);
 	}

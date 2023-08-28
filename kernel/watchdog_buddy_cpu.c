@@ -10,6 +10,8 @@ static DEFINE_PER_CPU(bool, watchdog_touch);
 static DEFINE_PER_CPU(bool, hard_watchdog_warn);
 static cpumask_t __read_mostly watchdog_cpus;
 
+static unsigned long hardlockup_allcpu_dumped;
+
 int __init watchdog_nmi_probe(void)
 {
 	return 0;
@@ -115,6 +117,14 @@ void watchdog_check_hardlockup(void)
 		/* only warn once */
 		if (per_cpu(hard_watchdog_warn, next_cpu) == true)
 			return;
+
+		/*
+		 * Perform all-CPU dump only once to avoid multiple hardlockups
+		 * generating interleaving traces
+		 */
+		if (sysctl_hardlockup_all_cpu_backtrace &&
+				!test_and_set_bit(0, &hardlockup_allcpu_dumped))
+			trigger_allbutself_cpu_backtrace();
 
 		if (hardlockup_panic)
 			panic("Watchdog detected hard LOCKUP on cpu %u", next_cpu);

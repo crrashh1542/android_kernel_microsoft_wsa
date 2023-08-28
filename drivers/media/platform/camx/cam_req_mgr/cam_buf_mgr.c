@@ -528,6 +528,7 @@ int cam_buf_mgr_init(struct platform_device *pdev)
 
 	idev->dev = &pdev->dev;
 	dma_coerce_mask_and_coherent(idev->dev, DMA_BIT_MASK(64));
+	dma_set_max_seg_size(idev->dev, UINT_MAX);
 	mutex_init(&idev->dev_lock);
 
 	return 0;

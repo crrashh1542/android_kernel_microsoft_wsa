@@ -18,10 +18,11 @@ struct remove_rescan_context {
 	spinlock_t		dev_lock; /* protects device */
 	struct pci_dev		*dev;
 	int			rescan_done;
+	bool			cold_reboot;
 };
 
 void t7xx_pci_dev_rescan(void);
-void t7xx_rescan_queue_work(struct pci_dev *pdev);
+void t7xx_rescan_queue_work(struct pci_dev *pdev, bool cold_reboot);
 int t7xx_rescan_init(void);
 void t7xx_rescan_deinit(void);
 void t7xx_rescan_done(void);

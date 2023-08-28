@@ -10,6 +10,11 @@ menuconfig VFIO
 	  If you don't know what to do here, say N.
 
 if VFIO
+config VFIO_ACPI_NOTIFY
+	bool
+	depends on ACPI
+	default n
+
 config VFIO_IOMMU_TYPE1
 	tristate
 	default n

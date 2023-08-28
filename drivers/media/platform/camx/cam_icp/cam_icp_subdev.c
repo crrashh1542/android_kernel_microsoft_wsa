@@ -50,7 +50,7 @@ struct cam_icp_subdev {
 	int32_t reserved;
 };
 
-static struct cam_icp_subdev g_icp_dev;
+static struct cam_icp_subdev *g_icp_dev;
 
 static const struct of_device_id cam_icp_dt_match[] = {
 	{.compatible = "qcom,cam-icp"},
@@ -83,8 +83,8 @@ static int cam_icp_subdev_open(struct v4l2_subdev *sd,
 	struct cam_node *node = v4l2_get_subdevdata(sd);
 	int rc = 0;
 
-	mutex_lock(&g_icp_dev.icp_lock);
-	if (g_icp_dev.open_cnt >= 1) {
+	mutex_lock(&g_icp_dev->icp_lock);
+	if (g_icp_dev->open_cnt >= 1) {
 		CAM_ERR(CAM_ICP, "ICP subdev is already opened");
 		rc = -EALREADY;
 		goto end;
@@ -102,9 +102,9 @@ static int cam_icp_subdev_open(struct v4l2_subdev *sd,
 		CAM_ERR(CAM_ICP, "FW download failed");
 		goto end;
 	}
-	g_icp_dev.open_cnt++;
+	g_icp_dev->open_cnt++;
 end:
-	mutex_unlock(&g_icp_dev.icp_lock);
+	mutex_unlock(&g_icp_dev->icp_lock);
 	return rc;
 }
 
@@ -115,13 +115,12 @@ static int cam_icp_subdev_close(struct v4l2_subdev *sd,
 	struct cam_hw_mgr_intf *hw_mgr_intf = NULL;
 	struct cam_node *node = v4l2_get_subdevdata(sd);
 
-	mutex_lock(&g_icp_dev.icp_lock);
-	if (g_icp_dev.open_cnt <= 0) {
+	mutex_lock(&g_icp_dev->icp_lock);
+	if (g_icp_dev->open_cnt <= 0) {
 		CAM_DBG(CAM_ICP, "ICP subdev is already closed");
 		rc = -EINVAL;
 		goto end;
 	}
-	g_icp_dev.open_cnt--;
 	if (!node) {
 		CAM_ERR(CAM_ICP, "Invalid args");
 		rc = -EINVAL;
@@ -135,15 +134,18 @@ static int cam_icp_subdev_close(struct v4l2_subdev *sd,
 		goto end;
 	}
 
-	rc = cam_node_shutdown(node);
+	g_icp_dev->open_cnt--;
+	if (g_icp_dev->open_cnt == 0)
+		rc = cam_node_shutdown(node);
 	if (rc < 0) {
 		CAM_ERR(CAM_ICP, "HW close failed");
+		g_icp_dev->open_cnt++;
 		goto end;
 	}
 
 end:
-	mutex_unlock(&g_icp_dev.icp_lock);
-	return 0;
+	mutex_unlock(&g_icp_dev->icp_lock);
+	return rc;
 }
 
 static const struct v4l2_subdev_internal_ops cam_icp_subdev_internal_ops = {
@@ -174,16 +176,21 @@ static int cam_icp_probe(struct platform_device *pdev)
 	}
 	put_device(&cpas_pdev->dev);
 
-	g_icp_dev.sd.pdev = pdev;
-	g_icp_dev.sd.internal_ops = &cam_icp_subdev_internal_ops;
-	rc = cam_subdev_probe(&g_icp_dev.sd, pdev, CAM_ICP_DEV_NAME,
+	g_icp_dev = devm_kzalloc(&pdev->dev,
+		sizeof(struct cam_icp_subdev), GFP_KERNEL);
+	if (!g_icp_dev)
+		return -ENOMEM;
+
+	g_icp_dev->sd.pdev = pdev;
+	g_icp_dev->sd.internal_ops = &cam_icp_subdev_internal_ops;
+	rc = cam_subdev_probe(&g_icp_dev->sd, pdev, CAM_ICP_DEV_NAME,
 		CAM_ICP_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "ICP cam_subdev_probe failed");
 		goto probe_fail;
 	}
 
-	node = (struct cam_node *) g_icp_dev.sd.token;
+	node = (struct cam_node *) g_icp_dev->sd.token;
 
 	hw_mgr_intf = kzalloc(sizeof(*hw_mgr_intf), GFP_KERNEL);
 	if (!hw_mgr_intf) {
@@ -199,8 +206,8 @@ static int cam_icp_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < CAM_ICP_CTX_MAX; i++) {
-		g_icp_dev.ctx_icp[i].base = &g_icp_dev.ctx[i];
-		rc = cam_icp_context_init(&g_icp_dev.ctx_icp[i],
+		g_icp_dev->ctx_icp[i].base = &g_icp_dev->ctx[i];
+		rc = cam_icp_context_init(&g_icp_dev->ctx_icp[i],
 					hw_mgr_intf, i);
 		if (rc) {
 			CAM_ERR(CAM_ICP, "ICP context init failed");
@@ -208,7 +215,7 @@ static int cam_icp_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = cam_node_init(node, hw_mgr_intf, g_icp_dev.ctx,
+	rc = cam_node_init(node, hw_mgr_intf, g_icp_dev->ctx,
 				CAM_ICP_CTX_MAX, CAM_ICP_DEV_NAME);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "ICP node init failed");
@@ -218,8 +225,8 @@ static int cam_icp_probe(struct platform_device *pdev)
 	cam_smmu_set_client_page_fault_handler(iommu_hdl,
 		cam_icp_dev_iommu_fault_handler, node);
 
-	g_icp_dev.open_cnt = 0;
-	mutex_init(&g_icp_dev.icp_lock);
+	g_icp_dev->open_cnt = 0;
+	mutex_init(&g_icp_dev->icp_lock);
 
 	pr_info("%s driver probed successfully\n", KBUILD_MODNAME);
 
@@ -228,11 +235,11 @@ static int cam_icp_probe(struct platform_device *pdev)
 ctx_fail:
 	cam_icp_hw_mgr_deinit();
 	for (--i; i >= 0; i--)
-		cam_icp_context_deinit(&g_icp_dev.ctx_icp[i]);
+		cam_icp_context_deinit(&g_icp_dev->ctx_icp[i]);
 hw_init_fail:
 	kfree(hw_mgr_intf);
 hw_alloc_fail:
-	cam_subdev_remove(&g_icp_dev.sd);
+	cam_subdev_remove(&g_icp_dev->sd);
 probe_fail:
 	return rc;
 }
@@ -261,12 +268,12 @@ static int cam_icp_remove(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < CAM_ICP_CTX_MAX; i++)
-		cam_icp_context_deinit(&g_icp_dev.ctx_icp[i]);
+		cam_icp_context_deinit(&g_icp_dev->ctx_icp[i]);
 
 	cam_icp_hw_mgr_deinit();
-	cam_node_deinit(g_icp_dev.node);
-	cam_subdev_remove(&g_icp_dev.sd);
-	mutex_destroy(&g_icp_dev.icp_lock);
+	cam_node_deinit(g_icp_dev->node);
+	cam_subdev_remove(&g_icp_dev->sd);
+	mutex_destroy(&g_icp_dev->icp_lock);
 
 	return 0;
 }

@@ -21,10 +21,8 @@
 
 #include <linux/compat.h>
 
-#include <linux/version.h>
-#include <drm/drm_ioctl.h>
 #include <drm/drm_edid.h>
-#include "evdi_drm.h"
+#include <uapi/drm/evdi_drm.h>
 
 #include "evdi_drm_drv.h"
 
@@ -33,7 +31,8 @@ struct drm_evdi_connect32 {
 	int32_t dev_index;
 	uint32_t edid_ptr32;
 	uint32_t edid_length;
-	uint32_t sku_area_limit;
+	uint32_t pixel_area_limit;
+	uint32_t pixel_per_second_limit;
 };
 
 struct drm_evdi_grabpix32 {
@@ -60,7 +59,8 @@ static int compat_evdi_connect(struct file *file,
 	krequest.dev_index = req32.dev_index;
 	krequest.edid = compat_ptr(req32.edid_ptr32);
 	krequest.edid_length = req32.edid_length;
-	krequest.sku_area_limit = req32.sku_area_limit;
+	krequest.pixel_area_limit = req32.pixel_area_limit;
+	krequest.pixel_per_second_limit = req32.pixel_per_second_limit;
 
 	return drm_ioctl_kernel(file, evdi_painter_connect_ioctl, &krequest, 0);
 }
@@ -90,7 +90,7 @@ static int compat_evdi_grabpix(struct file *file,
 
 	req32.num_rects = krequest.num_rects;
 	if (copy_to_user((void __user *)arg, &req32, sizeof(req32)))
-                return -EFAULT;
+		return -EFAULT;
 	return 0;
 }
 

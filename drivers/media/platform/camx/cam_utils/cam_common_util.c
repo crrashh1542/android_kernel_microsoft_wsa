@@ -14,9 +14,14 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/slab.h>
-
+#include <linux/timer.h>
+#include <linux/completion.h>
+#include <linux/module.h>
+#include <linux/iopoll.h>
+#include <linux/moduleparam.h>
 #include "cam_common_util.h"
 #include "cam_debug_util.h"
+#include "cam_hw.h"
 
 int cam_common_util_get_string_index(const char **strings,
 	uint32_t num_strings, char *matching_string, uint32_t *index)
@@ -62,3 +67,24 @@ ktime_t cam_common_util_get_curr_timestamp(void)
 	return ktime_get_boottime();
 }
 
+void *cam_common_mem_kdup(void *from, size_t len)
+{
+	void *to = kvzalloc(len, GFP_KERNEL);
+
+	if (!to) {
+		CAM_ERR(CAM_UTIL, "Failed to allocate header memory");
+		return to;
+	}
+
+	CAM_DBG(CAM_UTIL, "Allocate and copy header with size: %zu", len);
+	memcpy(to, from, len);
+
+	return to;
+}
+EXPORT_SYMBOL(cam_common_mem_kdup);
+
+void cam_common_mem_free(void *memory)
+{
+	kvfree(memory);
+}
+EXPORT_SYMBOL(cam_common_mem_free);

@@ -45,13 +45,8 @@ static const struct vivid_fmt formats_ovl[] = {
 	},
 };
 
-/* The number of discrete webcam framesizes */
-#define VIVID_WEBCAM_SIZES 6
-/* The number of discrete webcam frameintervals */
-#define VIVID_WEBCAM_IVALS (VIVID_WEBCAM_SIZES * 2)
-
 /* Sizes must be in increasing order */
-static const struct v4l2_frmsize_discrete webcam_sizes[VIVID_WEBCAM_SIZES] = {
+static const struct v4l2_frmsize_discrete webcam_sizes[] = {
 	{  320, 180 },
 	{  640, 360 },
 	{  640, 480 },
@@ -64,20 +59,42 @@ static const struct v4l2_frmsize_discrete webcam_sizes[VIVID_WEBCAM_SIZES] = {
  * Intervals must be in increasing order and there must be twice as many
  * elements in this array as there are in webcam_sizes.
  */
-static const struct v4l2_fract webcam_intervals[VIVID_WEBCAM_IVALS] = {
+static const struct v4l2_fract webcam_intervals[] = {
 	{  1, 1 },
 	{  1, 2 },
 	{  1, 4 },
 	{  1, 5 },
 	{  1, 10 },
 	{  2, 25 },
-	{  1, 15 },
+	{  1, 15 }, /* 7 - maximum for 2160p */
 	{  1, 25 },
-	{  1, 30 },
+	{  1, 30 }, /* 9 - maximum for 1080p */
 	{  1, 40 },
 	{  1, 50 },
-	{  1, 60 },
+	{  1, 60 }, /* 12 - maximum for 720p */
+	{  1, 120 },
 };
+
+/* Limit maximum FPS rates for high resolutions */
+#define IVAL_COUNT_720P 12 /* 720p and up is limited to 60 fps */
+#define IVAL_COUNT_1080P 9 /* 1080p and up is limited to 30 fps */
+#define IVAL_COUNT_2160P 7 /* 2160p and up is limited to 15 fps */
+
+static inline unsigned int webcam_ival_count(const struct vivid_dev *dev,
+					     unsigned int frmsize_idx)
+{
+	if (webcam_sizes[frmsize_idx].height >= 2160)
+		return IVAL_COUNT_2160P;
+
+	if (webcam_sizes[frmsize_idx].height >= 1080)
+		return IVAL_COUNT_1080P;
+
+	if (webcam_sizes[frmsize_idx].height >= 720)
+		return IVAL_COUNT_720P;
+
+	/* For low resolutions, allow all FPS rates */
+	return ARRAY_SIZE(webcam_intervals);
+}
 
 static int vid_cap_queue_setup(struct vb2_queue *vq,
 		       unsigned *nbuffers, unsigned *nplanes,
@@ -381,6 +398,7 @@ static enum tpg_pixel_aspect vivid_get_pixel_aspect(const struct vivid_dev *dev)
 void vivid_update_format_cap(struct vivid_dev *dev, bool keep_controls)
 {
 	struct v4l2_bt_timings *bt = &dev->dv_timings_cap[dev->input].bt;
+	u32 dims[V4L2_CTRL_MAX_DIMS] = {};
 	unsigned size;
 	u64 pixelclock;
 
@@ -465,6 +483,17 @@ void vivid_update_format_cap(struct vivid_dev *dev, bool keep_controls)
 	tpg_s_video_aspect(&dev->tpg, vivid_get_video_aspect(dev));
 	tpg_s_pixel_aspect(&dev->tpg, vivid_get_pixel_aspect(dev));
 	tpg_update_mv_step(&dev->tpg);
+
+	/*
+	 * We can be called from within s_ctrl, in that case we can't
+	 * modify controls. Luckily we don't need to in that case.
+	 */
+	if (keep_controls)
+		return;
+
+	dims[0] = roundup(dev->src_rect.width, PIXEL_ARRAY_DIV);
+	dims[1] = roundup(dev->src_rect.height, PIXEL_ARRAY_DIV);
+	v4l2_ctrl_modify_dimensions(dev->pixel_array, dims);
 }
 
 /* Map the field to something that is valid for the current input */
@@ -580,7 +609,7 @@ int vivid_try_fmt_vid_cap(struct file *file, void *priv,
 	if (vivid_is_webcam(dev)) {
 		const struct v4l2_frmsize_discrete *sz =
 			v4l2_find_nearest_size(webcam_sizes,
-					       VIVID_WEBCAM_SIZES, width,
+					       ARRAY_SIZE(webcam_sizes), width,
 					       height, mp->width, mp->height);
 
 		w = sz->width;
@@ -761,14 +790,16 @@ int vivid_s_fmt_vid_cap(struct file *file, void *priv,
 			compose->height /= factor;
 		}
 	} else if (vivid_is_webcam(dev)) {
+		unsigned int ival_sz = webcam_ival_count(dev, dev->webcam_size_idx);
+
 		/* Guaranteed to be a match */
 		for (i = 0; i < ARRAY_SIZE(webcam_sizes); i++)
 			if (webcam_sizes[i].width == mp->width &&
 					webcam_sizes[i].height == mp->height)
 				break;
 		dev->webcam_size_idx = i;
-		if (dev->webcam_ival_idx >= 2 * (VIVID_WEBCAM_SIZES - i))
-			dev->webcam_ival_idx = 2 * (VIVID_WEBCAM_SIZES - i) - 1;
+		if (dev->webcam_ival_idx >= ival_sz)
+			dev->webcam_ival_idx = ival_sz - 1;
 		vivid_update_format_cap(dev, false);
 	} else {
 		struct v4l2_rect r = { 0, 0, mp->width, mp->height };
@@ -1896,7 +1927,7 @@ int vidioc_enum_frameintervals(struct file *file, void *priv,
 			break;
 	if (i == ARRAY_SIZE(webcam_sizes))
 		return -EINVAL;
-	if (fival->index >= 2 * (VIVID_WEBCAM_SIZES - i))
+	if (fival->index >= webcam_ival_count(dev, i))
 		return -EINVAL;
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
 	fival->discrete = webcam_intervals[fival->index];
@@ -1923,7 +1954,7 @@ int vivid_vid_cap_s_parm(struct file *file, void *priv,
 			  struct v4l2_streamparm *parm)
 {
 	struct vivid_dev *dev = video_drvdata(file);
-	unsigned ival_sz = 2 * (VIVID_WEBCAM_SIZES - dev->webcam_size_idx);
+	unsigned int ival_sz = webcam_ival_count(dev, dev->webcam_size_idx);
 	struct v4l2_fract tpf;
 	unsigned i;
 

@@ -15,7 +15,6 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -93,6 +92,9 @@ static void mtk_drm_crtc_finish_page_flip(struct mtk_drm_crtc *mtk_crtc)
 	unsigned long flags;
 
 	spin_lock_irqsave(&crtc->dev->event_lock, flags);
+	if (!mtk_crtc->event)
+		DRM_INFO("%s %dd 0x%px mtk_crtc 0x%px\n",
+			 __func__, __LINE__, mtk_crtc->event, mtk_crtc);
 	drm_crtc_send_vblank_event(crtc, mtk_crtc->event);
 	drm_crtc_vblank_put(crtc);
 	mtk_crtc->event = NULL;
@@ -452,6 +454,9 @@ static void mtk_crtc_ddp_hw_fini(struct mtk_drm_crtc *mtk_crtc)
 
 	if (crtc->state->event && !crtc->state->active) {
 		spin_lock_irq(&crtc->dev->event_lock);
+		DRM_INFO("%s %d event 0x%px 0x%px 0x%px\n",
+			 __func__, __LINE__,
+			 mtk_crtc->event, mtk_crtc, crtc);
 		drm_crtc_send_vblank_event(crtc, crtc->state->event);
 		crtc->state->event = NULL;
 		spin_unlock_irq(&crtc->dev->event_lock);
@@ -746,6 +751,11 @@ static void mtk_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 		WARN_ON(drm_crtc_vblank_get(crtc) != 0);
 		mtk_crtc->event = mtk_crtc_state->base.event;
 		mtk_crtc_state->base.event = NULL;
+
+		if (!mtk_crtc->event)
+			DRM_INFO("%s event 0x%px 0x%px 0x%px\n",
+				 __func__,
+				 mtk_crtc->event, mtk_crtc, crtc);
 	}
 }
 
@@ -946,6 +956,8 @@ int mtk_drm_crtc_create(struct drm_device *drm_dev,
 
 	mtk_crtc->planes = devm_kcalloc(dev, num_comp_planes,
 					sizeof(struct drm_plane), GFP_KERNEL);
+	if (!mtk_crtc->planes)
+		return -ENOMEM;
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		ret = mtk_drm_crtc_init_comp_planes(drm_dev, mtk_crtc, i,

@@ -227,10 +227,9 @@ static int kvm_vfio_set_group(struct kvm_device *dev, long attr, u64 arg)
 		kvg->vfio_group = vfio_group;
 
 		kvm_arch_start_assignment(dev->kvm);
+		kvm_vfio_group_set_kvm(kvg->vfio_group, dev->kvm);
 
 		mutex_unlock(&kv->lock);
-
-		kvm_vfio_group_set_kvm(vfio_group, dev->kvm);
 
 		kvm_vfio_update_coherency(dev);
 

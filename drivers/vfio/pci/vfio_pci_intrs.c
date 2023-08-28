@@ -19,6 +19,7 @@
 #include <linux/vfio.h>
 #include <linux/wait.h>
 #include <linux/slab.h>
+#include <linux/vfio_acpi_notify.h>
 
 #include <linux/vfio_pci_core.h>
 
@@ -639,6 +640,71 @@ static int vfio_pci_set_req_trigger(struct vfio_pci_core_device *vdev,
 					       count, flags, data);
 }
 
+static int
+vfio_pci_set_acpi_ntfy_trigger(struct vfio_pci_core_device *vdev,
+			       unsigned int index, unsigned int start,
+			       unsigned int count, uint32_t flags, void *data)
+{
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
+
+	if (index != VFIO_PCI_ACPI_IRQ_INDEX || start != 0 || count > 1)
+		return -EINVAL;
+
+	if (!adev)
+		return -ENODEV;
+
+	if (!vdev->acpi_notification)
+		return -EINVAL;
+
+	/*
+	 * Disable notifications: flags = (DATA_NONE|ACTION_TRIGGER), count = 0
+	 * Enable loopback testing: (DATA_BOOL|ACTION_TRIGGER) or
+	 *			    (DATA_NONE|ACTION_TRIGGER), count != 0
+	 */
+	if (flags & VFIO_IRQ_SET_DATA_NONE) {
+		if (count)
+			vfio_acpi_notify(adev, ACPI_NOTIFY_DEVICE_CHECK,
+					 vdev->acpi_notification);
+		else
+			vfio_remove_acpi_notify(&vdev->acpi_notification, adev);
+
+		return 0;
+	} else if (flags & VFIO_IRQ_SET_DATA_BOOL) {
+		uint8_t trigger;
+
+		if (!count)
+			return -EINVAL;
+
+		trigger = *(uint8_t *)data;
+		if (trigger)
+			vfio_acpi_notify(adev, ACPI_NOTIFY_DEVICE_CHECK,
+					 vdev->acpi_notification);
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int
+vfio_pci_set_acpi_ntfy_eventfd_trigger(struct vfio_pci_core_device *vdev,
+				       unsigned int index, unsigned int start,
+				       unsigned int count, uint32_t flags, void *data)
+{
+	struct acpi_device *adev = ACPI_COMPANION(&vdev->pdev->dev);
+	int32_t fd;
+
+	if (index != VFIO_PCI_ACPI_IRQ_INDEX || start != 0 || count != 1)
+		return -EINVAL;
+
+	if (!adev)
+		return -ENODEV;
+
+	fd = *(int32_t *)data;
+
+	return vfio_register_acpi_notify_handler(&vdev->acpi_notification, adev, fd);
+}
+
 int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 			    unsigned index, unsigned start, unsigned count,
 			    void *data)
@@ -686,6 +752,20 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
 			func = vfio_pci_set_req_trigger;
 			break;
+		}
+		break;
+	case VFIO_PCI_ACPI_IRQ_INDEX:
+		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
+		case VFIO_IRQ_SET_ACTION_TRIGGER:
+			switch (flags & VFIO_IRQ_SET_DATA_TYPE_MASK) {
+			case VFIO_IRQ_SET_DATA_BOOL:
+			case VFIO_IRQ_SET_DATA_NONE:
+				func = vfio_pci_set_acpi_ntfy_trigger;
+				break;
+			case VFIO_IRQ_SET_DATA_EVENTFD:
+				func = vfio_pci_set_acpi_ntfy_eventfd_trigger;
+				break;
+			}
 		}
 		break;
 	}

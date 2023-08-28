@@ -112,12 +112,10 @@ static const struct mtk_stateless_control mtk_stateless_controls[] = {
 #define NUM_CTRLS ARRAY_SIZE(mtk_stateless_controls)
 
 static struct mtk_video_fmt mtk_video_formats[5];
-static struct mtk_codec_framesizes mtk_vdec_framesizes[3];
 
 static struct mtk_video_fmt default_out_format;
 static struct mtk_video_fmt default_cap_format;
 static unsigned int num_formats;
-static unsigned int num_framesizes;
 
 static struct v4l2_frmsize_stepwise stepwise_fhd = {
 	.min_width = MTK_VDEC_MIN_W,
@@ -260,8 +258,10 @@ static void mtk_vdec_worker(struct work_struct *work)
 		if (src_buf_req)
 			v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
 	} else {
-		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		v4l2_m2m_buf_done(vb2_v4l2_src, state);
+		if (ret != -EAGAIN) {
+			v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+			v4l2_m2m_buf_done(vb2_v4l2_src, state);
+		}
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 	}
 }
@@ -351,7 +351,6 @@ static void mtk_vcodec_add_formats(unsigned int fourcc,
 	struct mtk_vcodec_dev *dev = ctx->dev;
 	const struct mtk_vcodec_dec_pdata *pdata = dev->vdec_pdata;
 	int count_formats = *pdata->num_formats;
-	int count_framesizes = *pdata->num_framesizes;
 
 	switch (fourcc) {
 	case V4L2_PIX_FMT_H264_SLICE:
@@ -360,17 +359,15 @@ static void mtk_vcodec_add_formats(unsigned int fourcc,
 		mtk_video_formats[count_formats].fourcc = fourcc;
 		mtk_video_formats[count_formats].type = MTK_FMT_DEC;
 		mtk_video_formats[count_formats].num_planes = 1;
+		mtk_video_formats[count_formats].frmsize = stepwise_fhd;
 
-		mtk_vdec_framesizes[count_framesizes].fourcc = fourcc;
-		mtk_vdec_framesizes[count_framesizes].stepwise = stepwise_fhd;
 		if (!(ctx->dev->dec_capability & VCODEC_CAPABILITY_4K_DISABLED) &&
 		    fourcc != V4L2_PIX_FMT_VP8_FRAME) {
-			mtk_vdec_framesizes[count_framesizes].stepwise.max_width =
+			mtk_video_formats[count_formats].frmsize.max_width =
 				VCODEC_DEC_4K_CODED_WIDTH;
-			mtk_vdec_framesizes[count_framesizes].stepwise.max_height =
+			mtk_video_formats[count_formats].frmsize.max_height =
 				VCODEC_DEC_4K_CODED_HEIGHT;
 		}
-		num_framesizes++;
 		break;
 	case V4L2_PIX_FMT_MM21:
 	case V4L2_PIX_FMT_MT21C:
@@ -384,15 +381,15 @@ static void mtk_vcodec_add_formats(unsigned int fourcc,
 	}
 
 	num_formats++;
-	mtk_v4l2_debug(3, "num_formats: %d num_frames:%d dec_capability: 0x%x",
-		       count_formats, count_framesizes, ctx->dev->dec_capability);
+	mtk_v4l2_debug(3, "num_formats: %d dec_capability: 0x%x",
+		       count_formats, ctx->dev->dec_capability);
 }
 
 static void mtk_vcodec_get_supported_formats(struct mtk_vcodec_ctx *ctx)
 {
 	int cap_format_count = 0, out_format_count = 0;
 
-	if (num_formats && num_framesizes)
+	if (num_formats)
 		return;
 
 	if (ctx->dev->dec_capability & MTK_VDEC_FORMAT_MM21) {
@@ -471,8 +468,6 @@ const struct mtk_vcodec_dec_pdata mtk_vdec_8183_pdata = {
 	.num_formats = &num_formats,
 	.default_out_fmt = &default_out_format,
 	.default_cap_fmt = &default_cap_format,
-	.vdec_framesizes = mtk_vdec_framesizes,
-	.num_framesizes = &num_framesizes,
 	.uses_stateless_api = true,
 	.worker = mtk_vdec_worker,
 	.flush_decoder = mtk_vdec_flush_decoder,
@@ -491,8 +486,6 @@ const struct mtk_vcodec_dec_pdata mtk_lat_sig_core_pdata = {
 	.num_formats = &num_formats,
 	.default_out_fmt = &default_out_format,
 	.default_cap_fmt = &default_cap_format,
-	.vdec_framesizes = mtk_vdec_framesizes,
-	.num_framesizes = &num_framesizes,
 	.uses_stateless_api = true,
 	.worker = mtk_vdec_worker,
 	.flush_decoder = mtk_vdec_flush_decoder,
@@ -510,8 +503,6 @@ const struct mtk_vcodec_dec_pdata mtk_vdec_single_core_pdata = {
 	.num_formats = &num_formats,
 	.default_out_fmt = &default_out_format,
 	.default_cap_fmt = &default_cap_format,
-	.vdec_framesizes = mtk_vdec_framesizes,
-	.num_framesizes = &num_framesizes,
 	.uses_stateless_api = true,
 	.worker = mtk_vdec_worker,
 	.flush_decoder = mtk_vdec_flush_decoder,

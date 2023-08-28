@@ -49,6 +49,8 @@ enum tick_nohz_mode {
  * @timer_expires_base:	Base time clock monotonic for @timer_expires
  * @next_timer:		Expiry time of next expiring timer for debugging purpose only
  * @tick_dep_mask:	Tick dependency mask - is set, if someone needs the tick
+ * @last_tick_jiffies:	Value of jiffies seen on last tick
+ * @stalled_jiffies:	Number of stalled jiffies detected across ticks
  */
 struct tick_sched {
 	struct hrtimer			sched_timer;
@@ -77,6 +79,8 @@ struct tick_sched {
 	u64				next_timer;
 	ktime_t				idle_expires;
 	atomic_t			tick_dep_mask;
+	unsigned long			last_tick_jiffies;
+	unsigned int			stalled_jiffies;
 };
 
 extern struct tick_sched *tick_get_tick_sched(int cpu);
@@ -96,6 +100,12 @@ __tick_broadcast_oneshot_control(enum tick_broadcast_state state)
 {
 	return -EBUSY;
 }
+#endif
+
+#if defined CONFIG_NO_HZ_COMMON && defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
+extern void tick_nohz_hres_to_lres(void);
+#else
+static inline void tick_nohz_hres_to_lres(void) { }
 #endif
 
 #endif

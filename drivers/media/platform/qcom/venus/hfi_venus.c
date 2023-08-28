@@ -206,6 +206,10 @@ static int venus_write_queue(struct venus_hfi_device *hdev,
 
 	new_wr_idx = wr_idx + dwords;
 	wr_ptr = (u32 *)(queue->qmem.kva + (wr_idx << 2));
+
+	if (wr_ptr < (u32 *)queue->qmem.kva || wr_ptr > (u32 *)(queue->qmem.kva + queue->qmem.size))
+		return -EINVAL;
+
 	if (new_wr_idx < qsize) {
 		memcpy(wr_ptr, packet, dwords << 2);
 	} else {
@@ -273,6 +277,10 @@ static int venus_read_queue(struct venus_hfi_device *hdev,
 	}
 
 	rd_ptr = (u32 *)(queue->qmem.kva + (rd_idx << 2));
+
+	if (rd_ptr < (u32 *)queue->qmem.kva || rd_ptr > (u32 *)(queue->qmem.kva + queue->qmem.size))
+		return -EINVAL;
+
 	dwords = *rd_ptr >> 2;
 	if (!dwords)
 		return -EINVAL;
@@ -835,34 +843,24 @@ static int venus_sys_set_debug(struct venus_hfi_device *hdev, u32 debug)
 {
 	struct hfi_sys_set_property_pkt *pkt;
 	u8 packet[IFACEQ_VAR_SMALL_PKT_SIZE];
-	int ret;
 
 	pkt = (struct hfi_sys_set_property_pkt *)packet;
 
 	pkt_sys_debug_config(pkt, HFI_DEBUG_MODE_QUEUE, debug);
 
-	ret = venus_iface_cmdq_write(hdev, pkt, false);
-	if (ret)
-		return ret;
-
-	return 0;
+	return venus_iface_cmdq_write(hdev, pkt, false);
 }
 
 static int venus_sys_set_coverage(struct venus_hfi_device *hdev, u32 mode)
 {
 	struct hfi_sys_set_property_pkt *pkt;
 	u8 packet[IFACEQ_VAR_SMALL_PKT_SIZE];
-	int ret;
 
 	pkt = (struct hfi_sys_set_property_pkt *)packet;
 
 	pkt_sys_coverage_config(pkt, mode);
 
-	ret = venus_iface_cmdq_write(hdev, pkt, false);
-	if (ret)
-		return ret;
-
-	return 0;
+	return venus_iface_cmdq_write(hdev, pkt, false);
 }
 
 static int venus_sys_set_idle_message(struct venus_hfi_device *hdev,
@@ -870,7 +868,6 @@ static int venus_sys_set_idle_message(struct venus_hfi_device *hdev,
 {
 	struct hfi_sys_set_property_pkt *pkt;
 	u8 packet[IFACEQ_VAR_SMALL_PKT_SIZE];
-	int ret;
 
 	if (!enable)
 		return 0;
@@ -879,11 +876,7 @@ static int venus_sys_set_idle_message(struct venus_hfi_device *hdev,
 
 	pkt_sys_idle_indicator(pkt, enable);
 
-	ret = venus_iface_cmdq_write(hdev, pkt, false);
-	if (ret)
-		return ret;
-
-	return 0;
+	return venus_iface_cmdq_write(hdev, pkt, false);
 }
 
 static int venus_sys_set_power_control(struct venus_hfi_device *hdev,
@@ -891,17 +884,12 @@ static int venus_sys_set_power_control(struct venus_hfi_device *hdev,
 {
 	struct hfi_sys_set_property_pkt *pkt;
 	u8 packet[IFACEQ_VAR_SMALL_PKT_SIZE];
-	int ret;
 
 	pkt = (struct hfi_sys_set_property_pkt *)packet;
 
 	pkt_sys_power_control(pkt, enable);
 
-	ret = venus_iface_cmdq_write(hdev, pkt, false);
-	if (ret)
-		return ret;
-
-	return 0;
+	return venus_iface_cmdq_write(hdev, pkt, false);
 }
 
 static int venus_sys_set_ubwc_config(struct venus_hfi_device *hdev)

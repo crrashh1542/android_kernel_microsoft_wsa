@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2020-2022 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -133,7 +133,7 @@
  *   - base_jit_alloc_info_11_5
  *   - kbase_ioctl_mem_jit_init_10_2
  *   - kbase_ioctl_mem_jit_init_11_5
- * 11.37
+ * 11.37:
  * - Fix kinstr_prfcnt issues:
  *   - Missing implicit sample for CMD_STOP when HWCNT buffer is full.
  *   - Race condition when stopping periodic sampling.
@@ -145,7 +145,7 @@
  * - CPU mappings of USER_BUFFER imported memory handles must be cached.
  */
 #define BASE_UK_VERSION_MAJOR 11
-#define BASE_UK_VERSION_MINOR 36
+#define BASE_UK_VERSION_MINOR 38
 
 /**
  * struct kbase_ioctl_version_check - Check version compatibility between

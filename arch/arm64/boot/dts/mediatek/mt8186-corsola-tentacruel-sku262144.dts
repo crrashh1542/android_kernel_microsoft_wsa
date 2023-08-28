@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2022 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-tentacruel.dtsi"
+
+/ {
+	model = "Google Tentacruel sku262144/262145/262146/262147/327680/327681 board";
+	compatible = "google,tentacruel-sku262144", "google,tentacruel-sku262145",
+		     "google,tentacruel-sku262146", "google,tentacruel-sku262147",
+		     "google,tentacruel-sku327680", "google,tentacruel-sku327681",
+		     "google,tentacruel", "google,corsola", "mediatek,mt8186";
+};

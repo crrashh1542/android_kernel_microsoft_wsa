@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2022 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-tentacruel.dtsi"
+
+/ {
+	model = "Google Tentacruel sku262148/262149/262150/262151/327682/327683 board";
+	compatible = "google,tentacruel-sku262148", "google,tentacruel-sku262149",
+		     "google,tentacruel-sku262150", "google,tentacruel-sku262151",
+		     "google,tentacruel-sku327682", "google,tentacruel-sku327683",
+		     "google,tentacruel", "google,corsola", "mediatek,mt8186";
+};
+
+&i2c2 {
+	touchpad@15 {
+		compatible = "hid-over-i2c";
+		reg = <0x15>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		interrupt-parent = <&pio>;
+		hid-descr-addr = <0x0001>;
+		interrupts-extended = <&pio 11 IRQ_TYPE_LEVEL_LOW>;
+		vcc-supply = <&pp3300_s3>;
+		wakeup-source;
+	};
+};

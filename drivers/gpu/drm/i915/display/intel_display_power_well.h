@@ -7,8 +7,8 @@
 
 #include <linux/types.h>
 
-#include "intel_display.h"
 #include "intel_display_power.h"
+#include "intel_dpio_phy.h"
 
 struct drm_i915_private;
 struct i915_power_well;
@@ -110,6 +110,8 @@ struct i915_power_well_desc {
 	 * Thunderbolt mode.
 	 */
 	u16 is_tc_tbt:1;
+	/* Enable timeout if greater than the default 1ms */
+	u16 enable_timeout;
 };
 
 struct i915_power_well {

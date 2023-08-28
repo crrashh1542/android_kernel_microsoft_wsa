@@ -11,24 +11,30 @@
 #include "mtk_vcodec_dec_pm.h"
 #include "vdec_drv_if.h"
 
-static const struct mtk_video_fmt mtk_video_formats[] = {
+static struct mtk_video_fmt mtk_video_formats[] = {
 	{
 		.fourcc = V4L2_PIX_FMT_H264,
 		.type = MTK_FMT_DEC,
 		.num_planes = 1,
 		.flags = V4L2_FMT_FLAG_DYN_RESOLUTION,
+		.frmsize = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
+			     MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_VP8,
 		.type = MTK_FMT_DEC,
 		.num_planes = 1,
 		.flags = V4L2_FMT_FLAG_DYN_RESOLUTION,
+		.frmsize = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
+			     MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_VP9,
 		.type = MTK_FMT_DEC,
 		.num_planes = 1,
 		.flags = V4L2_FMT_FLAG_DYN_RESOLUTION,
+		.frmsize = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
+			     MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MT21C,
@@ -42,27 +48,6 @@ static const unsigned int num_supported_formats =
 
 #define DEFAULT_OUT_FMT_IDX 0
 #define DEFAULT_CAP_FMT_IDX 3
-
-static const struct mtk_codec_framesizes mtk_vdec_framesizes[] = {
-	{
-		.fourcc = V4L2_PIX_FMT_H264,
-		.stepwise = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
-			      MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
-	},
-	{
-		.fourcc = V4L2_PIX_FMT_VP8,
-		.stepwise = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
-			      MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
-	},
-	{
-		.fourcc = V4L2_PIX_FMT_VP9,
-		.stepwise = { MTK_VDEC_MIN_W, MTK_VDEC_MAX_W, 16,
-			      MTK_VDEC_MIN_H, MTK_VDEC_MAX_H, 16 },
-	},
-};
-
-static const unsigned int num_supported_framesize =
-	ARRAY_SIZE(mtk_vdec_framesizes);
 
 /*
  * This function tries to clean all display buffers, the buffers will return
@@ -595,6 +580,19 @@ static int mtk_vcodec_dec_ctrls_setup(struct mtk_vcodec_ctx *ctx)
 
 static void mtk_init_vdec_params(struct mtk_vcodec_ctx *ctx)
 {
+	unsigned int i;
+
+	if (!(ctx->dev->dec_capability & VCODEC_CAPABILITY_4K_DISABLED)) {
+		for (i = 0; i < num_supported_formats; i++) {
+			if (mtk_video_formats[i].type != MTK_FMT_DEC)
+				continue;
+
+			mtk_video_formats[i].frmsize.max_width =
+				VCODEC_DEC_4K_CODED_WIDTH;
+			mtk_video_formats[i].frmsize.max_height =
+				VCODEC_DEC_4K_CODED_HEIGHT;
+		}
+	}
 }
 
 static struct vb2_ops mtk_vdec_frame_vb2_ops = {
@@ -618,8 +616,6 @@ const struct mtk_vcodec_dec_pdata mtk_vdec_8173_pdata = {
 	.num_formats = &num_supported_formats,
 	.default_out_fmt = &mtk_video_formats[DEFAULT_OUT_FMT_IDX],
 	.default_cap_fmt = &mtk_video_formats[DEFAULT_CAP_FMT_IDX],
-	.vdec_framesizes = mtk_vdec_framesizes,
-	.num_framesizes = &num_supported_framesize,
 	.worker = mtk_vdec_worker,
 	.flush_decoder = mtk_vdec_flush_decoder,
 	.is_subdev_supported = false,

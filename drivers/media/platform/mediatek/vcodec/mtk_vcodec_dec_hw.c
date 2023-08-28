@@ -51,6 +51,8 @@ static int mtk_vdec_hw_prob_done(struct mtk_vcodec_dev *vdec_dev)
 		if (!subdev_node)
 			continue;
 
+		of_node_put(subdev_node);
+
 		hw_idx = (enum mtk_vdec_hw_id)(uintptr_t)of_id->data;
 		if (!test_bit(hw_idx, vdec_dev->subdev_bitmap)) {
 			dev_err(&pdev->dev, "vdec %d is not ready", hw_idx);
@@ -191,8 +193,16 @@ err:
 	return ret;
 }
 
+static int mtk_vdec_hw_remove(struct platform_device *pdev)
+{
+	pm_runtime_disable(&pdev->dev);
+
+	return 0;
+}
+
 static struct platform_driver mtk_vdec_driver = {
 	.probe	= mtk_vdec_hw_probe,
+	.remove = mtk_vdec_hw_remove,
 	.driver	= {
 		.name	= "mtk-vdec-comp",
 		.of_match_table = mtk_vdec_hw_match,

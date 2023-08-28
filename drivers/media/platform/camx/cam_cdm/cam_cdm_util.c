@@ -21,6 +21,7 @@
 #include "cam_cdm_virtual.h"
 #include "cam_cdm.h"
 #include "cam_io_util.h"
+#include "cam_common_util.h"
 
 #define CAM_CDM_DWORD 4
 
@@ -272,11 +273,13 @@ cam_cdm_get_ioremap_from_base(
 }
 
 static int cam_cdm_util_reg_cont_write(void __iomem *base_addr,
-	uint32_t *cmd_buf, uint32_t cmd_buf_size, uint32_t *used_bytes)
+	uint32_t *cmd_buf, uint32_t cmd_buf_size, uint32_t *used_bytes,
+	uint32_t base_array_size,
+	struct cam_soc_reg_map *base_table[CAM_SOC_MAX_BLOCK])
 {
-	int ret = 0;
-	uint32_t *data;
-	struct cdm_regcontinuous_cmd *reg_cont;
+	uint32_t *data, i;
+	struct cdm_regcontinuous_cmd reg_cont;
+	resource_size_t size = 0;
 
 	if (cmd_buf_size < cdm_get_cmd_header_size(CAM_CDM_CMD_REG_CONT) ||
 	    !base_addr) {
@@ -285,95 +288,168 @@ static int cam_cdm_util_reg_cont_write(void __iomem *base_addr,
 		return -EINVAL;
 	}
 
-	reg_cont = (struct cdm_regcontinuous_cmd *)cmd_buf;
-	if (!reg_cont->count ||
-	    reg_cont->count * sizeof(uint32_t) +
-	     cdm_get_cmd_header_size(CAM_CDM_CMD_REG_CONT) > cmd_buf_size) {
-		CAM_ERR(CAM_CDM, "buffer size %d is not sufficient for count%d",
-			cmd_buf_size, reg_cont->count);
+	memcpy(&reg_cont, cmd_buf, sizeof(struct cdm_regcontinuous_cmd));
+	for (i = 0; i < base_array_size; i++) {
+		if ((base_table[i]) &&
+			((base_table[i])->mem_base == base_addr)) {
+			size = (base_table[i])->size;
+			break;
+		}
+	}
+
+	if (size == 0) {
+		CAM_ERR(CAM_CDM, "Could not retrieve ioremap size, address not mapped!");
 		return -EINVAL;
 	}
+
+	if ((!reg_cont.count) || (((reg_cont.count * sizeof(uint32_t)) +
+	     cdm_get_cmd_header_size(CAM_CDM_CMD_REG_CONT)) > cmd_buf_size)) {
+		CAM_ERR(CAM_CDM, "buffer size %d is not sufficient for count%d",
+			cmd_buf_size, reg_cont.count);
+		return -EINVAL;
+	}
+
 	data = cmd_buf + cdm_get_cmd_header_size(CAM_CDM_CMD_REG_CONT);
-	cam_io_memcpy(base_addr + reg_cont->offset,	data,
-		reg_cont->count * sizeof(uint32_t));
 
-	*used_bytes = reg_cont->count * sizeof(uint32_t) +
+	if ((reg_cont.offset <= size) && ((reg_cont.offset +
+		(reg_cont.count * sizeof(uint32_t))) <= size)) {
+		cam_io_memcpy(base_addr + reg_cont.offset,	data,
+			reg_cont.count * sizeof(uint32_t));
+	} else {
+		CAM_ERR(CAM_CDM, "Offset out of mapped range! size: %llu, offset: %u",
+			size, reg_cont.offset);
+		return -EINVAL;
+	}
+
+	*used_bytes = reg_cont.count * sizeof(uint32_t) +
 		      cdm_get_cmd_header_size(CAM_CDM_CMD_REG_CONT) * 4;
-
-	return ret;
+	return 0;
 }
 
 static int cam_cdm_util_reg_random_write(void __iomem *base_addr,
-	uint32_t *cmd_buf, uint32_t cmd_buf_size, uint32_t *used_bytes)
+	uint32_t *cmd_buf, uint32_t cmd_buf_size, uint32_t *used_bytes,
+	uint32_t base_array_size,
+	struct cam_soc_reg_map *base_table[CAM_SOC_MAX_BLOCK])
 {
 	uint32_t i;
-	struct cdm_regrandom_cmd *reg_random;
-	uint32_t *data;
+	struct cdm_regrandom_cmd reg_random;
+	uint32_t *data, offset;
+	resource_size_t size = 0;
 
 	if (!base_addr) {
 		CAM_ERR(CAM_CDM, "invalid base address");
 		return -EINVAL;
 	}
 
-	reg_random = (struct cdm_regrandom_cmd *) cmd_buf;
-	if (!reg_random->count ||
-	    (((reg_random->count * (sizeof(uint32_t) * 2)) +
-	      cdm_get_cmd_header_size(CAM_CDM_CMD_REG_RANDOM)) >
-	     cmd_buf_size)) {
+	memcpy(&reg_random, cmd_buf, sizeof(struct cdm_regrandom_cmd));
+	for (i = 0; i < base_array_size; i++) {
+		if ((base_table[i]) &&
+			((base_table[i])->mem_base == base_addr)) {
+			size = (base_table[i])->size;
+			break;
+		}
+	}
+
+	if (size == 0) {
+		CAM_ERR(CAM_CDM, "Could not retrieve ioremap size, address not mapped!");
+		return -EINVAL;
+	}
+
+	if ((!reg_random.count) || (((reg_random.count * (sizeof(uint32_t) * 2)) +
+		cdm_get_cmd_header_size(CAM_CDM_CMD_REG_RANDOM)) > cmd_buf_size)) {
 		CAM_ERR(CAM_CDM, "invalid reg_count  %d cmd_buf_size %d",
-			reg_random->count, cmd_buf_size);
+			reg_random.count, cmd_buf_size);
 		return -EINVAL;
 	}
 	data = cmd_buf + cdm_get_cmd_header_size(CAM_CDM_CMD_REG_RANDOM);
-
-	for (i = 0; i < reg_random->count; i++) {
-		CAM_DBG(CAM_CDM, "reg random: offset %pK, value 0x%x",
-			((void __iomem *)(base_addr + data[0])),
-			data[1]);
-		cam_io_w(data[1], base_addr + data[0]);
-		data += 2;
+	for (i = 0; i < reg_random.count; i++) {
+		offset = data[0];
+		if (offset <= size) {
+			CAM_DBG(CAM_CDM, "reg random: offset %pK, value 0x%x",
+				((void __iomem *)(base_addr + offset)),
+				data[1]);
+			cam_io_w(data[1], base_addr + offset);
+			data += 2;
+		} else {
+			CAM_ERR(CAM_CDM, "Offset out of mapped range! size: %llu, offset: %u",
+				size, offset);
+			return -EINVAL;
+		}
 	}
 
-	*used_bytes = ((reg_random->count * (sizeof(uint32_t) * 2)) +
+	*used_bytes = ((reg_random.count * (sizeof(uint32_t) * 2)) +
 		(4 * cdm_get_cmd_header_size(CAM_CDM_CMD_REG_RANDOM)));
-
 	return 0;
 }
 
 static int cam_cdm_util_swd_dmi_write(uint32_t cdm_cmd_type,
 	void __iomem *base_addr, uint32_t *cmd_buf, uint32_t cmd_buf_size,
-	uint32_t *used_bytes)
+	uint32_t *used_bytes, uint32_t base_array_size,
+	struct cam_soc_reg_map *base_table[CAM_SOC_MAX_BLOCK])
 {
 	uint32_t i;
-	struct cdm_dmi_cmd *swd_dmi;
+	struct cdm_dmi_cmd swd_dmi;
 	uint32_t *data;
+	resource_size_t size = 0;
 
-	swd_dmi = (struct cdm_dmi_cmd *)cmd_buf;
+	memcpy(&swd_dmi, cmd_buf, sizeof(struct cdm_dmi_cmd));
+	for (i = 0; i < base_array_size; i++) {
+		if ((base_table[i]) &&
+			((base_table[i])->mem_base == base_addr)) {
+			size = (base_table[i])->size;
+			break;
+		}
+	}
 
-	if (cmd_buf_size < (cdm_required_size_dmi() + swd_dmi->length + 1)) {
+	if (size == 0) {
+		CAM_ERR(CAM_CDM, "Could not retrieve ioremap size, address not mapped!");
+		return -EINVAL;
+	}
+
+	if (cmd_buf_size < (cdm_required_size_dmi() + swd_dmi.length + 1)) {
 		CAM_ERR(CAM_CDM, "invalid CDM_SWD_DMI length %d",
-			swd_dmi->length + 1);
+			swd_dmi.length + 1);
 		return -EINVAL;
 	}
 	data = cmd_buf + cdm_required_size_dmi();
 
 	if (cdm_cmd_type == CAM_CDM_CMD_SWD_DMI_64) {
-		for (i = 0; i < (swd_dmi->length + 1)/8; i++) {
-			cam_io_w_mb(data[0], base_addr +
-				swd_dmi->DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
-			cam_io_w_mb(data[1], base_addr +
-				swd_dmi->DMIAddr + CAM_CDM_DMI_DATA_HI_OFFSET);
+		for (i = 0; i < (swd_dmi.length + 1)/8; i++) {
+			if (swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET <= size)
+				cam_io_w_mb(data[0], base_addr +
+					swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
+			else {
+				CAM_ERR(CAM_CDM,
+					"Offset out of mapped range! size: %llu, offset: %u",
+					size, swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
+				return -EINVAL;
+			}
+			if (swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_HI_OFFSET <= size)
+				cam_io_w_mb(data[1], base_addr +
+					swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_HI_OFFSET);
+			else {
+				CAM_ERR(CAM_CDM,
+					"Offset out of mapped range! size: %llu, offset: %u",
+					size, swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_HI_OFFSET);
+				return -EINVAL;
+			}
 			data += 2;
 		}
 	} else {
-		for (i = 0; i < (swd_dmi->length + 1)/4; i++) {
-			cam_io_w_mb(data[0], base_addr +
-				swd_dmi->DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
+		for (i = 0; i < (swd_dmi.length + 1)/4; i++) {
+			if (swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET <= size)
+				cam_io_w_mb(data[0], base_addr +
+					swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
+			else {
+				CAM_ERR(CAM_CDM,
+					"Offset out of mapped range! size: %llu, offset: %u",
+					size, swd_dmi.DMIAddr + CAM_CDM_DMI_DATA_LO_OFFSET);
+				return -EINVAL;
+			}
 			data += 1;
 		}
 	}
-	*used_bytes = (4 * cdm_required_size_dmi()) + swd_dmi->length + 1;
-
+	*used_bytes = (4 * cdm_required_size_dmi()) + swd_dmi.length + 1;
 	return 0;
 }
 
@@ -392,7 +468,8 @@ int cam_cdm_util_cmd_buf_write(void __iomem **current_device_base,
 		switch (cdm_cmd_type) {
 		case CAM_CDM_CMD_REG_CONT: {
 			ret = cam_cdm_util_reg_cont_write(*current_device_base,
-				cmd_buf, cmd_buf_size, &used_bytes);
+				cmd_buf, cmd_buf_size, &used_bytes,
+				base_array_size, base_table);
 			if (ret)
 				break;
 
@@ -405,7 +482,7 @@ int cam_cdm_util_cmd_buf_write(void __iomem **current_device_base,
 		case CAM_CDM_CMD_REG_RANDOM: {
 			ret = cam_cdm_util_reg_random_write(
 				*current_device_base, cmd_buf, cmd_buf_size,
-				&used_bytes);
+				&used_bytes, base_array_size, base_table);
 			if (ret)
 				break;
 
@@ -426,7 +503,7 @@ int cam_cdm_util_cmd_buf_write(void __iomem **current_device_base,
 			}
 			ret = cam_cdm_util_swd_dmi_write(cdm_cmd_type,
 				*current_device_base, cmd_buf, cmd_buf_size,
-				&used_bytes);
+				&used_bytes, base_array_size, base_table);
 			if (ret)
 				break;
 

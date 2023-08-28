@@ -1076,6 +1076,8 @@ err:
 EXPORT_SYMBOL_GPL(acc_ctrlrequest);
 
 int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
+			      const struct usb_ctrlrequest *ctrl);
+int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
 			      const struct usb_ctrlrequest *ctrl)
 {
 	u16 w_length = le16_to_cpu(ctrl->wLength);

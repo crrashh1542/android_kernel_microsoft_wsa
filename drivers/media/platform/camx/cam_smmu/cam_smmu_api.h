@@ -98,6 +98,7 @@ int cam_smmu_ops(int handle, enum cam_smmu_ops_param op);
  *
  * @param handle: Handle to identify the CAM SMMU client (VFE, CPP, FD etc.)
  * @param buf_fd: buffer handle identifying the memory buffer.
+ * @param dmabuf: DMA buf handle identifying the memory buffer.
  * @dir		: Mapping direction: which will traslate toDMA_BIDIRECTIONAL,
  *		  DMA_TO_DEVICE or DMA_FROM_DEVICE
  * @dma_addr	: Pointer to physical address where mapped address will be
@@ -108,7 +109,8 @@ int cam_smmu_ops(int handle, enum cam_smmu_ops_param op);
  * @return Status of operation. Negative in case of error. Zero otherwise.
  */
 int cam_smmu_map_user_iova(int handle,
-	int buf_fd, enum dma_data_direction dir,
+	int buf_fd, struct dma_buf *dmabuf,
+	enum dma_data_direction dir,
 	dma_addr_t *dma_addr, size_t *len_ptr,
 	enum cam_smmu_region_id region_id);
 
@@ -136,11 +138,14 @@ int cam_smmu_map_kernel_iova(int handle,
  *
  * @param handle: Handle to identify the CAMSMMU client (VFE, CPP, FD etc.)
  * @param buf_fd: buffer handle identifying the memory buffer.
+ * @param dma_buf: DMA Buf handle identifying the memory buffer.
+ * @param region_id: Region id from which to unmap buffer.
  *
  * @return Status of operation. Negative in case of error. Zero otherwise.
  */
 int cam_smmu_unmap_user_iova(int handle,
-	int buf_fd, enum cam_smmu_region_id region_id);
+	int buf_fd, struct dma_buf *dma_buf,
+	enum cam_smmu_region_id region_id);
 
 /**
  * @brief       : Unmaps kernel IOVA for calling driver
@@ -193,12 +198,14 @@ void cam_smmu_unset_client_page_fault_handler(int handle, void *token);
  *
  * @param handle: SMMU handle identifying the context bank to map to
  * @param buf_fd: buffer fd of memory to map to
+ * @param dma_buf: DMA buf of memory to map to
  * @param paddr_ptr: Pointer IOVA address that will be returned
  * @param len_ptr: Length of memory mapped
  *
  * @return Status of operation. Negative in case of error. Zero otherwise.
  */
-int cam_smmu_get_iova(int handle, int buf_fd, dma_addr_t *paddr_ptr,
+int cam_smmu_get_iova(int handle, int buf_fd, struct dma_buf *dma_buf,
+		      dma_addr_t *paddr_ptr,
 		      size_t *len_ptr);
 
 /**
@@ -206,10 +213,11 @@ int cam_smmu_get_iova(int handle, int buf_fd, dma_addr_t *paddr_ptr,
  *
  * @param handle: SMMU handle identifying the context bank
  * @param buf_fd: buffer fd of memory to unmap
+ * @param dma_buf: DMA Buf of memory to unmap
  *
  * @return Status of operation. Negative in case of error. Zero otherwise.
  */
-int cam_smmu_put_iova(int handle, int ion_fd);
+int cam_smmu_put_iova(int handle, int ion_fd, struct dma_buf *dma_buf);
 
 /**
  * @brief Allocates firmware for context bank

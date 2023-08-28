@@ -759,10 +759,10 @@ int cs_dsp_coeff_write_ctrl(struct cs_dsp_coeff_ctl *ctl,
 {
 	int ret = 0;
 
-	lockdep_assert_held(&ctl->dsp->pwr_lock);
-
 	if (!ctl)
 		return -ENOENT;
+
+	lockdep_assert_held(&ctl->dsp->pwr_lock);
 
 	if (len + off * sizeof(u32) > ctl->len)
 		return -EINVAL;
@@ -827,10 +827,10 @@ int cs_dsp_coeff_read_ctrl(struct cs_dsp_coeff_ctl *ctl,
 {
 	int ret = 0;
 
-	lockdep_assert_held(&ctl->dsp->pwr_lock);
-
 	if (!ctl)
 		return -ENOENT;
+
+	lockdep_assert_held(&ctl->dsp->pwr_lock);
 
 	if (len + off * sizeof(u32) > ctl->len)
 		return -EINVAL;
@@ -1176,6 +1176,7 @@ static int cs_dsp_parse_coeff(struct cs_dsp *dsp,
 				return -EINVAL;
 			break;
 		case WMFW_CTL_TYPE_HOSTEVENT:
+		case WMFW_CTL_TYPE_FWEVENT:
 			ret = cs_dsp_check_coeff_flags(dsp, &coeff_blk,
 						       WMFW_CTL_FLAG_SYS |
 						       WMFW_CTL_FLAG_VOLATILE |
@@ -2742,10 +2743,16 @@ EXPORT_SYMBOL_GPL(cs_dsp_stop);
 
 static int cs_dsp_halo_start_core(struct cs_dsp *dsp)
 {
-	return regmap_update_bits(dsp->regmap,
-				  dsp->base + HALO_CCM_CORE_CONTROL,
-				  HALO_CORE_RESET | HALO_CORE_EN,
-				  HALO_CORE_RESET | HALO_CORE_EN);
+	int ret;
+
+	ret = regmap_update_bits(dsp->regmap, dsp->base + HALO_CCM_CORE_CONTROL,
+				 HALO_CORE_RESET | HALO_CORE_EN,
+				 HALO_CORE_RESET | HALO_CORE_EN);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(dsp->regmap, dsp->base + HALO_CCM_CORE_CONTROL,
+				  HALO_CORE_RESET, 0);
 }
 
 static void cs_dsp_halo_stop_core(struct cs_dsp *dsp)

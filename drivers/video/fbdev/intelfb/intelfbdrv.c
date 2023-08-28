@@ -107,6 +107,7 @@
  *              Add support for 945GME. (Phil Endecott <spam_from_intelfb@chezphil.org>)
  */
 
+#include <linux/aperture.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -482,6 +483,10 @@ static int intelfb_pci_register(struct pci_dev *pdev,
 	int offset;
 
 	DBG_MSG("intelfb_pci_register\n");
+
+	err = aperture_remove_conflicting_pci_devices(pdev, "intelfb");
+	if (err)
+		return err;
 
 	num_registered++;
 	if (num_registered != 1) {
@@ -1213,6 +1218,9 @@ static int intelfb_check_var(struct fb_var_screeninfo *var,
 	DBG_MSG("intelfb_check_var: accel_flags is %d\n", var->accel_flags);
 
 	dinfo = GET_DINFO(info);
+
+	if (!var->pixclock)
+		return -EINVAL;
 
 	/* update the pitch */
 	if (intelfbhw_validate_mode(dinfo, var) != 0)

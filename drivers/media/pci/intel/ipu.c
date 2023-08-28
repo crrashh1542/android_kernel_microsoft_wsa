@@ -40,8 +40,9 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 {
 	struct ipu_bus_device *isys;
 	struct ipu_isys_pdata *pdata;
+	int ret;
 
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
@@ -52,17 +53,28 @@ static struct ipu_bus_device *ipu_isys_init(struct pci_dev *pdev,
 	if (ipu_ver == IPU_VER_6SE)
 		ctrl->ratio = IPU6SE_IS_FREQ_CTL_DEFAULT_RATIO;
 
-	isys = ipu_bus_add_device(pdev, parent, pdata, ctrl,
-				  IPU_ISYS_NAME, nr);
-	if (IS_ERR(isys))
-		return ERR_PTR(-ENOMEM);
-
+	isys = ipu_bus_initialize_device(pdev, parent, pdata, ctrl,
+					 IPU_ISYS_NAME, nr);
+	if (IS_ERR(isys)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(isys),
+			      "ipu_bus_initialize_device(isys) failed\n");
+		kfree(pdata);
+		return isys;
+	}
 	isys->mmu = ipu_mmu_init(&pdev->dev, base, ISYS_MMID,
 				 &ipdata->hw_variant);
-	if (IS_ERR(isys->mmu))
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(isys->mmu)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(isys->mmu),
+			      "ipu_mmu_init(isys->mmu) failed\n");
+		put_device(&isys->dev);
+		return ERR_CAST(isys->mmu);
+	}
 
 	isys->mmu->dev = &isys->dev;
+
+	ret = ipu_bus_add_device(isys);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return isys;
 }
@@ -76,25 +88,38 @@ static struct ipu_bus_device *ipu_psys_init(struct pci_dev *pdev,
 {
 	struct ipu_bus_device *psys;
 	struct ipu_psys_pdata *pdata;
+	int ret;
 
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
 	pdata->base = base;
 	pdata->ipdata = ipdata;
 
-	psys = ipu_bus_add_device(pdev, parent, pdata, ctrl,
-				  IPU_PSYS_NAME, nr);
-	if (IS_ERR(psys))
-		return ERR_PTR(-ENOMEM);
+	psys = ipu_bus_initialize_device(pdev, parent, pdata, ctrl,
+					 IPU_PSYS_NAME, nr);
+	if (IS_ERR(psys)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(psys),
+			      "ipu_bus_initialize_device(psys) failed\n");
+		kfree(pdata);
+		return psys;
+	}
 
 	psys->mmu = ipu_mmu_init(&pdev->dev, base, PSYS_MMID,
 				 &ipdata->hw_variant);
-	if (IS_ERR(psys->mmu))
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(psys->mmu)) {
+		dev_err_probe(&pdev->dev, PTR_ERR(psys->mmu),
+			      "ipu_mmu_init(psys->mmu) failed\n");
+		put_device(&psys->dev);
+		return ERR_CAST(psys->mmu);
+	}
 
 	psys->mmu->dev = &psys->dev;
+
+	ret = ipu_bus_add_device(psys);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return psys;
 }
@@ -238,7 +263,7 @@ static int ipu_init_debugfs(struct ipu_device *isp)
 	struct dentry *file;
 	struct dentry *dir;
 
-	dir = debugfs_create_dir(pci_name(isp->pdev), NULL);
+	dir = debugfs_create_dir(IPU_NAME, NULL);
 	if (!dir)
 		return -ENOMEM;
 
@@ -377,7 +402,6 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!isp)
 		return -ENOMEM;
 
-	dev_set_name(&pdev->dev, "intel-ipu");
 	isp->pdev = pdev;
 	INIT_LIST_HEAD(&isp->devices);
 
@@ -425,10 +449,13 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		isp->cpd_fw_name = IPU6SE_FIRMWARE_NAME;
 		break;
 	case IPU6EP_ADL_P_PCI_ID:
-	case IPU6EP_ADL_N_PCI_ID:
 	case IPU6EP_RPL_P_PCI_ID:
 		ipu_ver = IPU_VER_6EP;
 		isp->cpd_fw_name = is_es ? IPU6EPES_FIRMWARE_NAME : IPU6EP_FIRMWARE_NAME;
+		break;
+	case IPU6EP_ADL_N_PCI_ID:
+		ipu_ver = IPU_VER_6EP;
+		isp->cpd_fw_name = IPU6EPADLN_FIRMWARE_NAME;
 		break;
 	case IPU6EP_MTL_PCI_ID:
 		ipu_ver = IPU_VER_6EP_MTL;
@@ -593,6 +620,8 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_allow(&pdev->dev);
+
+	isp->ipu_bus_ready_to_probe = true;
 
 	return 0;
 

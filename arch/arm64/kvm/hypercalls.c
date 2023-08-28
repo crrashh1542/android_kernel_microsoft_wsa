@@ -3,6 +3,7 @@
 
 #include <linux/arm-smccc.h>
 #include <linux/kvm_host.h>
+#include <linux/cpufreq.h>
 #include <linux/sched.h>
 #include <uapi/linux/sched/types.h>
 
@@ -10,6 +11,45 @@
 
 #include <kvm/arm_hypercalls.h>
 #include <kvm/arm_psci.h>
+
+static void kvm_sched_get_cur_cpufreq(struct kvm_vcpu *vcpu, u64 *val)
+{
+	unsigned long ret_freq;
+
+	ret_freq = cpufreq_get(task_cpu(current));
+
+	val[0] = ret_freq;
+}
+
+static void kvm_sched_set_util(struct kvm_vcpu *vcpu, u64 *val)
+{
+	struct sched_attr attr = {
+		.sched_flags = SCHED_FLAG_UTIL_GUEST,
+	};
+	int ret;
+
+	attr.sched_util_min = smccc_get_arg1(vcpu);
+
+	ret = sched_setattr_nocheck(current, &attr);
+
+	val[0] = (u64)ret;
+}
+
+static void kvm_sched_get_cpufreq_table(struct kvm_vcpu *vcpu, u64 *val)
+{
+	struct cpufreq_policy *policy;
+	u32 idx = smccc_get_arg1(vcpu);
+
+	policy = cpufreq_cpu_get(task_cpu(current));
+
+	if (!policy)
+		return;
+
+	val[0] = SMCCC_RET_SUCCESS;
+	val[1] = policy->freq_table[idx].frequency;
+
+	cpufreq_cpu_put(policy);
+}
 
 static void kvm_ptp_get_time(struct kvm_vcpu *vcpu, u64 *val)
 {
@@ -58,24 +98,6 @@ static void kvm_ptp_get_time(struct kvm_vcpu *vcpu, u64 *val)
 	val[1] = lower_32_bits(systime_snapshot.real);
 	val[2] = upper_32_bits(cycles);
 	val[3] = lower_32_bits(cycles);
-}
-
-static void kvm_sched_set_uclamp(struct kvm_vcpu *vcpu, u64 *val)
-{
-	struct sched_attr attr = {
-		.sched_flags = SCHED_FLAG_UTIL_CLAMP,
-	};
-	int ret;
-
-	attr.sched_util_min = smccc_get_arg1(vcpu);
-	attr.sched_util_max = smccc_get_arg2(vcpu);
-
-	ret = sched_setattr(current, &attr);
-
-	val[0] = (u64)ret;
-	val[1] = 0;
-	val[2] = 0;
-	val[3] = 0;
 }
 
 int kvm_hvc_call_handler(struct kvm_vcpu *vcpu)
@@ -161,13 +183,24 @@ int kvm_hvc_call_handler(struct kvm_vcpu *vcpu)
 	case ARM_SMCCC_VENDOR_HYP_KVM_FEATURES_FUNC_ID:
 		val[0] = BIT(ARM_SMCCC_KVM_FUNC_FEATURES);
 		val[0] |= BIT(ARM_SMCCC_KVM_FUNC_PTP);
-		val[ARM_SMCCC_KVM_FUNC_UCLAMP / 32] |= BIT(ARM_SMCCC_KVM_FUNC_UCLAMP % 32);
+		val[ARM_SMCCC_KVM_FUNC_GET_CUR_CPUFREQ / 32] |=
+			BIT(ARM_SMCCC_KVM_FUNC_GET_CUR_CPUFREQ % 32);
+		val[ARM_SMCCC_KVM_FUNC_UTIL_HINT / 32] |=
+			BIT(ARM_SMCCC_KVM_FUNC_UTIL_HINT % 32);
+		val[ARM_SMCCC_KVM_FUNC_GET_CPUFREQ_TBL / 32] |=
+			BIT(ARM_SMCCC_KVM_FUNC_GET_CPUFREQ_TBL % 32);
 		break;
 	case ARM_SMCCC_VENDOR_HYP_KVM_PTP_FUNC_ID:
 		kvm_ptp_get_time(vcpu, val);
 		break;
-	case ARM_SMCCC_VENDOR_HYP_KVM_UCLAMP_FUNC_ID:
-		kvm_sched_set_uclamp(vcpu, val);
+	case ARM_SMCCC_VENDOR_HYP_KVM_GET_CUR_CPUFREQ_FUNC_ID:
+		kvm_sched_get_cur_cpufreq(vcpu, val);
+		break;
+	case ARM_SMCCC_VENDOR_HYP_KVM_UTIL_HINT_FUNC_ID:
+		kvm_sched_set_util(vcpu, val);
+		break;
+	case ARM_SMCCC_VENDOR_HYP_KVM_GET_CPUFREQ_TBL_FUNC_ID:
+		kvm_sched_get_cpufreq_table(vcpu, val);
 		break;
 	case ARM_SMCCC_TRNG_VERSION:
 	case ARM_SMCCC_TRNG_FEATURES:

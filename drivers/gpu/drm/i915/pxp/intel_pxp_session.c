@@ -3,6 +3,9 @@
  * Copyright(c) 2020, Intel Corporation. All rights reserved.
  */
 
+#include <drm/i915_drm.h>
+#include <linux/nospec.h>
+
 #include "i915_drv.h"
 #include "i915_reg.h"
 
@@ -236,13 +239,16 @@ int intel_pxp_sm_ioctl_reserve_session(struct intel_pxp *pxp, struct drm_file *d
  */
 int intel_pxp_sm_ioctl_terminate_session(struct intel_pxp *pxp,
 					 struct drm_file *drmfile,
-					 u32 pxp_tag)
+					 u32 session_id)
 {
-	u8 session_id = pxp_tag & DOWNSTREAM_DRM_I915_PXP_TAG_SESSION_ID_MASK;
 	int ret;
 
 	lockdep_assert_held(&pxp->session_mutex);
 
+	if (session_id >= INTEL_PXP_MAX_HWDRM_SESSIONS)
+		return -EINVAL;
+
+	session_id = array_index_nospec(session_id, INTEL_PXP_MAX_HWDRM_SESSIONS);
 	if (!pxp->hwdrm_sessions[session_id])
 		return 0;
 
@@ -267,7 +273,10 @@ int intel_pxp_sm_ioctl_query_pxp_tag(struct intel_pxp *pxp,
 		return -EINVAL;
 
 	session_id = *pxp_tag & DOWNSTREAM_DRM_I915_PXP_TAG_SESSION_ID_MASK;
+	if (session_id >= INTEL_PXP_MAX_HWDRM_SESSIONS)
+                return -EINVAL;
 
+	session_id = array_index_nospec(session_id, INTEL_PXP_MAX_HWDRM_SESSIONS);
 	if (!pxp->hwdrm_sessions[session_id]) {
 		*pxp_tag = 0;
 		*session_is_alive = 0;
@@ -296,6 +305,10 @@ int intel_pxp_sm_ioctl_mark_session_in_play(struct intel_pxp *pxp,
 {
 	lockdep_assert_held(&pxp->session_mutex);
 
+	if (session_id >= INTEL_PXP_MAX_HWDRM_SESSIONS)
+		return -EINVAL;
+
+	session_id = array_index_nospec(session_id, INTEL_PXP_MAX_HWDRM_SESSIONS);
 	if (!pxp->hwdrm_sessions[session_id])
 		return -EINVAL;
 
@@ -408,6 +421,8 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 
 	mutex_lock(&pxp->session_mutex);
 
+	intel_pxp_tee_end_all_fw_sessions(pxp, active_sip_slots);
+
 	/* terminate the hw sessions */
 	ret = pxp_terminate_all_sessions(pxp);
 	if (ret) {
@@ -422,8 +437,6 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 	}
 
 	intel_uncore_write(gt->uncore, PXP_GLOBAL_TERMINATE, 1);
-
-	intel_pxp_tee_end_all_fw_sessions(pxp, active_sip_slots);
 
 out:
 	mutex_unlock(&pxp->session_mutex);

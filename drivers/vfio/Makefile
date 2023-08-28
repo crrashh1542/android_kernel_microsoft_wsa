@@ -2,6 +2,7 @@
 vfio_virqfd-y := virqfd.o
 
 vfio-y += vfio_main.o
+vfio-$(CONFIG_VFIO_ACPI_NOTIFY) += acpi_notify.o
 
 obj-$(CONFIG_VFIO) += vfio.o
 obj-$(CONFIG_VFIO_VIRQFD) += vfio_virqfd.o

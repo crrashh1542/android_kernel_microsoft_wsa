@@ -35,3 +35,7 @@ int cam_isp_hw_mgr_init(struct device_node *of_node,
 	return rc;
 }
 
+void cam_isp_hw_mgr_deinit(void)
+{
+	cam_ife_hw_mgr_deinit();
+}

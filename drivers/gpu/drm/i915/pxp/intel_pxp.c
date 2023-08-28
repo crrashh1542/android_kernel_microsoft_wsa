@@ -382,10 +382,13 @@ static int pxp_set_session_status(struct intel_pxp *pxp,
 	struct downstream_drm_i915_pxp_set_session_status_params params;
 	struct downstream_drm_i915_pxp_set_session_status_params __user *uparams =
 		u64_to_user_ptr(pxp_ops->params);
+	u32 session_id;
 	int ret = 0;
 
 	if (copy_from_user(&params, uparams, sizeof(params)) != 0)
 		return -EFAULT;
+
+	session_id = params.pxp_tag & DOWNSTREAM_DRM_I915_PXP_TAG_SESSION_ID_MASK;
 
 	switch (params.req_session_state) {
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_ID_INIT:
@@ -395,11 +398,11 @@ static int pxp_set_session_status(struct intel_pxp *pxp,
 		break;
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_IN_PLAY:
 		ret = intel_pxp_sm_ioctl_mark_session_in_play(pxp, drmfile,
-							      params.pxp_tag);
+							      session_id);
 		break;
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_TERMINATE:
 		ret = intel_pxp_sm_ioctl_terminate_session(pxp, drmfile,
-							   params.pxp_tag);
+							   session_id);
 		break;
 	default:
 		ret = -EINVAL;

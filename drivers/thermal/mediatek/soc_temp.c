@@ -11,6 +11,7 @@
 #include <linux/completion.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
+#include <linux/cpuidle.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -21,7 +22,6 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
-#include <linux/pm_qos.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/io.h>
@@ -399,9 +399,6 @@ struct mtk_svs_bank {
 	u32 status;
 
 	enum mtk_svs_state state;
-	/* Use this to limit bank frequency */
-	unsigned long max_freq_khz;
-	unsigned long min_freq_khz;
 
 	struct mtk_thermal *mt;
 	struct completion init_done;
@@ -1397,16 +1394,19 @@ static void mtk_svs_set_phase(struct mtk_svs_bank *svs, int phase)
 
 static void mtk_svs_adjust_voltage(struct mtk_svs_bank *svs)
 {
-	int i;
+	int i, ret;
 
 	for (i = 0; i < MT8173_NUM_SVS_OPP; i++) {
 		if (!svs->freq_table[i])
 			continue;
 
-		dev_pm_opp_adjust_voltage(svs->dev, svs->freq_table[i],
-					  svs->updated_volt_table[i],
-					  svs_bank_cfgs[svs->bank_id].vmin_uV,
-					  svs_bank_cfgs[svs->bank_id].vmax_uV);
+		ret = dev_pm_opp_adjust_voltage(svs->dev, svs->freq_table[i],
+						svs->updated_volt_table[i],
+						svs_bank_cfgs[svs->bank_id].vmin_uV,
+						svs_bank_cfgs[svs->bank_id].vmax_uV);
+		if (ret)
+			dev_err(svs->dev, "set %uuV fail: %d\n",
+				svs->updated_volt_table[i], ret);
 	}
 }
 
@@ -1589,7 +1589,6 @@ static int mtk_svs_bank_init(struct mtk_svs_bank *svs)
 	}
 
 	/* Assume CPU DVFS OPP table is already initialized by cpufreq driver*/
-	rcu_read_lock();
 	count = dev_pm_opp_get_opp_count(svs->dev);
 	if (count > MT8173_NUM_SVS_OPP)
 		dev_warn(svs->dev, "%d OPP entries found.\n"
@@ -1601,28 +1600,26 @@ static int mtk_svs_bank_init(struct mtk_svs_bank *svs)
 		opp = dev_pm_opp_find_freq_floor(svs->dev, &rate);
 		if (IS_ERR(opp)) {
 			dev_err(svs->dev, "error opp entry!!\n");
-			rcu_read_unlock();
 			ret = PTR_ERR(opp);
 			goto out;
 		}
 
 		svs->freq_table[i] = rate;
 		svs->volt_table[i] = dev_pm_opp_get_voltage(opp);
+		dev_pm_opp_put(opp);
 	}
 
 out:
-	rcu_read_unlock();
-
 	return ret;
 }
 
 static int mtk_svs_hw_init(struct mtk_thermal *mt)
 {
 	struct clk *parent;
-	unsigned long timeout;
+	unsigned long timeout, freq;
 	struct mtk_svs_bank *svs;
-	struct cpufreq_policy policy;
-	struct pm_qos_request qos_request = {{0}};
+	struct cpufreq_policy *policy;
+	struct freq_qos_request *req;
 	int i, j, ret, vboot_uV;
 
 	parent = clk_get_parent(mt->svs_mux);
@@ -1633,35 +1630,51 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		return ret;
 	}
 
+	req = kcalloc(2, sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return ret;
+
 	/*
 	 * When doing SVS init, we have to make sure all CPUs are on and
 	 * working at 1.0 volt. Add a pm_qos request to prevent CPUs from
 	 * entering CPU off idle state.
 	 */
-	cpu_latency_qos_add_request(&qos_request, 1);
+	cpuidle_pause_and_lock();
 
 	for (i = 0; i < MT8173_NUM_SVS_BANKS; i++) {
 		svs = &svs_banks[i];
+		freq = 0;
 
-		/* Backup current cpufreq policy */
-		ret = cpufreq_get_policy(&policy, svs->cpu_dev_id);
-		if (ret) {
-			dev_err(svs->dev, "cpufreq is not ready.\n");
-			cpu_latency_qos_remove_request(&qos_request);
-			clk_set_parent(mt->svs_mux, parent);
-			return ret;
+		policy = cpufreq_cpu_get(svs->cpu_dev_id);
+		if (!policy) {
+			dev_err(svs->dev, "Failed to get CPU policy\n");
+			ret = -EINVAL;
+			break;
 		}
 
 		/* Force CPUFreq switch to OPP with 1.0 volt */
 		for (j = 0; j < MT8173_NUM_SVS_OPP; j++) {
 			svs->updated_volt_table[j] = svs->volt_table[j];
 			if (svs->volt_table[j] <= svs_bank_cfgs[i].vboot_uV &&
-			    (!svs->max_freq_khz || !svs->min_freq_khz)) {
+			    !freq) {
 				svs->updated_volt_table[j] =
 						svs_bank_cfgs[i].vboot_uV;
-				svs->max_freq_khz = svs->freq_table[j] / 1000;
-				svs->min_freq_khz = svs->freq_table[j] / 1000;
+				freq = svs->freq_table[j] / 1000;
 			}
+		}
+		ret = freq_qos_add_request(&policy->constraints, req, FREQ_QOS_MIN,
+					   freq);
+		if (ret < 0) {
+			dev_err(svs->dev, "Failed to add min-freq constraint (%d)\n", ret);
+			goto remove_min_req;
+		}
+
+		ret = freq_qos_add_request(&policy->constraints, req + 1, FREQ_QOS_MAX,
+					   freq);
+		if (ret < 0) {
+			dev_err(svs->dev, "Failed to add max-freq constraint (%d)\n", ret);
+			freq_qos_remove_request(req);
+			goto remove_max_req;
 		}
 
 		schedule_work(&svs->work);
@@ -1669,7 +1682,7 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		if (timeout == 0) {
 			dev_err(svs->dev, "SVS vboot init timeout.\n");
 			ret = -EINVAL;
-			goto err_bank_init;
+			break;
 		}
 
 		reinit_completion(&svs->init_done);
@@ -1704,13 +1717,18 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		if (timeout == 0) {
 			dev_err(svs->dev, "SVS initialization timeout.\n");
 			ret = -EINVAL;
-			goto err_bank_init;
+			break;
 		}
 
-		/* Unlimit CPUFreq OPP range */
-		svs->max_freq_khz = policy.max;
-		svs->min_freq_khz = policy.min;
+remove_max_req:
+		freq_qos_remove_request(req + 1);
+remove_min_req:
+		freq_qos_remove_request(req);
+		cpufreq_cpu_put(policy);
 		cpufreq_update_policy(svs->cpu_dev_id);
+
+		if (ret)
+			break;
 
 		/* Configure regulator to normal mode */
 		ret = regulator_set_mode(svs->reg, REGULATOR_MODE_NORMAL);
@@ -1718,8 +1736,7 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 			dev_err(svs->dev,
 				"Failed to set regulator in normal mode\n");
 	}
-
-err_bank_init:
+	kfree(req);
 
 	if (ret)
 		for (i = 0; i < MT8173_NUM_SVS_BANKS; i++) {
@@ -1735,7 +1752,7 @@ err_bank_init:
 			schedule_work(&svs->work);
 		}
 
-	cpu_latency_qos_remove_request(&qos_request);
+	cpuidle_resume_and_unlock();
 
 	ret = clk_set_parent(mt->svs_mux, parent);
 	if (ret) {

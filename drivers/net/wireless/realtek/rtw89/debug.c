@@ -52,6 +52,21 @@ struct rtw89_debugfs_priv {
 	};
 };
 
+static const u16 rtw89_rate_info_bw_to_mhz_map[] = {
+	[RATE_INFO_BW_20] = 20,
+	[RATE_INFO_BW_40] = 40,
+	[RATE_INFO_BW_80] = 80,
+	[RATE_INFO_BW_160] = 160,
+};
+
+static u16 rtw89_rate_info_bw_to_mhz(enum rate_info_bw bw)
+{
+	if (bw < ARRAY_SIZE(rtw89_rate_info_bw_to_mhz_map))
+		return rtw89_rate_info_bw_to_mhz_map[bw];
+
+	return 0;
+}
+
 static int rtw89_debugfs_single_show(struct seq_file *m, void *v)
 {
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
@@ -465,7 +480,7 @@ static const struct txpwr_map __txpwr_map_lmt_ru = {
 };
 
 static u8 __print_txpwr_ent(struct seq_file *m, const struct txpwr_ent *ent,
-			    const u8 *buf, const u8 cur)
+			    const s8 *buf, const u8 cur)
 {
 	char *fmt;
 
@@ -494,8 +509,9 @@ static int __print_txpwr_map(struct seq_file *m, struct rtw89_dev *rtwdev,
 			     const struct txpwr_map *map)
 {
 	u8 fct = rtwdev->chip->txpwr_factor_mac;
-	u8 *buf, cur, i;
 	u32 val, addr;
+	s8 *buf, tmp;
+	u8 cur, i;
 	int ret;
 
 	buf = vzalloc(map->addr_to - map->addr_from + 4);
@@ -508,8 +524,11 @@ static int __print_txpwr_map(struct seq_file *m, struct rtw89_dev *rtwdev,
 			val = MASKDWORD;
 
 		cur = addr - map->addr_from;
-		for (i = 0; i < 4; i++, val >>= 8)
-			buf[cur + i] = FIELD_GET(MASKBYTE0, val) >> fct;
+		for (i = 0; i < 4; i++, val >>= 8) {
+			/* signed 7 bits, and reserved BIT(7) */
+			tmp = sign_extend32(val, 6);
+			buf[cur + i] = tmp >> fct;
+		}
 	}
 
 	for (cur = 0, i = 0; i < map->size; i++)
@@ -595,6 +614,7 @@ rtw89_debug_priv_mac_reg_dump_select(struct file *filp,
 	struct seq_file *m = (struct seq_file *)filp->private_data;
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
+	const struct rtw89_chip_info *chip = rtwdev->chip;
 	char buf[32];
 	size_t buf_size;
 	int sel;
@@ -611,6 +631,12 @@ rtw89_debug_priv_mac_reg_dump_select(struct file *filp,
 
 	if (sel < RTW89_DBG_SEL_MAC_00 || sel > RTW89_DBG_SEL_RFC) {
 		rtw89_info(rtwdev, "invalid args: %d\n", sel);
+		return -EINVAL;
+	}
+
+	if (sel == RTW89_DBG_SEL_MAC_30 && chip->chip_id != RTL8852C) {
+		rtw89_info(rtwdev, "sel %d is address hole on chip %d\n", sel,
+			   chip->chip_id);
 		return -EINVAL;
 	}
 
@@ -771,13 +797,34 @@ rtw89_debug_priv_mac_mem_dump_get(struct seq_file *m, void *v)
 {
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
+	bool grant_read = false;
+
+	if (debugfs_priv->mac_mem.sel >= RTW89_MAC_MEM_NUM)
+		return -ENOENT;
+
+	if (rtwdev->chip->chip_id == RTL8852C) {
+		switch (debugfs_priv->mac_mem.sel) {
+		case RTW89_MAC_MEM_TXD_FIFO_0_V1:
+		case RTW89_MAC_MEM_TXD_FIFO_1_V1:
+		case RTW89_MAC_MEM_TXDATA_FIFO_0:
+		case RTW89_MAC_MEM_TXDATA_FIFO_1:
+			grant_read = true;
+			break;
+		default:
+			break;
+		}
+	}
 
 	mutex_lock(&rtwdev->mutex);
 	rtw89_leave_ps_mode(rtwdev);
+	if (grant_read)
+		rtw89_write32_set(rtwdev, R_AX_TCR1, B_AX_TCR_FORCE_READ_TXDFIFO);
 	rtw89_debug_dump_mac_mem(m, rtwdev,
 				 debugfs_priv->mac_mem.sel,
 				 debugfs_priv->mac_mem.start,
 				 debugfs_priv->mac_mem.len);
+	if (grant_read)
+		rtw89_write32_clr(rtwdev, R_AX_TCR1, B_AX_TCR_FORCE_READ_TXDFIFO);
 	mutex_unlock(&rtwdev->mutex);
 
 	return 0;
@@ -2950,17 +2997,18 @@ static ssize_t rtw89_debug_priv_send_h2c_set(struct file *filp,
 	struct rtw89_debugfs_priv *debugfs_priv = filp->private_data;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	u8 *h2c;
+	int ret;
 	u16 h2c_len = count / 2;
 
 	h2c = rtw89_hex2bin_user(rtwdev, user_buf, count);
 	if (IS_ERR(h2c))
 		return -EFAULT;
 
-	rtw89_fw_h2c_raw(rtwdev, h2c, h2c_len);
+	ret = rtw89_fw_h2c_raw(rtwdev, h2c, h2c_len);
 
 	kfree(h2c);
 
-	return count;
+	return ret ? ret : count;
 }
 
 static int
@@ -3181,6 +3229,7 @@ static void rtw89_sta_info_get_iter(void *data, struct ieee80211_sta *sta)
 	else
 		seq_printf(m, "Legacy %d", rate->legacy);
 	seq_printf(m, "%s", rtwsta->ra_report.might_fallback_legacy ? " FB_G" : "");
+	seq_printf(m, " BW:%u", rtw89_rate_info_bw_to_mhz(rate->bw));
 	seq_printf(m, "\t(hw_rate=0x%x)", rtwsta->ra_report.hw_rate);
 	seq_printf(m, "\t==> agg_wait=%d (%d)\n", rtwsta->max_agg_wait,
 		   sta->max_rc_amsdu_len);
@@ -3206,6 +3255,7 @@ static void rtw89_sta_info_get_iter(void *data, struct ieee80211_sta *sta)
 			   he_gi_str[rate->he_gi] : "N/A");
 		break;
 	}
+	seq_printf(m, " BW:%u", rtw89_rate_info_bw_to_mhz(status->bw));
 	seq_printf(m, "\t(hw_rate=0x%x)\n", rtwsta->rx_hw_rate);
 
 	rssi = ewma_rssi_read(&rtwsta->avg_rssi);
@@ -3304,6 +3354,31 @@ static void rtw89_dump_addr_cam(struct seq_file *m,
 	}
 }
 
+__printf(3, 4)
+static void rtw89_dump_pkt_offload(struct seq_file *m, struct list_head *pkt_list,
+				   const char *fmt, ...)
+{
+	struct rtw89_pktofld_info *info;
+	struct va_format vaf;
+	va_list args;
+
+	if (list_empty(pkt_list))
+		return;
+
+	va_start(args, fmt);
+	vaf.va = &args;
+	vaf.fmt = fmt;
+
+	seq_printf(m, "%pV", &vaf);
+
+	va_end(args);
+
+	list_for_each_entry(info, pkt_list, list)
+		seq_printf(m, "%d ", info->id);
+
+	seq_puts(m, "\n");
+}
+
 static
 void rtw89_vif_ids_get_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 {
@@ -3314,6 +3389,7 @@ void rtw89_vif_ids_get_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 	seq_printf(m, "VIF [%d] %pM\n", rtwvif->mac_id, rtwvif->mac_addr);
 	seq_printf(m, "\tbssid_cam_idx=%u\n", bssid_cam->bssid_cam_idx);
 	rtw89_dump_addr_cam(m, &rtwvif->addr_cam);
+	rtw89_dump_pkt_offload(m, &rtwvif->general_pkt_list, "\tpkt_ofld[GENERAL]: ");
 }
 
 static void rtw89_dump_ba_cam(struct seq_file *m, struct rtw89_sta *rtwsta)
@@ -3352,6 +3428,7 @@ static int rtw89_debug_priv_stations_get(struct seq_file *m, void *v)
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	struct rtw89_cam_info *cam_info = &rtwdev->cam_info;
+	u8 idx;
 
 	mutex_lock(&rtwdev->mutex);
 
@@ -3366,6 +3443,15 @@ static int rtw89_debug_priv_stations_get(struct seq_file *m, void *v)
 		   cam_info->sec_cam_map);
 	seq_printf(m, "\tba_cam:    %*ph\n", (int)sizeof(cam_info->ba_cam_map),
 		   cam_info->ba_cam_map);
+	seq_printf(m, "\tpkt_ofld:  %*ph\n", (int)sizeof(rtwdev->pkt_offload),
+		   rtwdev->pkt_offload);
+
+	for (idx = NL80211_BAND_2GHZ; idx < NUM_NL80211_BANDS; idx++) {
+		if (!(rtwdev->chip->support_bands & BIT(idx)))
+			continue;
+		rtw89_dump_pkt_offload(m, &rtwdev->scan_info.pkt_list[idx],
+				       "\t\t[SCAN %u]: ", idx);
+	}
 
 	ieee80211_iterate_active_interfaces_atomic(rtwdev->hw,
 		IEEE80211_IFACE_ITER_NORMAL, rtw89_vif_ids_get_iter, m);

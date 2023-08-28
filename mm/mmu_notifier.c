@@ -441,6 +441,32 @@ void __mmu_notifier_change_pte(struct mm_struct *mm, unsigned long address,
 	srcu_read_unlock(&srcu, id);
 }
 
+/* see the comments on mmu_notifier_test_clear_young() */
+int __mmu_notifier_test_clear_young(struct mm_struct *mm,
+				    unsigned long start, unsigned long end,
+				    bool fallback, unsigned long *bitmap)
+{
+	int key;
+	struct mmu_notifier *mn;
+	int young = 0;
+
+	key = srcu_read_lock(&srcu);
+
+	hlist_for_each_entry_srcu(mn, &mm->notifier_subscriptions->list,
+				  hlist, srcu_read_lock_held(&srcu)) {
+		if (mn->ops->test_clear_young &&
+		    mn->ops->test_clear_young(mn, mm, start, end, bitmap))
+			continue;
+
+		if (fallback && mn->ops->clear_young)
+			young |= mn->ops->clear_young(mn, mm, start, end);
+	}
+
+	srcu_read_unlock(&srcu, key);
+
+	return young;
+}
+
 static int mn_itree_invalidate(struct mmu_notifier_subscriptions *subscriptions,
 			       const struct mmu_notifier_range *range)
 {

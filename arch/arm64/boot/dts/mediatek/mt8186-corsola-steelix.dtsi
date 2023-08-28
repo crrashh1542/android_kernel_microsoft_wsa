@@ -46,7 +46,7 @@
 };
 
 &dsi_out {
-	remote-endpoint = <&anx7625_in_>;
+	remote-endpoint = <&anx7625_in>;
 };
 
 &i2c0 {
@@ -71,7 +71,7 @@
 		port@0 {
 			reg = <0>;
 
-			anx7625_in_: endpoint {
+			anx7625_in: endpoint {
 				remote-endpoint = <&dsi_out>;
 				data-lanes = <0 1 2 3>;
 			};
@@ -113,6 +113,7 @@
 		pinctrl-0 = <&touchscreen_pins>;
 		reset-gpios = <&pio 60 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&pp3300_s3>;
+		goodix,no-reset-during-suspend;
 	};
 };
 
