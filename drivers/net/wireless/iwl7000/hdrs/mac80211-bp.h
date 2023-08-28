@@ -1641,7 +1641,7 @@ enum nl80211_eht_gi {
 #define NL80211_RRF_NO_320MHZ 0
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,18,0) */
 
-#if LINUX_VERSION_IS_LESS(5,15,0)
+#if LINUX_VERSION_IS_LESS(4,19,0)
 /**
  * eth_hw_addr_set - Assign Ethernet address to a net_device
  * @dev: pointer to net_device structure
