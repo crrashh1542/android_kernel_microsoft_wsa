@@ -359,6 +359,12 @@ static int __cam_node_handle_dump_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
+	if (strcmp(node->name, ctx->dev_name)) {
+		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
+			node->name, ctx->dev_name);
+		return -EINVAL;
+	}
+
 	rc = cam_context_handle_dump_dev(ctx, dump);
 	if (rc)
 		CAM_ERR(CAM_CORE, "Flush failure for node %s", node->name);
