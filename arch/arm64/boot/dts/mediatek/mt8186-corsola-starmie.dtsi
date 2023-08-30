@@ -198,6 +198,10 @@
 	};
 };
 
+&pen_insert {
+	wakeup-event-action = <EV_ACT_ANY>;
+};
+
 &pio {
 	/* 185 lines */
 	gpio-line-names = "TP",
