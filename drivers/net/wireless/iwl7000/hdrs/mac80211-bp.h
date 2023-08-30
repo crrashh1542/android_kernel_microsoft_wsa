@@ -2124,3 +2124,25 @@ WRAP_LOCKED(cfg80211_cqm_links_state_change_notify)(struct net_device *dev,
 #define sdata_lock_old_cfg80211(sdata) do {} while (0)
 #define sdata_unlock_old_cfg80211(sdata) do {} while (0)
 #endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+
+#include <linux/leds.h>
+
+static inline void backport_led_trigger_blink_oneshot(struct led_trigger *trigger,
+						      unsigned long delay_on,
+						      unsigned long delay_off,
+						      int invert)
+{
+	led_trigger_blink_oneshot(trigger, &delay_on, &delay_off, invert);
+}
+#define led_trigger_blink_oneshot LINUX_BACKPORT(led_trigger_blink_oneshot)
+
+static inline void backport_led_trigger_blink(struct led_trigger *trigger,
+					      unsigned long delay_on,
+					      unsigned long delay_off)
+{
+	led_trigger_blink(trigger, &delay_on, &delay_off);
+}
+#define led_trigger_blink LINUX_BACKPORT(led_trigger_blink)
+#endif

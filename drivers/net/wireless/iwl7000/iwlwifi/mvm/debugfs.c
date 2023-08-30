@@ -731,7 +731,8 @@ static ssize_t iwl_dbgfs_amsdu_len_read(struct ieee80211_link_sta *link_sta,
 	char buf[32];
 	int pos;
 
-	pos = scnprintf(buf, sizeof(buf), "current %d ", link_sta->agg.max_amsdu_len);
+	pos = scnprintf(buf, sizeof(buf), "current %d ",
+			link_sta->agg.max_amsdu_len);
 	pos += scnprintf(buf + pos, sizeof(buf) - pos, "stored %d\n",
 			 mvm_link_sta->orig_amsdu_len);
 

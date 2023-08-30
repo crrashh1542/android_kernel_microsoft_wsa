@@ -306,7 +306,8 @@ static int iwl_pcie_load_payloads_continuously(struct iwl_trans *trans,
 	}
 	len = len0 + len1;
 
-	dram->block = iwl_pcie_ctxt_info_dma_alloc_coherent(trans, len, &dram->physical);
+	dram->block = iwl_pcie_ctxt_info_dma_alloc_coherent(trans, len,
+							    &dram->physical);
 	if (!dram->block) {
 		IWL_DEBUG_FW(trans, "Failed to allocate PNVM DMA.\n");
 		return -ENOMEM;

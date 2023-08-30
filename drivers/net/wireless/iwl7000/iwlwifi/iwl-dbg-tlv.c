@@ -1307,8 +1307,7 @@ static void iwl_dbg_tlv_init_cfg(struct iwl_fw_runtime *fwrt)
 			iwl_dbg_tlv_gen_active_trig_list(fwrt, tp);
 		}
 	} else if (*ini_dest != IWL_FW_INI_LOCATION_DRAM_PATH) {
-		/*
-		 * For DRAM, go through the loop below to clear all the buffers
+		/* For DRAM, go through the loop below to clear all the buffers
 		 * properly on restart, otherwise garbage may be left there and
 		 * leak into new debug dumps.
 		 */

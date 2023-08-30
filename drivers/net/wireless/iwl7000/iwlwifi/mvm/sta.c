@@ -60,8 +60,7 @@ u32 iwl_mvm_get_sta_ampdu_dens(struct ieee80211_link_sta *link_sta,
 	if (WARN_ON(!link_sta))
 		return 0;
 
-	/*
-	 * Note that we always use only legacy & highest supported PPDUs, so
+	/* Note that we always use only legacy & highest supported PPDUs, so
 	 * of Draft P802.11be D.30 Table 10-12a--Fields used for calculating
 	 * the maximum A-MPDU size of various PPDU types in different bands,
 	 * we only need to worry about the highest supported PPDU type here.
@@ -4348,8 +4347,7 @@ int iwl_mvm_add_pasn_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	keyconf->flags = IEEE80211_KEY_FLAG_PAIRWISE;
 
 	if (mld) {
-		/*
-		 * The MFP flag is set according to the station mfp field. Since
+		/* The MFP flag is set according to the station mfp field. Since
 		 * we don't have a station, set it manually.
 		 */
 		u32 key_flags =

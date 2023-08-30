@@ -262,10 +262,9 @@ enum iwl_reg_capa_flags_v4 {
 */
 #define REG_CAPA_V2_RESP_VER	6
 
-/*
-* API v4 for reg_capa_flags is relevant from version 8 and onwards of the
-* MCC update command response.
-*/
+/* API v4 for reg_capa_flags is relevant from version 8 and onwards of the
+ * MCC update command response.
+ */
 #define REG_CAPA_V4_RESP_VER	8
 
 /**

@@ -1211,8 +1211,9 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
                 gain = cmd->v1.gain[0];
                 *cmd_size = sizeof(cmd->v1);
                 if (fwrt->ppag_ver == 1 || fwrt->ppag_ver == 2) {
+			/* in this case FW supports revision 0 */
                         IWL_DEBUG_RADIO(fwrt,
-					"PPAG table rev is %d but FW supports rev 0, sending truncated table\n",
+					"PPAG table rev is %d, send truncated table\n",
                                         fwrt->ppag_ver);
 		}
 	} else if (cmd_ver >= 2 && cmd_ver <= 4) {
@@ -1220,15 +1221,16 @@ int iwl_read_ppag_table(struct iwl_fw_runtime *fwrt, union iwl_ppag_table_cmd *c
                 gain = cmd->v2.gain[0];
                 *cmd_size = sizeof(cmd->v2);
                 if (fwrt->ppag_ver == 0) {
+			/* in this case FW supports revisions 1 or 2 */
                         IWL_DEBUG_RADIO(fwrt,
-					"PPAG table rev is 0 but FW supports rev 1 or 2, sending padded table\n");
+					"PPAG table rev is 0, send padded table\n");
                 }
         } else {
                 IWL_DEBUG_RADIO(fwrt, "Unsupported PPAG command version\n");
                 return -EINVAL;
         }
 
-	// ppag mode
+	/* ppag mode */
 	IWL_DEBUG_RADIO(fwrt,
 			"PPAG MODE bits were read from bios: %d\n",
 			cmd->v1.flags & cpu_to_le32(ACPI_PPAG_MASK));

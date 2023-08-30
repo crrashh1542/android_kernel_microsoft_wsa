@@ -2387,8 +2387,7 @@ iwl_mvm_scan_umac_fill_general_p_v12(struct iwl_mvm *mvm,
 		struct iwl_mvm_vif_link_info *link_info;
 		u8 link_id = 0;
 
-		/*
-		 * Use one of the active link (if any). In the future it would
+		/* Use one of the active link (if any). In the future it would
 		 * be possible that the link ID would be part of the scan
 		 * request coming from upper layers so we would need to use it.
 		 */

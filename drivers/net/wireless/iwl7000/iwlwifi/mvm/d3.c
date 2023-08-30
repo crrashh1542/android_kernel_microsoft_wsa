@@ -2990,16 +2990,14 @@ static bool iwl_mvm_wait_d3_notif(struct iwl_notif_wait_data *notif_wait,
 				(void *)pkt->data;
 			struct iwl_wowlan_info_notif_v2 *notif_v2;
 
-			notif_v2 = kmemdup(notif_v1,
-					   offsetofend(struct iwl_wowlan_info_notif_v2,
-						       received_beacons),
-					   GFP_ATOMIC);
+			notif_v2 = kmemdup(notif_v1, sizeof(*notif_v2), GFP_ATOMIC);
 
 			if (!notif_v2)
 				return false;
 
 			notif_v2->tid_tear_down = notif_v1->tid_tear_down;
 			notif_v2->station_id = notif_v1->station_id;
+			memset_after(notif_v2, 0, station_id);
 			iwl_mvm_parse_wowlan_info_notif_v2(mvm, notif_v2,
 							   d3_data->status,
 							   len);

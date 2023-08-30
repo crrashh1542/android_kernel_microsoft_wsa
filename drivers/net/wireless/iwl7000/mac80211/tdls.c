@@ -569,7 +569,8 @@ ieee80211_tdls_add_setup_start_ies(struct ieee80211_link_data *link,
 			pos = skb_put(skb, cap_size);
 			he_6ghz_capa =
 				ieee80211_get_he_6ghz_capa_vif(sband, &sdata->vif);
-			pos = ieee80211_write_he_6ghz_cap(pos, he_6ghz_capa, pos + cap_size);
+			pos = ieee80211_write_he_6ghz_cap(pos, he_6ghz_capa,
+							  pos + cap_size);
 		}
 	}
 
@@ -933,10 +934,11 @@ ieee80211_prep_tdls_direct(struct wiphy *wiphy, struct net_device *dev,
 
 static struct sk_buff *
 ieee80211_tdls_build_mgmt_packet_data(struct ieee80211_sub_if_data *sdata,
-				      const u8 *peer, int link_id, u8 action_code,
-				      u8 dialog_token, u16 status_code,
-				      bool initiator, const u8 *extra_ies,
-				      size_t extra_ies_len, u8 oper_class,
+				      const u8 *peer, int link_id,
+				      u8 action_code, u8 dialog_token,
+				      u16 status_code, bool initiator,
+				      const u8 *extra_ies, size_t extra_ies_len,
+				      u8 oper_class,
 				      struct cfg80211_chan_def *chandef)
 {
 	struct ieee80211_local *local = sdata->local;
