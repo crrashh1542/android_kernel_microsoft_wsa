@@ -21,3 +21,7 @@
 		wakeup-source;
 	};
 };
+
+&usb_c1 {
+	status = "disabled";
+};
