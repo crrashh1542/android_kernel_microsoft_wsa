@@ -1620,7 +1620,7 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 	struct mtk_svs_bank *svs;
 	struct cpufreq_policy *policy;
 	struct freq_qos_request *req;
-	int i, j, ret, vboot_uV;
+	int i, j, ret, err, vboot_uV;
 
 	parent = clk_get_parent(mt->svs_mux);
 	ret = clk_set_parent(mt->svs_mux, mt->svs_pll);
@@ -1666,7 +1666,7 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 					   freq);
 		if (ret < 0) {
 			dev_err(svs->dev, "Failed to add min-freq constraint (%d)\n", ret);
-			goto remove_min_req;
+			goto put_policy;
 		}
 
 		ret = freq_qos_add_request(&policy->constraints, req + 1, FREQ_QOS_MAX,
@@ -1674,15 +1674,15 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		if (ret < 0) {
 			dev_err(svs->dev, "Failed to add max-freq constraint (%d)\n", ret);
 			freq_qos_remove_request(req);
-			goto remove_max_req;
+			goto remove_min_req;
 		}
 
 		schedule_work(&svs->work);
 		timeout = wait_for_completion_timeout(&svs->init_done, HZ);
 		if (timeout == 0) {
 			dev_err(svs->dev, "SVS vboot init timeout.\n");
-			ret = -EINVAL;
-			break;
+			ret = -ETIMEDOUT;
+			goto remove_max_req;
 		}
 
 		reinit_completion(&svs->init_done);
@@ -1695,16 +1695,16 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		    uvolt_to_config(svs_bank_cfgs[i].vboot_uV)) {
 			dev_err(svs->dev, "Vboot value mismatch!\n");
 			ret = -EINVAL;
-			break;
+			goto remove_max_req;
 		}
 
 		/* Configure regulator to PWM mode */
 		ret = regulator_set_mode(svs->reg, REGULATOR_MODE_FAST);
 		if (ret) {
 			dev_err(svs->dev,
-				"Failed to set regulator in PWM mode\n");
+				"Failed to set regulator in PWM mode: %d\n", ret);
 			ret = -EINVAL;
-			break;
+			goto remove_max_req;
 		}
 
 		mtk_thermal_get_bank(&mt->banks[i]);
@@ -1716,25 +1716,27 @@ static int mtk_svs_hw_init(struct mtk_thermal *mt)
 		timeout = wait_for_completion_timeout(&svs->init_done, HZ);
 		if (timeout == 0) {
 			dev_err(svs->dev, "SVS initialization timeout.\n");
-			ret = -EINVAL;
-			break;
+			ret = -ETIMEDOUT;
+		}
+
+		/* Configure regulator to normal mode */
+		err = regulator_set_mode(svs->reg, REGULATOR_MODE_NORMAL);
+		if (err) {
+			dev_err(svs->dev,
+				"Failed to set regulator in normal mode: %d\n", err);
+			ret = ret ? ret : err;
 		}
 
 remove_max_req:
 		freq_qos_remove_request(req + 1);
 remove_min_req:
 		freq_qos_remove_request(req);
+put_policy:
 		cpufreq_cpu_put(policy);
 		cpufreq_update_policy(svs->cpu_dev_id);
 
 		if (ret)
 			break;
-
-		/* Configure regulator to normal mode */
-		ret = regulator_set_mode(svs->reg, REGULATOR_MODE_NORMAL);
-		if (ret)
-			dev_err(svs->dev,
-				"Failed to set regulator in normal mode\n");
 	}
 	kfree(req);
 
