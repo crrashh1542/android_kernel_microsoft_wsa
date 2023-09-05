@@ -179,8 +179,8 @@ static void iwl_mvm_mld_mac_remove_interface(struct ieee80211_hw *hw,
 
 	/* Before the interface removal, mac80211 would cancel the ROC, and the
 	 * ROC worker would be scheduled if needed. The worker would be flushed
-	 * in iwl_mvm_prepare_mac_removal() and thus at this point there is no
-	 * link etc. so nothing needs to be done here.
+	 * in iwl_mvm_prepare_mac_removal() and thus at this point the link is
+	 * not active. So need only to remove the link.
 	 */
 	if (vif->type == NL80211_IFTYPE_P2P_DEVICE) {
 		if (mvmvif->deflink.phy_ctxt) {
@@ -188,6 +188,7 @@ static void iwl_mvm_mld_mac_remove_interface(struct ieee80211_hw *hw,
 			mvmvif->deflink.phy_ctxt = NULL;
 		}
 		mvm->p2p_device_vif = NULL;
+		iwl_mvm_remove_link(mvm, vif, &vif->bss_conf);
 	} else {
 		iwl_mvm_disable_link(mvm, vif, &vif->bss_conf);
 	}
