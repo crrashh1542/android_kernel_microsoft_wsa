@@ -135,7 +135,7 @@ static struct i2c_driver i2c_hid_of_driver = {
 	.driver = {
 		.name	= "i2c_hid_of",
 		.pm	= &i2c_hid_core_pm,
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 		.of_match_table = of_match_ptr(i2c_hid_of_match),
 	},
 
