@@ -249,7 +249,6 @@ static int cam_mem_util_get_dma_buf_fd(size_t len,
 	int *fd,
 	unsigned long *i_ino)
 {
-	struct dma_buf *dmabuf = NULL;
 	int rc = 0;
 
 	if (!buf || !fd) {
@@ -263,6 +262,13 @@ static int cam_mem_util_get_dma_buf_fd(size_t len,
 
 	*i_ino = file_inode((*buf)->file)->i_ino;
 
+	/*
+	 * increment the ref count so that ref count becomes 2 here
+	 * when we close fd, refcount becomes 1 and when we do
+	 * dmap_put_buf, ref count becomes 0 and memory will be freed.
+	 */
+	get_dma_buf(*buf);
+
 	*fd = dma_buf_fd(*buf, O_CLOEXEC);
 	if (*fd < 0) {
 		CAM_ERR(CAM_MEM, "get fd fail, *fd=%d", *fd);
@@ -270,20 +276,10 @@ static int cam_mem_util_get_dma_buf_fd(size_t len,
 		goto get_fd_fail;
 	}
 
-	/*
-	 * increment the ref count so that ref count becomes 2 here
-	 * when we close fd, refcount becomes 1 and when we do
-	 * dmap_put_buf, ref count becomes 0 and memory will be freed.
-	 */
-	dmabuf = dma_buf_get(*fd);
-	if (IS_ERR_OR_NULL(dmabuf)) {
-		rc = PTR_ERR(dmabuf);
-		CAM_ERR(CAM_MEM, "dma_buf_get failed, *fd=%d, i_ino=%lu, rc=%d", *fd, *i_ino, rc);
-	}
-
 	return rc;
 
 get_fd_fail:
+	dma_buf_put(*buf);
 	cmm_free_buffer(*buf);
 	return rc;
 }
