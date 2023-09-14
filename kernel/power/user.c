@@ -306,59 +306,84 @@ static int snapshot_release_block_device(struct snapshot_data *data) {
 	return 0;
 }
 
+static struct bio *new_snapshot_bio(struct snapshot_bdev *sbdev, unsigned int op, sector_t sector)
+{
+	struct bio *bio = bio_alloc(GFP_KERNEL, BIO_MAX_VECS);
+	if (!bio)
+		return ERR_PTR(-ENOMEM);
+
+	bio_set_dev(bio, sbdev->bdev);
+	bio->bi_iter.bi_sector = sector;
+	bio->bi_opf = op | REQ_IDLE;
+	if (bio->bi_opf & REQ_OP_WRITE)
+		bio->bi_opf |= REQ_PREFLUSH;
+	return bio;
+}
+
 static int snapshot_write_block_device(struct snapshot_data *data) {
-	int res = 0;
+	int res;
 	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
-	struct bio bio;
-	struct bio_vec bio_vec;
-	int sector = 0;
+        ktime_t start = ktime_get();
+	ktime_t stop;
+	struct bio *bio = new_snapshot_bio(sbdev, REQ_OP_WRITE, /* sector= */0);
+	if (IS_ERR(bio))
+		  return PTR_ERR(bio);
 
-	while (1) {
-		struct bio_vec bvec;
-
+	while (true) {
 		res = snapshot_read_next(&data->handle);
-		if (!res)
-			break;
-		else if (res < (int)PAGE_SIZE) {
-			if (res > 0)
-				res = -EFAULT;
-			break;
+		if (res == 0)
+			goto transfer_complete_wait;
+		else if (res < 0)
+			goto out_err;
+
+add_page:
+		if (!bio_add_page(bio, virt_to_page(data_of(data->handle)), PAGE_SIZE, 0)) {
+			/* The bio is full, submit it and create a new one */
+			struct bio *next_bio = new_snapshot_bio(sbdev, REQ_OP_WRITE,
+					bio_end_sector(bio));
+			if (IS_ERR(next_bio)) {
+				res = PTR_ERR(next_bio);
+				goto out_err;
+			}
+
+			bio_chain(bio, next_bio);
+			submit_bio(bio);
+			bio = next_bio;
+			goto add_page;
 		}
 
-		bvec.bv_page = virt_to_page(data_of(data->handle));
-		bvec.bv_len = PAGE_SIZE;
-		bvec.bv_offset = 0;
+		if (data->handle.sync_read) {
+			struct bio *next_bio = new_snapshot_bio(sbdev, REQ_OP_WRITE,
+					bio_end_sector(bio));
+			if (IS_ERR(next_bio)) {
+				res = PTR_ERR(next_bio);
+				goto out_err;
+			}
 
-		bio_init(&bio, &bio_vec, 1);
-		bio_set_dev(&bio, sbdev->bdev);
-		bio.bi_iter.bi_sector = sector;
-		bio.bi_opf = REQ_OP_WRITE | REQ_SYNC | REQ_IDLE;
-		bio_add_page(&bio, bvec.bv_page, bvec.bv_len, bvec.bv_offset);
+			res = submit_bio_wait(bio);
+			if (res) {
+				bio_put(next_bio);
+				goto out_err;
+			}
 
-		res = submit_bio_wait(&bio);
-
-		if (res) {
-			pr_err("submitting bio failed at sector: %llu block number: %lu\n",
-			       (unsigned long long)bio.bi_iter.bi_sector,
-			       sbdev->nr_blocks_used);
-			res = -EFAULT;
-			break;
+			bio_put(bio);
+			bio = next_bio;
 		}
 
-		sector = bio_end_sector(&bio);
-		bio_uninit(&bio);
 		sbdev->nr_blocks_used++;
 	}
 
-	/* flush buffers before returning */
+transfer_complete_wait:
+	bio->bi_opf &= ~REQ_IDLE; /* No more IO after this */
+	bio->bi_opf |= REQ_FUA;
+	res = submit_bio_wait(bio);
 	if (!res) {
-		bio_init(&bio, &bio_vec, 0);
-		bio_set_dev(&bio, sbdev->bdev);
-		bio.bi_opf = REQ_OP_WRITE | REQ_SYNC | REQ_PREFLUSH;
-		res = submit_bio_wait(&bio);
-		bio_uninit(&bio);
+		stop = ktime_get();
+		swsusp_show_speed(start, stop, sbdev->nr_blocks_used, "wrote image via ioctl");
 	}
-
+out_err:
+	if (bio)
+		bio_put(bio);
 	return res;
 }
 

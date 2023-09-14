@@ -2224,6 +2224,7 @@ int snapshot_read_next(struct snapshot_handle *handle)
 			handle->buffer = page_address(page);
 		}
 	}
+	handle->sync_read = (handle->buffer == buffer);
 	handle->cur++;
 	return PAGE_SIZE;
 }
