@@ -946,6 +946,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 #define HAS_LSPCON(dev_priv) (IS_DISPLAY_VER(dev_priv, 9, 10))
 
+#define HAS_LRR(i915)	(DISPLAY_VER(i915) >= 12)
+
 #define HAS_L3_CCS_READ(i915) (INTEL_INFO(i915)->has_l3_ccs_read)
 
 /* DPF == dynamic parity feature */

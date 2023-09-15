@@ -1886,7 +1886,15 @@
 #define _TRANS_HBLANK_A		0x60004
 #define _TRANS_HSYNC_A		0x60008
 #define _TRANS_VTOTAL_A		0x6000c
+#define VTOTAL_MASK			REG_GENMASK(31, 16)
+#define VTOTAL(vtotal)			REG_FIELD_PREP(VTOTAL_MASK, (vtotal))
+#define VACTIVE_MASK			REG_GENMASK(15, 0)
+#define VACTIVE(vdisplay)		REG_FIELD_PREP(VACTIVE_MASK, (vdisplay))
 #define _TRANS_VBLANK_A		0x60010
+#define VBLANK_END_MASK			REG_GENMASK(31, 16)
+#define VBLANK_END(vblank_end)		REG_FIELD_PREP(VBLANK_END_MASK, (vblank_end))
+#define VBLANK_START_MASK		REG_GENMASK(15, 0)
+#define VBLANK_START(vblank_start)	REG_FIELD_PREP(VBLANK_START_MASK, (vblank_start))
 #define _TRANS_VSYNC_A		0x60014
 #define _TRANS_EXITLINE_A	0x60018
 #define _PIPEASRC		0x6001c
