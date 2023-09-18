@@ -362,32 +362,31 @@ static int snapshot_write_block_device(struct snapshot_data *data) {
 	return res;
 }
 
-static struct bio *new_snapshot_bio(struct snapshot_bdev *sbdev, sector_t sector)
-{
-	struct bio *bio = bio_alloc(GFP_KERNEL, BIO_MAX_VECS);
-	if (!bio)
-		return ERR_PTR(-ENOMEM);
-
-	bio_set_dev(bio, sbdev->bdev);
+void reinit_bio(struct bio* bio, struct bio_vec* bio_vec, unsigned short max_vecs,
+		unsigned long sector, struct block_device* bdev, unsigned long op) {
+	bio_init(bio, bio_vec, max_vecs);
+	bio_set_dev(bio, bdev);
 	bio->bi_iter.bi_sector = sector;
-	bio->bi_opf = REQ_OP_READ | REQ_IDLE;
-	return bio;
+	bio->bi_opf = op | REQ_IDLE;
 }
 
+/*
+ * We are limited to the number of iovecs we can do on the stack without causing
+ * too deep of a stack which will break compilation. We can do more but it will
+ * have to be in a kmalloc'ed page. For now we stick with stack allocation
+ * for simplicity.
+ */
+#define BIO_VEC_SIZE 100
 static int snapshot_read_block_device(struct snapshot_data *data) {
 	int res;
 	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
-	struct page *page;
-	struct bio *bio;
+	struct bio_vec bio_vec[BIO_VEC_SIZE];
+	struct bio bio;
+	unsigned long sector = 0;
+	bool is_full;
         ktime_t start = ktime_get();
 	ktime_t stop;
-
-	bio = new_snapshot_bio(sbdev, /* sector= */0);
-	if (IS_ERR(bio)) {
-		res = PTR_ERR(bio);
-		bio = NULL;
-		goto out_err;
-	}
+	reinit_bio(&bio, (struct bio_vec*)&bio_vec, BIO_VEC_SIZE, sector, sbdev->bdev, REQ_OP_READ);
 
 	while (true) {
 		res = snapshot_write_next(&data->handle);
@@ -401,57 +400,40 @@ static int snapshot_read_block_device(struct snapshot_data *data) {
 			goto out_err;
 		}
 
-		page = virt_to_page(data_of(data->handle));
 add_page:
-		if (bio_add_page(bio, page, PAGE_SIZE, 0) != PAGE_SIZE) {
-			/* The bio is full, submit it and create a new one */
-			struct bio *next_bio = new_snapshot_bio(sbdev, bio_end_sector(bio));
-			if (IS_ERR(next_bio)) {
-				res = PTR_ERR(next_bio);
+		is_full = !bio_add_page(&bio, virt_to_page(data_of(data->handle)), PAGE_SIZE, 0);
+		if (is_full || data->handle.sync_read) {
+			res = submit_bio_wait(&bio);
+			if (res)
 				goto out_err;
-			}
 
-			bio_chain(bio, next_bio);
-			submit_bio(bio);
-			bio = next_bio;
-			goto add_page;
+			sector = bio_end_sector(&bio);
+			bio_uninit(&bio);
+			reinit_bio(&bio, (struct bio_vec*)&bio_vec, BIO_VEC_SIZE, sector,
+					sbdev->bdev, REQ_OP_READ);
+			if (is_full)
+				goto add_page;
 		}
 
 		sbdev->nr_blocks_used++;
-
-		/* We need to do sync reads until we've read all metadata */
-		if (data->handle.sync_read) {
-			struct bio *next_bio = new_snapshot_bio(sbdev, bio_end_sector(bio));
-			if (IS_ERR(next_bio)) {
-				res = PTR_ERR(next_bio);
-				goto out_err;
-			}
-
-			res = submit_bio_wait(bio);
-			if (res) {
-				bio_put(next_bio);
-				goto out_err;
-			}
-
-			bio_put(bio);
-			bio = next_bio;
-		}
 	}
 
 transfer_complete_wait:
-	res = submit_bio_wait(bio);
-	bio_put(bio);
+	res = submit_bio_wait(&bio);
+	bio_uninit(&bio);
 	if (res) {
 		data->read_failure = true;
 		return res;
 	}
 
 	stop = ktime_get();
+	if (!snapshot_image_loaded(&data->handle))
+		return -ENODATA;
+
 	swsusp_show_speed(start, stop, sbdev->nr_blocks_used, "loaded image via ioctl");
 	return 0;
 out_err:
-	if (bio)
-		bio_put(bio);
+	bio_uninit(&bio);
 	return res;
 }
 
