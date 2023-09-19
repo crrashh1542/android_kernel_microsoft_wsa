@@ -291,6 +291,11 @@ int mtk_gem_create_ioctl(struct drm_device *dev, void *data,
 	struct drm_mtk_gem_create *args = data;
 	int ret;
 
+	if (args->size == 0) {
+		DRM_ERROR("Invalid allocation size: %zu", args->size);
+		return -EINVAL;
+	}
+
 	mtk_gem = mtk_drm_gem_create(dev, args->size, false);
 	if (IS_ERR(mtk_gem))
 		return PTR_ERR(mtk_gem);
