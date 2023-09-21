@@ -5859,13 +5859,11 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 
 	if (!fastset)
 		PIPE_CONF_CHECK_BOOL(vrr.enable);
-	if (!fastset || !pipe_config->seamless_m_n) {
-		PIPE_CONF_CHECK_I(vrr.vmin);
-		PIPE_CONF_CHECK_I(vrr.vmax);
-		PIPE_CONF_CHECK_I(vrr.flipline);
-		PIPE_CONF_CHECK_I(vrr.pipeline_full);
-		PIPE_CONF_CHECK_I(vrr.guardband);
-	}
+	PIPE_CONF_CHECK_I(vrr.vmin);
+	PIPE_CONF_CHECK_I(vrr.vmax);
+	PIPE_CONF_CHECK_I(vrr.flipline);
+	PIPE_CONF_CHECK_I(vrr.pipeline_full);
+	PIPE_CONF_CHECK_I(vrr.guardband);
 
 #undef PIPE_CONF_CHECK_X
 #undef PIPE_CONF_CHECK_I

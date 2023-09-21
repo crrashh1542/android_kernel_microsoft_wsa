@@ -8,7 +8,6 @@
 #include "i915_reg.h"
 #include "intel_de.h"
 #include "intel_display_types.h"
-#include "intel_panel.h"
 #include "intel_vrr.h"
 
 bool intel_vrr_is_capable(struct intel_connector *connector)
@@ -106,7 +105,6 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
-	const struct drm_display_mode *panel_preferred_mode = NULL;
 	const struct drm_display_info *info = &connector->base.display_info;
 	int vmin, vmax;
 
@@ -115,9 +113,6 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE)
 		return;
-
-	if (connector->base.connector_type == DRM_MODE_CONNECTOR_eDP)
-		panel_preferred_mode = intel_panel_preferred_fixed_mode(connector);
 
 	vmin = DIV_ROUND_UP(adjusted_mode->crtc_clock * 1000,
 			    adjusted_mode->crtc_htotal * info->monitor_range.max_vfreq);
@@ -162,19 +157,6 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	if (crtc_state->uapi.vrr_enabled) {
 		crtc_state->vrr.enable = true;
 		crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
-	}
-
-	/*
-	 * FIXME: Currently since VRR + DRR fastset cannot work together
-	 * disable VRR enable if we are in downclock mode of DRR.
-	 *
-	 * Remove this once we start handling updating VRR parameters
-	 * in DRR fastset.
-	 */
-	if (panel_preferred_mode &&
-	    panel_preferred_mode->clock != adjusted_mode->clock) {
-		crtc_state->vrr.enable = false;
-		crtc_state->mode_flags &= ~I915_MODE_FLAG_VRR;
 	}
 }
 
