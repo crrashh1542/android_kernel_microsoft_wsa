@@ -8,6 +8,7 @@
 #include "mt8186-corsola-it6505.dtsi"
 
 /delete-node/ &dsi_out;
+/delete-node/ &keyboard_controller;
 
 / {
 	en_pp6000_mipi_disp_150ma: en-pp6000-mipi-disp-150ma {
@@ -101,6 +102,10 @@
 &cros_ec {
 	cbas {
 		compatible = "google,cros-cbas";
+	};
+
+	keyboard-controller {
+		compatible = "google,cros-ec-keyb-switches";
 	};
 };
 
