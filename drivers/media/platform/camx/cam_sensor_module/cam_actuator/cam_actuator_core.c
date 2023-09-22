@@ -295,7 +295,7 @@ int32_t cam_actuator_apply_request(struct cam_req_mgr_apply_request *apply)
 	}
 
 	a_ctrl = (struct cam_actuator_ctrl_t *)
-		cam_get_device_priv(apply->dev_hdl);
+		cam_get_device_bridge(apply->dev_hdl);
 	if (!a_ctrl) {
 		CAM_ERR(CAM_ACTUATOR, "Device data is NULL");
 		return -EINVAL;
@@ -353,7 +353,7 @@ int32_t cam_actuator_establish_link(
 	}
 
 	a_ctrl = (struct cam_actuator_ctrl_t *)
-		cam_get_device_priv(link->dev_hdl);
+		cam_get_device_bridge(link->dev_hdl);
 	if (!a_ctrl) {
 		CAM_ERR(CAM_ACTUATOR, "Device data is NULL");
 		return -EINVAL;
@@ -738,7 +738,7 @@ void cam_actuator_shutdown(struct cam_actuator_ctrl_t *a_ctrl)
 	}
 
 	if (a_ctrl->cam_act_state >= CAM_ACTUATOR_ACQUIRE) {
-		rc = cam_destroy_device_hdl(a_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(a_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_ACTUATOR, "destroying  dhdl failed");
 		a_ctrl->bridge_intf.device_hdl = -1;
@@ -808,7 +808,7 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 		bridge_params.priv = a_ctrl;
 		bridge_params.dev_id = CAM_ACTUATOR;
 		actuator_acq_dev.device_handle =
-			cam_create_device_hdl(&bridge_params);
+			cam_create_device_bridge_hdl(&bridge_params);
 		a_ctrl->bridge_intf.device_hdl = actuator_acq_dev.device_handle;
 		a_ctrl->bridge_intf.session_hdl =
 			actuator_acq_dev.session_handle;
@@ -860,7 +860,7 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 			goto release_mutex;
 		}
 
-		rc = cam_destroy_device_hdl(a_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(a_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_ACTUATOR, "destroying the device hdl");
 		a_ctrl->bridge_intf.device_hdl = -1;
@@ -977,7 +977,7 @@ int32_t cam_actuator_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		return -EINVAL;
 
 	a_ctrl = (struct cam_actuator_ctrl_t *)
-		cam_get_device_priv(flush_req->dev_hdl);
+		cam_get_device_bridge(flush_req->dev_hdl);
 	if (!a_ctrl) {
 		CAM_ERR(CAM_ACTUATOR, "Device data is NULL");
 		return -EINVAL;

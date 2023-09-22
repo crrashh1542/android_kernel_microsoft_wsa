@@ -29,12 +29,14 @@ enum hdl_state {
 
 /**
  * handle type
- * @HDL_TYPE_DEV: for device and link
+ * @HDL_TYPE_DEV_CTX: for device context
+ * @HDL_TYPE_DEV_BRIDGE: for device bridge
  * @HDL_TYPE_SESSION: for session
  * @HDL_TYPE_LINK: for link
  */
 enum hdl_type {
-	HDL_TYPE_DEV = 1,
+	HDL_TYPE_DEV_CTX = 1,
+	HDL_TYPE_DEV_BRIDGE,
 	HDL_TYPE_SESSION,
 	HDL_TYPE_LINK
 };
@@ -100,15 +102,16 @@ struct cam_create_dev_hdl {
 int32_t cam_create_session_hdl(void *priv);
 
 /**
- * cam_create_device_hdl() - create a device handle
+ * cam_create_device_ctx_hdl() - create a device context handle
  * @hdl_data: session hdl, flags, ops and priv dara as input
- *
- * cam_req_mgr_core calls this function to get
- * session and link handles
- * KMD drivers calls this function to create
- * a device handle. Returns a unique device handle
  */
-int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data);
+int32_t cam_create_device_ctx_hdl(struct cam_create_dev_hdl *hdl_data);
+
+/**
+ * cam_create_device_bridge_hdl() - create a device bridge handle
+ * @hdl_data: session hdl, flags, ops and priv dara as input
+ */
+int32_t cam_create_device_bridge_hdl(struct cam_create_dev_hdl *hdl_data);
 
 /**
  * cam_create_link_hdl() - create a link handle
@@ -122,14 +125,16 @@ int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data);
 int32_t cam_create_link_hdl(struct cam_create_dev_hdl *hdl_data);
 
 /**
- * cam_get_device_priv() - get private data of a device handle
+ * cam_get_device_ctx() - get private data of a device context handle
  * @dev_hdl: handle for a device
- *
- * cam_req_mgr_core and KMD drivers use this function to
- * get private data of a handle. Returns a private data
- * structure pointer.
  */
-void *cam_get_device_priv(int32_t dev_hdl);
+void *cam_get_device_ctx(int32_t dev_hdl);
+
+/**
+ * cam_get_device_bridge() - get private data of a device bridge handle
+ * @dev_hdl: handle for a device
+ */
+void *cam_get_device_bridge(int32_t dev_hdl);
 
 /**
  * cam_get_session_priv() - get private data of a session handle
@@ -161,12 +166,16 @@ struct cam_req_mgr_core_link *cam_get_link_priv(int32_t dev_hdl);
 void *cam_get_device_ops(int32_t dev_hdl);
 
 /**
- * cam_destroy_device_hdl() - destroy device handle
+ * cam_destroy_device__ctx_hdl() - destroy device context handle
  * @dev_hdl: handle for a device.
- *
- * Returns success/failure
  */
-int32_t cam_destroy_device_hdl(int32_t dev_hdl);
+int32_t cam_destroy_device_ctx_hdl(int32_t dev_hdl);
+
+/**
+ * cam_destroy_device__ctx_hdl() - destroy device bridge handle
+ * @dev_hdl: handle for a device.
+ */
+int32_t cam_destroy_device_bridge_hdl(int32_t dev_hdl);
 
 /**
  * cam_destroy_link_hdl() - destroy link handle

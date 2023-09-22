@@ -630,7 +630,7 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 		cam_sensor_power_down(s_ctrl);
 
 	if (s_ctrl->sensor_state >= CAM_SENSOR_ACQUIRE) {
-		if (cam_destroy_device_hdl(s_ctrl->bridge_intf.device_hdl))
+		if (cam_destroy_device_bridge_hdl(s_ctrl->bridge_intf.device_hdl))
 			CAM_WARN(CAM_SENSOR, "Destroy device hdl fails");
 		s_ctrl->bridge_intf.device_hdl = -1;
 		s_ctrl->bridge_intf.link_hdl = -1;
@@ -825,7 +825,7 @@ dummy_probe:
 		bridge_params.priv = s_ctrl;
 		bridge_params.dev_id = CAM_SENSOR;
 		sensor_acq_dev.device_handle =
-			cam_create_device_hdl(&bridge_params);
+			cam_create_device_bridge_hdl(&bridge_params);
 		s_ctrl->bridge_intf.device_hdl = sensor_acq_dev.device_handle;
 		s_ctrl->bridge_intf.session_hdl = sensor_acq_dev.session_handle;
 
@@ -903,7 +903,7 @@ dummy_probe:
 			rc = -EINVAL;
 			goto release_mutex;
 		}
-		rc = cam_destroy_device_hdl(s_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(s_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_SENSOR,
 				"failed in destroying the device hdl");
@@ -1084,7 +1084,7 @@ int cam_sensor_publish_dev_info(struct cam_req_mgr_device_info *info)
 		return -EINVAL;
 
 	s_ctrl = (struct cam_sensor_ctrl_t *)
-		cam_get_device_priv(info->dev_hdl);
+		cam_get_device_bridge(info->dev_hdl);
 
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
@@ -1110,7 +1110,7 @@ int cam_sensor_establish_link(struct cam_req_mgr_core_dev_link_setup *link)
 		return -EINVAL;
 
 	s_ctrl = (struct cam_sensor_ctrl_t *)
-		cam_get_device_priv(link->dev_hdl);
+		cam_get_device_bridge(link->dev_hdl);
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
 		return -EINVAL;
@@ -1348,7 +1348,7 @@ int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 		return -EINVAL;
 
 	s_ctrl = (struct cam_sensor_ctrl_t *)
-		cam_get_device_priv(apply->dev_hdl);
+		cam_get_device_bridge(apply->dev_hdl);
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
 		return -EINVAL;
@@ -1373,7 +1373,7 @@ int32_t cam_sensor_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		return -EINVAL;
 
 	s_ctrl = (struct cam_sensor_ctrl_t *)
-		cam_get_device_priv(flush_req->dev_hdl);
+		cam_get_device_bridge(flush_req->dev_hdl);
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
 		return -EINVAL;

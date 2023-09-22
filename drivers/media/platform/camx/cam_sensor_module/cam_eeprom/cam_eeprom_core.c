@@ -363,7 +363,7 @@ static int32_t cam_eeprom_get_dev_handle(struct cam_eeprom_ctrl_t *e_ctrl,
 	bridge_params.priv = e_ctrl;
 	bridge_params.dev_id = CAM_EEPROM;
 	eeprom_acq_dev.device_handle =
-		cam_create_device_hdl(&bridge_params);
+		cam_create_device_bridge_hdl(&bridge_params);
 	e_ctrl->bridge_intf.device_hdl = eeprom_acq_dev.device_handle;
 	e_ctrl->bridge_intf.session_hdl = eeprom_acq_dev.session_handle;
 
@@ -980,7 +980,7 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 	}
 
 	if (e_ctrl->cam_eeprom_state == CAM_EEPROM_ACQUIRE) {
-		rc = cam_destroy_device_hdl(e_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(e_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_EEPROM, "destroying the device hdl");
 
@@ -1164,7 +1164,7 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 			rc = -EINVAL;
 			goto release_mutex;
 		}
-		rc = cam_destroy_device_hdl(e_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(e_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_EEPROM,
 				"failed in destroying the device hdl");
