@@ -387,7 +387,7 @@ out_err:
 	return res;
 }
 
-void reinit_bio(struct bio* bio, struct bio_vec* bio_vec, unsigned short max_vecs,
+static void reinit_bio(struct bio* bio, struct bio_vec* bio_vec, unsigned short max_vecs,
 		unsigned long sector, struct block_device* bdev, unsigned long op) {
 	bio_init(bio, bio_vec, max_vecs);
 	bio_set_dev(bio, bdev);
@@ -401,7 +401,11 @@ void reinit_bio(struct bio* bio, struct bio_vec* bio_vec, unsigned short max_vec
  * have to be in a kmalloc'ed page. For now we stick with stack allocation
  * for simplicity.
  */
+#ifdef CONFIG_64BIT
 #define BIO_VEC_SIZE 100
+#else
+#define BIO_VEC_SIZE 32
+#endif
 static int snapshot_read_block_device(struct snapshot_data *data) {
 	int res;
 	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
