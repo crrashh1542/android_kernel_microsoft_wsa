@@ -19,6 +19,7 @@
 #include <asm/cacheflush.h>
 #include <linux/dma-buf.h>
 #include <linux/iosys-map.h>
+#include <linux/fdtable.h>
 
 #include "cam_buf_mgr.h"
 #include "cam_req_mgr_util.h"
@@ -498,6 +499,7 @@ map_hw_fail:
 	cam_mem_put_slot(tbl, idx);
 slot_fail:
 	dma_buf_put(dmabuf);
+	close_fd(fd);
 	return rc;
 }
 
