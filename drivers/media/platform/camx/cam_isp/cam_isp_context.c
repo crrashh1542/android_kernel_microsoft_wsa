@@ -3390,6 +3390,13 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	packet = (struct cam_packet *)(packet_addr + (uint32_t)cmd->offset);
 
 	header_size = packet->header.size;
+
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
+
 	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
 	if (!packet_local) {
 		CAM_ERR(CAM_ISP, "Alloc and copy fail");

@@ -140,6 +140,13 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		(uint32_t)config.offset);
 	header_size = csl_packet->header.size;
 
+
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
 	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
 
 	if (!csl_packet_local) {
@@ -477,6 +484,12 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 		goto rel_pkt_buf;
 	}
 	header_size = pkt->header.size;
+
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
 
 	pkt_local = (struct cam_packet *)cam_common_mem_kdup(pkt, header_size);
 

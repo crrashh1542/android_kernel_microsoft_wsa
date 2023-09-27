@@ -606,7 +606,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 	for (i = 0; i < csl_packet->num_cmd_buf; i++) {
 		total_cmd_buf_in_bytes = cmd_desc[i].length;
 		processed_cmd_buf_in_bytes = 0;
-		if (!total_cmd_buf_in_bytes)
+		if (total_cmd_buf_in_bytes < sizeof(struct common_header))
 			continue;
 		rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
 			&generic_pkt_addr, &pkt_len);
@@ -630,6 +630,13 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 		}
 		remain_len = pkt_len - cmd_desc[i].offset;
 		cmd_buf += cmd_desc[i].offset / sizeof(uint32_t);
+
+		if (total_cmd_buf_in_bytes < sizeof(struct common_header)) {
+			CAM_ERR(CAM_EEPROM, "common_header size exceeds alloc len (%zu)",
+				total_cmd_buf_in_bytes);
+			rc = -EINVAL;
+			goto rel_cmd_buf;
+		}
 
 		cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, total_cmd_buf_in_bytes);
 
@@ -855,6 +862,12 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	csl_packet = (struct cam_packet *)
 		(generic_pkt_addr + (uint32_t)dev_config.offset);
 	header_size = csl_packet->header.size;
+
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_EEPROM, "cam_packet size exceeds header_size (%zu)", header_size);
+		rc = -EINVAL;
+		goto release_buf;
+	}
 
 	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
 
