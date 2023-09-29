@@ -1907,6 +1907,14 @@ static struct ctl_table kern_table[] = {
 		.extra1		= SYSCTL_ONE,
 	},
 #endif
+#ifdef CONFIG_SMP
+	{
+		.procname	= "sched_aggressive_next_balance",
+		.data		= &sched_aggressive_next_balance.key,
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
+#endif
 #if defined(CONFIG_ENERGY_MODEL) && defined(CONFIG_CPU_FREQ_GOV_SCHEDUTIL)
 	{
 		.procname	= "sched_energy_aware",
