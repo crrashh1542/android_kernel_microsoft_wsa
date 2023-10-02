@@ -224,19 +224,17 @@ TRACE_EVENT_CONDITION(cros_inet_accept_exit,
 );
 
 
-TRACE_EVENT_CONDITION(cros_inet_sendmsg_exit,
-	/* The tracepoint signature matches the signature of inet_sendmsg with
-	 * addition of the return value. This is done to match the expected
-	 * signature of an fexit bpf program.
+TRACE_EVENT_CONDITION(cros_inet_sendmsg_enter,
+	/* The tracepoint signature matches the signature of inet_sendmsg.
+	 * This is done to match the expected signature of an fentry bpf program.
 	 * This is done so that a BPF application can use the same
 	 * handler for kernels that don't support fexit for ARM64 and those
 	 * that do.
 	 */
-	TP_PROTO(struct socket *sock, struct msghdr *msg, size_t size, int rv),
-	TP_ARGS(sock, msg, size, rv),
+	TP_PROTO(struct socket *sock, struct msghdr *msg, size_t size),
+	TP_ARGS(sock, msg, size),
 	TP_CONDITION(sock && sock->sk),
 	TP_STRUCT__entry(
-		__field(size_t, bytes_sent)
 		__field(__u32, saddr4)
 		__field(__u32, daddr4)
 		__field(__u16, sport)
@@ -247,15 +245,13 @@ TRACE_EVENT_CONDITION(cros_inet_sendmsg_exit,
 		struct sock *sk = sock->sk;
 
 		CROS_NET_FILL_ADDR_PORT(sk, __entry);
-		__entry->bytes_sent = rv;
 	),
 	TP_printk(
-		"do_not_depend:%pI4:%d-%pI4:%d-%zu-prot:%d",
+		"do_not_depend:%pI4:%d-%pI4:%d-prot:%d",
 		&__entry->saddr4,
 		__entry->sport,
 		&__entry->daddr4,
 		__entry->dport,
-		__entry->bytes_sent,
 		__entry->protocol
 		)
 );
