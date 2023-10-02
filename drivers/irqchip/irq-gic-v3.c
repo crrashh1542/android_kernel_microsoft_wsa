@@ -96,7 +96,7 @@ static DEFINE_STATIC_KEY_TRUE(supports_deactivate_key);
  * - Figure 4-7 Secure read of the priority field for a Non-secure Group 1
  *   interrupt.
  */
-static DEFINE_STATIC_KEY_FALSE(supports_pseudo_nmis);
+DEFINE_STATIC_KEY_FALSE(supports_pseudo_nmis);
 
 /*
  * Global static key controlling whether an update to PMR allowing more
