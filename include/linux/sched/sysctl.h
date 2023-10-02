@@ -84,4 +84,5 @@ int sched_energy_aware_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
 #endif
 
+extern unsigned long sysctl_sched_min_load_balance_interval;
 #endif /* _LINUX_SCHED_SYSCTL_H */
