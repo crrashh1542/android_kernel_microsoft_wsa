@@ -9,6 +9,8 @@
 
 #include "common.h"
 
+#include <linux/kvm_para.h>
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
@@ -199,6 +201,17 @@ static void exit_to_user_mode_prepare(struct pt_regs *regs)
 	unsigned long ti_work;
 
 	lockdep_assert_irqs_disabled();
+
+	/*
+	 * Guest requests a boost when preemption is disabled but does not request
+	 * an immediate unboost when preemption is enabled back. There is a chance
+	 * that we are boosted here. Unboost if needed.
+	 */
+	if (pv_sched_enabled()) {
+		pv_sched_vcpu_kerncs_unboost(PVSCHED_KERNCS_BOOST_ALL, true);
+		pv_sched_vcpu_update(current->policy, current->rt_priority,
+				task_nice(current), false);
+	}
 
 	/* Flush pending rcuog wakeup before the last need_resched() check */
 	tick_nohz_user_enter_prepare();
