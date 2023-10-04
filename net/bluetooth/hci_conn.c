@@ -41,6 +41,11 @@ struct sco_param {
 	u8  retrans_effort;
 };
 
+struct le_conn_data {
+	bdaddr_t dst;
+	u8 dst_type;
+};
+
 static const struct sco_param esco_param_cvsd[] = {
 	{ EDR_ESCO_MASK & ~ESCO_2EV3, 0x000a,	0x01 }, /* S3 */
 	{ EDR_ESCO_MASK & ~ESCO_2EV3, 0x0007,	0x01 }, /* S2 */
@@ -937,11 +942,26 @@ void hci_conn_failed(struct hci_conn *conn, u8 status)
 
 static void create_le_conn_complete(struct hci_dev *hdev, void *data, int err)
 {
-	struct hci_conn *conn = data;
+	struct le_conn_data *conn_data = data;
+	struct hci_conn *conn;
 
 	bt_dev_dbg(hdev, "err %d", err);
 
+	if (!conn_data) {
+		bt_dev_err(hdev, "conn_data is NULL");
+		return;
+	}
+
 	hci_dev_lock(hdev);
+
+	conn = hci_conn_hash_lookup_le(hdev, &conn_data->dst, conn_data->dst_type);
+
+	if (!conn) {
+		bt_dev_err(hdev,
+			   "can't find conn with addr:%pMR,type:%d, skip the connection",
+			   &conn_data->dst, conn_data->dst_type);
+		goto done;
+	}
 
 	if (!err) {
 		hci_connect_le_scan_cleanup(conn, 0x00);
@@ -957,12 +977,28 @@ static void create_le_conn_complete(struct hci_dev *hdev, void *data, int err)
 	hci_conn_failed(conn, err);
 
 done:
+	kfree(conn_data);
 	hci_dev_unlock(hdev);
 }
 
 static int hci_connect_le_sync(struct hci_dev *hdev, void *data)
 {
-	struct hci_conn *conn = data;
+	struct le_conn_data *conn_data = data;
+	struct hci_conn *conn;
+
+	if (!conn_data) {
+		bt_dev_err(hdev, "conn_data is NULL");
+		return -ECONNABORTED;
+	}
+
+	conn = hci_conn_hash_lookup_le(hdev, &conn_data->dst, conn_data->dst_type);
+
+	if (!conn) {
+		bt_dev_err(hdev,
+			   "can't find conn with addr:%pMR,type:%d, skip the connection",
+			   &conn_data->dst, conn_data->dst_type);
+		return -ECONNABORTED;
+	}
 
 	bt_dev_dbg(hdev, "conn %p", conn);
 
@@ -975,6 +1011,7 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 {
 	struct hci_conn *conn;
 	struct smp_irk *irk;
+	struct le_conn_data *conn_data;
 	int err;
 
 	/* Let's make sure that le is enabled.*/
@@ -1038,10 +1075,17 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 	conn->state = BT_CONNECT;
 	clear_bit(HCI_CONN_SCANNING, &conn->flags);
 
-	err = hci_cmd_sync_queue(hdev, hci_connect_le_sync, conn,
+	conn_data = kmalloc(sizeof(*conn_data), GFP_KERNEL);
+	if (!conn_data)
+		return ERR_PTR(-ENOMEM);
+	bacpy(&conn_data->dst, dst);
+	conn_data->dst_type = dst_type;
+
+	err = hci_cmd_sync_queue(hdev, hci_connect_le_sync, conn_data,
 				 create_le_conn_complete);
 	if (err) {
 		hci_conn_del(conn);
+		kfree(conn_data);
 		return ERR_PTR(err);
 	}
 
