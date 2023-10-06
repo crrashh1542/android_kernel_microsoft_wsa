@@ -156,7 +156,7 @@ static int __cam_node_handle_acquire_hw_v1(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -201,7 +201,7 @@ static int __cam_node_handle_start_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -240,7 +240,7 @@ static int __cam_node_handle_stop_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -279,7 +279,7 @@ static int __cam_node_handle_config_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -320,7 +320,7 @@ static int __cam_node_handle_flush_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -359,7 +359,7 @@ static int __cam_node_handle_dump_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -398,7 +398,7 @@ static int __cam_node_handle_release_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -459,7 +459,7 @@ static int __cam_node_handle_release_hw_v1(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -626,7 +626,7 @@ int cam_node_shutdown(struct cam_node *node)
 }
 
 int cam_node_init(struct cam_node *node, struct cam_hw_mgr_intf *hw_mgr_intf,
-	struct cam_context *ctx_list, uint32_t ctx_size, char *name)
+	struct cam_context *ctx_list, uint32_t ctx_size, const char *name)
 {
 	int rc = 0;
 	int i;
@@ -638,8 +638,7 @@ int cam_node_init(struct cam_node *node, struct cam_hw_mgr_intf *hw_mgr_intf,
 
 	memset(node, 0, sizeof(*node));
 
-	strlcpy(node->name, name, sizeof(node->name));
-
+	node->name = name;
 	memcpy(&node->hw_mgr_intf, hw_mgr_intf, sizeof(node->hw_mgr_intf));
 	node->crm_node_intf.apply_req = __cam_node_crm_apply_req;
 	node->crm_node_intf.get_dev_info = __cam_node_crm_get_dev_info;

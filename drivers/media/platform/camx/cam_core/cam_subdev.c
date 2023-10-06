@@ -121,7 +121,7 @@ int cam_subdev_remove(struct cam_subdev *sd)
 }
 
 int cam_subdev_probe(struct cam_subdev *sd, struct platform_device *pdev,
-	char *name, uint32_t dev_type)
+	const char *name, uint32_t dev_type)
 {
 	int rc;
 	struct cam_node *node = NULL;

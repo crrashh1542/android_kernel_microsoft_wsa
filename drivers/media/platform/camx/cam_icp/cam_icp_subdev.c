@@ -38,8 +38,6 @@
 #include "cam_debug_util.h"
 #include "cam_smmu_api.h"
 
-#define CAM_ICP_DEV_NAME        "cam-icp"
-
 struct cam_icp_subdev {
 	struct cam_subdev sd;
 	struct cam_node *node;
@@ -183,7 +181,7 @@ static int cam_icp_probe(struct platform_device *pdev)
 
 	g_icp_dev->sd.pdev = pdev;
 	g_icp_dev->sd.internal_ops = &cam_icp_subdev_internal_ops;
-	rc = cam_subdev_probe(&g_icp_dev->sd, pdev, CAM_ICP_DEV_NAME,
+	rc = cam_subdev_probe(&g_icp_dev->sd, pdev, cam_icp_dev_name(),
 		CAM_ICP_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "ICP cam_subdev_probe failed");
@@ -216,7 +214,7 @@ static int cam_icp_probe(struct platform_device *pdev)
 	}
 
 	rc = cam_node_init(node, hw_mgr_intf, g_icp_dev->ctx,
-				CAM_ICP_CTX_MAX, CAM_ICP_DEV_NAME);
+				CAM_ICP_CTX_MAX, cam_icp_dev_name());
 	if (rc) {
 		CAM_ERR(CAM_ICP, "ICP node init failed");
 		goto ctx_fail;

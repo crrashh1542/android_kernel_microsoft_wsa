@@ -38,7 +38,7 @@
  *
  */
 struct cam_node {
-	char                         name[CAM_CTX_DEV_NAME_MAX_LENGTH];
+	const char                  *name;
 	uint32_t                     state;
 
 	/* context pool */
@@ -96,7 +96,7 @@ int cam_node_shutdown(struct cam_node *node);
  *
  */
 int cam_node_init(struct cam_node *node, struct cam_hw_mgr_intf *hw_mgr_intf,
-	struct cam_context *ctx_list, uint32_t ctx_size, char *name);
+	struct cam_context *ctx_list, uint32_t ctx_size, const char *name);
 
 /**
  * cam_node_put_ctxt_to_free_list()

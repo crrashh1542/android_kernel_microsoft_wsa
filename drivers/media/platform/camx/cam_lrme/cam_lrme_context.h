@@ -39,4 +39,6 @@ int cam_lrme_context_init(struct cam_lrme_context *lrme_ctx,
 	uint32_t index);
 int cam_lrme_context_deinit(struct cam_lrme_context *lrme_ctx);
 
+const char *cam_lrme_dev_name(void);
+
 #endif /* _CAM_LRME_CONTEXT_H_ */

@@ -28,14 +28,19 @@
 #include "cam_isp_context.h"
 #include "cam_common_util.h"
 
-static const char isp_dev_name[] = "cam-isp";
-
 #define INC_HEAD(head, max_entries) \
 	(atomic64_add_return(1, head) % \
 	max_entries)
 
 static int cam_isp_context_dump_active_request(void *data, unsigned long iova,
 	uint32_t buf_info);
+
+const char *cam_isp_dev_name(void)
+{
+	static const char *dev_name = CAM_ISP_DEV_NAME;
+
+	return dev_name;
+}
 
 static const char *__cam_isp_evt_val_to_type(
 	uint32_t evt_id)
@@ -3893,7 +3898,7 @@ static int __cam_isp_ctx_get_dev_info_in_acquired(struct cam_context *ctx,
 	int rc = 0;
 
 	dev_info->dev_hdl = ctx->dev_hdl;
-	strlcpy(dev_info->name, CAM_ISP_DEV_NAME, sizeof(dev_info->name));
+	strlcpy(dev_info->name, cam_isp_dev_name(), sizeof(dev_info->name));
 	dev_info->dev_id = CAM_REQ_MGR_DEVICE_IFE;
 	dev_info->p_delay = 1;
 	dev_info->trigger = CAM_TRIGGER_POINT_SOF;
@@ -4488,7 +4493,7 @@ int cam_isp_context_init(struct cam_isp_context *ctx,
 	}
 
 	/* camera context setup */
-	rc = cam_context_init(ctx_base, isp_dev_name, CAM_ISP, ctx_id,
+	rc = cam_context_init(ctx_base, cam_isp_dev_name(), CAM_ISP, ctx_id,
 		crm_node_intf, hw_intf, ctx->req_base, CAM_CTX_REQ_MAX);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "Camera Context Base init failed");
