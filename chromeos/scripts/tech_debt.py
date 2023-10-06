@@ -15,7 +15,8 @@ import sys
 
 
 TECH_DEBT_MSG = 'This patch is not fully upstream. Please open a tracking bug here: go/cros-kernel-technical-debt-bug and add a label UPSTREAM-TASK=b:XXXX referencing it. A member of the review committee will review the CL. Thank you.'
-
+TECH_DEBT_MISSING_BUG = 'Proper BUG=b:XXXX entry is missing in the commit message'
+TECH_DEBT_DUP_BUG_MSG = 'UPSTREAM-TASK bugs cannot be the same as those present in the BUG tag.'
 
 def is_chromium_only(files):
     """Check if the CL modifies files that only belong to ChromiumOS"""
@@ -43,14 +44,35 @@ def check_tech_debt(commit):
         'BACKPORT: FROMLIST'):
         return True
 
-    buganizer = r'b:[0-9]{7,}'
-    tag_line = r'\nUPSTREAM-TASK=%s([, ]+%s)*[ \t]*\n' % (buganizer, buganizer)
-    if re.search(tag_line, commit_message):
-        return True
+    bug_id = r'b:[0-9]{7,}'
+    bugs_ids= rf'({bug_id}(?:[, ]+{bug_id})*)'
 
-    print(TECH_DEBT_MSG, file=sys.stderr)
-    return False
+    bug_tag=rf'\nBUG={bugs_ids}+'
+    upstream_task_tag=rf'\nUPSTREAM-TASK={bugs_ids}+'
 
+    bug_line = re.findall(bug_tag, commit_message)
+    if bug_line == []:
+        print(TECH_DEBT_MISSING_BUG, file=sys.stderr)
+        return False
+
+    upstream_task_line = re.findall(upstream_task_tag, commit_message)
+    if upstream_task_line == []:
+        print(TECH_DEBT_MSG, file=sys.stderr)
+        return False
+
+    bugs = set()
+    for b in bug_line:
+        bugs |= set(re.findall(bug_id, b))
+
+    upstream_tasks = set()
+    for b in upstream_task_line:
+        upstream_tasks |= set(re.findall(bug_id, b))
+
+    if set(bugs) & set(upstream_tasks):
+        print(TECH_DEBT_DUP_BUG_MSG, file=sys.stderr)
+        return False
+
+    return True
 
 def main():
     """Main function."""
