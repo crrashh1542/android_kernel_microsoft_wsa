@@ -5324,7 +5324,7 @@ static int cam_icp_util_dump_frame_data(struct cam_packet *packet,
 				return -EINVAL;
 			}
 			if (len <= cmd_desc[i].offset) {
-				CAM_WARN(CAM_ICP, "buf overshoot len %zu offset %zu",
+				CAM_WARN(CAM_ICP, "buf overshoot len %zu offset %u",
 					len, cmd_desc[i].offset);
 				rc = -ENOSPC;
 				goto end;
