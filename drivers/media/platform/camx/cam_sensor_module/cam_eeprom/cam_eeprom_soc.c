@@ -198,7 +198,8 @@ ERROR:
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * @e_ctrl: ctrl structure
  *
  * Parses eeprom dt
@@ -243,7 +244,8 @@ static int cam_eeprom_get_dt_data(struct cam_eeprom_ctrl_t *e_ctrl)
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * @eb_info: eeprom private data structure
  * @of_node: eeprom device node
  *
@@ -281,7 +283,8 @@ static int cam_eeprom_cmm_dts(struct cam_eeprom_soc_private *eb_info,
 	return 0;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * @e_ctrl: ctrl structure
  *
  * This function is called from cam_eeprom_platform/i2c/spi_driver_probe

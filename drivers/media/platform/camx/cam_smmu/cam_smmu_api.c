@@ -568,7 +568,7 @@ static int cam_smmu_check_handle_unique(int hdl)
 	return 0;
 }
 
-/**
+/*
  *  use low 2 bytes for handle cookie
  */
 static int cam_smmu_create_iommu_handle(int idx)

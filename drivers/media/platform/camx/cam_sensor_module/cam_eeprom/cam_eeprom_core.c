@@ -405,7 +405,8 @@ static int32_t cam_eeprom_update_slaveInfo(struct cam_eeprom_ctrl_t *e_ctrl,
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_eeprom_parse_memory_map - Parse memory map info
  * @data:             memory block data
  * @cmd_buf:          command buffer
