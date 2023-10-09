@@ -1847,7 +1847,7 @@ static int cam_icp_mgr_process_direct_ack_msg(uint32_t *msg_ptr)
 		ioconfig_ack = (struct hfi_msg_ipebps_async_ack *)msg_ptr;
 		ctx_data =
 			(struct cam_icp_hw_ctx_data *)ioconfig_ack->user_data1;
-		if (ctx_data->state != CAM_ICP_CTX_STATE_FREE)
+		if (ctx_data->state != CAM_ICP_CTX_STATE_FREE) {
 			complete(&ctx_data->wait_complete);
 			CAM_DBG(CAM_ICP, "received IPE/BPS\n"
 				"MAP ACK:ctx_state =%d\n"
@@ -1856,6 +1856,7 @@ static int cam_icp_mgr_process_direct_ack_msg(uint32_t *msg_ptr)
 				ioconfig_ack->err_type,
 				cam_icp_error_handle_id_to_type(
 				ioconfig_ack->err_type));
+		}
 		break;
 	case HFI_IPEBPS_CMD_OPCODE_MEM_UNMAP:
 		ioconfig_ack = (struct hfi_msg_ipebps_async_ack *)msg_ptr;
