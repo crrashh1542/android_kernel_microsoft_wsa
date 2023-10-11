@@ -23,6 +23,24 @@
 
 #include "mei_pxp.h"
 
+static inline int mei_pxp_reenable(const struct device *dev, struct mei_cl_device *cldev)
+{
+	int ret;
+
+	dev_warn(dev, "Trying to reset the channel...\n");
+	ret = mei_cldev_disable(cldev);
+	if (ret < 0)
+		dev_warn(dev, "mei_cldev_disable failed. %d\n", ret);
+	/*
+	 * Explicitly ignoring disable failure,
+	 * enable may fix the states and succeed
+	 */
+	ret = mei_cldev_enable(cldev);
+	if (ret < 0)
+		dev_err(dev, "mei_cldev_enable failed. %d\n", ret);
+	return ret;
+}
+
 /**
  * mei_pxp_send_message() - Sends a PXP message to ME FW.
  * @dev: device corresponding to the mei_cl_device
@@ -36,6 +54,7 @@ mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vt
 {
 	struct mei_cl_device *cldev;
 	ssize_t byte;
+	int ret;
 
 	if (!dev || !message)
 		return -EINVAL;
@@ -46,10 +65,20 @@ mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vt
 	byte = mei_cldev_send_vtag(cldev, (u8 *)message, size, vtag);
 	if (byte < 0) {
 		dev_dbg(dev, "mei_cldev_send failed. %zd\n", byte);
-		return byte;
+		switch (byte) {
+		case -ENOMEM:
+			fallthrough;
+		case -ENODEV:
+			fallthrough;
+		case -ETIME:
+			ret = mei_pxp_reenable(dev, cldev);
+			if (ret)
+				byte = ret;
+			break;
+		}
 	}
 
-	return 0;
+	return byte;
 }
 
 /**
@@ -66,6 +95,7 @@ mei_pxp_receive_message(struct device *dev, void *buffer, size_t size, u8 vtag)
 	struct mei_cl_device *cldev;
 	ssize_t byte;
 	bool retry = false;
+	int ret;
 
 	if (!dev || !buffer)
 		return -EINVAL;
@@ -76,26 +106,22 @@ retry:
 	byte = mei_cldev_recv_vtag(cldev, buffer, size, &vtag);
 	if (byte < 0) {
 		dev_dbg(dev, "mei_cldev_recv failed. %zd\n", byte);
-		if (byte != -ENOMEM)
-			return byte;
-
-		/* Retry the read when pages are reclaimed */
-		msleep(20);
-		if (!retry) {
-			retry = true;
-			goto retry;
-		} else {
-			dev_warn(dev, "No memory on data receive after retry, trying to reset the channel...\n");
-			byte = mei_cldev_disable(cldev);
-			if (byte < 0)
-				dev_warn(dev, "mei_cldev_disable failed. %zd\n", byte);
-			/*
-			 * Explicitly ignoring disable failure,
-			 * enable may fix the states and succeed
-			 */
-			byte = mei_cldev_enable(cldev);
-			if (byte < 0)
-				dev_err(dev, "mei_cldev_enable failed. %zd\n", byte);
+		switch (byte) {
+		case -ENOMEM:
+			/* Retry the read when pages are reclaimed */
+			msleep(20);
+			if (!retry) {
+				retry = true;
+				goto retry;
+			}
+			fallthrough;
+		case -ENODEV:
+			fallthrough;
+		case -ETIME:
+			ret = mei_pxp_reenable(dev, cldev);
+			if (ret)
+				byte = ret;
+			break;
 		}
 	}
 
