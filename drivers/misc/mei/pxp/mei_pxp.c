@@ -47,10 +47,20 @@ static inline int mei_pxp_reenable(const struct device *dev, struct mei_cl_devic
  * @message: a message buffer to send
  * @size: size of the message
  * @vtag: the vtag of the connection (use 0 for default)
- * Return: 0 on Success, <0 on Failure
+ * @timeout_ms: timeout in milliseconds, zero means wait indefinitely.
+ *
+ * Returns: 0 on Success, <0 on Failure with the following defined failures.
+ *         -ENODEV: Client was not connected.
+ *                  Caller may attempt to try again immediately.
+ *         -ENOMEM: Internal memory allocation failure experienced.
+ *                  Caller may sleep to allow kernel reclaim before retrying.
+ *         -EINTR : Calling thread received a signal. Caller may choose
+ *                  to abandon with the same thread id.
+ *         -ETIME : Request is timed out.
+ *                  Caller may attempt to try again immediately.
  */
 static int
-mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vtag)
+mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vtag, unsigned long timeout_ms)
 {
 	struct mei_cl_device *cldev;
 	ssize_t byte;
@@ -62,7 +72,7 @@ mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vt
 	cldev = to_mei_cl_device(dev);
 
 	/* temporary drop const qualifier till the API is fixed */
-	byte = mei_cldev_send_vtag(cldev, (u8 *)message, size, vtag);
+	byte = mei_cldev_send_vtag_timeout(cldev, message, size, vtag,  timeout_ms);
 	if (byte < 0) {
 		dev_dbg(dev, "mei_cldev_send failed. %zd\n", byte);
 		switch (byte) {
@@ -87,10 +97,21 @@ mei_pxp_send_message(struct device *dev, const void *message, size_t size, u8 vt
  * @buffer: a message buffer to contain the received message
  * @size: size of the buffer
  * @vtag: the vtag of the connection (use 0 for default)
- * Return: bytes sent on Success, <0 on Failure
+ * @timeout_ms: timeout in milliseconds, zero means wait indefinitely.
+ *
+ * Returns: number of bytes send on Success, <0 on Failure with the following defined failures.
+ *         -ENODEV: Client was not connected.
+ *                  Caller may attempt to try again from send immediately.
+ *         -ENOMEM: Internal memory allocation failure experienced.
+ *                  Caller may sleep to allow kernel reclaim before retrying.
+ *         -EINTR : Calling thread received a signal. Caller will need to repeat calling
+ *                  (with a different owning thread) to retrieve existing unclaimed response
+ *                  (and may discard it).
+ *         -ETIME : Request is timed out.
+ *                  Caller may attempt to try again from send immediately.
  */
 static int
-mei_pxp_receive_message(struct device *dev, void *buffer, size_t size, u8 vtag)
+mei_pxp_receive_message(struct device *dev, void *buffer, size_t size, u8 vtag, unsigned long timeout_ms)
 {
 	struct mei_cl_device *cldev;
 	ssize_t byte;
@@ -103,7 +124,7 @@ mei_pxp_receive_message(struct device *dev, void *buffer, size_t size, u8 vtag)
 	cldev = to_mei_cl_device(dev);
 
 retry:
-	byte = mei_cldev_recv_vtag(cldev, buffer, size, &vtag);
+	byte = mei_cldev_recv_vtag_timeout(cldev, buffer, size, &vtag, timeout_ms);
 	if (byte < 0) {
 		dev_dbg(dev, "mei_cldev_recv failed. %zd\n", byte);
 		switch (byte) {

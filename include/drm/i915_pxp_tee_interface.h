@@ -21,8 +21,8 @@ struct i915_pxp_component_ops {
 	 */
 	struct module *owner;
 
-	int (*send)(struct device *dev, const void *message, size_t size, u8 vtag);
-	int (*recv)(struct device *dev, void *buffer, size_t size, u8 vtag);
+	int (*send)(struct device *dev, const void *message, size_t size, u8 vtag, unsigned long timeout_ms);
+	int (*recv)(struct device *dev, void *buffer, size_t size, u8 vtag, unsigned long timeout_ms);
 };
 
 /**
