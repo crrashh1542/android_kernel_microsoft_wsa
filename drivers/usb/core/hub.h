@@ -14,6 +14,7 @@
 #include <linux/usb.h>
 #include <linux/usb/ch11.h>
 #include <linux/usb/hcd.h>
+#include <linux/usb/typec.h>
 #include "usb.h"
 
 struct usb_hub {
@@ -82,6 +83,7 @@ struct usb_hub {
  * @dev: generic device interface
  * @port_owner: port's owner
  * @peer: related usb2 and usb3 ports (share the same connector)
+ * @connector: USB Type-C connector
  * @req: default pm qos request for hubs without port power control
  * @connect_type: port's connect type
  * @location: opaque representation of platform connector location
@@ -96,6 +98,7 @@ struct usb_port {
 	struct device dev;
 	struct usb_dev_state *port_owner;
 	struct usb_port *peer;
+	struct typec_connector *connector;
 	struct dev_pm_qos_request *req;
 	enum usb_port_connect_type connect_type;
 	usb_port_location_t location;
