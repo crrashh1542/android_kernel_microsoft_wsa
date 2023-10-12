@@ -366,7 +366,7 @@ void *cam_get_device_ops(int32_t dev_hdl)
 	}
 
 	type = CAM_REQ_MGR_GET_HDL_TYPE(dev_hdl);
-	if (type < HDL_TYPE_DEV_CTX || type > HDL_TYPE_LINK) {
+	if (type <= HDL_TYPE_UNDERFLOW || type >= HDL_TYPE_OVERFLOW) {
 		CAM_ERR(CAM_CRM, "Invalid type");
 		goto device_ops_fail;
 	}

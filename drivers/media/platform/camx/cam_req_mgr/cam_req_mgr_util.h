@@ -35,10 +35,12 @@ enum hdl_state {
  * @HDL_TYPE_LINK: for link
  */
 enum hdl_type {
-	HDL_TYPE_DEV_CTX = 1,
+	HDL_TYPE_UNDERFLOW,	/* first valid type is below this line */
+	HDL_TYPE_DEV_CTX,
 	HDL_TYPE_DEV_BRIDGE,
 	HDL_TYPE_SESSION,
-	HDL_TYPE_LINK
+	HDL_TYPE_LINK,
+	HDL_TYPE_OVERFLOW,	/* last valid type is above this line */
 };
 
 /**
