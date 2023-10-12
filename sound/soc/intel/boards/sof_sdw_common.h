@@ -12,6 +12,7 @@
 #include <linux/bits.h>
 #include <linux/types.h>
 #include <sound/soc.h>
+#include "sof_hdmi_common.h"
 
 #define MAX_NO_PROPS 2
 #define MAX_HDMI_NUM 4
@@ -92,9 +93,8 @@ struct sof_sdw_codec_info {
 };
 
 struct mc_private {
-	struct list_head hdmi_pcm_list;
-	bool idisp_codec;
 	struct snd_soc_jack sdw_headset;
+	struct sof_hdmi_private hdmi;
 	struct device *headset_codec_dev; /* only one headset per card */
 };
 

@@ -1219,8 +1219,6 @@ static int create_sdw_dailink(struct snd_soc_card *card,
 	return 0;
 }
 
-#define IDISP_CODEC_MASK	0x4
-
 static int sof_card_codec_conf_alloc(struct device *dev,
 				     struct snd_soc_acpi_mach_params *mach_params,
 				     struct snd_soc_codec_conf **codec_conf,
@@ -1295,7 +1293,7 @@ static int sof_card_dai_links_create(struct device *dev,
 		codec_info_list[i].amp_num = 0;
 
 	if (mach_params->codec_mask & IDISP_CODEC_MASK) {
-		ctx->idisp_codec = true;
+		ctx->hdmi.idisp_codec = true;
 
 		if (sof_sdw_quirk & SOF_SDW_TGL_HDMI)
 			hdmi_num = SOF_TGL_HDMI_COUNT;
@@ -1329,7 +1327,7 @@ static int sof_card_dai_links_create(struct device *dev,
 		comp_num++;
 
 	dev_dbg(dev, "sdw %d, ssp %d, dmic %d, hdmi %d", sdw_be_num, ssp_num,
-		dmic_num, ctx->idisp_codec ? hdmi_num : 0);
+		dmic_num, ctx->hdmi.idisp_codec ? hdmi_num : 0);
 
 	/* allocate BE dailinks */
 	num_links = comp_num + sdw_be_num;
@@ -1457,7 +1455,7 @@ HDMI:
 		name = devm_kasprintf(dev, GFP_KERNEL, "iDisp%d", i + 1);
 		cpu_dai_name = devm_kasprintf(dev, GFP_KERNEL, "iDisp%d Pin", i + 1);
 
-		if (ctx->idisp_codec) {
+		if (ctx->hdmi.idisp_codec) {
 			codec_name = "ehdaudio0D2";
 			codec_dai_name = devm_kasprintf(dev, GFP_KERNEL,
 							"intel-hdmi-hifi%d", i + 1);
@@ -1469,7 +1467,7 @@ HDMI:
 		ret = init_simple_dai_link(dev, dai_links + link_index, be_id, name,
 					   1, 0, // HDMI only supports playback
 					   cpu_dai_name, codec_name, codec_dai_name,
-					   sof_sdw_hdmi_init, NULL);
+					   i == 0 ? sof_sdw_hdmi_init : NULL, NULL);
 		if (ret)
 			return ret;
 
@@ -1514,7 +1512,7 @@ static int sof_sdw_card_late_probe(struct snd_soc_card *card)
 			return ret;
 	}
 
-	if (ctx->idisp_codec)
+	if (ctx->hdmi.idisp_codec)
 		ret = sof_sdw_hdmi_card_late_probe(card);
 
 	return ret;
@@ -1578,8 +1576,6 @@ static int mc_probe(struct platform_device *pdev)
 		sof_sdw_quirk = quirk_override;
 	}
 	log_quirks(&pdev->dev);
-
-	INIT_LIST_HEAD(&ctx->hdmi_pcm_list);
 
 	card->dev = &pdev->dev;
 	snd_soc_card_set_drvdata(card, ctx);
