@@ -1,0 +1,196 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2023 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8186-corsola.dtsi"
+#include "mt8186-corsola-it6505.dtsi"
+
+/ {
+	pp3300_micvdd_s3: regulator-pp3300_micvdd_s3 {
+		compatible = "regulator-fixed";
+		regulator-name = "pp3300_micvdd_s3";
+		pinctrl-names = "default";
+		pinctrl-0 = <&rt1019p_pins_default>;
+		enable-active-high;
+		gpio = <&pio 150 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&pp3300_z2>;
+	};
+};
+
+&dsi_out {
+	remote-endpoint = <&anx7625_in>;
+};
+
+&i2c0 {
+	clock-frequency = <400000>;
+
+	anx_bridge: anx7625@58 {
+		compatible = "analogix,anx7625";
+		reg = <0x58>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&anx7625_pins>;
+		panel_flags = <1>;
+		enable-gpios = <&pio 96 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 98 GPIO_ACTIVE_HIGH>;
+		vdd10-supply = <&pp1000_edpbrdg>;
+		vdd18-supply = <&pp1800_edpbrdg_dx>;
+		vdd33-supply = <&pp3300_edp_dx>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		analogix,lane0-swing = /bits/ 8 <0x70 0x30>;
+		analogix,lane1-swing = /bits/ 8 <0x70 0x30>;
+
+		port@0 {
+			reg = <0>;
+
+			anx7625_in: endpoint {
+				remote-endpoint = <&dsi_out>;
+				data-lanes = <0 1 2 3>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			anx7625_out: endpoint {
+				remote-endpoint = <&panel_in>;
+			};
+		};
+
+		aux-bus {
+			panel: panel {
+				compatible = "auo,b116xw03";
+				power-supply = <&pp3300_disp_x>;
+				backlight = <&backlight_lcd0>;
+
+				port {
+					panel_in: endpoint {
+						remote-endpoint = <&anx7625_out>;
+					};
+				};
+			};
+		};
+	};
+};
+
+&i2c2 {
+	touchpad@15 {
+		compatible = "hid-over-i2c";
+		reg = <0x15>;
+		interrupt-parent = <&pio>;
+		interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		post-power-on-delay-ms = <10>;
+		hid-descr-addr = <0x0001>;
+		vdd-supply = <&pp3300_s3>;
+	};
+};
+
+&i2c5 {
+	clock-frequency = <400000>;
+
+	rt5650: rt5650@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		avdd-supply = <&mt6366_vio18_reg>;
+		cpvdd-supply = <&pp3300_micvdd_s3>;
+		interrupt-parent = <&pio>;
+		interrupts = <17 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+	};
+};
+
+&mmc1_pins_default {
+	pins-clk {
+		drive-strength = <MTK_DRIVE_8mA>;
+	};
+
+	pins-cmd-dat {
+		drive-strength = <MTK_DRIVE_8mA>;
+	};
+};
+
+&mmc1_pins_uhs {
+	pins-clk {
+		drive-strength = <MTK_DRIVE_8mA>;
+	};
+
+	pins-cmd-dat {
+		drive-strength = <MTK_DRIVE_8mA>;
+	};
+};
+
+&dpi_pin_default {
+	pins-cmd-dat {
+		pinmux = <PINMUX_GPIO103__FUNC_GPIO103>,
+				<PINMUX_GPIO104__FUNC_GPIO104>,
+				<PINMUX_GPIO105__FUNC_GPIO105>,
+				<PINMUX_GPIO106__FUNC_GPIO106>,
+				<PINMUX_GPIO107__FUNC_GPIO107>,
+				<PINMUX_GPIO108__FUNC_GPIO108>,
+				<PINMUX_GPIO109__FUNC_GPIO109>,
+				<PINMUX_GPIO110__FUNC_GPIO110>,
+				<PINMUX_GPIO111__FUNC_GPIO111>,
+				<PINMUX_GPIO112__FUNC_GPIO112>,
+				<PINMUX_GPIO113__FUNC_GPIO113>,
+				<PINMUX_GPIO114__FUNC_GPIO114>,
+				<PINMUX_GPIO101__FUNC_GPIO101>,
+				<PINMUX_GPIO100__FUNC_GPIO100>,
+				<PINMUX_GPIO102__FUNC_GPIO102>,
+				<PINMUX_GPIO99__FUNC_GPIO99>;
+		drive-strength = <MTK_DRIVE_10mA>;
+		output-low;
+	};
+};
+
+&dpi_pin_func {
+	pins-cmd-dat {
+		pinmux = <PINMUX_GPIO103__FUNC_DPI_DATA0>,
+				<PINMUX_GPIO104__FUNC_DPI_DATA1>,
+				<PINMUX_GPIO105__FUNC_DPI_DATA2>,
+				<PINMUX_GPIO106__FUNC_DPI_DATA3>,
+				<PINMUX_GPIO107__FUNC_DPI_DATA4>,
+				<PINMUX_GPIO108__FUNC_DPI_DATA5>,
+				<PINMUX_GPIO109__FUNC_DPI_DATA6>,
+				<PINMUX_GPIO110__FUNC_DPI_DATA7>,
+				<PINMUX_GPIO111__FUNC_DPI_DATA8>,
+				<PINMUX_GPIO112__FUNC_DPI_DATA9>,
+				<PINMUX_GPIO113__FUNC_DPI_DATA10>,
+				<PINMUX_GPIO114__FUNC_DPI_DATA11>,
+				<PINMUX_GPIO101__FUNC_DPI_HSYNC>,
+				<PINMUX_GPIO100__FUNC_DPI_VSYNC>,
+				<PINMUX_GPIO102__FUNC_DPI_DE>,
+				<PINMUX_GPIO99__FUNC_DPI_PCLK>;
+		drive-strength = <MTK_DRIVE_10mA>;
+	};
+};
+
+&sound {
+	status = "okay";
+
+	compatible = "mediatek,mt8186-mt6366-rt5650-sound";
+	mediatek,adsp = <&adsp>;
+
+	playback-codecs {
+		sound-dai = <&it6505dptx>;
+	};
+
+	headset-codec {
+		sound-dai = <&rt5650>;
+	};
+};
+
+&wifi_pins_pwrseq {
+	pins-wifi-enable {
+		pinmux = <PINMUX_GPIO51__FUNC_GPIO51>;
+	};
+};
+
+&wifi_pwrseq {
+	reset-gpios = <&pio 51 GPIO_ACTIVE_LOW>;
+};
