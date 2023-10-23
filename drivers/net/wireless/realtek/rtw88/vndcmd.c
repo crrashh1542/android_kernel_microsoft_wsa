@@ -67,7 +67,6 @@ static int rtw_vndcmd_set_sar(struct wiphy *wiphy, struct wireless_dev *wdev,
 	struct nlattr *tb[REALTEK_VNDCMD_SAR_RULE_ATTR_MAX + 1];
 	struct nlattr *nl_sar_rule;
 	int rem_sar_rules, r;
-	int ret = 0;
 	u32 band;
 	u8 power;
 
@@ -89,39 +88,28 @@ static int rtw_vndcmd_set_sar(struct wiphy *wiphy, struct wireless_dev *wdev,
 		return -EINVAL;
 	}
 
-	mutex_lock(&rtwdev->mutex);
 	nla_for_each_nested(nl_sar_rule, tb_root[REALTEK_VNDCMD_ATTR_SAR_RULES],
 			    rem_sar_rules) {
 		r = nla_parse_nested(tb, REALTEK_VNDCMD_SAR_RULE_ATTR_MAX,
 				     nl_sar_rule, rtw_sar_rule_policy, NULL);
-		if (r) {
-			ret = r;
-			goto out;
-		}
-		if (!tb[REALTEK_VNDCMD_ATTR_SAR_BAND]) {
-			ret = -EINVAL;
-			goto out;
-		}
-		if (!tb[REALTEK_VNDCMD_ATTR_SAR_POWER]) {
-			ret = -EINVAL;
-			goto out;
-		}
+		if (r)
+			return r;
+		if (!tb[REALTEK_VNDCMD_ATTR_SAR_BAND])
+			return -EINVAL;
+		if (!tb[REALTEK_VNDCMD_ATTR_SAR_POWER])
+			return -EINVAL;
 
 		band = nla_get_u32(tb[REALTEK_VNDCMD_ATTR_SAR_BAND]);
 		power = nla_get_u8(tb[REALTEK_VNDCMD_ATTR_SAR_POWER]);
 
 		r = rtw_apply_vndcmd_sar(rtwdev, band, power);
-		if (r) {
-			ret = r;
-			goto out;
-		}
+		if (r)
+			return r;
 	}
 
 	rtw_phy_set_tx_power_level(rtwdev, hal->current_channel);
 
-out:
-	mutex_unlock(&rtwdev->mutex);
-	return ret;
+	return 0;
 }
 
 static const struct wiphy_vendor_command rtw88_vendor_commands[] = {
