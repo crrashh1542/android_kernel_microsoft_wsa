@@ -185,7 +185,9 @@ static struct page **msm_gem_pin_pages_locked(struct drm_gem_object *obj)
 
 	msm_gem_assert_locked(obj);
 
-	if (GEM_WARN_ON(msm_obj->madv != MSM_MADV_WILLNEED)) {
+	if (msm_obj->madv != MSM_MADV_WILLNEED) {
+		DRM_DEV_DEBUG_DRIVER(obj->dev->dev, "Invalid madv state: %u vs %u\n",
+				     msm_obj->madv, MSM_MADV_WILLNEED);
 		return ERR_PTR(-EBUSY);
 	}
 
