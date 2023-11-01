@@ -7,8 +7,8 @@
 #include "mt8186-corsola-chinchou.dtsi"
 
 / {
-	model = "Google chinchou sku16/sku2147483647 board";
-	compatible = "google,chinchou-sku16", "google,chinchou-sku2147483647",
+	model = "Google chinchou sku1/sku17 board";
+	compatible = "google,chinchou-sku1", "google,chinchou-sku17",
 			"mediatek,mt8186";
 };
 
@@ -25,4 +25,8 @@
 		hid-descr-addr = <0x0001>;
 		vdd-supply = <&pp3300_s3>;
 	};
+};
+
+&gpio_keys {
+	status = "disabled";
 };
