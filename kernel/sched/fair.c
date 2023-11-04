@@ -882,20 +882,30 @@ s64 update_curr_common(struct rq *rq)
 static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
+	struct rq *rq = rq_of(cfs_rq);
 	s64 delta_exec;
 
 	if (unlikely(!curr))
 		return;
 
-	delta_exec = update_curr_se(rq_of(cfs_rq), curr);
+	delta_exec = update_curr_se(rq, curr);
 	if (unlikely(delta_exec <= 0))
 		return;
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 	update_min_vruntime(cfs_rq);
 
-	if (entity_is_task(curr))
-		update_curr_task(task_of(curr), delta_exec);
+	if (entity_is_task(curr)) {
+		struct task_struct *p = task_of(curr);
+		update_curr_task(p, delta_exec);
+		/*
+		 * Any fair task that runs outside of fair_server should
+		 * account against fair_server such that it can account for
+		 * this time and possibly avoid running this period.
+		 */
+		if (p->dl_server != &rq->fair_server)
+			dl_server_update(&rq->fair_server, delta_exec);
+	}
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
 }
@@ -7750,6 +7760,7 @@ void fair_server_init(struct rq *rq)
 	dl_se->dl_runtime = 50 * NSEC_PER_MSEC;
 	dl_se->dl_deadline = 1000 * NSEC_PER_MSEC;
 	dl_se->dl_period = 1000 * NSEC_PER_MSEC;
+	dl_se->dl_defer = 1;
 
 	dl_server_init(dl_se, rq, fair_server_has_tasks, fair_server_pick);
 }
