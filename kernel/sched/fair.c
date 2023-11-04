@@ -7756,12 +7756,6 @@ void fair_server_init(struct rq *rq)
 	struct sched_dl_entity *dl_se = &rq->fair_server;
 
 	init_dl_entity(dl_se);
-
-	dl_se->dl_runtime = 50 * NSEC_PER_MSEC;
-	dl_se->dl_deadline = 1000 * NSEC_PER_MSEC;
-	dl_se->dl_period = 1000 * NSEC_PER_MSEC;
-	dl_se->dl_defer = 1;
-
 	dl_server_init(dl_se, rq, fair_server_has_tasks, fair_server_pick);
 }
 
