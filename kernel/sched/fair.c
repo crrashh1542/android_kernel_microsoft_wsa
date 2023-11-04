@@ -5838,6 +5838,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
+	if (!rq->cfs.h_nr_running)
+		dl_server_start(&rq->fair_server);
 #ifdef CONFIG_SMP
 	/*
 	 * The normal code path for host thread enqueue doesn't take into
@@ -6015,6 +6017,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		rq->next_balance = jiffies;
 
 dequeue_throttle:
+	if (!rq->cfs.h_nr_running)
+		dl_server_stop(&rq->fair_server);
+
 	util_est_update(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
 }
@@ -7724,6 +7729,29 @@ idle:
 static struct task_struct *__pick_next_task_fair(struct rq *rq)
 {
 	return pick_next_task_fair(rq, NULL, NULL);
+}
+
+static bool fair_server_has_tasks(struct sched_dl_entity *dl_se)
+{
+	return !!dl_se->rq->cfs.nr_running;
+}
+
+static struct task_struct *fair_server_pick(struct sched_dl_entity *dl_se)
+{
+	return pick_next_task_fair(dl_se->rq, NULL, NULL);
+}
+
+void fair_server_init(struct rq *rq)
+{
+	struct sched_dl_entity *dl_se = &rq->fair_server;
+
+	init_dl_entity(dl_se);
+
+	dl_se->dl_runtime = 50 * NSEC_PER_MSEC;
+	dl_se->dl_deadline = 1000 * NSEC_PER_MSEC;
+	dl_se->dl_period = 1000 * NSEC_PER_MSEC;
+
+	dl_server_init(dl_se, rq, fair_server_has_tasks, fair_server_pick);
 }
 
 /*
