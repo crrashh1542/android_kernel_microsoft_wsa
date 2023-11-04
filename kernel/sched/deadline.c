@@ -1326,6 +1326,13 @@ throttle:
 	}
 
 	/*
+	 * The fair server (sole dl_server) does not account for real-time
+	 * workload because it is running fair work.
+	 */
+	if (dl_se == &rq->fair_server)
+		return;
+
+	/*
 	 * Because -- for now -- we share the rt bandwidth, we need to
 	 * account our runtime there too, otherwise actual rt tasks
 	 * would be able to exceed the shared quota.
