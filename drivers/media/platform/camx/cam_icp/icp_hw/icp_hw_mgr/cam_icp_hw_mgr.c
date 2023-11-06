@@ -2643,7 +2643,7 @@ static int cam_icp_mgr_abort_handle_wq(
 	packet_size =
 		sizeof(struct hfi_cmd_ipebps_async) +
 		sizeof(struct hfi_cmd_abort) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.indirect);
 	abort_cmd = kzalloc(packet_size, GFP_KERNEL);
 	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int) packet_size);
 	if (!abort_cmd) {
@@ -2687,7 +2687,7 @@ static int cam_icp_mgr_abort_handle(
 	packet_size =
 		sizeof(struct hfi_cmd_ipebps_async) +
 		sizeof(struct hfi_cmd_abort) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.indirect);
 	abort_cmd = kzalloc(packet_size, GFP_KERNEL);
 	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int) packet_size);
 	if (!abort_cmd) {
@@ -2740,7 +2740,7 @@ static int cam_icp_mgr_destroy_handle(
 	packet_size =
 		sizeof(struct hfi_cmd_ipebps_async) +
 		sizeof(struct hfi_cmd_abort_destroy) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.indirect);
 	destroy_cmd = kzalloc(packet_size, GFP_KERNEL);
 	if (!destroy_cmd) {
 		rc = -ENOMEM;
@@ -3771,7 +3771,7 @@ static int cam_icp_process_stream_settings(
 		(sizeof(struct hfi_cmd_ipe_bps_map) +
 		((cmd_mem_regions->num_regions - 1) *
 		sizeof(struct mem_map_region_data))) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.indirect);
 
 	async_direct = kzalloc(packet_size, GFP_KERNEL);
 	if (!async_direct) {
