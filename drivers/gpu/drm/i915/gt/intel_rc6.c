@@ -510,12 +510,10 @@ static bool rc6_supported(struct intel_rc6 *rc6)
 	 *
 	 * TODO: enable software RC6 contorl after a fix is found.
 	 */
-	if (INTEL_GEN(i915) == 11) {
-		if (IS_PLATFORM(i915, INTEL_JASPERLAKE)) {
-			drm_notice(&i915->drm,
-			   "WA: Software RC6 disabled for Jasperlake platform\n");
-			return false;
-		}
+	if (IS_JSL_EHL(i915)) {
+		drm_notice(&i915->drm,
+		   "WA: Software RC6 disabled for Jasperlake/Elkhartlake platforms\n");
+		return false;
 	}
 
 	return true;
