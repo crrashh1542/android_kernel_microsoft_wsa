@@ -22,9 +22,6 @@ TECH_DEBT_MSG = (
     "referencing it. A member of the review committee will review the CL. "
     "Thank you."
 )
-TECH_DEBT_MISSING_BUG = (
-    "Proper BUG=b:XXXX entry is missing in the commit message"
-)
 TECH_DEBT_DUP_BUG_MSG = (
     "UPSTREAM-TASK bugs cannot be the same as those present in the BUG tag."
 )
@@ -73,10 +70,6 @@ def check_tech_debt(commit):
     upstream_task_tag = rf"\nUPSTREAM-TASK={bugs_ids}+"
 
     bug_line = re.findall(bug_tag, commit_message)
-    if bug_line == []:
-        print(TECH_DEBT_MISSING_BUG, file=sys.stderr)
-        return False
-
     upstream_task_line = re.findall(upstream_task_tag, commit_message)
     if upstream_task_line == []:
         print(TECH_DEBT_MSG, file=sys.stderr)
