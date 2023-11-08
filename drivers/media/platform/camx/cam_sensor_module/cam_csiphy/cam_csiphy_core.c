@@ -207,7 +207,7 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	header_size = csl_packet->header.size;
 
 	if (header_size < sizeof(struct cam_packet)) {
-		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}

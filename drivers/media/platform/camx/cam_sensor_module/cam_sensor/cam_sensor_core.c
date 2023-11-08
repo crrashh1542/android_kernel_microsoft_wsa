@@ -142,7 +142,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 
 
 	if (header_size < sizeof(struct cam_packet)) {
-		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
@@ -486,7 +486,7 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 	header_size = pkt->header.size;
 
 	if (header_size < sizeof(struct cam_packet)) {
-		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}

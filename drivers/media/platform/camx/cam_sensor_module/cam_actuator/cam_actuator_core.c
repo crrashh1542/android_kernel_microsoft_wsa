@@ -474,7 +474,7 @@ static int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 	header_size = csl_packet->header.size;
 
 	if (header_size < sizeof(struct cam_packet)) {
-		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%zu)", header_size);
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
