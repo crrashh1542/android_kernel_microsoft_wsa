@@ -578,8 +578,7 @@ static int link_validate(struct media_link *link)
 	struct ipu_isys_video *av =
 	    container_of(link->sink, struct ipu_isys_video, pad);
 	/* All sub-devices connected to a video node are ours. */
-	struct ipu_isys_pipeline *ip =
-		to_ipu_isys_pipeline(av->vdev.entity.pipe);
+	struct ipu_isys_pipeline *ip = &av->ip;
 	struct v4l2_subdev *sd;
 
 	if (!link->source->entity)
