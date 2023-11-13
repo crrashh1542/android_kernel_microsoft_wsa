@@ -372,7 +372,7 @@ static int snapshot_submit_io(int op, int op_flags, sector_t sector,
 
 static int snapshot_rw_block_device(int direction, struct snapshot_data *data) {
 	struct snapshot_bio_batch batch;
-        ktime_t start = ktime_get();
+	ktime_t start = ktime_get();
 	sector_t sector = 0;
 	int res;
 
