@@ -900,6 +900,13 @@ struct mgmt_cp_notify_suspend_state {
 } __packed;
 #define MGMT_NOTIFY_SUSPEND_STATE_SIZE	0x3
 
+#define MGMT_OP_SCO_FORCE_RETRANS_EFFORT	0x0200
+struct mgmt_cp_sco_force_retrans_effort {
+	struct mgmt_addr_info addr;
+	__u8 retrans_effort;
+} __packed;
+#define MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE	(MGMT_ADDR_INFO_SIZE + 1)
+
 #define MGMT_EV_CMD_COMPLETE		0x0001
 struct mgmt_ev_cmd_complete {
 	__le16	opcode;

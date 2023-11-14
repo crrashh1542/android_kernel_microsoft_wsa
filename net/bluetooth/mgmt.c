@@ -131,6 +131,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI,
 	MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
 	MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE,
+	MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
 };
 
 static const u16 mgmt_events[] = {
@@ -8911,6 +8912,53 @@ static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, voi
 	return 0;
 }
 
+static int sco_force_retrans_effort(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_sco_force_retrans_effort *cp = data;
+	struct hci_conn *acl;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	hci_dev_lock(hdev);
+
+	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->addr.bdaddr);
+
+	if (!acl) {
+		bt_dev_err(hdev, "%s: no acl found for %pMR",
+			   __func__, &cp->addr.bdaddr);
+		goto failed;
+	}
+
+	switch (cp->retrans_effort) {
+	/* optimize for power consumption and optimize for link quality
+	 * require esco
+	 */
+	case 0x01:
+	case 0x02:
+		if (!lmp_esco_capable(acl))
+			goto failed;
+		/* fall through */
+	/* No retransmission and Don’t care don't require esco  */
+	case 0x00:
+	case 0xFF:
+		break;
+	default:
+		goto failed;
+	}
+
+	acl->force_retrans_effort = cp->retrans_effort;
+	bt_dev_info(hdev, "set retrans effort to %d for %pMR", acl->force_retrans_effort,
+		    &cp->addr.bdaddr);
+
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+					MGMT_STATUS_SUCCESS);
+failed:
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+			       MGMT_STATUS_INVALID_PARAMS);
+}
+
 static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ NULL }, /* 0x0000 (no command) */
 	{ read_version,            MGMT_READ_VERSION_SIZE,
@@ -9060,6 +9108,9 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	[MGMT_OP_SCO_FORCE_RETRANS_EFFORT] = {
+	sco_force_retrans_effort,
+				   MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE },
 };
 
 void mgmt_index_added(struct hci_dev *hdev)

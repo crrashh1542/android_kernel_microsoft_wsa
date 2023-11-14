@@ -446,6 +446,12 @@ static bool hci_enhanced_setup_sync_conn(struct hci_conn *conn, __u16 handle)
 	cp.pkt_type = __cpu_to_le16(param->pkt_type);
 	cp.max_latency = __cpu_to_le16(param->max_latency);
 
+	/* Overwrite the retransmission effort if it is set. */
+	if (conn->force_retrans_effort != SCO_NO_FORCE_RETRANS_EFFORT) {
+		cp.retrans_effort = conn->force_retrans_effort;
+		bt_dev_info(hdev, "Force dst:%pMR retrans effort to %d", &conn->dst,
+			    cp.retrans_effort);
+	}
 	if (hci_send_cmd(hdev, HCI_OP_ENHANCED_SETUP_SYNC_CONN, sizeof(cp), &cp) < 0)
 		return false;
 
@@ -498,6 +504,12 @@ static bool hci_setup_sync_conn(struct hci_conn *conn, __u16 handle)
 	cp.pkt_type = __cpu_to_le16(param->pkt_type);
 	cp.max_latency = __cpu_to_le16(param->max_latency);
 
+	/* Overwrite the retransmission effort if it is set. */
+	if (conn->force_retrans_effort != SCO_NO_FORCE_RETRANS_EFFORT) {
+		cp.retrans_effort = conn->force_retrans_effort;
+		bt_dev_info(hdev, "Force dst:%pMR retrans effort to %d", &conn->dst,
+			    cp.retrans_effort);
+	}
 	if (hci_send_cmd(hdev, HCI_OP_SETUP_SYNC_CONN, sizeof(cp), &cp) < 0)
 		return false;
 
@@ -737,6 +749,8 @@ struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,
 
 	/* Set Default Authenticated payload timeout to 30s */
 	conn->auth_payload_timeout = DEFAULT_AUTH_PAYLOAD_TIMEOUT;
+
+	conn->force_retrans_effort = SCO_NO_FORCE_RETRANS_EFFORT;
 
 	if (conn->role == HCI_ROLE_MASTER)
 		conn->out = true;
@@ -1287,6 +1301,7 @@ struct hci_conn *hci_connect_sco(struct hci_dev *hdev, int type, bdaddr_t *dst,
 
 	sco->setting = setting;
 	sco->codec = *codec;
+	sco->force_retrans_effort = acl->force_retrans_effort;
 
 	if (acl->state == BT_CONNECTED &&
 	    (sco->state == BT_OPEN || sco->state == BT_CLOSED)) {
