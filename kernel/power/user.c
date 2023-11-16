@@ -21,6 +21,7 @@
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/freezer.h>
+#include <linux/sched/sysctl.h>
 
 #include <linux/uaccess.h>
 #include <linux/blkdev.h>
@@ -338,7 +339,14 @@ static void snapshot_bio_end_io(struct bio *bio)
 
 static int snapshot_bio_batch_wait(struct snapshot_bio_batch *batch)
 {
-	wait_event(batch->wait, atomic_read(&batch->count) == 0);
+	unsigned long hung_task_timeout = sysctl_hung_task_timeout_secs;
+	if (hung_task_timeout) {
+		while (!wait_event_timeout(batch->wait,
+			atomic_read(&batch->count) == 0, hung_task_timeout * (HZ/2)));
+	} else {
+		wait_event(batch->wait, atomic_read(&batch->count) == 0);
+	}
+
 	return blk_status_to_errno(atomic_read(&batch->status));
 }
 
