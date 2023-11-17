@@ -3368,10 +3368,11 @@ static int handle_dump_pkt_qca(struct hci_dev *hdev, struct sk_buff *skb)
 			goto out;
 		}
 
-		ret = hci_devcd_init(hdev, dump_size);
-		if (ret < 0) {
-			bt_dev_err(hdev, "memdump init error(%d)", ret);
-			goto out;
+		if (hci_devcd_init(hdev, dump_size) < 0) {
+			bt_dev_err(hdev, "memdump init error");
+			clear_bit(BTUSB_HW_SSR_ACTIVE, &btdata->flags);
+			kfree_skb(skb);
+			return ret;
 		}
 
 		btdata->qca_dump.ram_dump_size = dump_size;
