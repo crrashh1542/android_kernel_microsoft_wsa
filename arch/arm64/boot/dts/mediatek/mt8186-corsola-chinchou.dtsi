@@ -17,6 +17,74 @@
 		gpio = <&pio 150 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&pp3300_z2>;
 	};
+
+	tboard_thermistor1: thermal-sensor1 {
+		compatible = "generic-adc-thermal";
+		#thermal-sensor-cells = <0>;
+		io-channels = <&auxadc 0>;
+		io-channel-names = "sensor-channel";
+		temperature-lookup-table = <    (-5000) 1491
+						0 1413
+						5000 1324
+						10000 1225
+						15000 1120
+						20000 1012
+						25000 900
+						30000 797
+						35000 698
+						40000 607
+						45000 525
+						50000 451
+						55000 386
+						60000 330
+						65000 282
+						70000 241
+						75000 206
+						80000 176
+						85000 151
+						90000 129
+						95000 111
+						100000 96
+						105000 83
+						110000 72
+						115000 62
+						120000 54
+						125000 47>;
+	};
+
+	tboard_thermistor2: thermal-sensor2 {
+		compatible = "generic-adc-thermal";
+		#thermal-sensor-cells = <0>;
+		io-channels = <&auxadc 1>;
+		io-channel-names = "sensor-channel";
+		temperature-lookup-table = <    (-5000) 1491
+						0 1413
+						5000 1324
+						10000 1225
+						15000 1120
+						20000 1012
+						25000 900
+						30000 797
+						35000 698
+						40000 607
+						45000 525
+						50000 451
+						55000 386
+						60000 330
+						65000 282
+						70000 241
+						75000 206
+						80000 176
+						85000 151
+						90000 129
+						95000 111
+						100000 96
+						105000 83
+						110000 72
+						115000 62
+						120000 54
+						125000 47>;
+	};
 };
 
 &dsi_out {
@@ -236,4 +304,18 @@
 		MATRIX_KEY(0x06, 0x0d, KEY_LEFTALT)        /* Left ALT*/
 		MATRIX_KEY(0x03, 0x0e, KEY_RIGHTCTRL)      /* Right Control*/
 	>;
+};
+
+&thermal_zones {
+	cpu-ntc {
+		polling-delay = <1000>; /* milliseconds */
+		polling-delay-passive = <0>; /* milliseconds */
+		thermal-sensors = <&tboard_thermistor1>;
+	};
+
+	pmic-ntc {
+		polling-delay = <1000>; /* milliseconds */
+		polling-delay-passive = <0>; /* milliseconds */
+		thermal-sensors = <&tboard_thermistor2>;
+	};
 };
