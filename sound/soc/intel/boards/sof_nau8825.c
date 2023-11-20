@@ -687,6 +687,8 @@ static const struct platform_device_id board_ids[] = {
 	{
 		.name = "rpl_mx98360a_8825",
 		.driver_data = (kernel_ulong_t)(SOF_NAU8825_SSP_CODEC(0) |
+					SOF_SPEAKER_AMP_PRESENT |
+					SOF_MAX98360A_SPEAKER_AMP_PRESENT |
 					SOF_NAU8825_SSP_AMP(1) |
 					SOF_NAU8825_NUM_HDMIDEV(4) |
 					SOF_BT_OFFLOAD_SSP(2) |
