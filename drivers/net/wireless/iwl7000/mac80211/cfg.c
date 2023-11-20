@@ -468,7 +468,7 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 			     int link_id,
 #endif
- u8 key_idx, bool pairwise,
+			      u8 key_idx, bool pairwise,
 			     const u8 *mac_addr, struct key_params *params)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
@@ -646,7 +646,7 @@ static int ieee80211_del_key(struct wiphy *wiphy, struct net_device *dev,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 			     int link_id,
 #endif
- u8 key_idx, bool pairwise,
+			      u8 key_idx, bool pairwise,
 			     const u8 *mac_addr)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
@@ -671,7 +671,7 @@ static int ieee80211_get_key(struct wiphy *wiphy, struct net_device *dev,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 			     int link_id,
 #endif
- u8 key_idx, bool pairwise,
+			      u8 key_idx, bool pairwise,
 			     const u8 *mac_addr, void *cookie,
 			     void (*callback)(void *cookie,
 					      struct key_params *params))
@@ -783,7 +783,7 @@ static int ieee80211_config_default_key(struct wiphy *wiphy,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 					int link_id,
 #endif
- u8 key_idx, bool uni,
+					 u8 key_idx, bool uni,
 					bool multi)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
@@ -806,7 +806,7 @@ static int ieee80211_config_default_mgmt_key(struct wiphy *wiphy,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 					     int link_id,
 #endif
- u8 key_idx)
+					      u8 key_idx)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
 	int link_id = -1;
@@ -829,7 +829,7 @@ static int ieee80211_config_default_beacon_key(struct wiphy *wiphy,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,1,0)
 					       int link_id,
 #endif
- u8 key_idx)
+					        u8 key_idx)
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
 	int link_id = -1;
@@ -1279,7 +1279,7 @@ ieee80211_assign_beacon(struct ieee80211_sub_if_data *sdata,
 		       sizeof(new->cntdwn_counter_offsets[0]));
 	}
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
- else if (cca) {
+	 else if (cca) {
 		new->cntdwn_current_counter = cca->count;
 		new->cntdwn_counter_offsets[0] = cca->counter_offset_beacon;
 	}
@@ -1693,10 +1693,10 @@ static void ieee80211_free_next_beacon(struct ieee80211_link_data *link)
 
 static int ieee80211_stop_ap(struct wiphy *wiphy, struct net_device *dev
 #if CFG80211_VERSION >= KERNEL_VERSION(6,0,0)
-,
+			     ,
 			     unsigned int link_id
 #endif
-)
+			     )
 {
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
 	unsigned int link_id = 0;
@@ -5358,15 +5358,15 @@ const struct cfg80211_ops mac80211_config_ops = {
 		.mgmt_frame_register = ieee80211_mgmt_frame_register,
 #endif
 
-	.set_antenna = ieee80211_set_antenna,
-	.get_antenna = ieee80211_get_antenna,
-	.set_rekey_data = ieee80211_set_rekey_data,
-	.tdls_oper = ieee80211_tdls_oper,
-	.tdls_mgmt = ieee80211_tdls_mgmt,
-	.tdls_channel_switch = ieee80211_tdls_channel_switch,
-	.tdls_cancel_channel_switch = ieee80211_tdls_cancel_channel_switch,
-	.probe_client = ieee80211_probe_client,
-	.set_noack_map = ieee80211_set_noack_map,
+		.set_antenna = ieee80211_set_antenna,
+		.get_antenna = ieee80211_get_antenna,
+		.set_rekey_data = ieee80211_set_rekey_data,
+		.tdls_oper = ieee80211_tdls_oper,
+		.tdls_mgmt = ieee80211_tdls_mgmt,
+		.tdls_channel_switch = ieee80211_tdls_channel_switch,
+		.tdls_cancel_channel_switch = ieee80211_tdls_cancel_channel_switch,
+		.probe_client = ieee80211_probe_client,
+		.set_noack_map = ieee80211_set_noack_map,
 #ifdef CONFIG_PM
 	.set_wakeup = ieee80211_set_wakeup,
 #endif

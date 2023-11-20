@@ -3438,8 +3438,8 @@ static void __ieee80211_disconnect_unlocked(struct ieee80211_sub_if_data *sdata)
 	ifmgd->reconnect = false;
 }
 
-static void
-__ieee80211_disconnect_locked(struct ieee80211_sub_if_data *sdata){
+static void __ieee80211_disconnect_locked(struct ieee80211_sub_if_data *sdata)
+{
 	sdata_lock_old_cfg80211(sdata);
 	__ieee80211_disconnect_unlocked(sdata);
 	sdata_unlock_old_cfg80211(sdata);
@@ -5288,7 +5288,8 @@ out_err:
 
 static void ieee80211_assoc_comeback(struct net_device *dev,
 				     struct ieee80211_mgd_assoc_data *assoc_data,
-				     u32 timeout) {
+				     u32 timeout)
+{
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
 	int i;
 
@@ -7027,7 +7028,8 @@ static void _ieee80211_sta_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 
 
 void ieee80211_sta_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
-				  struct sk_buff *skb) {
+				  struct sk_buff *skb)
+{
 	sdata_lock_old_cfg80211(sdata);
 	_ieee80211_sta_rx_queued_mgmt(sdata, skb);
 	sdata_unlock_old_cfg80211(sdata);
@@ -7329,7 +7331,8 @@ static void _ieee80211_sta_work(struct ieee80211_sub_if_data *sdata)
 }
 
 
-void ieee80211_sta_work(struct ieee80211_sub_if_data *sdata) {
+void ieee80211_sta_work(struct ieee80211_sub_if_data *sdata)
+{
 	sdata_lock_old_cfg80211(sdata);
 	_ieee80211_sta_work(sdata);
 	sdata_unlock_old_cfg80211(sdata);
@@ -7474,7 +7477,8 @@ static void _ieee80211_mgd_quiesce(struct ieee80211_sub_if_data *sdata)
 }
 
 
-void ieee80211_mgd_quiesce(struct ieee80211_sub_if_data *sdata) {
+void ieee80211_mgd_quiesce(struct ieee80211_sub_if_data *sdata)
+{
 	sdata_lock_old_cfg80211(sdata);
 	_ieee80211_mgd_quiesce(sdata);
 	sdata_unlock_old_cfg80211(sdata);
@@ -7512,7 +7516,8 @@ static void _ieee80211_sta_restart(struct ieee80211_sub_if_data *sdata)
 }
 
 
-void ieee80211_sta_restart(struct ieee80211_sub_if_data *sdata) {
+void ieee80211_sta_restart(struct ieee80211_sub_if_data *sdata)
+{
 	sdata_lock_old_cfg80211(sdata);
 	_ieee80211_sta_restart(sdata);
 	sdata_unlock_old_cfg80211(sdata);

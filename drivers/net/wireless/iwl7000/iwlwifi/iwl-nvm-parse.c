@@ -955,7 +955,7 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 			IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G;
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 		cfg_eht_cap(iftype_data)->eht_cap_elem.mac_cap_info[0] |=
-			u8_encode_bits(IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_11454,
+				u8_encode_bits(IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_11454,
 					       IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_MASK);
 #endif
 		break;
@@ -966,9 +966,9 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 		if (!no_320) {
 			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[0] |=
-				IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ;
+					IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ;
 			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[1] |=
-				IEEE80211_EHT_PHY_CAP1_BEAMFORMEE_SS_320MHZ_MASK;
+					IEEE80211_EHT_PHY_CAP1_BEAMFORMEE_SS_320MHZ_MASK;
 		}
 #endif
 		fallthrough;
@@ -1076,12 +1076,12 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 				  IEEE80211_EHT_PHY_CAP3_TRIG_MU_BF_PART_BW_FDBK |
 				  IEEE80211_EHT_PHY_CAP3_TRIG_CQI_FDBK);
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[4] &=
-		~(IEEE80211_EHT_PHY_CAP4_PART_BW_DL_MU_MIMO |
+				~(IEEE80211_EHT_PHY_CAP4_PART_BW_DL_MU_MIMO |
 				  IEEE80211_EHT_PHY_CAP4_POWER_BOOST_FACT_SUPP);
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[5] &=
-		~IEEE80211_EHT_PHY_CAP5_NON_TRIG_CQI_FEEDBACK;
+				~IEEE80211_EHT_PHY_CAP5_NON_TRIG_CQI_FEEDBACK;
 		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[6] &=
-		~(IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK |
+				~(IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK |
 				  IEEE80211_EHT_PHY_CAP6_EHT_DUP_6GHZ_SUPP);
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 		if (!trans->dbg_cfg.eht_disable_extra_ltf)

@@ -2583,7 +2583,7 @@ void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 int ieee80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 			const u8 *peer,
 #if CFG80211_VERSION >= KERNEL_VERSION(6,5,0)
- int link_id,
+			 int link_id,
 #endif
 			u8 action_code, u8 dialog_token, u16 status_code,
 			u32 peer_capability, bool initiator,

@@ -214,7 +214,7 @@ struct ieee80211_regdomain *iwl_mvm_get_regdomain(struct wiphy *wiphy,
 #if CFG80211_VERSION <= KERNEL_VERSION(6,8,0)
 				      mvm->nvm_data,
 #endif
-__le32_to_cpu(resp->n_channels),
+				      __le32_to_cpu(resp->n_channels),
 				      resp->channels,
 				      __le16_to_cpu(resp->mcc),
 				      __le16_to_cpu(resp->geo_info),
