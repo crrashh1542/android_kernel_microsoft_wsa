@@ -82,6 +82,7 @@ static void trace_note(struct blk_trace *bt, pid_t pid, int action,
 		trace_ctx = tracing_gen_ctx_flags(0);
 		event = trace_buffer_lock_reserve(buffer, TRACE_BLK,
 						  sizeof(*t) + len + cgid_len,
+						  blk_tr->trace_flags,
 						  trace_ctx);
 		if (!event)
 			return;
@@ -256,6 +257,7 @@ static void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 		trace_ctx = tracing_gen_ctx_flags(0);
 		event = trace_buffer_lock_reserve(buffer, TRACE_BLK,
 						  sizeof(*t) + pdu_len + cgid_len,
+						  blk_tr->trace_flags,
 						  trace_ctx);
 		if (!event)
 			return;

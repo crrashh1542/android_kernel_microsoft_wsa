@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/pm.h>
 #include <crypto/algapi.h>
 #include <crypto/aes.h>
 #include <crypto/xts.h>
@@ -52,10 +53,12 @@ static int aeskl_setkey_common(struct crypto_tfm *tfm, void *raw_ctx, const u8 *
 		pr_warn_once("AES-KL does not support 192-bit key. Use AES-NI.\n");
 		err = aesni_set_key(ctx, in_key, key_len);
 	} else {
-		if (!valid_keylocker())
+		if (!valid_keylocker()) {
 			err = -ENODEV;
-		else
+		} else {
 			err = aeskl_setkey(ctx, in_key, key_len);
+			disable_hibernate_aeskl();
+		}
 	}
 	kernel_fpu_end();
 

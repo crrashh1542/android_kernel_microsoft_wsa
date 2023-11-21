@@ -20,7 +20,8 @@
 #include "cam_irq_controller.h"
 #include "cam_debug_util.h"
 
-/**
+/*
+ * FIXME kerneldoc
  * struct cam_irq_evt_handler:
  * @Brief:                  Event handler information
  *
@@ -51,7 +52,8 @@ struct cam_irq_evt_handler {
 	int                                index;
 };
 
-/**
+/*
+ * FIXME kerneldoc
  * struct cam_irq_register_obj:
  * @Brief:                  Structure containing information related to
  *                          a particular register Set
@@ -70,7 +72,8 @@ struct cam_irq_register_obj {
 	uint32_t                     top_half_enable_mask[CAM_IRQ_PRIORITY_MAX];
 };
 
-/**
+/*
+ * FIXME kerneldoc
  * struct cam_irq_controller:
  *
  * @brief:                  IRQ Controller structure.
@@ -601,7 +604,8 @@ int cam_irq_controller_unsubscribe_irq(void *irq_controller,
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_irq_controller_match_bit_mask()
  *
  * @Brief:                This function checks if any of the enabled IRQ bits
@@ -763,9 +767,9 @@ irqreturn_t cam_irq_controller_handle_irq(int irq_num, void *priv)
 			if (irq_register->top_half_enable_mask[j] &
 				controller->irq_status_arr[i])
 				need_th_processing[j] = true;
-				CAM_DBG(CAM_IRQ_CTRL,
-					"i %d j %d need_th_processing = %d",
-					i, j, need_th_processing[j]);
+			CAM_DBG(CAM_IRQ_CTRL,
+				"i %d j %d need_th_processing = %d",
+				i, j, need_th_processing[j]);
 		}
 	}
 

@@ -289,21 +289,26 @@ static inline PVRSRV_ERROR _ValidateParams(IMG_UINT32 ui32NumPhysChunks,
 	IMG_BOOL bIsSparse = (ui32NumVirtChunks != ui32NumPhysChunks ||
 			ui32NumVirtChunks > 1) ? IMG_TRUE : IMG_FALSE;
 
-	if (ui32NumPhysChunks == 0 && ui32NumVirtChunks == 0)
+	if (ui32NumVirtChunks == 0)
 	{
-		PVR_DPF((PVR_DBG_ERROR,
-				"%s: Number of physical chunks and number of virtual chunks "
-				"cannot be both 0",
-				__func__));
+		PVR_DPF((PVR_DBG_ERROR, "%s: Number of virtual chunks cannot be 0",
+		         __func__));
 
 		return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
-	/* Protect against ridiculous page sizes */
-	if (uiLog2AllocPageSize > RGX_HEAP_2MB_PAGE_SHIFT)
+	/* Protect against invalid page sizes */
+	switch (uiLog2AllocPageSize)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "Page size is too big: 2^%u.", uiLog2AllocPageSize));
-		return PVRSRV_ERROR_INVALID_PARAMS;
+		#define X(_name, _shift) case _shift:
+			RGX_HEAP_PAGE_SHIFTS_DEF
+		#undef X
+			break;
+		default:
+			PVR_LOG_VA(PVR_DBG_ERROR,
+			           "page size of %u is invalid.",
+			           1 << uiLog2AllocPageSize);
+			return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
 	/* Range check of the alloc size */
@@ -621,6 +626,7 @@ PhysmemNewRamBackedPMR(CONNECTION_DATA *psConnection,
 {
 	PVRSRV_PHYS_HEAP ePhysHeap = PVRSRV_GET_PHYS_HEAP_HINT(uiFlags);
 
+	PVR_LOG_RETURN_IF_INVALID_PARAM(ePhysHeap < PVRSRV_PHYS_HEAP_LAST, "uiFlags");
 	PVR_LOG_RETURN_IF_INVALID_PARAM(uiAnnotationLength != 0, "uiAnnotationLength");
 	PVR_LOG_RETURN_IF_INVALID_PARAM(pszAnnotation != NULL, "pszAnnotation");
 

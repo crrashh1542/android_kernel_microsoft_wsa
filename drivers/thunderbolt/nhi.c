@@ -15,9 +15,11 @@
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/property.h>
+#include <linux/string_helpers.h>
 
 #include "nhi.h"
 #include "nhi_regs.h"
@@ -43,6 +45,10 @@
 /* Host interface quirks */
 #define QUIRK_AUTO_CLEAR_INT	BIT(0)
 #define QUIRK_E2E		BIT(1)
+
+static bool host_reset = true;
+module_param(host_reset, bool, 0444);
+MODULE_PARM_DESC(host_reset, "reset USBv2 host router (default: true)");
 
 static int ring_interrupt_index(const struct tb_ring *ring)
 {
@@ -1173,6 +1179,78 @@ static void nhi_check_quirks(struct tb_nhi *nhi)
 	}
 }
 
+static int nhi_check_iommu_pdev(struct pci_dev *pdev, void *data)
+{
+	if (!pdev->external_facing ||
+	    !device_iommu_capable(&pdev->dev, IOMMU_CAP_PRE_BOOT_PROTECTION))
+		return 0;
+	*(bool *)data = true;
+	return 1; /* Stop walking */
+}
+
+static void nhi_check_iommu(struct tb_nhi *nhi)
+{
+	struct pci_bus *bus = nhi->pdev->bus;
+	bool port_ok = false;
+
+	/*
+	 * Ideally what we'd do here is grab every PCI device that
+	 * represents a tunnelling adapter for this NHI and check their
+	 * status directly, but unfortunately USB4 seems to make it
+	 * obnoxiously difficult to reliably make any correlation.
+	 *
+	 * So for now we'll have to bodge it... Hoping that the system
+	 * is at least sane enough that an adapter is in the same PCI
+	 * segment as its NHI, if we can find *something* on that segment
+	 * which meets the requirements for Kernel DMA Protection, we'll
+	 * take that to imply that firmware is aware and has (hopefully)
+	 * done the right thing in general. We need to know that the PCI
+	 * layer has seen the ExternalFacingPort property which will then
+	 * inform the IOMMU layer to enforce the complete "untrusted DMA"
+	 * flow, but also that the IOMMU driver itself can be trusted not
+	 * to have been subverted by a pre-boot DMA attack.
+	 */
+	while (bus->parent)
+		bus = bus->parent;
+
+	pci_walk_bus(bus, nhi_check_iommu_pdev, &port_ok);
+
+	nhi->iommu_dma_protection = port_ok;
+	dev_dbg(&nhi->pdev->dev, "IOMMU DMA protection is %s\n",
+		str_enabled_disabled(port_ok));
+}
+
+static void nhi_reset(struct tb_nhi *nhi)
+{
+	ktime_t timeout;
+	u32 val;
+
+	val = ioread32(nhi->iobase + REG_CAPS);
+	/* Reset only v2 and later routers */
+	if (FIELD_GET(REG_CAPS_VERSION_MASK, val) < REG_CAPS_VERSION_2)
+		return;
+
+	if (!host_reset) {
+		dev_dbg(&nhi->pdev->dev, "skipping host router reset\n");
+		return;
+	}
+
+	iowrite32(REG_RESET_HRR, nhi->iobase + REG_RESET);
+	msleep(100);
+
+	timeout = ktime_add_ms(ktime_get(), 500);
+	do {
+		val = ioread32(nhi->iobase + REG_RESET);
+		if (!(val & REG_RESET_HRR)) {
+			dev_warn(&nhi->pdev->dev, "host router reset successful\n");
+			return;
+		}
+		usleep_range(10, 20);
+	} while (ktime_before(ktime_get(), timeout));
+
+	dev_warn(&nhi->pdev->dev, "timeout resetting host router\n");
+}
+
 static int nhi_init_msi(struct tb_nhi *nhi)
 {
 	struct pci_dev *pdev = nhi->pdev;
@@ -1273,7 +1351,7 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	nhi->ops = (const struct tb_nhi_ops *)id->driver_data;
 	/* cannot fail - table is allocated in pcim_iomap_regions */
 	nhi->iobase = pcim_iomap_table(pdev)[0];
-	nhi->hop_count = ioread32(nhi->iobase + REG_HOP_COUNT) & 0x3ff;
+	nhi->hop_count = ioread32(nhi->iobase + REG_CAPS) & 0x3ff;
 	dev_dbg(dev, "total paths: %d\n", nhi->hop_count);
 
 	nhi->tx_rings = devm_kcalloc(&pdev->dev, nhi->hop_count,
@@ -1284,6 +1362,9 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return -ENOMEM;
 
 	nhi_check_quirks(nhi);
+	nhi_check_iommu(nhi);
+
+	nhi_reset(nhi);
 
 	res = nhi_init_msi(nhi);
 	if (res)
@@ -1435,6 +1516,8 @@ static struct pci_device_id nhi_ids[] = {
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_MTL_P_NHI1),
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_BARLOW_RIDGE_HOST_80G_NHI) },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_BARLOW_RIDGE_HOST_40G_NHI) },
 
 	/* Any USB4 compliant host */
 	{ PCI_DEVICE_CLASS(PCI_CLASS_SERIAL_USB_USB4, ~0) },

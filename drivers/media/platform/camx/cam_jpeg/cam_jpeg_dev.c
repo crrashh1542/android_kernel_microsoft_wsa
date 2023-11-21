@@ -24,7 +24,6 @@
 #include "cam_debug_util.h"
 #include "cam_smmu_api.h"
 
-#define CAM_JPEG_DEV_NAME "cam-jpeg"
 
 static struct cam_jpeg_dev *g_jpeg_dev;
 
@@ -152,7 +151,7 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 		goto unregister;
 	}
 	g_jpeg_dev->sd.internal_ops = &cam_jpeg_subdev_internal_ops;
-	rc = cam_subdev_probe(&g_jpeg_dev->sd, pdev, CAM_JPEG_DEV_NAME,
+	rc = cam_subdev_probe(&g_jpeg_dev->sd, pdev, cam_jpeg_dev_name(),
 		CAM_JPEG_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "JPEG cam_subdev_probe failed %d", rc);
@@ -180,7 +179,7 @@ static int cam_jpeg_dev_probe(struct platform_device *pdev)
 	}
 
 	rc = cam_node_init(node, &hw_mgr_intf, g_jpeg_dev->ctx, CAM_CTX_MAX,
-		CAM_JPEG_DEV_NAME);
+		cam_jpeg_dev_name());
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "JPEG node init failed %d", rc);
 		goto ctx_init_fail;

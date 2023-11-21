@@ -691,14 +691,8 @@ int ext4_should_retry_alloc(struct super_block *sb, int *retries)
 	 * possible we just missed a transaction commit that did so
 	 */
 	smp_mb();
-	if (sbi->s_mb_free_pending == 0) {
-		if (test_opt(sb, DISCARD)) {
-			atomic_inc(&sbi->s_retry_alloc_pending);
-			flush_work(&sbi->s_discard_work);
-			atomic_dec(&sbi->s_retry_alloc_pending);
-		}
+	if (sbi->s_mb_free_pending == 0)
 		return ext4_has_free_clusters(sbi, 1, 0);
-	}
 
 	/*
 	 * it's possible we've just missed a transaction commit here,
@@ -909,11 +903,11 @@ unsigned long ext4_bg_num_gdb(struct super_block *sb, ext4_group_t group)
 }
 
 /*
- * This function returns the number of file system metadata clusters at
+ * This function returns the number of file system metadata blocks at
  * the beginning of a block group, including the reserved gdt blocks.
  */
-static unsigned ext4_num_base_meta_clusters(struct super_block *sb,
-				     ext4_group_t block_group)
+unsigned int ext4_num_base_meta_blocks(struct super_block *sb,
+				       ext4_group_t block_group)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	unsigned num;
@@ -931,8 +925,15 @@ static unsigned ext4_num_base_meta_clusters(struct super_block *sb,
 	} else { /* For META_BG_BLOCK_GROUPS */
 		num += ext4_bg_num_gdb(sb, block_group);
 	}
-	return EXT4_NUM_B2C(sbi, num);
+	return num;
 }
+
+static unsigned int ext4_num_base_meta_clusters(struct super_block *sb,
+						ext4_group_t block_group)
+{
+	return EXT4_NUM_B2C(EXT4_SB(sb), ext4_num_base_meta_blocks(sb, block_group));
+}
+
 /**
  *	ext4_inode_to_goal_block - return a hint for block allocation
  *	@inode: inode for block allocation

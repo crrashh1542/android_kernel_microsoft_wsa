@@ -361,6 +361,7 @@ extern int of_n_addr_cells(struct device_node *np);
 extern int of_n_size_cells(struct device_node *np);
 extern const struct of_device_id *of_match_node(
 	const struct of_device_id *matches, const struct device_node *node);
+extern const void *of_device_get_match_data(const struct device *dev);
 extern int of_modalias_node(struct device_node *node, char *modalias, int len);
 extern void of_print_phandle_args(const char *msg, const struct of_phandle_args *args);
 extern struct device_node *of_parse_phandle(const struct device_node *np,
@@ -574,7 +575,7 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 				   unsigned long initrd_len,
 				   const char *cmdline, size_t extra_fdt_size);
 int ima_get_kexec_buffer(void **addr, size_t *size);
-int ima_free_kexec_buffer(void);
+int __init ima_free_kexec_buffer(void);
 #else /* CONFIG_OF */
 
 static inline void of_core_init(void)
@@ -1020,6 +1021,11 @@ static inline int of_map_id(struct device_node *np, u32 id,
 static inline phys_addr_t of_dma_get_max_cpu_address(struct device_node *np)
 {
 	return PHYS_ADDR_MAX;
+}
+
+static inline const void *of_device_get_match_data(const struct device *dev)
+{
+	return NULL;
 }
 
 #define of_match_ptr(_ptr)	NULL

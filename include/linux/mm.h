@@ -3270,9 +3270,6 @@ unsigned long wp_shared_mapping_range(struct address_space *mapping,
 #endif
 
 extern int sysctl_nr_trim_pages;
-extern int min_filelist_kbytes;
-extern int min_filelist_kbytes_handler(struct ctl_table *table, int write,
-		void *buf, size_t *len, loff_t *pos);
 
 #ifdef CONFIG_PRINTK
 void mem_dump_obj(void *object);

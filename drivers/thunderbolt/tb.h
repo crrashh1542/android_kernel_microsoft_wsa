@@ -19,10 +19,6 @@
 #include "ctl.h"
 #include "dma_port.h"
 
-#define NVM_MIN_SIZE		SZ_32K
-#define NVM_MAX_SIZE		SZ_512K
-#define NVM_DATA_DWORDS		16
-
 /* Keep link controller awake during update */
 #define QUIRK_FORCE_POWER_LINK_CONTROLLER		BIT(0)
 /* Disable CLx if not supported */
@@ -142,7 +138,7 @@ enum tb_clx {
  * @vendor_name: Name of the vendor (or %NULL if not known)
  * @device_name: Name of the device (or %NULL if not known)
  * @link_speed: Speed of the link in Gb/s
- * @link_width: Width of the link (1 or 2)
+ * @link_width: Width of the upstream facing link
  * @link_usb4: Upstream link is USB4
  * @generation: Switch Thunderbolt generation
  * @cap_plug_events: Offset to the plug events capability (%0 if not found)
@@ -180,6 +176,11 @@ enum tb_clx {
  * switches) you need to have domain lock held.
  *
  * In USB4 terminology this structure represents a router.
+ *
+ * Note @link_width is not the same as whether link is bonded or not.
+ * For Gen 4 links the link is also bonded when it is asymmetric. The
+ * correct way to find out whether the link is bonded or not is to look
+ * @bonded field of the upstream port.
  */
 struct tb_switch {
 	struct device dev;
@@ -195,7 +196,7 @@ struct tb_switch {
 	const char *vendor_name;
 	const char *device_name;
 	unsigned int link_speed;
-	unsigned int link_width;
+	enum tb_link_width link_width;
 	bool link_usb4;
 	unsigned int generation;
 	int cap_plug_events;
@@ -229,6 +230,23 @@ struct tb_switch {
 };
 
 /**
+ * struct tb_bandwidth_group - Bandwidth management group
+ * @tb: Pointer to the domain the group belongs to
+ * @index: Index of the group (aka Group_ID). Valid values %1-%7
+ * @ports: DP IN adapters belonging to this group are linked here
+ *
+ * Any tunnel that requires isochronous bandwidth (that's DP for now) is
+ * attached to a bandwidth group. All tunnels going through the same
+ * USB4 links share the same group and can dynamically distribute the
+ * bandwidth within the group.
+ */
+struct tb_bandwidth_group {
+	struct tb *tb;
+	int index;
+	struct list_head ports;
+};
+
+/**
  * struct tb_port - a thunderbolt port, part of a tb_switch
  * @config: Cached port configuration read from registers
  * @sw: Switch the port belongs to
@@ -252,6 +270,11 @@ struct tb_switch {
  * @ctl_credits: Buffers reserved for control path
  * @dma_credits: Number of credits allocated for DMA tunneling for all
  *		 DMA paths through this port.
+ * @group: Bandwidth allocation group the adapter is assigned to. Only
+ *	   used for DP IN adapters for now.
+ * @group_list: The adapter is linked to the group's list of ports through this
+ * @max_bw: Maximum possible bandwidth through this adapter if set to
+ *	    non-zero.
  *
  * In USB4 terminology this structure represents an adapter (protocol or
  * lane adapter).
@@ -277,6 +300,9 @@ struct tb_port {
 	unsigned int total_credits;
 	unsigned int ctl_credits;
 	unsigned int dma_credits;
+	struct tb_bandwidth_group *group;
+	struct list_head group_list;
+	unsigned int max_bw;
 };
 
 /**
@@ -911,17 +937,6 @@ static inline bool tb_switch_is_tiger_lake(const struct tb_switch *sw)
 }
 
 /**
- * tb_switch_is_usb4() - Is the switch USB4 compliant
- * @sw: Switch to check
- *
- * Returns true if the @sw is USB4 compliant router, false otherwise.
- */
-static inline bool tb_switch_is_usb4(const struct tb_switch *sw)
-{
-	return sw->config.thunderbolt_version == USB4_VERSION_1_0;
-}
-
-/**
  * tb_switch_is_icm() - Is the switch handled by ICM firmware
  * @sw: Switch to check
  *
@@ -1001,6 +1016,29 @@ static inline bool tb_switch_is_clx_enabled(const struct tb_switch *sw,
 }
 
 /**
+ * usb4_switch_version() - Returns USB4 version of the router
+ * @sw: Router to check
+ *
+ * Returns major version of USB4 router (%1 for v1, %2 for v2 and so
+ * on). Can be called to pre-USB4 router too and in that case returns %0.
+ */
+static inline unsigned int usb4_switch_version(const struct tb_switch *sw)
+{
+	return FIELD_GET(USB4_VERSION_MAJOR_MASK, sw->config.thunderbolt_version);
+}
+
+/**
+ * tb_switch_is_usb4() - Is the switch USB4 compliant
+ * @sw: Switch to check
+ *
+ * Returns true if the @sw is USB4 compliant router, false otherwise.
+ */
+static inline bool tb_switch_is_usb4(const struct tb_switch *sw)
+{
+	return usb4_switch_version(sw) > 0;
+}
+
+/**
  * tb_switch_is_clx_supported() - Is CLx supported on this type of router
  * @sw: The router to check CLx support for
  */
@@ -1048,11 +1086,10 @@ static inline bool tb_port_use_credit_allocation(const struct tb_port *port)
 
 int tb_port_get_link_speed(struct tb_port *port);
 int tb_port_get_link_width(struct tb_port *port);
-int tb_port_set_link_width(struct tb_port *port, unsigned int width);
-int tb_port_set_lane_bonding(struct tb_port *port, bool bonding);
+int tb_port_set_link_width(struct tb_port *port, enum tb_link_width width);
 int tb_port_lane_bonding_enable(struct tb_port *port);
 void tb_port_lane_bonding_disable(struct tb_port *port);
-int tb_port_wait_for_link_width(struct tb_port *port, int width,
+int tb_port_wait_for_link_width(struct tb_port *port, unsigned int width_mask,
 				int timeout_msec);
 int tb_port_update_credits(struct tb_port *port);
 bool tb_port_is_clx_enabled(struct tb_port *port, enum tb_clx clx);
@@ -1246,6 +1283,23 @@ int usb4_usb3_port_allocate_bandwidth(struct tb_port *port, int *upstream_bw,
 				      int *downstream_bw);
 int usb4_usb3_port_release_bandwidth(struct tb_port *port, int *upstream_bw,
 				     int *downstream_bw);
+
+int usb4_dp_port_set_cm_id(struct tb_port *port, int cm_id);
+bool usb4_dp_port_bw_mode_supported(struct tb_port *port);
+bool usb4_dp_port_bw_mode_enabled(struct tb_port *port);
+int usb4_dp_port_set_cm_bw_mode_supported(struct tb_port *port, bool supported);
+int usb4_dp_port_group_id(struct tb_port *port);
+int usb4_dp_port_set_group_id(struct tb_port *port, int group_id);
+int usb4_dp_port_nrd(struct tb_port *port, int *rate, int *lanes);
+int usb4_dp_port_set_nrd(struct tb_port *port, int rate, int lanes);
+int usb4_dp_port_granularity(struct tb_port *port);
+int usb4_dp_port_set_granularity(struct tb_port *port, int granularity);
+int usb4_dp_port_set_estimated_bw(struct tb_port *port, int bw);
+int usb4_dp_port_allocated_bw(struct tb_port *port);
+int usb4_dp_port_allocate_bw(struct tb_port *port, int bw);
+int usb4_dp_port_requested_bw(struct tb_port *port);
+
+int usb4_pci_port_set_ext_encapsulation(struct tb_port *port, bool enable);
 
 static inline bool tb_is_usb4_port_device(const struct device *dev)
 {

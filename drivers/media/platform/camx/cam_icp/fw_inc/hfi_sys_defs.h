@@ -344,7 +344,10 @@ struct hfi_cmd_prop {
 	uint32_t size;
 	uint32_t pkt_type;
 	uint32_t num_prop;
-	uint32_t prop_data[1];
+	union {
+		uint32_t prop;
+		DECLARE_FLEX_ARRAY(uint32_t, prop_data);
+	};
 } __packed;
 
 /**
@@ -401,7 +404,10 @@ struct hfi_sys_support {
  */
 struct hfi_supported_prop {
 	uint32_t num_prop;
-	uint32_t prop_data[1];
+	union {
+		uint32_t prop;
+		DECLARE_FLEX_ARRAY(uint32_t, prop_data);
+	};
 } __packed;
 
 /**
@@ -450,7 +456,10 @@ struct hfi_msg_init_done {
 	uint32_t pkt_type;
 	uint32_t err_type;
 	uint32_t num_prop;
-	uint32_t prop_data[1];
+	union {
+		uint32_t prop;
+		DECLARE_FLEX_ARRAY(uint32_t, prop_data);
+	};
 } __packed;
 
 /**
@@ -478,7 +487,10 @@ struct hfi_msg_prop {
 	uint32_t size;
 	uint32_t pkt_type;
 	uint32_t num_prop;
-	uint32_t prop_data[1];
+	union {
+		uint32_t prop;
+		DECLARE_FLEX_ARRAY(uint32_t, prop_data);
+	};
 } __packed;
 
 /**

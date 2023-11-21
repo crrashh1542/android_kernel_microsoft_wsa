@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Red Hat Inc.
+ * Copyright 2021 Red Hat Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -18,45 +18,31 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors: Ben Skeggs
  */
-#include "priv.h"
-#include "head.h"
+#include <nvif/head.h>
+#include <nvif/disp.h>
+#include <nvif/printf.h>
 
-#include <core/client.h>
+#include <nvif/class.h>
+#include <nvif/if0013.h>
 
-#include <nvif/cl0046.h>
-#include <nvif/unpack.h>
+void
+nvif_head_dtor(struct nvif_head *head)
+{
+	nvif_object_dtor(&head->object);
+}
 
 int
-nv04_disp_mthd(struct nvkm_object *object, u32 mthd, void *data, u32 size)
+nvif_head_ctor(struct nvif_disp *disp, const char *name, int id, struct nvif_head *head)
 {
-	struct nvkm_disp *disp = nvkm_disp(object->engine);
-	union {
-		struct nv04_disp_mthd_v0 v0;
-	} *args = data;
-	struct nvkm_head *head;
-	int id, ret = -ENOSYS;
+	struct nvif_head_v0 args;
+	int ret;
 
-	nvif_ioctl(object, "disp mthd size %d\n", size);
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
-		nvif_ioctl(object, "disp mthd vers %d mthd %02x head %d\n",
-			   args->v0.version, args->v0.method, args->v0.head);
-		mthd = args->v0.method;
-		id   = args->v0.head;
-	} else
-		return ret;
+	args.version = 0;
+	args.id = id;
 
-	if (!(head = nvkm_head_find(disp, id)))
-		return -ENXIO;
-
-	switch (mthd) {
-	case NV04_DISP_SCANOUTPOS:
-		return nvkm_head_mthd_scanoutpos(object, head, data, size);
-	default:
-		break;
-	}
-
-	return -EINVAL;
+	ret = nvif_object_ctor(&disp->object, name ? name : "nvifHead", id, NVIF_CLASS_HEAD,
+			       &args, sizeof(args), &head->object);
+	NVIF_ERRON(ret, &disp->object, "[NEW head id:%d]", args.id);
+	return ret;
 }

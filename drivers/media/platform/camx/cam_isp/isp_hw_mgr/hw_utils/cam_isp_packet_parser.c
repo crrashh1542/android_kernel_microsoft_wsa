@@ -131,6 +131,13 @@ static int cam_isp_update_dual_config(
 	}
 	remain_len = len - cmd_desc->offset;
 	cpu_addr += (cmd_desc->offset / 4);
+	if (cmd_desc->length < sizeof(struct cam_isp_dual_config)) {
+		CAM_ERR(CAM_CTXT, "cam_isp_dual_config size exceeds cmd_desc->length (%u)",
+			cmd_desc->length);
+		rc = -ENOMEM;
+		goto put_buf;
+	}
+
 	cpu_addr_local = (uint32_t *)cam_common_mem_kdup(cpu_addr, cmd_desc->length);
 	if (!cpu_addr_local) {
 		CAM_ERR(CAM_ISP, "Alloc and copy fail");

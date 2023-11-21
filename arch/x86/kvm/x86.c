@@ -1746,7 +1746,7 @@ static int __kvm_set_msr(struct kvm_vcpu *vcpu, u32 index, u64 data,
 		 * value, and that something deterministic happens if the guest
 		 * invokes 64-bit SYSENTER.
 		 */
-		data = get_canonical(data, vcpu_virt_addr_bits(vcpu));
+		data = __canonical_address(data, vcpu_virt_addr_bits(vcpu));
 		break;
 	case MSR_TSC_AUX:
 		if (!kvm_is_supported_user_return_msr(MSR_TSC_AUX))
@@ -10435,11 +10435,17 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 			r = -EINTR;
 			goto out;
 		}
+
 		/*
-		 * It should be impossible for the hypervisor timer to be in
-		 * use before KVM has ever run the vCPU.
+		 * Don't bother switching APIC timer emulation from the
+		 * hypervisor timer to the software timer, the only way for the
+		 * APIC timer to be active is if userspace stuffed vCPU state,
+		 * i.e. put the vCPU into a nonsensical state.  Only an INIT
+		 * will transition the vCPU out of UNINITIALIZED (without more
+		 * state stuffing from userspace), which will reset the local
+		 * APIC and thus cancel the timer or drop the IRQ (if the timer
+		 * already expired).
 		 */
-		WARN_ON_ONCE(kvm_lapic_hv_timer_in_use(vcpu));
 		kvm_vcpu_block(vcpu);
 		if (kvm_apic_accept_events(vcpu) < 0) {
 			r = 0;

@@ -777,13 +777,17 @@ static int cam_jpeg_mgr_prepare_hw_update(void *hw_mgr_priv,
 
 	for (i = 0, j = 0, k = 0; i < packet->num_io_configs; i++) {
 		if (io_cfg_ptr[i].direction == CAM_BUF_INPUT) {
+			if (j >= prepare_args->max_in_map_entries)
+				continue;
 			prepare_args->in_map_entries[j].resource_handle =
 				io_cfg_ptr[i].resource_type;
 			prepare_args->in_map_entries[j++].sync_id =
 				io_cfg_ptr[i].fence;
 			prepare_args->num_in_map_entries++;
 		} else {
-			prepare_args->in_map_entries[k].resource_handle =
+			if (k >= prepare_args->max_out_map_entries)
+				continue;
+			prepare_args->out_map_entries[k].resource_handle =
 				io_cfg_ptr[i].resource_type;
 			prepare_args->out_map_entries[k++].sync_id =
 				io_cfg_ptr[i].fence;

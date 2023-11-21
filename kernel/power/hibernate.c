@@ -46,6 +46,7 @@ static char resume_file[256] = CONFIG_PM_STD_PARTITION;
 dev_t swsusp_resume_device;
 sector_t swsusp_resume_block;
 __visible int in_suspend __nosavedata;
+static atomic_t hibernate_disabled_aeskl;
 
 enum {
 	HIBERNATION_INVALID,
@@ -82,9 +83,16 @@ void hibernate_release(void)
 
 bool hibernation_available(void)
 {
-	return nohibernate == 0 &&
+	bool can_hibernate = nohibernate == 0 &&
 		!security_locked_down(LOCKDOWN_HIBERNATION) &&
 		!secretmem_active();
+
+	if (can_hibernate && atomic_read(&hibernate_disabled_aeskl)) {
+		can_hibernate = false;
+		pr_info("Cannot hibernate due to aeskl\n");
+	}
+
+	return can_hibernate;
 }
 
 /**
@@ -796,6 +804,15 @@ int hibernate(void)
 
 	return error;
 }
+
+/**
+ * disable_hibernate_aeskl - Disable hibernate because AES-KL is being used.
+ */
+void disable_hibernate_aeskl(void)
+{
+	atomic_set(&hibernate_disabled_aeskl, 1);
+}
+EXPORT_SYMBOL_GPL(disable_hibernate_aeskl);
 
 /**
  * hibernate_quiet_exec - Execute a function with all devices frozen.

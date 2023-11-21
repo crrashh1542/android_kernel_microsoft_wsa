@@ -200,28 +200,6 @@ static void set_task_reclaim_state(struct task_struct *task,
 	task->reclaim_state = rs;
 }
 
-int min_filelist_kbytes_handler(struct ctl_table *table, int write,
-				void *buf, size_t *len, loff_t *pos)
-{
-	size_t written;
-
-	if (!lru_gen_enabled() || write)
-		return proc_dointvec(table, write, buf, len, pos);
-
-	if (!*len || *pos) {
-		*len = 0;
-		return 0;
-	}
-
-	written = min_t(size_t, 2, *len);
-	memcpy(buf, "0\n", written);
-
-	*len = written;
-	*pos = written;
-
-	return 0;
-}
-
 static LIST_HEAD(shrinker_list);
 static DECLARE_RWSEM(shrinker_rwsem);
 
@@ -2670,28 +2648,6 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 }
 
 /*
- * Low watermark used to prevent fscache thrashing during low memory.
- */
-int min_filelist_kbytes;
-
-/*
- * Check low watermark used to prevent fscache thrashing during low memory.
- */
-static int file_is_low(struct lruvec *lruvec)
-{
-	unsigned long size;
-
-	if (!mem_cgroup_disabled())
-		return false;
-
-	size = node_page_state(lruvec_pgdat(lruvec), NR_ACTIVE_FILE);
-	size += node_page_state(lruvec_pgdat(lruvec), NR_INACTIVE_FILE);
-	size <<= (PAGE_SHIFT - 10);
-
-	return size < min_filelist_kbytes;
-}
-
-/*
  * Determine how aggressively the anon and file LRU lists should be
  * scanned.  The relative value of each set of LRU lists is determined
  * by looking at the fraction of the pages scanned we did rotate back
@@ -2728,15 +2684,6 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 */
 	if (cgroup_reclaim(sc) && !swappiness) {
 		scan_balance = SCAN_FILE;
-		goto out;
-	}
-
-	/*
-	 * Do not scan file pages when swap is allowed by __GFP_IO and
-	 * file page count is low.
-	 */
-	if ((sc->gfp_mask & __GFP_IO) && file_is_low(lruvec)) {
-		scan_balance = SCAN_ANON;
 		goto out;
 	}
 

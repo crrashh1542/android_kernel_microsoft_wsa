@@ -136,7 +136,7 @@ static void trace_hwlat_sample(struct hwlat_sample *sample)
 	struct hwlat_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_HWLAT, sizeof(*entry),
-					  tracing_gen_ctx());
+					  tr->trace_flags, tracing_gen_ctx());
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);
@@ -635,7 +635,7 @@ static int s_mode_show(struct seq_file *s, void *v)
 	else
 		seq_printf(s, "%s", thread_mode_str[mode]);
 
-	if (mode != MODE_MAX)
+	if (mode < MODE_MAX - 1) /* if mode is any but last */
 		seq_puts(s, " ");
 
 	return 0;
