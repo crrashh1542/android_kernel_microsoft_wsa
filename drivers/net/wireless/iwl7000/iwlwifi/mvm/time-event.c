@@ -875,12 +875,6 @@ void iwl_mvm_stop_session_protection(struct iwl_mvm *mvm,
 	id = te_data->id;
 	spin_unlock_bh(&mvm->time_event_lock);
 
-#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
-	if (vif->cfg.assoc) {
-		/* a good assoc, reset session_prot_fail_num */
-		mvmvif->session_prot_fail_num = 2;
-	}
-#endif
 	if (fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_SESSION_PROT_CMD)) {
 		if (id != SESSION_PROTECT_CONF_ASSOC) {
@@ -898,6 +892,10 @@ void iwl_mvm_stop_session_protection(struct iwl_mvm *mvm,
 
 	iwl_mvm_remove_time_event(mvm, mvmvif, te_data);
 }
+
+#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
+static int session_prot_fail_dump_num = 3;
+#endif
 
 void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 				      struct iwl_rx_cmd_buffer *rxb)
@@ -977,25 +975,14 @@ void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 			 * the userspace will retry to associate.
 			 */
 			iwl_debug_session_prot(true);
-			if (mvmvif->session_prot_fail_num) {
-				mvmvif->session_prot_fail_num--;
+			if (session_prot_fail_dump_num) {
+				session_prot_fail_dump_num--;
 				IWL_ERR(mvm,
-					"Restarting the firmware to collect logs, %d more dumps before asking help from user space\n",
-					mvmvif->session_prot_fail_num);
+					"Restarting the firmware to collect logs, %d more dumps\n",
+					session_prot_fail_dump_num);
 				iwl_dbg_tlv_time_point(&mvm->fwrt,
 						       IWL_FW_INI_TIME_POINT_USER_TRIGGER,
 						       NULL);
-			} else {
-				static char *prop[] = {
-					"DRIVER=iwlwifi",
-					"EVENT=cannot_assoc",
-					NULL
-				};
-
-				IWL_ERR(mvm,
-					"Sending udev event to userspace\n");
-				kobject_uevent_env(&mvm->hw->wiphy->dev.kobj,
-						   KOBJ_CHANGE, prop);
 			}
 #endif
 		}
