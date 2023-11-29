@@ -222,6 +222,8 @@ bool __kfence_obj_info(struct kmem_obj_info *kpp, void *object, struct page *pag
 
 #else /* CONFIG_KFENCE */
 
+#define kfence_sample_interval	(0)
+
 static inline bool is_kfence_address(const void *addr) { return false; }
 static inline void kfence_alloc_pool(void) { }
 static inline void kfence_init(void) { }
