@@ -353,7 +353,7 @@ static int snapshot_bio_batch_wait(struct snapshot_bio_batch *batch)
 static int snapshot_submit_io(int op, int op_flags, sector_t sector,
 		struct snapshot_bio_batch *batch, void *data)
 {
-	struct bio *bio = bio_alloc(GFP_NOIO | __GFP_HIGH, 1);
+	struct bio *bio = bio_alloc(GFP_KERNEL | GFP_NOIO | __GFP_HIGH, 1);
 	if (!bio)
 		return -ENOMEM;
 
