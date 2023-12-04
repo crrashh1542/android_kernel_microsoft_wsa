@@ -2569,8 +2569,7 @@ static inline void free_highmem_data(void) {}
 static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 		struct memory_bitmap *zero_bm)
 {
-	unsigned int nr_pages, nr_highmem;
-	struct linked_page *lp;
+	unsigned int nr_highmem;
 	struct memory_bitmap tmp;
 	int error;
 
@@ -2607,45 +2606,6 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 		error = prepare_highmem_image(bm, &nr_highmem);
 		if (error)
 			goto Free;
-	}
-	/*
-	 * Reserve some safe pages for potential later use.
-	 *
-	 * NOTE: This way we make sure there will be enough safe pages for the
-	 * chain_alloc() in get_buffer().  It is a bit wasteful, but
-	 * nr_copy_pages cannot be greater than 50% of the memory anyway.
-	 *
-	 * nr_copy_pages cannot be less than allocated_unsafe_pages too.
-	 */
-	nr_pages = (nr_zero_pages + nr_copy_pages) - nr_highmem - allocated_unsafe_pages;
-	nr_pages = DIV_ROUND_UP(nr_pages, PBES_PER_LINKED_PAGE);
-	while (nr_pages > 0) {
-		lp = get_image_page(GFP_RESUME, PG_SAFE);
-		if (!lp) {
-			error = -ENOMEM;
-			goto Free;
-		}
-		lp->next = safe_pages_list;
-		safe_pages_list = lp;
-		nr_pages--;
-	}
-	/* Preallocate memory for the image */
-	nr_pages = (nr_zero_pages + nr_copy_pages) - nr_highmem - allocated_unsafe_pages;
-	while (nr_pages > 0) {
-		lp = (struct linked_page *)get_zeroed_page(GFP_RESUME);
-		if (!lp) {
-			error = -ENOMEM;
-			goto Free;
-		}
-		if (!swsusp_page_is_free(virt_to_page(lp))) {
-			/* The page is "safe", add it to the list */
-			lp->next = safe_pages_list;
-			safe_pages_list = lp;
-		}
-		/* Mark the page as allocated */
-		swsusp_set_page_forbidden(virt_to_page(lp));
-		swsusp_set_page_free(virt_to_page(lp));
-		nr_pages--;
 	}
 	return 0;
 
