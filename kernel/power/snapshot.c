@@ -2545,6 +2545,7 @@ static inline void free_highmem_data(void) {}
 #endif /* CONFIG_HIGHMEM */
 
 #define PBES_PER_LINKED_PAGE	(LINKED_PAGE_DATA_SIZE / sizeof(struct pbe))
+#define GFP_RESUME (GFP_NOIO | __GFP_HIGH)
 
 /**
  * prepare_image - Make room for loading hibernation image.
@@ -2580,7 +2581,7 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	nr_highmem = count_highmem_image_pages(bm);
 	mark_unsafe_pages(bm);
 
-	error = memory_bm_create(new_bm, GFP_ATOMIC, PG_SAFE);
+	error = memory_bm_create(new_bm, GFP_RESUME, PG_SAFE);
 	if (error)
 		goto Free;
 
@@ -2588,14 +2589,14 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	memory_bm_free(bm, PG_UNSAFE_KEEP);
 
 	/* Make a copy of zero_bm so it can be created in safe pages */
-	error = memory_bm_create(&tmp, GFP_ATOMIC, PG_SAFE);
+	error = memory_bm_create(&tmp, GFP_RESUME, PG_SAFE);
 	if (error)
 		goto Free;
 	duplicate_memory_bitmap(&tmp, zero_bm);
 	memory_bm_free(zero_bm, PG_UNSAFE_KEEP);
 
 	/* Recreate zero_bm in safe pages */
-	error = memory_bm_create(zero_bm, GFP_ATOMIC, PG_SAFE);
+	error = memory_bm_create(zero_bm, GFP_RESUME, PG_SAFE);
 	if (error)
 		goto Free;
 	duplicate_memory_bitmap(zero_bm, &tmp);
@@ -2619,7 +2620,7 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	nr_pages = (nr_zero_pages + nr_copy_pages) - nr_highmem - allocated_unsafe_pages;
 	nr_pages = DIV_ROUND_UP(nr_pages, PBES_PER_LINKED_PAGE);
 	while (nr_pages > 0) {
-		lp = get_image_page(GFP_ATOMIC, PG_SAFE);
+		lp = get_image_page(GFP_RESUME, PG_SAFE);
 		if (!lp) {
 			error = -ENOMEM;
 			goto Free;
@@ -2631,7 +2632,7 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	/* Preallocate memory for the image */
 	nr_pages = (nr_zero_pages + nr_copy_pages) - nr_highmem - allocated_unsafe_pages;
 	while (nr_pages > 0) {
-		lp = (struct linked_page *)get_zeroed_page(GFP_ATOMIC);
+		lp = (struct linked_page *)get_zeroed_page(GFP_RESUME);
 		if (!lp) {
 			error = -ENOMEM;
 			goto Free;
@@ -2726,7 +2727,7 @@ next:
 	if (!handle->cur) {
 		if (!buffer)
 			/* This makes the buffer be freed by swsusp_free() */
-			buffer = get_image_page(GFP_ATOMIC, PG_ANY);
+			buffer = get_image_page(GFP_RESUME, PG_ANY);
 
 		if (!buffer)
 			return -ENOMEM;
@@ -2739,11 +2740,11 @@ next:
 
 		safe_pages_list = NULL;
 
-		error = memory_bm_create(&copy_bm, GFP_ATOMIC, PG_ANY);
+		error = memory_bm_create(&copy_bm, GFP_RESUME, PG_ANY);
 		if (error)
 			return error;
 
-		error = memory_bm_create(&zero_bm, GFP_ATOMIC, PG_ANY);
+		error = memory_bm_create(&zero_bm, GFP_RESUME, PG_ANY);
 		if (error)
 			return error;
 
@@ -2760,7 +2761,7 @@ next:
 			if (error)
 				return error;
 
-			chain_init(&ca, GFP_ATOMIC, PG_SAFE);
+			chain_init(&ca, GFP_RESUME, PG_SAFE);
 			memory_bm_position_reset(&orig_bm);
 			memory_bm_position_reset(&zero_bm);
 			restore_pblist = NULL;
