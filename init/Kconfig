@@ -2408,3 +2408,9 @@ config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 # <asm/syscall_wrapper.h>.
 config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
+
+config SCHED_EEVDF
+	bool "EEVDF cpu scheduler"
+	help
+	  Enable dynamic switching between EEVDF and CFS.
+	default y
