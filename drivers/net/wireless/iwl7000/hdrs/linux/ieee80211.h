@@ -1163,6 +1163,23 @@ struct ieee80211_twt_setup {
 	u8 params[];
 } __packed;
 
+#define IEEE80211_T2L_MAP_MAX_CNT			2
+#define IEEE80211_T2L_MAP_CONTROL_DIRECTION		0x03
+#define IEEE80211_T2L_MAP_CONTROL_DEF_LINK_MAP		0x04
+#define IEEE80211_T2L_MAP_CONTROL_SWITCH_TIME_PRESENT	0x08
+#define IEEE80211_T2L_MAP_CONTROL_EXPECTED_DUR_PRESENT	0x10
+#define IEEE80211_T2L_MAP_CONTROL_LINK_MAP_SIZE		0x20
+
+#define IEEE80211_T2L_MAP_DIRECTION_DOWN		0
+#define IEEE80211_T2L_MAP_DIRECTION_UP			1
+#define IEEE80211_T2L_MAP_DIRECTION_BOTH		2
+
+struct ieee80211_t2l_map_elem {
+	/* the second part of control field is in optional[] */
+	u8 control;
+	u8 optional[];
+} __packed;
+
 struct ieee80211_mgmt {
 	__le16 frame_control;
 	__le16 duration;
@@ -1342,6 +1359,7 @@ struct ieee80211_mgmt {
 				} __packed wnm_timing_msr;
 			} u;
 		} __packed action;
+		DECLARE_FLEX_ARRAY(u8, body); /* Generic frame body */
 	} u;
 } __packed __aligned(2);
 
@@ -1586,6 +1604,8 @@ struct ieee80211_mcs_info {
 #define IEEE80211_HT_MCS_TX_MAX_STREAMS_SHIFT	2
 #define		IEEE80211_HT_MCS_TX_MAX_STREAMS	4
 #define IEEE80211_HT_MCS_TX_UNEQUAL_MODULATION	0x10
+
+#define IEEE80211_HT_MCS_CHAINS(mcs) ((mcs) == 32 ? 1 : (1 + ((mcs) >> 3)))
 
 /*
  * 802.11n D5.0 20.3.5 / 20.6 says:
@@ -3012,6 +3032,28 @@ ieee80211_eht_oper_size_ok(const u8 *data, u8 len)
 	return len >= needed;
 }
 
+#define IEEE80211_BW_IND_DIS_SUBCH_PRESENT	BIT(1)
+
+struct ieee80211_bandwidth_indication {
+	u8 params;
+	struct ieee80211_eht_operation_info info;
+} __packed;
+
+static inline bool
+ieee80211_bandwidth_indication_size_ok(const u8 *data, u8 len)
+{
+	const struct ieee80211_bandwidth_indication *bwi = (const void *)data;
+
+	if (len < sizeof(*bwi))
+		return false;
+
+	if (bwi->params & IEEE80211_BW_IND_DIS_SUBCH_PRESENT &&
+	    len < sizeof(*bwi) + 2)
+		return false;
+
+	return true;
+}
+
 #define LISTEN_INT_USF	GENMASK(15, 14)
 #define LISTEN_INT_UI	GENMASK(13, 0)
 
@@ -3469,6 +3511,8 @@ enum ieee80211_eid_ext {
 	WLAN_EID_EXT_EHT_OPERATION = 106,
 	WLAN_EID_EXT_EHT_MULTI_LINK = 107,
 	WLAN_EID_EXT_EHT_CAPABILITY = 108,
+	WLAN_EID_EXT_TID_TO_LINK_MAPPING = 109,
+	WLAN_EID_EXT_BANDWIDTH_INDICATION = 135,
 };
 
 /* Action category code */
@@ -4236,6 +4280,35 @@ static inline bool ieee80211_is_public_action(struct ieee80211_hdr *hdr,
 }
 
 /**
+ * ieee80211_is_protected_dual_of_public_action - check if skb contains a
+ * protected dual of public action management frame
+ * @skb: the skb containing the frame, length will be checked
+ *
+ * Return: true if the skb contains a protected dual of public action
+ * management frame, false otherwise.
+ */
+static inline bool
+ieee80211_is_protected_dual_of_public_action(struct sk_buff *skb)
+{
+	u8 action;
+
+	if (!ieee80211_is_public_action((void *)skb->data, skb->len) ||
+	    skb->len < IEEE80211_MIN_ACTION_SIZE + 1)
+		return false;
+
+	action = *(u8 *)(skb->data + IEEE80211_MIN_ACTION_SIZE);
+
+	return action != WLAN_PUB_ACTION_20_40_BSS_COEX &&
+		action != WLAN_PUB_ACTION_DSE_REG_LOC_ANN &&
+		action != WLAN_PUB_ACTION_MSMT_PILOT &&
+		action != WLAN_PUB_ACTION_TDLS_DISCOVER_RES &&
+		action != WLAN_PUB_ACTION_LOC_TRACK_NOTI &&
+		action != WLAN_PUB_ACTION_FTM_REQUEST &&
+		action != WLAN_PUB_ACTION_FTM_RESPONSE &&
+		action != WLAN_PUB_ACTION_FILS_DISCOVERY;
+}
+
+/**
  * _ieee80211_is_group_privacy_action - check if frame is a group addressed
  * privacy action frame
  * @hdr: the frame
@@ -4919,7 +4992,7 @@ static inline bool ieee80211_mle_basic_sta_prof_size_ok(const u8 *data,
 	if (control & IEEE80211_MLE_STA_CONTROL_DTIM_INFO_PRESENT)
 		info_len += 2;
 	if (control & IEEE80211_MLE_STA_CONTROL_COMPLETE_PROFILE &&
-	    control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE) {
+	    control & IEEE80211_MLE_STA_CONTROL_NSTR_LINK_PAIR_PRESENT) {
 		if (control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE)
 			info_len += 2;
 		else
@@ -4958,7 +5031,7 @@ ieee80211_mle_basic_sta_prof_bss_param_ch_cnt(const struct ieee80211_mle_per_sta
 	if (control & IEEE80211_MLE_STA_CONTROL_DTIM_INFO_PRESENT)
 		pos += 2;
 	if (control & IEEE80211_MLE_STA_CONTROL_COMPLETE_PROFILE &&
-	    control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE) {
+	    control & IEEE80211_MLE_STA_CONTROL_NSTR_LINK_PAIR_PRESENT) {
 		if (control & IEEE80211_MLE_STA_CONTROL_NSTR_BITMAP_SIZE)
 			pos += 2;
 		else
@@ -5003,6 +5076,39 @@ static inline bool ieee80211_mle_reconf_sta_prof_size_ok(const u8 *data,
 
 	return prof->sta_info_len >= info_len &&
 	       fixed + prof->sta_info_len - 1 <= len;
+}
+
+static inline bool ieee80211_tid_to_link_map_size_ok(const u8 *data, size_t len)
+{
+	const struct ieee80211_t2l_map_elem *t2l = (const void *)data;
+	u8 control, fixed = sizeof(*t2l), elem_len = 0;
+
+	if (len < fixed)
+		return false;
+
+	control = t2l->control;
+
+	if (control & IEEE80211_T2L_MAP_CONTROL_SWITCH_TIME_PRESENT)
+		elem_len += 2;
+	if (control & IEEE80211_T2L_MAP_CONTROL_EXPECTED_DUR_PRESENT)
+		elem_len += 3;
+
+	if (!(control & IEEE80211_T2L_MAP_CONTROL_DEF_LINK_MAP)) {
+		u8 bm_size;
+
+		elem_len += 1;
+		if (len < fixed + elem_len)
+			return false;
+
+		if (control & IEEE80211_T2L_MAP_CONTROL_LINK_MAP_SIZE)
+			bm_size = 1;
+		else
+			bm_size = 2;
+
+		elem_len += hweight8(t2l->optional[0]) * bm_size;
+	}
+
+	return len >= fixed + elem_len;
 }
 
 #define for_each_mle_subelement(_elem, _data, _len)			\

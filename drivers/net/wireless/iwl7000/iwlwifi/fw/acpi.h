@@ -139,6 +139,7 @@ enum iwl_dsm_funcs_rev_0 {
 	DSM_FUNC_ENABLE_UNII4_CHAN = 7,
 	DSM_FUNC_ACTIVATE_CHANNEL = 8,
 	DSM_FUNC_FORCE_DISABLE_CHANNELS = 9,
+	DSM_FUNC_ENERGY_DETECTION_THRESHOLD = 10,
 	DSM_FUNC_RFI_DLVR_CONFIG = 11
 };
 
@@ -173,7 +174,7 @@ enum iwl_dsm_values_rfi_dlvr {
 };
 
 enum iwl_dsm_masks_reg {
-	DSM_MASK_CHINA_22_REG = BIT(1)
+	DSM_MASK_CHINA_22_REG = BIT(2)
 };
 
 #ifdef CONFIG_ACPI

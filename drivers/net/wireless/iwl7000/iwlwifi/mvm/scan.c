@@ -197,7 +197,8 @@ static void iwl_mvm_scan_iterator(void *_data, u8 *mac,
 	struct iwl_mvm_scan_iter_data *data = _data;
 	struct iwl_mvm_vif *curr_mvmvif;
 
-	if (vif->type != NL80211_IFTYPE_P2P_DEVICE && mvmvif->deflink.phy_ctxt &&
+	if (vif->type != NL80211_IFTYPE_P2P_DEVICE &&
+	    mvmvif->deflink.phy_ctxt &&
 	    mvmvif->deflink.phy_ctxt->id < NUM_PHY_CTX)
 		data->global_cnt += 1;
 
@@ -1813,7 +1814,7 @@ iwl_mvm_umac_scan_cfg_channels_v7_6g(struct iwl_mvm *mvm,
 			/* Use the highest PSD value allowed as advertised by
 			 * APs for this channel
 			 */
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 			tmp_psd_20 = IEEE80211_RNR_TBTT_PARAMS_PSD_RESERVED;
 #else
 			tmp_psd_20 = scan_6ghz_params[j].psd_20;
@@ -2152,8 +2153,9 @@ static u8 iwl_mvm_scan_umac_flags2(struct iwl_mvm *mvm,
 				IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_RESPECT_P2P_GO_HB;
 	}
 
-	if (params->scan_6ghz && fw_has_capa(&mvm->fw->ucode_capa,
-					     IWL_UCODE_TLV_CAPA_SCAN_DONT_TOGGLE_ANT))
+	if (params->scan_6ghz &&
+	    fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_SCAN_DONT_TOGGLE_ANT))
 		flags |= IWL_UMAC_SCAN_GEN_PARAMS_FLAGS2_DONT_TOGGLE_ANT;
 
 	return flags;
@@ -2382,20 +2384,19 @@ iwl_mvm_scan_umac_fill_general_p_v12(struct iwl_mvm *mvm,
 	if (version < 12) {
 		gp->scan_start_mac_or_link_id = scan_vif->id;
 	} else {
-		/*
-		 * Use one of the active link (if any). In the future it would
+		struct iwl_mvm_vif_link_info *link_info;
+		u8 link_id = 0;
+
+		/* Use one of the active link (if any). In the future it would
 		 * be possible that the link ID would be part of the scan
 		 * request coming from upper layers so we would need to use it.
 		 */
-		if (!vif->active_links) {
-			gp->scan_start_mac_or_link_id = 0;
-		} else {
-			u8 link_id = ffs(vif->active_links) - 1;
-			struct iwl_mvm_vif_link_info *link_info =
-				scan_vif->link[link_id];
+		if (vif->active_links)
+			link_id = ffs(vif->active_links) - 1;
 
+		link_info = scan_vif->link[link_id];
+		if (!WARN_ON(!link_info))
 			gp->scan_start_mac_or_link_id = link_info->fw_link_id;
-		}
 	}
 }
 
@@ -2807,7 +2808,9 @@ static void iwl_mvm_scan_respect_p2p_go_iter(void *_data, u8 *mac,
 	if (vif->type == NL80211_IFTYPE_AP && vif->p2p) {
 		u32 link_id;
 
-		for (link_id = 0; link_id < ARRAY_SIZE(mvmvif->link); link_id++) {
+		for (link_id = 0;
+		     link_id < ARRAY_SIZE(mvmvif->link);
+		     link_id++) {
 			struct iwl_mvm_vif_link_info *link =
 				mvmvif->link[link_id];
 
@@ -2933,10 +2936,8 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	iwl_mvm_fill_scan_type(mvm, &params, vif);
 	iwl_mvm_fill_respect_p2p_go(mvm, &params, vif);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	if (req->duration)
 		params.iter_notif = true;
-#endif
 
 	iwl_mvm_build_scan_probe(mvm, vif, ies, &params);
 
@@ -3366,7 +3367,7 @@ int iwl_mvm_scan_stop(struct iwl_mvm *mvm, int type, bool notify)
 	if (!(mvm->scan_status & type))
 		return 0;
 
-	if (iwl_mvm_is_radio_killed(mvm)) {
+	if (!test_bit(STATUS_DEVICE_ENABLED, &mvm->trans->status)) {
 		ret = 0;
 		goto out;
 	}

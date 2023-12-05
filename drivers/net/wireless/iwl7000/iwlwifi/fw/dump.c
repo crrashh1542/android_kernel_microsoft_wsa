@@ -107,7 +107,8 @@ static bool iwl_fwrt_if_errorid_other_cpu(u32 err_id)
 {
 	err_id &= 0xFF;
 
-	if ((err_id >= FW_ASSERT_LMAC_FATAL && err_id <= RT_NMI_INTERRUPT_OTHER_LMAC_FATAL) ||
+	if ((err_id >= FW_ASSERT_LMAC_FATAL &&
+	     err_id <= RT_NMI_INTERRUPT_OTHER_LMAC_FATAL) ||
 	    err_id == FW_ASSERT_NMI_UNKNOWN)
 		return  true;
 	return false;
@@ -512,10 +513,12 @@ void iwl_fwrt_dump_error_logs(struct iwl_fw_runtime *fwrt)
 
 		if (!iwl_trans_grab_nic_access(fwrt->trans))
 			return;
-		for (count = 0; count < fwrt->trans->dbg.num_pc; count++, pc_data++)
+		for (count = 0; count < fwrt->trans->dbg.num_pc;
+		     count++, pc_data++)
 			IWL_ERR(fwrt, "%s: 0x%x\n",
 				pc_data->pc_name,
-				iwl_read_prph_no_grab(fwrt->trans, pc_data->pc_address));
+				iwl_read_prph_no_grab(fwrt->trans,
+						      pc_data->pc_address));
 		iwl_trans_release_nic_access(fwrt->trans);
 	}
 

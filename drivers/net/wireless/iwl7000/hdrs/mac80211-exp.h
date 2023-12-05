@@ -4,6 +4,7 @@
 #define ieee80211_manage_rx_ba_offl __iwl7000_ieee80211_manage_rx_ba_offl
 #define ieee80211_rx_ba_timer_expired __iwl7000_ieee80211_rx_ba_timer_expired
 #define ieee80211_send_bar __iwl7000_ieee80211_send_bar
+#define ieee80211_refresh_tx_agg_session_timer __iwl7000_ieee80211_refresh_tx_agg_session_timer
 #define ieee80211_start_tx_ba_session __iwl7000_ieee80211_start_tx_ba_session
 #define ieee80211_start_tx_ba_cb_irqsafe __iwl7000_ieee80211_start_tx_ba_cb_irqsafe
 #define ieee80211_stop_tx_ba_session __iwl7000_ieee80211_stop_tx_ba_session
@@ -12,17 +13,25 @@
 #define ieee80211_calc_tx_airtime __iwl7000_ieee80211_calc_tx_airtime
 #define arc4_setkey __iwl7000_arc4_setkey
 #define arc4_crypt __iwl7000_arc4_crypt
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-#define dev_coredumpsg __iwl7000_dev_coredumpsg
-#endif /* < 4.7.0 */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
-#define kstrtobool __iwl7000_kstrtobool
-#define kstrtobool_from_user __iwl7000_kstrtobool_from_user
-#endif /* < 4.6.0 */
+#ifdef CONFIG_THERMAL
+#if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
+#define thermal_zone_device_register_with_trips __iwl7000_thermal_zone_device_register_with_trips
+#endif
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#define thermal_zone_device_priv __iwl7000_thermal_zone_device_priv
+#endif /* < 6.4 */
+#endif
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+#define wiphy_work_queue __iwl7000_wiphy_work_queue
+#define wiphy_work_cancel __iwl7000_wiphy_work_cancel
+#define wiphy_delayed_work_timer __iwl7000_wiphy_delayed_work_timer
+#define wiphy_delayed_work_queue __iwl7000_wiphy_delayed_work_queue
+#define wiphy_delayed_work_cancel __iwl7000_wiphy_delayed_work_cancel
+#endif /* CFG80211_VERSION < KERNEL_VERSION(6,5,0) */
 #if CFG80211_VERSION < KERNEL_VERSION(5,6,0)
 #define ieee80211_get_vht_max_nss __iwl7000_ieee80211_get_vht_max_nss
 #endif
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 #define cfg80211_defragment_element __iwl7000_cfg80211_defragment_element
 #define ieee80211_fragment_element __iwl7000_ieee80211_fragment_element
 #endif
@@ -31,7 +40,7 @@
 #define ieee80211_nan_func_terminated __iwl7000_ieee80211_nan_func_terminated
 #define ieee80211_nan_func_match __iwl7000_ieee80211_nan_func_match
 #define ieee80211_color_change_finish __iwl7000_ieee80211_color_change_finish
-#define ieeee80211_obss_color_collision_notify __iwl7000_ieeee80211_obss_color_collision_notify
+#define ieee80211_obss_color_collision_notify __iwl7000_ieee80211_obss_color_collision_notify
 #define ieee80211_iter_chan_contexts_atomic __iwl7000_ieee80211_iter_chan_contexts_atomic
 #define ieee80211_request_smps __iwl7000_ieee80211_request_smps
 #define ieee80211_iter_keys __iwl7000_ieee80211_iter_keys
@@ -97,7 +106,6 @@
 #define ieee80211_tx_status __iwl7000_ieee80211_tx_status
 #define ieee80211_tx_status_ext __iwl7000_ieee80211_tx_status_ext
 #define ieee80211_tx_rate_update __iwl7000_ieee80211_tx_rate_update
-#define ieee80211_tx_status_8023 __iwl7000_ieee80211_tx_status_8023
 #define ieee80211_report_low_ack __iwl7000_ieee80211_report_low_ack
 #define ieee80211_free_txskb __iwl7000_ieee80211_free_txskb
 #define ieee80211_tdls_oper_request __iwl7000_ieee80211_tdls_oper_request
@@ -116,6 +124,9 @@
 #define ieee80211_beacon_set_cntdwn __iwl7000_ieee80211_beacon_set_cntdwn
 #define ieee80211_beacon_cntdwn_is_complete __iwl7000_ieee80211_beacon_cntdwn_is_complete
 #define ieee80211_beacon_get_template __iwl7000_ieee80211_beacon_get_template
+#define ieee80211_beacon_get_template_ema_index __iwl7000_ieee80211_beacon_get_template_ema_index
+#define ieee80211_beacon_free_ema_list __iwl7000_ieee80211_beacon_free_ema_list
+#define ieee80211_beacon_get_template_ema_list __iwl7000_ieee80211_beacon_get_template_ema_list
 #define ieee80211_beacon_get_tim __iwl7000_ieee80211_beacon_get_tim
 #define ieee80211_proberesp_get __iwl7000_ieee80211_proberesp_get
 #define ieee80211_get_fils_discovery_tmpl __iwl7000_ieee80211_get_fils_discovery_tmpl
@@ -142,7 +153,6 @@
 #define ieee80211_iterate_interfaces __iwl7000_ieee80211_iterate_interfaces
 #define ieee80211_iterate_active_interfaces_atomic __iwl7000_ieee80211_iterate_active_interfaces_atomic
 #define ieee80211_iterate_active_interfaces_mtx __iwl7000_ieee80211_iterate_active_interfaces_mtx
-#define ieee80211_iterate_stations __iwl7000_ieee80211_iterate_stations
 #define ieee80211_iterate_stations_atomic __iwl7000_ieee80211_iterate_stations_atomic
 #define wdev_to_ieee80211_vif __iwl7000_wdev_to_ieee80211_vif
 #define ieee80211_vif_to_wdev __iwl7000_ieee80211_vif_to_wdev

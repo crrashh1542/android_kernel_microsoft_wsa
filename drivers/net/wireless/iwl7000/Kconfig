@@ -11,12 +11,8 @@ config IWL7000
 	# we don't support or test on non-x86 platforms
 	depends on X86_64
 
-	# Build failure if built with ACPI disabled
-	depends on ACPI
-
 	# things mac80211 selects
 	select CRYPTO
-	select CRYPTO_ARC4
 	select CRYPTO_AES
 	select CRYPTO_CCM
 	select CRC32

@@ -97,7 +97,12 @@ u32 iwl_mvm_get_sec_flags(struct iwl_mvm *mvm,
 	if (!sta && vif->type == NL80211_IFTYPE_STATION)
 		sta = mvmvif->ap_sta;
 
-	if (!IS_ERR_OR_NULL(sta) && sta->mfp)
+	/* Set the MFP flag also for an AP interface where the key is an IGTK
+	 * key as in such a case the station would always be NULL
+	 */
+	if ((!IS_ERR_OR_NULL(sta) && sta->mfp) ||
+	    (vif->type == NL80211_IFTYPE_AP &&
+	     (keyconf->keyidx == 4 || keyconf->keyidx == 5)))
 		flags |= IWL_SEC_KEY_FLAG_MFP;
 
 	return flags;
@@ -273,8 +278,7 @@ int iwl_mvm_sec_key_add(struct iwl_mvm *mvm,
 	if (mvm_link)
 		mvm_link->igtk = keyconf;
 
-	/*
-	 * We don't really need this, but need it to be not invalid,
+	/* We don't really need this, but need it to be not invalid,
 	 * and if we switch links multiple times it might go to be
 	 * invalid when removed.
 	 */

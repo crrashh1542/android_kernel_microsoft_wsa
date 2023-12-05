@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2010-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2010-2014, 2018-2023 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -21,7 +21,7 @@
 /**
  * iwl_tm_validate_fw_cmd() - Validates FW host command input data
  * @data_in:	Input to be validated
- *
+ * Returns: an error code
  */
 static int iwl_tm_validate_fw_cmd(struct iwl_tm_data *data_in)
 {
@@ -45,6 +45,7 @@ static int iwl_tm_validate_fw_cmd(struct iwl_tm_data *data_in)
  * iwl_tm_validate_reg_ops() - Checks the input data for registers operations
  * @data_in:	data is casted to iwl_tm_regs_request len in
  *		the size of the request struct in bytes.
+ * Returns: an error code
  */
 static int iwl_tm_validate_reg_ops(struct iwl_tm_data *data_in)
 {
@@ -89,6 +90,7 @@ static int iwl_tm_validate_reg_ops(struct iwl_tm_data *data_in)
 /**
  * iwl_tm_trace_end - Ends debug trace. Common for all op modes.
  * @dev: testmode device struct
+ * Returns: an error code
  */
 static int iwl_tm_trace_end(struct iwl_tm_gnl_dev *dev)
 {
@@ -111,6 +113,7 @@ static int iwl_tm_trace_end(struct iwl_tm_gnl_dev *dev)
  * @dev:	testmode device struct
  * @data_in:	Only size is relevant - Desired size of trace buffer.
  * @data_out:	Trace request data (address & size)
+ * Returns: an error code
  */
 static int iwl_tm_trace_begin(struct iwl_tm_gnl_dev *dev,
 			      struct iwl_tm_data *data_in,
@@ -158,6 +161,7 @@ static bool iwl_tm_gnl_valid_hw_addr(u32 addr)
  * iwl_tm_validate_sram_write_req() - Checks input data of SRAM write request
  * @dev:	testmode device struct
  * @data_in:	SRAM access request
+ * Returns: an error code
  */
 static int iwl_tm_validate_sram_write_req(struct iwl_tm_gnl_dev *dev,
 					  struct iwl_tm_data *data_in)
@@ -191,6 +195,7 @@ static int iwl_tm_validate_sram_write_req(struct iwl_tm_gnl_dev *dev,
  * iwl_tm_validate_sram_read_req() - Checks input data of SRAM read request
  * @dev:	testmode device struct
  * @data_in:	SRAM access request
+ * Returns: an error code
  */
 static int iwl_tm_validate_sram_read_req(struct iwl_tm_gnl_dev *dev,
 					 struct iwl_tm_data *data_in)
@@ -218,6 +223,7 @@ static int iwl_tm_validate_sram_read_req(struct iwl_tm_gnl_dev *dev,
  * iwl_tm_notifications_en() - Checks input for enable test notifications
  * @tst:	Device's test data pointer
  * @data_in:	u32 notification (flag)
+ * Returns: an error code
  */
 static int iwl_tm_notifications_en(struct iwl_test *tst,
 				   struct iwl_tm_data *data_in)
@@ -240,7 +246,7 @@ static int iwl_tm_notifications_en(struct iwl_test *tst,
 /**
  * iwl_tm_validate_tx_cmd() - Validates FW host command input data
  * @data_in:	Input to be validated
- *
+ * Returns: an error code
  */
 static int iwl_tm_validate_tx_cmd(struct iwl_tm_data *data_in)
 {
@@ -267,7 +273,7 @@ static int iwl_tm_validate_tx_cmd(struct iwl_tm_data *data_in)
 /**
  * iwl_tm_validate_rx_hdrs_mode_req() - Validates RX headers mode request
  * @data_in:	Input to be validated
- *
+ * Returns: an error code
  */
 static int iwl_tm_validate_rx_hdrs_mode_req(struct iwl_tm_data *data_in)
 {
@@ -286,7 +292,7 @@ static int iwl_tm_validate_get_chip_id(struct iwl_trans *trans)
 /**
  * iwl_tm_validate_apmg_pd_mode_req() - Validates apmg rx mode request
  * @data_in:	Input to be validated
- *
+ * Returns: an error code
  */
 static int iwl_tm_validate_apmg_pd_mode_req(struct iwl_tm_data *data_in)
 {
@@ -505,6 +511,8 @@ iwl_tm_gnl_msg_policy[IWL_TM_GNL_MSG_ATTR_MAX] = {
  * Finds the device information according to device name,
  * must be protected by list mutex when used (mutex is not
  * locked inside the function to allow code flexibility)
+ *
+ * Returns: an error code
  */
 static struct iwl_tm_gnl_dev *iwl_tm_gnl_get_dev(const char *dev_name)
 {
@@ -528,6 +536,8 @@ static struct iwl_tm_gnl_dev *iwl_tm_gnl_get_dev(const char *dev_name)
  * @seq:	sequence number (usually the one of the sender)
  * @cmd_data:	Message's data
  * @flags:	Resources allocation flags
+ *
+ * Returns: an error code
  */
 static struct sk_buff *iwl_tm_gnl_create_msg(u32 pid, u32 seq,
 					     struct iwl_tm_gnl_cmd cmd_data,
@@ -587,6 +597,8 @@ send_msg_err:
  * Initiate a message sending to user space (as apposed
  * to replying to a message that was initiated by user
  * space). Uses multicast broadcasting method.
+ *
+ * Returns: an error code
  */
 int iwl_tm_gnl_send_msg(struct iwl_trans *trans, u32 cmd, bool check_notify,
 			void *data_out, u32 data_len, gfp_t flags)
@@ -628,6 +640,7 @@ IWL_EXPORT_SYMBOL(iwl_tm_gnl_send_msg);
  * iwl_tm_gnl_reply() - Sends command's results back to user space
  * @info:	info struct received in .doit callback
  * @cmd_data:	Data of command to be responded
+ * Returns: an error code
  */
 static int iwl_tm_gnl_reply(struct genl_info *info,
 			    struct iwl_tm_gnl_cmd cmd_data)
@@ -645,6 +658,7 @@ static int iwl_tm_gnl_reply(struct genl_info *info,
 /**
  * iwl_tm_gnl_cmd_execute() - Execute IWL testmode GNL command
  * @cmd_data:	Pointer to the data of command to be executed
+ * Returns: an error code
  */
 static int iwl_tm_gnl_cmd_execute(struct iwl_tm_gnl_cmd *cmd_data)
 {
@@ -765,6 +779,7 @@ static int iwl_tm_gnl_cmd_execute(struct iwl_tm_gnl_cmd *cmd_data)
  * @dev:	testmode device struct
  * @data_in:	input data
  * @data_out:	Dump data
+ * Returns: an error code
  */
 static int iwl_tm_mem_dump(struct iwl_tm_gnl_dev *dev,
 			   struct iwl_tm_data *data_in,
@@ -785,6 +800,7 @@ static int iwl_tm_mem_dump(struct iwl_tm_gnl_dev *dev,
  * iwl_tm_trace_dump - Returns trace buffer data
  * @dev:	Device pointer
  * @data_out:	Dump data
+ * Returns: an error code
  */
 static int iwl_tm_trace_dump(struct iwl_tm_gnl_dev *dev,
 			     struct iwl_tm_data *data_out)
@@ -823,6 +839,7 @@ static int iwl_tm_trace_dump(struct iwl_tm_gnl_dev *dev,
  * @cmd_data:	Pointer to the data of dump command.
  *		Only device name and command index are the relevant input.
  *		Data out is the start address of the buffer, and it's size.
+ * Returns: an error code
  */
 static int iwl_tm_gnl_command_dump(struct iwl_tm_gnl_cmd *cmd_data)
 {
@@ -858,6 +875,7 @@ static int iwl_tm_gnl_command_dump(struct iwl_tm_gnl_cmd *cmd_data)
  * iwl_tm_gnl_parse_msg - Extract input cmd data out of netlink attributes
  * @attrs:	Input netlink attributes
  * @cmd_data:	Command
+ * Returns: an error code
  */
 static int iwl_tm_gnl_parse_msg(struct nlattr **attrs,
 				struct iwl_tm_gnl_cmd *cmd_data)
@@ -885,6 +903,7 @@ static int iwl_tm_gnl_parse_msg(struct nlattr **attrs,
  * iwl_tm_gnl_cmd_do() - Executes IWL testmode GNL command
  * @skb: SKB with the command data
  * @info: generic netlink info
+ * Returns: an error code
  */
 static int iwl_tm_gnl_cmd_do(struct sk_buff *skb, struct genl_info *info)
 {
@@ -920,6 +939,7 @@ static int iwl_tm_gnl_cmd_do(struct sk_buff *skb, struct genl_info *info)
  * cb->args[1]:	Buffer data to dump
  * cb->args[2]:	Buffer size
  * cb->args[3]: Buffer offset from where to dump in the next round
+ * Returns: an error code
  */
 static int iwl_tm_gnl_dump(struct sk_buff *skb, struct netlink_callback *cb)
 {
@@ -1180,6 +1200,7 @@ static struct notifier_block iwl_tm_gnl_netlink_notifier = {
 
 /**
  * iwl_tm_gnl_init() - Registers tm-gnl module
+ * Returns: an error code
  *
  * Registers Testmode GNL family and initializes
  * TM GNL global variables
@@ -1202,6 +1223,7 @@ int iwl_tm_gnl_init(void)
 
 /**
  * iwl_tm_gnl_exit() - Unregisters Testmode GNL family
+ * Returns: an error code
  */
 int iwl_tm_gnl_exit(void)
 {

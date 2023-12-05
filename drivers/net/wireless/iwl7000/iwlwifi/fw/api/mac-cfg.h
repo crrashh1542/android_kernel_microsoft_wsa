@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2012-2014, 2018-2019, 2021-2022 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2019, 2021-2023 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -57,6 +57,14 @@ enum iwl_mac_conf_subcmd_ids {
 	 * @STA_DISABLE_TX_CMD: &struct iwl_mvm_sta_disable_tx_cmd
 	 */
 	STA_DISABLE_TX_CMD = 0xD,
+	/**
+	 * @ROC_CMD: &struct iwl_roc_req
+	 */
+	ROC_CMD = 0xE,
+	/**
+	 * @ROC_NOTIF: &struct iwl_roc_notif
+	 */
+	ROC_NOTIF = 0xF8,
 	/**
 	 * @SESSION_PROTECTION_NOTIF: &struct iwl_mvm_session_prot_notif
 	 */
@@ -159,7 +167,7 @@ struct iwl_channel_switch_start_notif {
 #define CS_ERR_TX_BLOCK_TIMER_EXPIRED BIT(3)
 
 /**
- * struct iwl_channel_switch_error_notif - Channel switch error notification
+ * struct iwl_channel_switch_error_notif_v1 - Channel switch error notification
  *
  * @mac_id: the mac for which the ucode sends the notification for
  * @csa_err_mask: mask of channel switch error that can occur
@@ -231,11 +239,12 @@ struct iwl_mac_low_latency_cmd {
  * struct iwl_mac_client_data - configuration data for client MAC context
  *
  * @is_assoc: 1 for associated state, 0 otherwise
- * @esr_transition_timeout: the timeout required by the AP for the eSR transition.
+ * @esr_transition_timeout: the timeout required by the AP for the
+ *	eSR transition.
  *	Available only from version 2 of the command.
- *	This values comes from the EMLSR transition delay in the EML Capabilities
- *	subfield.
- * @medium_sync_delay: the value as it appeasr in P802.11be_D2.2 Figure 9-1002j.
+ *	This value comes from the EMLSR transition delay in the EML
+ *	Capabilities subfield.
+ * @medium_sync_delay: the value as it appears in P802.11be_D2.2 Figure 9-1002j.
  * @assoc_id: unique ID assigned by the AP during association
  * @reserved1: alignment
  * @data_policy: see &enum iwl_mac_data_policy

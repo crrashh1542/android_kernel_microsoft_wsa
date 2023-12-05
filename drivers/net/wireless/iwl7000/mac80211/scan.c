@@ -175,7 +175,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	};
 	struct cfg80211_inform_bss bss_meta = {
 		.boottime_ns = rx_status->boottime_ns,
-#if CFG80211_VERSION >= KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,5,0)
 		.drv_data = (void *)&update_data,
 #endif
 	};
@@ -202,25 +202,20 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (scan_sdata && scan_sdata->vif.type == NL80211_IFTYPE_STATION &&
 	    scan_sdata->vif.cfg.assoc &&
 	    ieee80211_have_rx_timestamp(rx_status)) {
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		bss_meta.parent_tsf =
 			ieee80211_calculate_rx_timestamp(local, rx_status,
 							 len + FCS_LEN, 24);
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		ether_addr_copy(bss_meta.parent_bssid,
 				scan_sdata->vif.bss_conf.bssid);
-#else
-		scan_sdata->vif.bss_conf.bssid = scan_sdata->vif.bss_conf.bssid;
-#endif
 	}
 	rcu_read_unlock();
 
 	cbss = cfg80211_inform_bss_frame_data(local->hw.wiphy, &bss_meta,
 					      mgmt, len, GFP_ATOMIC);
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
 	if (cbss) {
 		struct cfg80211_bss *non_tx_cbss;
+		rcu_read_lock();
 		ieee80211_inform_bss(local->hw.wiphy, cbss,
 				     rcu_dereference(cbss->ies),
 				     (void *)&update_data);
@@ -233,6 +228,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 					     (void *)&update_data);
 #endif
 
+		rcu_read_unlock();
 	}
 #endif
 	if (!cbss)
@@ -299,8 +295,8 @@ void ieee80211_scan_rx(struct ieee80211_local *local, struct sk_buff *skb)
 		 * the beacon/proberesp rx gives us an opportunity to upgrade
 		 * to active scan
 		 */
-		 set_bit(SCAN_BEACON_DONE, &local->scanning);
-		 ieee80211_queue_delayed_work(&local->hw, &local->scan_work, 0);
+		set_bit(SCAN_BEACON_DONE, &local->scanning);
+		wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work, 0);
 	}
 
 	if (ieee80211_is_probe_resp(mgmt->frame_control)) {
@@ -372,7 +368,7 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_sub_if_data *sdata)
 	u32 flags = 0;
 
 	req = rcu_dereference_protected(local->scan_req,
-					lockdep_is_held(&local->mtx));
+					lockdep_is_wiphy_held(local->hw.wiphy));
 
 	if (test_bit(SCAN_HW_CANCELLED, &local->scanning))
 		return false;
@@ -423,10 +419,7 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_sub_if_data *sdata)
 	ether_addr_copy(local->hw_scan_req->req.mac_addr, req->mac_addr);
 	ether_addr_copy(local->hw_scan_req->req.mac_addr_mask,
 			req->mac_addr_mask);
-#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
-	ether_addr_copy(local->hw_scan_req->req.bssid,
-			cfg80211_scan_req_bssid(req));
-#endif
+	ether_addr_copy(local->hw_scan_req->req.bssid, req->bssid);
 
 	return true;
 }
@@ -440,7 +433,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 	struct ieee80211_sub_if_data *scan_sdata;
 	struct ieee80211_sub_if_data *sdata;
 
-	lockdep_assert_held(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	/*
 	 * It's ok to abort a not-yet-running scan (that
@@ -455,7 +448,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 		return;
 
 	scan_sdata = rcu_dereference_protected(local->scan_sdata,
-					       lockdep_is_held(&local->mtx));
+					       lockdep_is_wiphy_held(local->hw.wiphy));
 
 	if (hw_scan && !aborted &&
 	    !ieee80211_hw_check(&local->hw, SINGLE_SCAN_ON_ALL_BANDS) &&
@@ -464,7 +457,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 
 		rc = drv_hw_scan(local,
 			rcu_dereference_protected(local->scan_sdata,
-						  lockdep_is_held(&local->mtx)),
+						  lockdep_is_wiphy_held(local->hw.wiphy)),
 			local->hw_scan_req);
 
 		if (rc == 0)
@@ -481,7 +474,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 	local->hw_scan_req = NULL;
 
 	scan_req = rcu_dereference_protected(local->scan_req,
-					     lockdep_is_held(&local->mtx));
+					     lockdep_is_wiphy_held(local->hw.wiphy));
 
 	RCU_INIT_POINTER(local->scan_req, NULL);
 	RCU_INIT_POINTER(local->scan_sdata, NULL);
@@ -516,7 +509,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 	 */
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
 		if (ieee80211_sdata_running(sdata))
-			ieee80211_queue_work(&sdata->local->hw, &sdata->work);
+			wiphy_work_queue(sdata->local->hw.wiphy, &sdata->work);
 	}
 
 	if (was_scanning)
@@ -536,7 +529,7 @@ void ieee80211_scan_completed(struct ieee80211_hw *hw,
 
 	memcpy(&local->scan_info, info, sizeof(*info));
 
-	ieee80211_queue_delayed_work(&local->hw, &local->scan_work, 0);
+	wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work, 0);
 }
 EXPORT_SYMBOL(ieee80211_scan_completed);
 
@@ -576,8 +569,7 @@ static int ieee80211_start_sw_scan(struct ieee80211_local *local,
 	/* We need to set power level at maximum rate for scanning. */
 	ieee80211_hw_config(local, 0);
 
-	ieee80211_queue_delayed_work(&local->hw,
-				     &local->scan_work, 0);
+	wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work, 0);
 
 	return 0;
 }
@@ -587,20 +579,18 @@ static bool __ieee80211_can_leave_ch(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_sub_if_data *sdata_iter;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	if (!ieee80211_is_radar_required(local))
 		return true;
 
 	if (!regulatory_pre_cac_allowed(local->hw.wiphy))
 		return false;
 
-	mutex_lock(&local->iflist_mtx);
 	list_for_each_entry(sdata_iter, &local->interfaces, list) {
-		if (sdata_iter->wdev.cac_started) {
-			mutex_unlock(&local->iflist_mtx);
+		if (sdata_iter->wdev.cac_started)
 			return false;
-		}
 	}
-	mutex_unlock(&local->iflist_mtx);
 
 	return true;
 }
@@ -623,7 +613,7 @@ static bool ieee80211_can_scan(struct ieee80211_local *local,
 
 void ieee80211_run_deferred_scan(struct ieee80211_local *local)
 {
-	lockdep_assert_held(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!local->scan_req || local->scanning)
 		return;
@@ -631,11 +621,11 @@ void ieee80211_run_deferred_scan(struct ieee80211_local *local)
 	if (!ieee80211_can_scan(local,
 				rcu_dereference_protected(
 					local->scan_sdata,
-					lockdep_is_held(&local->mtx))))
+					lockdep_is_wiphy_held(local->hw.wiphy))))
 		return;
 
-	ieee80211_queue_delayed_work(&local->hw, &local->scan_work,
-				     round_jiffies_relative(0));
+	wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work,
+				 round_jiffies_relative(0));
 }
 
 static void ieee80211_send_scan_probe_req(struct ieee80211_sub_if_data *sdata,
@@ -675,7 +665,7 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 	u32 flags = 0, tx_flags;
 
 	scan_req = rcu_dereference_protected(local->scan_req,
-					     lockdep_is_held(&local->mtx));
+					     lockdep_is_wiphy_held(local->hw.wiphy));
 
 	tx_flags = IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
 	if (scan_req->no_cck)
@@ -686,12 +676,11 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 		flags |= IEEE80211_PROBE_FLAG_RANDOM_SN;
 
 	sdata = rcu_dereference_protected(local->scan_sdata,
-					  lockdep_is_held(&local->mtx));
+					  lockdep_is_wiphy_held(local->hw.wiphy));
 
 	for (i = 0; i < scan_req->n_ssids; i++)
 		ieee80211_send_scan_probe_req(
-			sdata, local->scan_addr,
-			cfg80211_scan_req_bssid(scan_req),
+			sdata, local->scan_addr, scan_req->bssid,
 			scan_req->ssids[i].ssid, scan_req->ssids[i].ssid_len,
 			scan_req->ie, scan_req->ie_len,
 			scan_req->rates[band], flags,
@@ -712,7 +701,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 	bool hw_scan = local->ops->hw_scan;
 	int rc;
 
-	lockdep_assert_held(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (local->scan_req)
 		return -EBUSY;
@@ -761,16 +750,10 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			req->n_channels * sizeof(req->channels[0]);
 		local->hw_scan_req->req.ie = ies;
 		local->hw_scan_req->req.flags = req->flags;
-#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
 		eth_broadcast_addr(local->hw_scan_req->req.bssid);
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration = req->duration;
-#endif
-#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration_mandatory =
 			req->duration_mandatory;
-#endif
 
 		local->hw_scan_band = 0;
 #if CFG80211_VERSION > KERNEL_VERSION(5,10,0)
@@ -838,8 +821,8 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 		}
 
 		/* Now, just wait a bit and we are all done! */
-		ieee80211_queue_delayed_work(&local->hw, &local->scan_work,
-					     next_delay);
+		wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work,
+					 next_delay);
 		return 0;
 	} else {
 		/* Do normal software scan */
@@ -904,12 +887,13 @@ static void ieee80211_scan_state_decision(struct ieee80211_local *local,
 	enum mac80211_scan_state next_scan_state;
 	struct cfg80211_scan_request *scan_req;
 
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	/*
 	 * check if at least one STA interface is associated,
 	 * check if at least one STA interface has pending tx frames
 	 * and grab the lowest used beacon interval
 	 */
-	mutex_lock(&local->iflist_mtx);
 	list_for_each_entry(sdata, &local->interfaces, list) {
 		if (!ieee80211_sdata_running(sdata))
 			continue;
@@ -925,10 +909,9 @@ static void ieee80211_scan_state_decision(struct ieee80211_local *local,
 			}
 		}
 	}
-	mutex_unlock(&local->iflist_mtx);
 
 	scan_req = rcu_dereference_protected(local->scan_req,
-					     lockdep_is_held(&local->mtx));
+					     lockdep_is_wiphy_held(local->hw.wiphy));
 
 	next_chan = scan_req->channels[local->scan_channel_idx];
 
@@ -969,7 +952,7 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 	struct cfg80211_scan_request *scan_req;
 
 	scan_req = rcu_dereference_protected(local->scan_req,
-					     lockdep_is_held(&local->mtx));
+					     lockdep_is_wiphy_held(local->hw.wiphy));
 
 	skip = 0;
 	chan = scan_req->channels[local->scan_channel_idx];
@@ -1093,7 +1076,7 @@ static void ieee80211_scan_state_resume(struct ieee80211_local *local,
 	local->next_scan_state = SCAN_SET_CHANNEL;
 }
 
-void ieee80211_scan_work(struct work_struct *work)
+void ieee80211_scan_work(struct wiphy *wiphy, struct wiphy_work *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, scan_work.work);
@@ -1102,7 +1085,7 @@ void ieee80211_scan_work(struct work_struct *work)
 	unsigned long next_delay = 0;
 	bool aborted;
 
-	mutex_lock(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!ieee80211_can_run_worker(local)) {
 		aborted = true;
@@ -1110,9 +1093,9 @@ void ieee80211_scan_work(struct work_struct *work)
 	}
 
 	sdata = rcu_dereference_protected(local->scan_sdata,
-					  lockdep_is_held(&local->mtx));
+					  lockdep_is_wiphy_held(local->hw.wiphy));
 	scan_req = rcu_dereference_protected(local->scan_req,
-					     lockdep_is_held(&local->mtx));
+					     lockdep_is_wiphy_held(local->hw.wiphy));
 
 	/* When scanning on-channel, the first-callback means completed. */
 	if (test_bit(SCAN_ONCHANNEL_SCANNING, &local->scanning)) {
@@ -1126,7 +1109,7 @@ void ieee80211_scan_work(struct work_struct *work)
 	}
 
 	if (!sdata || !scan_req)
-		goto out;
+		return;
 
 	if (!local->scanning) {
 		int rc;
@@ -1135,13 +1118,12 @@ void ieee80211_scan_work(struct work_struct *work)
 		RCU_INIT_POINTER(local->scan_sdata, NULL);
 
 		rc = __ieee80211_start_scan(sdata, scan_req);
-		if (rc) {
-			/* need to complete scan in cfg80211 */
-			rcu_assign_pointer(local->scan_req, scan_req);
-			aborted = true;
-			goto out_complete;
-		} else
-			goto out;
+		if (!rc)
+			return;
+		/* need to complete scan in cfg80211 */
+		rcu_assign_pointer(local->scan_req, scan_req);
+		aborted = true;
+		goto out_complete;
 	}
 
 	clear_bit(SCAN_BEACON_WAIT, &local->scanning);
@@ -1187,25 +1169,20 @@ void ieee80211_scan_work(struct work_struct *work)
 		}
 	} while (next_delay == 0);
 
-	ieee80211_queue_delayed_work(&local->hw, &local->scan_work, next_delay);
-	goto out;
+	wiphy_delayed_work_queue(local->hw.wiphy, &local->scan_work,
+				 next_delay);
+	return;
 
 out_complete:
 	__ieee80211_scan_completed(&local->hw, aborted);
-out:
-	mutex_unlock(&local->mtx);
 }
 
 int ieee80211_request_scan(struct ieee80211_sub_if_data *sdata,
 			   struct cfg80211_scan_request *req)
 {
-	int res;
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
-	mutex_lock(&sdata->local->mtx);
-	res = __ieee80211_start_scan(sdata, req);
-	mutex_unlock(&sdata->local->mtx);
-
-	return res;
+	return __ieee80211_start_scan(sdata, req);
 }
 
 int ieee80211_request_ibss_scan(struct ieee80211_sub_if_data *sdata,
@@ -1218,7 +1195,7 @@ int ieee80211_request_ibss_scan(struct ieee80211_sub_if_data *sdata,
 	int ret = -EBUSY, i, n_ch = 0;
 	enum nl80211_band band;
 
-	mutex_lock(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
 	/* busy scanning */
 	if (local->scan_req)
@@ -1275,7 +1252,6 @@ int ieee80211_request_ibss_scan(struct ieee80211_sub_if_data *sdata,
 
 	ret = __ieee80211_start_scan(sdata, sdata->local->int_scan_req);
  unlock:
-	mutex_unlock(&local->mtx);
 	return ret;
 }
 
@@ -1302,9 +1278,8 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 	 * after the scan was completed/aborted.
 	 */
 
-	mutex_lock(&local->mtx);
 	if (!local->scan_req)
-		goto out;
+		return;
 
 	/*
 	 * We have a scan running and the driver already reported completion,
@@ -1314,7 +1289,7 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 	if (test_bit(SCAN_HW_SCANNING, &local->scanning) &&
 	    test_bit(SCAN_COMPLETED, &local->scanning)) {
 		set_bit(SCAN_HW_CANCELLED, &local->scanning);
-		goto out;
+		return;
 	}
 
 	if (test_bit(SCAN_HW_SCANNING, &local->scanning)) {
@@ -1326,21 +1301,14 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 		if (local->ops->cancel_hw_scan)
 			drv_cancel_hw_scan(local,
 				rcu_dereference_protected(local->scan_sdata,
-						lockdep_is_held(&local->mtx)));
-		goto out;
+						lockdep_is_wiphy_held(local->hw.wiphy)));
+		return;
 	}
 
-	/*
-	 * If the work is currently running, it must be blocked on
-	 * the mutex, but we'll set scan_sdata = NULL and it'll
-	 * simply exit once it acquires the mutex.
-	 */
-	cancel_delayed_work(&local->scan_work);
+	wiphy_delayed_work_cancel(local->hw.wiphy, &local->scan_work);
 	/* and clean up */
 	memset(&local->scan_info, 0, sizeof(local->scan_info));
 	__ieee80211_scan_completed(&local->hw, true);
-out:
-	mutex_unlock(&local->mtx);
 }
 
 int __ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
@@ -1355,9 +1323,9 @@ int __ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 	u8 *ie;
 	u32 flags = 0;
 
-	iebufsz = local->scan_ies_len + req->ie_len;
+	lockdep_assert_wiphy(local->hw.wiphy);
 
-	lockdep_assert_held(&local->mtx);
+	iebufsz = local->scan_ies_len + req->ie_len;
 
 	if (!local->ops->sched_scan_start)
 		return -ENOTSUPP;
@@ -1408,19 +1376,13 @@ int ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 				       struct cfg80211_sched_scan_request *req)
 {
 	struct ieee80211_local *local = sdata->local;
-	int ret;
 
-	mutex_lock(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (rcu_access_pointer(local->sched_scan_sdata)) {
-		mutex_unlock(&local->mtx);
+	if (rcu_access_pointer(local->sched_scan_sdata))
 		return -EBUSY;
-	}
 
-	ret = __ieee80211_request_sched_scan_start(sdata, req);
-
-	mutex_unlock(&local->mtx);
-	return ret;
+	return __ieee80211_request_sched_scan_start(sdata, req);
 }
 
 int ieee80211_request_sched_scan_stop(struct ieee80211_local *local)
@@ -1428,25 +1390,21 @@ int ieee80211_request_sched_scan_stop(struct ieee80211_local *local)
 	struct ieee80211_sub_if_data *sched_scan_sdata;
 	int ret = -ENOENT;
 
-	mutex_lock(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (!local->ops->sched_scan_stop) {
-		ret = -ENOTSUPP;
-		goto out;
-	}
+	if (!local->ops->sched_scan_stop)
+		return -ENOTSUPP;
 
 	/* We don't want to restart sched scan anymore. */
 	RCU_INIT_POINTER(local->sched_scan_req, NULL);
 
 	sched_scan_sdata = rcu_dereference_protected(local->sched_scan_sdata,
-						lockdep_is_held(&local->mtx));
+						lockdep_is_wiphy_held(local->hw.wiphy));
 	if (sched_scan_sdata) {
 		ret = drv_sched_scan_stop(local, sched_scan_sdata);
 		if (!ret)
 			RCU_INIT_POINTER(local->sched_scan_sdata, NULL);
 	}
-out:
-	mutex_unlock(&local->mtx);
 
 	return ret;
 }
@@ -1463,24 +1421,21 @@ EXPORT_SYMBOL(ieee80211_sched_scan_results);
 
 void ieee80211_sched_scan_end(struct ieee80211_local *local)
 {
-	mutex_lock(&local->mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (!rcu_access_pointer(local->sched_scan_sdata)) {
-		mutex_unlock(&local->mtx);
+	if (!rcu_access_pointer(local->sched_scan_sdata))
 		return;
-	}
 
 	RCU_INIT_POINTER(local->sched_scan_sdata, NULL);
 
 	/* If sched scan was aborted by the driver. */
 	RCU_INIT_POINTER(local->sched_scan_req, NULL);
 
-	mutex_unlock(&local->mtx);
-
-	cfg80211_sched_scan_stopped(local->hw.wiphy, 0);
+	cfg80211_sched_scan_stopped_locked(local->hw.wiphy, 0);
 }
 
-void ieee80211_sched_scan_stopped_work(struct work_struct *work)
+void ieee80211_sched_scan_stopped_work(struct wiphy *wiphy,
+				       struct wiphy_work *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local,
@@ -1503,6 +1458,6 @@ void ieee80211_sched_scan_stopped(struct ieee80211_hw *hw)
 	if (local->in_reconfig)
 		return;
 
-	schedule_work(&local->sched_scan_stopped_work);
+	wiphy_work_queue(hw->wiphy, &local->sched_scan_stopped_work);
 }
 EXPORT_SYMBOL(ieee80211_sched_scan_stopped);

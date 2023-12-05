@@ -286,12 +286,10 @@ struct iwl_mvm_key_pn {
  *
  * @IWL_MVM_RXQ_EMPTY: empty sync notification
  * @IWL_MVM_RXQ_NOTIF_DEL_BA: notify RSS queues of delBA
- * @IWL_MVM_RXQ_NSSN_SYNC: notify all the RSS queues with the new NSSN
  */
 enum iwl_mvm_rxq_notif_type {
 	IWL_MVM_RXQ_EMPTY,
 	IWL_MVM_RXQ_NOTIF_DEL_BA,
-	IWL_MVM_RXQ_NSSN_SYNC,
 };
 
 /**
@@ -313,11 +311,6 @@ struct iwl_mvm_internal_rxq_notif {
 
 struct iwl_mvm_delba_data {
 	u32 baid;
-} __packed;
-
-struct iwl_mvm_nssn_sync_data {
-	u32 baid;
-	u32 nssn;
 } __packed;
 
 /**
@@ -371,6 +364,7 @@ struct iwl_mvm_link_sta {
  * and from Tx response flow, it needs a spinlock.
  * @tid_data: per tid data + mgmt. Look at %iwl_mvm_tid_data.
  * @tid_to_baid: a simple map of TID to baid
+ * @vif: a vif pointer
  * @reserved_queue: the queue reserved for this STA for DQA purposes
  *	Every STA has is given one reserved queue to allow it to operate. If no
  *	such queue can be guaranteed, the STA addition will fail.

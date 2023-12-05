@@ -353,7 +353,7 @@ struct iwl_nonqos_seq_query_cmd {
 } __packed; /* NON_QOS_TX_COUNTER_GET_SET_API_S_VER_1 */
 
 /**
- * struct iwl_missed_beacons_notif - information on missed beacons
+ * struct iwl_missed_beacons_notif_ver_3 - information on missed beacons
  * ( MISSED_BEACONS_NOTIFICATION = 0xa2 )
  * @mac_id: interface ID
  * @consec_missed_beacons_since_last_rx: number of consecutive missed

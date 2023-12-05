@@ -15,6 +15,7 @@
 #include "iwl-prph.h"
 #include "fw/acpi.h"
 #include "fw/pnvm.h"
+#include "fw/uefi.h"
 
 #include "mvm.h"
 #include "fw/dbg.h"
@@ -27,11 +28,14 @@
 #endif
 #include "time-sync.h"
 
-#define MVM_UCODE_ALIVE_TIMEOUT	(HZ * CPTCFG_IWL_TIMEOUT_FACTOR)
+#define MVM_UCODE_ALIVE_TIMEOUT	(2 * HZ * CPTCFG_IWL_TIMEOUT_FACTOR)
 #define MVM_UCODE_CALIB_TIMEOUT	(2 * HZ * CPTCFG_IWL_TIMEOUT_FACTOR)
 
 #define IWL_TAS_US_MCC 0x5553
 #define IWL_TAS_CANADA_MCC 0x4341
+
+#define IWL_UATS_VLP_AP_SUPPORTED BIT(29)
+#define IWL_UATS_AFC_AP_SUPPORTED BIT(30)
 
 struct iwl_mvm_alive_data {
 	bool valid;
@@ -405,7 +409,8 @@ static int iwl_mvm_load_ucode_wait_alive(struct iwl_mvm *mvm,
 		if (trans->trans_cfg->device_family >=
 					IWL_DEVICE_FAMILY_22000) {
 			pc_data = trans->dbg.pc_data;
-			for (count = 0; count < trans->dbg.num_pc; count++, pc_data++)
+			for (count = 0; count < trans->dbg.num_pc;
+			     count++, pc_data++)
 				IWL_ERR(mvm, "%s: 0x%x\n",
 					pc_data->pc_name,
 					pc_data->pc_address);
@@ -508,6 +513,52 @@ static void iwl_mvm_phy_filter_init(struct iwl_mvm *mvm,
 }
 
 #if defined(CONFIG_ACPI) && defined(CONFIG_EFI)
+static void iwl_mvm_uats_init(struct iwl_mvm *mvm)
+{
+	u8 cmd_ver;
+	int ret;
+	struct iwl_host_cmd cmd = {
+		.id = WIDE_ID(REGULATORY_AND_NVM_GROUP,
+			      UATS_TABLE_CMD),
+		.flags = 0,
+		.data[0] = &mvm->fwrt.uats_table,
+		.len[0] =  sizeof(mvm->fwrt.uats_table),
+		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
+	};
+
+	if (!(mvm->trans->trans_cfg->device_family >=
+	      IWL_DEVICE_FAMILY_AX210)) {
+		IWL_DEBUG_RADIO(mvm, "UATS feature is not supported\n");
+		return;
+	}
+
+	if (!mvm->fwrt.uats_enabled) {
+		IWL_DEBUG_RADIO(mvm, "UATS feature is disabled\n");
+		return;
+	}
+
+	cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw, cmd.id,
+					IWL_FW_CMD_VER_UNKNOWN);
+	if (cmd_ver != 1) {
+		IWL_DEBUG_RADIO(mvm,
+				"UATS_TABLE_CMD ver %d not supported\n",
+				cmd_ver);
+		return;
+	}
+
+	ret = iwl_uefi_get_uats_table(mvm->trans, &mvm->fwrt);
+	if (ret < 0) {
+		IWL_ERR(mvm, "failed to read UATS table (%d)\n", ret);
+		return;
+	}
+
+	ret = iwl_mvm_send_cmd(mvm, &cmd);
+	if (ret < 0)
+		IWL_ERR(mvm, "failed to send UATS_TABLE_CMD (%d)\n", ret);
+	else
+		IWL_DEBUG_RADIO(mvm, "UATS_TABLE_CMD sent to FW\n");
+}
+
 static int iwl_mvm_sgom_init(struct iwl_mvm *mvm)
 {
 	u8 cmd_ver;
@@ -546,6 +597,10 @@ static int iwl_mvm_sgom_init(struct iwl_mvm *mvm)
 static int iwl_mvm_sgom_init(struct iwl_mvm *mvm)
 {
 	return 0;
+}
+
+static void iwl_mvm_uats_init(struct iwl_mvm *mvm)
+{
 }
 #endif
 
@@ -712,7 +767,7 @@ static int iwl_run_unified_mvm_ucode(struct iwl_mvm *mvm)
 	if (mvm->trans->trans_cfg->device_family == IWL_DEVICE_FAMILY_AX210) {
 		sb_cfg = iwl_read_umac_prph(mvm->trans, SB_MODIFY_CFG_FLAG);
 		/* if needed, we'll reset this on our way out later */
-		mvm->pldr_sync = !(sb_cfg & SB_CFG_RESIDES_IN_OTP_MASK);
+		mvm->pldr_sync = sb_cfg == SB_CFG_RESIDES_IN_ROM;
 		if (mvm->pldr_sync && iwl_mei_pldr_req())
 			return -EBUSY;
 	}
@@ -799,7 +854,8 @@ static int iwl_run_unified_mvm_ucode(struct iwl_mvm *mvm)
 
 	/* Read the NVM only at driver load time, no need to do this twice */
 	if (!IWL_MVM_PARSE_NVM && !mvm->nvm_data) {
-		mvm->nvm_data = iwl_get_nvm(mvm->trans, mvm->fw);
+		mvm->nvm_data = iwl_get_nvm(mvm->trans, mvm->fw,
+					    mvm->set_tx_ant, mvm->set_rx_ant);
 		if (IS_ERR(mvm->nvm_data)) {
 			ret = PTR_ERR(mvm->nvm_data);
 			mvm->nvm_data = NULL;
@@ -810,7 +866,7 @@ static int iwl_run_unified_mvm_ucode(struct iwl_mvm *mvm)
 
 	mvm->rfkill_safe_init_done = true;
 
-	iwl_rfi_send_config_cmd(mvm, NULL);
+	iwl_rfi_send_config_cmd(mvm, NULL, false, true);
 	return 0;
 
 error:
@@ -938,7 +994,7 @@ out:
 		mvm->nvm_data->bands[0].n_channels = 1;
 		mvm->nvm_data->bands[0].n_bitrates = 1;
 		mvm->nvm_data->bands[0].bitrates =
-			(void *)((u8 *)mvm->nvm_data->channels + 1);
+			(void *)(mvm->nvm_data->channels + 1);
 		mvm->nvm_data->bands[0].bitrates->hw_value = 10;
 	}
 
@@ -1399,7 +1455,10 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 {
 	int ret;
 	u32 value;
-	struct iwl_lari_config_change_cmd_v6 cmd = {};
+	struct iwl_lari_config_change_cmd_v7 cmd = {};
+	u8 cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw,
+					   WIDE_ID(REGULATORY_AND_NVM_GROUP,
+						   LARI_CONFIG_CHANGE), 1);
 
 	cmd.config_bitmap = iwl_acpi_get_lari_config_bitmap(&mvm->fwrt);
 
@@ -1417,8 +1476,11 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0,
 				   DSM_FUNC_ACTIVATE_CHANNEL,
 				   &iwl_guid, &value);
-	if (!ret)
+	if (!ret) {
+		if (cmd_ver < 8)
+			value &= ~ACTIVATE_5G2_IN_WW_MASK;
 		cmd.chan_state_active_bitmap = cpu_to_le32(value);
+	}
 
 	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0,
 				   DSM_FUNC_ENABLE_6E,
@@ -1432,18 +1494,26 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 	if (!ret)
 		cmd.force_disable_channels_bitmap = cpu_to_le32(value);
 
+	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0,
+				   DSM_FUNC_ENERGY_DETECTION_THRESHOLD,
+				   &iwl_guid, &value);
+	if (!ret)
+		cmd.edt_bitmap = cpu_to_le32(value);
+
 	if (cmd.config_bitmap ||
 	    cmd.oem_uhb_allow_bitmap ||
 	    cmd.oem_11ax_allow_bitmap ||
 	    cmd.oem_unii4_allow_bitmap ||
 	    cmd.chan_state_active_bitmap ||
-	    cmd.force_disable_channels_bitmap) {
+	    cmd.force_disable_channels_bitmap ||
+	    cmd.edt_bitmap) {
 		size_t cmd_size;
-		u8 cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw,
-						   WIDE_ID(REGULATORY_AND_NVM_GROUP,
-							   LARI_CONFIG_CHANGE),
-						   1);
+
 		switch (cmd_ver) {
+		case 8:
+		case 7:
+			cmd_size = sizeof(struct iwl_lari_config_change_cmd_v7);
+			break;
 		case 6:
 			cmd_size = sizeof(struct iwl_lari_config_change_cmd_v6);
 			break;
@@ -1477,6 +1547,9 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 				"sending LARI_CONFIG_CHANGE, oem_uhb_allow_bitmap=0x%x, force_disable_channels_bitmap=0x%x\n",
 				le32_to_cpu(cmd.oem_uhb_allow_bitmap),
 				le32_to_cpu(cmd.force_disable_channels_bitmap));
+		IWL_DEBUG_RADIO(mvm,
+				"sending LARI_CONFIG_CHANGE, edt_bitmap=0x%x\n",
+				le32_to_cpu(cmd.edt_bitmap));
 		ret = iwl_mvm_send_cmd_pdu(mvm,
 					   WIDE_ID(REGULATORY_AND_NVM_GROUP,
 						   LARI_CONFIG_CHANGE),
@@ -1486,6 +1559,10 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 					"Failed to send LARI_CONFIG_CHANGE (%d)\n",
 					ret);
 	}
+
+	if (le32_to_cpu(cmd.oem_uhb_allow_bitmap) & IWL_UATS_VLP_AP_SUPPORTED ||
+	    le32_to_cpu(cmd.oem_uhb_allow_bitmap) & IWL_UATS_AFC_AP_SUPPORTED)
+		mvm->fwrt.uats_enabled = TRUE;
 }
 
 void iwl_mvm_get_acpi_tables(struct iwl_mvm *mvm)
@@ -1593,6 +1670,13 @@ void iwl_mvm_get_acpi_tables(struct iwl_mvm *mvm)
 
 #endif /* CONFIG_ACPI */
 
+static void iwl_mvm_disconnect_iterator(void *data, u8 *mac,
+					struct ieee80211_vif *vif)
+{
+	if (vif->type == NL80211_IFTYPE_STATION)
+		ieee80211_hw_restart_disconnect(vif);
+}
+
 void iwl_mvm_send_recovery_cmd(struct iwl_mvm *mvm, u32 flags)
 {
 	u32 error_log_size = mvm->fw->ucode_capa.error_log_size;
@@ -1637,10 +1721,15 @@ void iwl_mvm_send_recovery_cmd(struct iwl_mvm *mvm, u32 flags)
 	/* skb respond is only relevant in ERROR_RECOVERY_UPDATE_DB */
 	if (flags & ERROR_RECOVERY_UPDATE_DB) {
 		resp = le32_to_cpu(*(__le32 *)host_cmd.resp_pkt->data);
-		if (resp)
+		if (resp) {
 			IWL_ERR(mvm,
 				"Failed to send recovery cmd blob was invalid %d\n",
 				resp);
+
+			ieee80211_iterate_interfaces(mvm->hw, 0,
+						     iwl_mvm_disconnect_iterator,
+						     mvm);
+		}
 	}
 }
 
@@ -1721,8 +1810,6 @@ static void iwl_mvm_send_system_features_control(struct iwl_mvm *mvm)
 int iwl_mvm_up(struct iwl_mvm *mvm)
 {
 	int ret, i;
-	struct ieee80211_channel *chan;
-	struct cfg80211_chan_def chandef;
 	struct ieee80211_supported_band *sband = NULL;
 
 	lockdep_assert_held(&mvm->mutex);
@@ -1851,21 +1938,6 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 		goto error;
 	}
 
-	chan = &sband->channels[0];
-
-	cfg80211_chandef_create(&chandef, chan, NL80211_CHAN_NO_HT);
-	for (i = 0; i < NUM_PHY_CTX; i++) {
-		/*
-		 * The channel used here isn't relevant as it's
-		 * going to be overwritten in the other flows.
-		 * For now use the first channel we have.
-		 */
-		ret = iwl_mvm_phy_ctxt_add(mvm, &mvm->phy_ctxts[i],
-					   &chandef, 1, 1);
-		if (ret)
-			goto error;
-	}
-
 	if (iwl_mvm_is_tt_in_fw(mvm)) {
 		/* in order to give the responsibility of ct-kill and
 		 * TX backoff to FW we need to send empty temperature reporting
@@ -1976,6 +2048,7 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 
 	iwl_mvm_tas_init(mvm);
 	iwl_mvm_leds_sync(mvm);
+	iwl_mvm_uats_init(mvm);
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	iwl_mvm_send_system_features_control(mvm);

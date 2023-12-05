@@ -325,14 +325,13 @@ static int iwl_tm_get_fw_info(struct iwl_testmode *testmode,
  *		  length is valid.
  * @data_out:	  Will be allocated inside, freeing is in the caller's
  *		  responsibility
+ * Returns: an error code indicating success or failure
  */
 int iwl_tm_execute_cmd(struct iwl_testmode *testmode, u32 cmd,
 		       struct iwl_tm_data *data_in,
 		       struct iwl_tm_data *data_out)
 {
 	const struct iwl_test_ops *test_ops;
-	bool cmd_supported = false;
-	int ret;
 
 	if (!testmode->trans->op_mode) {
 		IWL_ERR(testmode->trans, "No op_mode!\n");
@@ -343,39 +342,33 @@ int iwl_tm_execute_cmd(struct iwl_testmode *testmode, u32 cmd,
 
 	test_ops = &testmode->trans->op_mode->ops->test_ops;
 
-	if (test_ops->cmd_exec)
-		ret = test_ops->cmd_exec(testmode, cmd, data_in, data_out,
-					    &cmd_supported);
+	if (test_ops->cmd_exec) {
+		bool cmd_supported = false;
+		int ret;
 
-	if (cmd_supported)
-		goto out;
+		ret = test_ops->cmd_exec(testmode, cmd, data_in, data_out,
+					 &cmd_supported);
+
+		if (cmd_supported)
+			return ret;
+	}
 
 	switch (cmd) {
 	case IWL_TM_USER_CMD_HCMD:
-		ret = iwl_tm_send_hcmd(testmode, data_in, data_out);
-		break;
+		return iwl_tm_send_hcmd(testmode, data_in, data_out);
 	case IWL_TM_USER_CMD_REG_ACCESS:
-		ret = iwl_tm_reg_ops(testmode, data_in, data_out);
-		break;
+		return iwl_tm_reg_ops(testmode, data_in, data_out);
 	case IWL_TM_USER_CMD_SRAM_WRITE:
-		ret = iwl_tm_indirect_write(testmode, data_in);
-		break;
+		return iwl_tm_indirect_write(testmode, data_in);
 	case IWL_TM_USER_CMD_SRAM_READ:
-		ret = iwl_tm_indirect_read(testmode, data_in, data_out);
-		break;
+		return iwl_tm_indirect_read(testmode, data_in, data_out);
 	case IWL_TM_USER_CMD_GET_DEVICE_INFO:
-		ret = iwl_tm_get_dev_info(testmode, data_out);
-		break;
+		return iwl_tm_get_dev_info(testmode, data_out);
 	case IWL_TM_USER_CMD_GET_FW_INFO:
-		ret = iwl_tm_get_fw_info(testmode, data_out);
-		break;
+		return iwl_tm_get_fw_info(testmode, data_out);
 	default:
-		ret = -EOPNOTSUPP;
-		break;
+		return -EOPNOTSUPP;
 	}
-
-out:
-	return ret;
 }
 
 void iwl_tm_init(struct iwl_trans *trans, const struct iwl_fw *fw,
