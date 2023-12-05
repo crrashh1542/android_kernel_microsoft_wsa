@@ -23,6 +23,27 @@
 #include "sched.h"
 
 /*
+ * Use EEVDF scheduler
+ */
+int sysctl_sched_use_eevdf = 0;
+
+/*
+ * Targeted preemption latency for CPU-bound tasks:
+ *
+ * NOTE: this latency value is not the same as the concept of
+ * 'timeslice length' - timeslices in CFS are of variable length
+ * and have no persistent notion like in traditional, time-slice
+ * based scheduling concepts.
+ *
+ * (to see the precise effective timeslice length of your workload,
+ *  run vmstat and monitor the context-switches (cs) field)
+ *
+ * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
+ */
+unsigned int sysctl_sched_latency			= 6000000ULL;
+static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
+
+/*
  * The initial- and re-scaling of tunables is configurable
  *
  * Options are:
@@ -40,6 +61,19 @@ unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
  *
  * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
+unsigned int sysctl_sched_min_granularity			= 750000ULL;
+static unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
+
+/*
+ * This value is kept at sysctl_sched_latency/sysctl_sched_min_granularity
+ */
+static unsigned int sched_nr_latency = 8;
+
+/*
+ * Minimal preemption granularity for CPU-bound tasks:
+ *
+ * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ */
 unsigned int sysctl_sched_base_slice			= 750000ULL;
 static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
 
@@ -48,6 +82,18 @@ static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
  * parent will (try to) run first.
  */
 unsigned int sysctl_sched_child_runs_first __read_mostly;
+
+/*
+ * SCHED_OTHER wake-up granularity.
+ *
+ * This option delays the preemption effects of decoupled workloads
+ * and reduces their over-scheduling. Synchronous workloads will still
+ * have immediate wakeup/sleep latencies.
+ *
+ * (default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ */
+unsigned int sysctl_sched_wakeup_granularity			= 1000000UL;
+static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
@@ -168,6 +214,9 @@ static void update_sysctl(void)
 #define SET_SYSCTL(name) \
 	(sysctl_##name = (factor) * normalized_sysctl_##name)
 	SET_SYSCTL(sched_base_slice);
+	SET_SYSCTL(sched_min_granularity);
+	SET_SYSCTL(sched_latency);
+	SET_SYSCTL(sched_wakeup_granularity);
 #undef SET_SYSCTL
 }
 
@@ -805,6 +854,16 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 	return __node_2_se(left);
 }
 
+static struct sched_entity *__pick_next_entity(struct sched_entity *se)
+{
+	struct rb_node *next = rb_next(&se->run_node);
+
+	if (!next)
+		return NULL;
+
+	return __node_2_se(next);
+}
+
 /*
  * Earliest Eligible Virtual Deadline First
  *
@@ -952,14 +1011,84 @@ int sched_update_scaling(void)
 {
 	unsigned int factor = get_update_sysctl_factor();
 
+	sched_nr_latency = DIV_ROUND_UP(sysctl_sched_latency,
+					sysctl_sched_min_granularity);
+
 #define WRT_SYSCTL(name) \
 	(normalized_sysctl_##name = sysctl_##name / (factor))
 	WRT_SYSCTL(sched_base_slice);
+	WRT_SYSCTL(sched_min_granularity);
+	WRT_SYSCTL(sched_latency);
+	WRT_SYSCTL(sched_wakeup_granularity);
 #undef WRT_SYSCTL
 
 	return 0;
 }
 #endif
+
+/*
+ * The idea is to set a period in which each task runs once.
+ *
+ * When there are too many tasks (sched_nr_latency) we have to stretch
+ * this period because otherwise the slices get too small.
+ *
+ * p = (nr <= nl) ? l : l*nr/nl
+ */
+static u64 __sched_period(unsigned long nr_running)
+{
+	if (unlikely(nr_running > sched_nr_latency))
+		return nr_running * sysctl_sched_min_granularity;
+	else
+		return sysctl_sched_latency;
+}
+
+/*
+ * We calculate the wall-time slice from the period by taking a part
+ * proportional to the weight.
+ *
+ * s = p*P[w/rw]
+ */
+static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned int nr_running = cfs_rq->nr_running;
+	u64 slice;
+
+	if (sched_feat(ALT_PERIOD))
+		nr_running = rq_of(cfs_rq)->cfs.h_nr_running;
+
+	slice = __sched_period(nr_running + !se->on_rq);
+
+	for_each_sched_entity(se) {
+		struct load_weight *load;
+		struct load_weight lw;
+
+		cfs_rq = cfs_rq_of(se);
+		load = &cfs_rq->load;
+
+		if (unlikely(!se->on_rq)) {
+			lw = cfs_rq->load;
+
+			update_load_add(&lw, se->load.weight);
+			load = &lw;
+		}
+		slice = __calc_delta(slice, se->load.weight, load);
+	}
+
+	if (sched_feat(BASE_SLICE))
+		slice = max(slice, (u64)sysctl_sched_min_granularity);
+
+	return slice;
+}
+
+/*
+ * We calculate the vruntime slice of a to-be-inserted task.
+ *
+ * vs = s/w
+ */
+static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	return calc_delta_fair(sched_slice(cfs_rq, se), se);
+}
 
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
@@ -987,7 +1116,7 @@ static void update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	/*
 	 * The task has consumed its request, reschedule.
 	 */
-	if (cfs_rq->nr_running > 1) {
+	if (sysctl_sched_use_eevdf && cfs_rq->nr_running > 1) {
 		resched_curr(rq_of(cfs_rq));
 		clear_buddies(cfs_rq, se);
 	}
@@ -4653,92 +4782,180 @@ static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
 
 #endif /* CONFIG_SMP */
 
+
+static void check_spread(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+#ifdef CONFIG_SCHED_DEBUG
+	s64 d = se->vruntime - cfs_rq->min_vruntime;
+
+	if (d < 0)
+		d = -d;
+
+	if (d > 3*sysctl_sched_latency)
+		schedstat_inc(cfs_rq->nr_spread_over);
+#endif
+}
+
+static inline bool entity_is_long_sleeper(struct sched_entity *se)
+{
+	struct cfs_rq *cfs_rq;
+	u64 sleep_time;
+
+	if (se->exec_start == 0)
+		return false;
+
+	cfs_rq = cfs_rq_of(se);
+
+	sleep_time = rq_clock_task(rq_of(cfs_rq));
+
+	/* Happen while migrating because of clock task divergence */
+	if (sleep_time <= se->exec_start)
+		return false;
+
+	sleep_time -= se->exec_start;
+	if (sleep_time > ((1ULL << 63) / scale_load_down(NICE_0_LOAD)))
+		return true;
+
+	return false;
+}
+
 static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
-	u64 vslice, vruntime = avg_vruntime(cfs_rq);
+	u64 vslice = calc_delta_fair(se->slice, se);
+	u64 vruntime = cfs_rq->min_vruntime;
 	s64 lag = 0;
 
-	se->slice = sysctl_sched_base_slice;
-	vslice = calc_delta_fair(se->slice, se);
-
-	/*
-	 * Due to how V is constructed as the weighted average of entities,
-	 * adding tasks with positive lag, or removing tasks with negative lag
-	 * will move 'time' backwards, this can screw around with the lag of
-	 * other tasks.
-	 *
-	 * EEVDF: placement strategy #1 / #2
-	 */
-	if (sched_feat(PLACE_LAG) && cfs_rq->nr_running) {
-		struct sched_entity *curr = cfs_rq->curr;
-		unsigned long load;
-
-		lag = se->vlag;
+	if (sysctl_sched_use_eevdf) {
+		vruntime = avg_vruntime(cfs_rq);
 
 		/*
-		 * If we want to place a task and preserve lag, we have to
-		 * consider the effect of the new entity on the weighted
-		 * average and compensate for this, otherwise lag can quickly
-		 * evaporate.
-		 *
-		 * Lag is defined as:
-		 *
-		 *   lag_i = S - s_i = w_i * (V - v_i)
-		 *
-		 * To avoid the 'w_i' term all over the place, we only track
-		 * the virtual lag:
-		 *
-		 *   vl_i = V - v_i <=> v_i = V - vl_i
-		 *
-		 * And we take V to be the weighted average of all v:
-		 *
-		 *   V = (\Sum w_j*v_j) / W
-		 *
-		 * Where W is: \Sum w_j
-		 *
-		 * Then, the weighted average after adding an entity with lag
-		 * vl_i is given by:
-		 *
-		 *   V' = (\Sum w_j*v_j + w_i*v_i) / (W + w_i)
-		 *      = (W*V + w_i*(V - vl_i)) / (W + w_i)
-		 *      = (W*V + w_i*V - w_i*vl_i) / (W + w_i)
-		 *      = (V*(W + w_i) - w_i*l) / (W + w_i)
-		 *      = V - w_i*vl_i / (W + w_i)
-		 *
-		 * And the actual lag after adding an entity with vl_i is:
-		 *
-		 *   vl'_i = V' - v_i
-		 *         = V - w_i*vl_i / (W + w_i) - (V - vl_i)
-		 *         = vl_i - w_i*vl_i / (W + w_i)
-		 *
-		 * Which is strictly less than vl_i. So in order to preserve lag
-		 * we should inflate the lag before placement such that the
-		 * effective lag after placement comes out right.
-		 *
-		 * As such, invert the above relation for vl'_i to get the vl_i
-		 * we need to use such that the lag after placement is the lag
-		 * we computed before dequeue.
-		 *
-		 *   vl'_i = vl_i - w_i*vl_i / (W + w_i)
-		 *         = ((W + w_i)*vl_i - w_i*vl_i) / (W + w_i)
-		 *
-		 *   (W + w_i)*vl'_i = (W + w_i)*vl_i - w_i*vl_i
-		 *                   = W*vl_i
-		 *
-		 *   vl_i = (W + w_i)*vl'_i / W
-		 */
-		load = cfs_rq->avg_load;
-		if (curr && curr->on_rq)
-			load += scale_load_down(curr->load.weight);
+		* Due to how V is constructed as the weighted average of entities,
+		* adding tasks with positive lag, or removing tasks with negative lag
+		* will move 'time' backwards, this can screw around with the lag of
+		* other tasks.
+		*
+		* EEVDF: placement strategy #1 / #2
+		*/
+		if (sched_feat(PLACE_LAG) && cfs_rq->nr_running) {
+			struct sched_entity *curr = cfs_rq->curr;
+			unsigned long load;
 
-		lag *= load + scale_load_down(se->load.weight);
-		if (WARN_ON_ONCE(!load))
-			load = 1;
-		lag = div_s64(lag, load);
+			lag = se->vlag;
+
+			/*
+			* If we want to place a task and preserve lag, we have to
+			* consider the effect of the new entity on the weighted
+			* average and compensate for this, otherwise lag can quickly
+			* evaporate.
+			*
+			* Lag is defined as:
+			*
+			*   lag_i = S - s_i = w_i * (V - v_i)
+			*
+			* To avoid the 'w_i' term all over the place, we only track
+			* the virtual lag:
+			*
+			*   vl_i = V - v_i <=> v_i = V - vl_i
+			*
+			* And we take V to be the weighted average of all v:
+			*
+			*   V = (\Sum w_j*v_j) / W
+			*
+			* Where W is: \Sum w_j
+			*
+			* Then, the weighted average after adding an entity with lag
+			* vl_i is given by:
+			*
+			*   V' = (\Sum w_j*v_j + w_i*v_i) / (W + w_i)
+			*      = (W*V + w_i*(V - vl_i)) / (W + w_i)
+			*      = (W*V + w_i*V - w_i*vl_i) / (W + w_i)
+			*      = (V*(W + w_i) - w_i*l) / (W + w_i)
+			*      = V - w_i*vl_i / (W + w_i)
+			*
+			* And the actual lag after adding an entity with vl_i is:
+			*
+			*   vl'_i = V' - v_i
+			*         = V - w_i*vl_i / (W + w_i) - (V - vl_i)
+			*         = vl_i - w_i*vl_i / (W + w_i)
+			*
+			* Which is strictly less than vl_i. So in order to preserve lag
+			* we should inflate the lag before placement such that the
+			* effective lag after placement comes out right.
+			*
+			* As such, invert the above relation for vl'_i to get the vl_i
+			* we need to use such that the lag after placement is the lag
+			* we computed before dequeue.
+			*
+			*   vl'_i = vl_i - w_i*vl_i / (W + w_i)
+			*         = ((W + w_i)*vl_i - w_i*vl_i) / (W + w_i)
+			*
+			*   (W + w_i)*vl'_i = (W + w_i)*vl_i - w_i*vl_i
+			*                   = W*vl_i
+			*
+			*   vl_i = (W + w_i)*vl'_i / W
+			*/
+			load = cfs_rq->avg_load;
+			if (curr && curr->on_rq)
+				load += scale_load_down(curr->load.weight);
+
+			lag *= load + scale_load_down(se->load.weight);
+			if (WARN_ON_ONCE(!load))
+				load = 1;
+			lag = div_s64(lag, load);
+		}
+
+		se->vruntime = vruntime - lag;
+	} else {
+		int initial = flags & ENQUEUE_INITIAL;
+
+		/*
+		* The 'current' period is already promised to the current tasks,
+		* however the extra weight of the new task will slow them down a
+		* little, place the new task so that it fits in the slot that
+		* stays open at the end.
+		*/
+		if (initial && sched_feat(START_DEBIT))
+			vruntime += sched_vslice(cfs_rq, se);
+
+		/* sleeps up to a single latency don't count. */
+		if (!initial) {
+			unsigned long thresh = sysctl_sched_latency;
+
+			/*
+			* Halve their sleep time's effect, to allow
+			* for a gentler effect of sleepers:
+			*/
+			if (sched_feat(GENTLE_FAIR_SLEEPERS))
+				thresh >>= 1;
+
+			vruntime -= thresh;
+		}
+
+		/*
+		* Pull vruntime of the entity being placed to the base level of
+		* cfs_rq, to prevent boosting it if placed backwards.
+		* However, min_vruntime can advance much faster than real time, with
+		* the extreme being when an entity with the minimal weight always runs
+		* on the cfs_rq. If the waking entity slept for a long time, its
+		* vruntime difference from min_vruntime may overflow s64 and their
+		* comparison may get inversed, so ignore the entity's original
+		* vruntime in that case.
+		* The maximal vruntime speedup is given by the ratio of normal to
+		* minimal weight: scale_load_down(NICE_0_LOAD) / MIN_SHARES.
+		* When placing a migrated waking entity, its exec_start has been set
+		* from a different rq. In order to take into account a possible
+		* divergence between new and prev rq's clocks task because of irq and
+		* stolen time, we take an additional margin.
+		* So, cutting off on the sleep time of
+		*     2^63 / scale_load_down(NICE_0_LOAD) ~ 104 days
+		* should be safe.
+		*/
+		if (entity_is_long_sleeper(se))
+			se->vruntime = vruntime;
+		else
+			se->vruntime = max_vruntime(se->vruntime, vruntime);
 	}
-
-	se->vruntime = vruntime - lag;
 
 	/*
 	 * When joining the competition; the exisiting tasks will be,
@@ -4781,16 +4998,28 @@ static inline bool cfs_bandwidth_used(void);
 static void
 enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
+	bool renorm = !(flags & ENQUEUE_WAKEUP) || (flags & ENQUEUE_MIGRATED);
 	bool curr = cfs_rq->curr == se;
 
 	/*
 	 * If we're the current task, we must renormalise before calling
 	 * update_curr().
 	 */
-	if (curr)
+	if (sysctl_sched_use_eevdf && curr)
 		place_entity(cfs_rq, se, flags);
+	else if (!sysctl_sched_use_eevdf && renorm && curr) 
+		se->vruntime += cfs_rq->min_vruntime;
 
 	update_curr(cfs_rq);
+
+	/*
+	 * Otherwise, renormalise after, such that we're placed at the current
+	 * moment in time, instead of some random moment in the past. Being
+	 * placed in the past could significantly boost this task to the
+	 * fairness detriment of existing tasks.
+	 */
+	if (!sysctl_sched_use_eevdf && renorm && !curr)
+		se->vruntime += cfs_rq->min_vruntime;
 
 	/*
 	 * When enqueuing a sched_entity, we must:
@@ -4813,10 +5042,13 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 * XXX now that the entity has been re-weighted, and it's lag adjusted,
 	 * we can place the entity.
 	 */
-	if (!curr)
+	if (sysctl_sched_use_eevdf && !curr)
 		place_entity(cfs_rq, se, flags);
 
 	account_entity_enqueue(cfs_rq, se);
+
+	if (!sysctl_sched_use_eevdf && flags & ENQUEUE_WAKEUP)
+		place_entity(cfs_rq, se, 0);
 
 	/* Entity has migrated, no longer consider this task hot */
 	if (flags & ENQUEUE_MIGRATED)
@@ -4824,6 +5056,9 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	check_schedstat_required();
 	update_stats_enqueue(cfs_rq, se, flags);
+	if (!sysctl_sched_use_eevdf)
+		check_spread(cfs_rq, se);
+
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
 	se->on_rq = 1;
@@ -4840,6 +5075,17 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		check_enqueue_throttle(cfs_rq);
 }
 
+static void __clear_buddies_last(struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+		if (cfs_rq->last != se)
+			break;
+
+		cfs_rq->last = NULL;
+	}
+}
+
 static void __clear_buddies_next(struct sched_entity *se)
 {
 	for_each_sched_entity(se) {
@@ -4851,10 +5097,27 @@ static void __clear_buddies_next(struct sched_entity *se)
 	}
 }
 
+static void __clear_buddies_skip(struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+		if (cfs_rq->skip != se)
+			break;
+
+		cfs_rq->skip = NULL;
+	}
+}
+
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	if (!sysctl_sched_use_eevdf && cfs_rq->last == se)
+		__clear_buddies_last(se);
+
 	if (cfs_rq->next == se)
 		__clear_buddies_next(se);
+
+	if (!sysctl_sched_use_eevdf && cfs_rq->skip == se)
+		__clear_buddies_skip(se);
 }
 
 static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
@@ -4888,6 +5151,15 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	se->on_rq = 0;
 	account_entity_dequeue(cfs_rq, se);
 
+	/*
+	 * Normalize after update_curr(); which will also have moved
+	 * min_vruntime if @se is the one holding it back. But before doing
+	 * update_min_vruntime() again, which will discount @se's position and
+	 * can move min_vruntime forward still more.
+	 */
+	if (!sysctl_sched_use_eevdf && !(flags & DEQUEUE_SLEEP))
+		se->vruntime -= cfs_rq->min_vruntime;
+
 	/* return excess runtime on last dequeue */
 	return_cfs_rq_runtime(cfs_rq);
 
@@ -4901,6 +5173,46 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 */
 	if ((flags & (DEQUEUE_SAVE | DEQUEUE_MOVE)) != DEQUEUE_SAVE)
 		update_min_vruntime(cfs_rq);
+}
+
+/*
+ * Preempt the current task with a newly woken task if needed:
+ */
+static void
+check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
+{
+	unsigned long ideal_runtime, delta_exec;
+	struct sched_entity *se;
+	s64 delta;
+
+	ideal_runtime = sched_slice(cfs_rq, curr);
+	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
+	if (delta_exec > ideal_runtime) {
+		resched_curr(rq_of(cfs_rq));
+		/*
+		 * The current task ran long enough, ensure it doesn't get
+		 * re-elected due to buddy favours.
+		 */
+		clear_buddies(cfs_rq, curr);
+		return;
+	}
+
+	/*
+	 * Ensure that a task that missed wakeup preemption by a
+	 * narrow margin doesn't have to wait for a full slice.
+	 * This also mitigates buddy induced latencies under load.
+	 */
+	if (delta_exec < sysctl_sched_min_granularity)
+		return;
+
+	se = __pick_first_entity(cfs_rq);
+	delta = curr->vruntime - se->vruntime;
+
+	if (delta < 0)
+		return;
+
+	if (delta > ideal_runtime)
+		resched_curr(rq_of(cfs_rq));
 }
 
 static void
@@ -4946,6 +5258,65 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	se->prev_sum_exec_runtime = se->sum_exec_runtime;
 }
 
+static int
+wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
+
+/*
+ * Pick the next process, keeping these things in mind, in this order:
+ * 1) keep things fair between processes/task groups
+ * 2) pick the "next" process, since someone really wants that to run
+ * 3) pick the "last" process, for cache locality
+ * 4) do not run the "skip" process, if something else is available
+ */
+static struct sched_entity *
+pick_cfs(struct cfs_rq *cfs_rq, struct sched_entity *curr)
+{
+	struct sched_entity *left = __pick_first_entity(cfs_rq);
+	struct sched_entity *se;
+
+	/*
+	 * If curr is set we have to see if its left of the leftmost entity
+	 * still in the tree, provided there was anything in the tree at all.
+	 */
+	if (!left || (curr && entity_before(curr, left)))
+		left = curr;
+
+	se = left; /* ideally we run the leftmost entity */
+
+	/*
+	 * Avoid running the skip buddy, if running something else can
+	 * be done without getting too unfair.
+	 */
+	if (cfs_rq->skip && cfs_rq->skip == se) {
+		struct sched_entity *second;
+
+		if (se == curr) {
+			second = __pick_first_entity(cfs_rq);
+		} else {
+			second = __pick_next_entity(se);
+			if (!second || (curr && entity_before(curr, second)))
+				second = curr;
+		}
+
+		if (second && wakeup_preempt_entity(second, left) < 1)
+			se = second;
+	}
+
+	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1) {
+		/*
+		 * Someone really wants this to run. If it's not unfair, run it.
+		 */
+		se = cfs_rq->next;
+	} else if (cfs_rq->last && wakeup_preempt_entity(cfs_rq->last, left) < 1) {
+		/*
+		 * Prefer last buddy, try to return the CPU to a preempted task.
+		 */
+		se = cfs_rq->last;
+	}
+
+	return se;
+}
+
 /*
  * Pick the next process, keeping these things in mind, in this order:
  * 1) keep things fair between processes/task groups
@@ -4956,6 +5327,8 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 static struct sched_entity *
 pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
+	if (!sysctl_sched_use_eevdf)
+		return pick_cfs(cfs_rq, curr);
 	/*
 	 * Enabling NEXT_BUDDY will affect latency but not fairness.
 	 */
@@ -4979,6 +5352,9 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 
 	/* throttle cfs_rqs exceeding runtime */
 	check_cfs_rq_runtime(cfs_rq);
+
+	if (!sysctl_sched_use_eevdf)
+		check_spread(cfs_rq, prev);
 
 	if (prev->on_rq) {
 		update_stats_wait_start(cfs_rq, prev);
@@ -5020,6 +5396,9 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 			hrtimer_active(&rq_of(cfs_rq)->hrtick_timer))
 		return;
 #endif
+
+	if (!sysctl_sched_use_eevdf && cfs_rq->nr_running > 1)
+		check_preempt_tick(cfs_rq, curr);
 }
 
 
@@ -5899,13 +6278,17 @@ static inline void unthrottle_offline_cfs_rqs(struct rq *rq) {}
 static void hrtick_start_fair(struct rq *rq, struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 	SCHED_WARN_ON(task_rq(p) != rq);
 
 	if (rq->cfs.h_nr_running > 1) {
 		u64 ran = se->sum_exec_runtime - se->prev_sum_exec_runtime;
-		u64 slice = se->slice;
-		s64 delta = slice - ran;
+		u64 slice = sched_slice(cfs_rq, se);
+		s64 delta;
+		if (sysctl_sched_use_eevdf)
+			slice = se->slice;
+		delta = (s64)(slice - ran);
 
 		if (delta < 0) {
 			if (task_current(rq, p))
@@ -5928,7 +6311,8 @@ static void hrtick_update(struct rq *rq)
 	if (!hrtick_enabled_fair(rq) || curr->sched_class != &fair_sched_class)
 		return;
 
-	hrtick_start_fair(rq, curr);
+	if (sysctl_sched_use_eevdf || cfs_rq_of(&curr->se)->nr_running < sched_nr_latency)
+		hrtick_start_fair(rq, curr);
 }
 #else /* !CONFIG_SCHED_HRTICK */
 static inline void
@@ -7460,6 +7844,32 @@ static void detach_entity_cfs_rq(struct sched_entity *se);
  */
 static void migrate_task_rq_fair(struct task_struct *p, int new_cpu)
 {
+	/*
+	 * As blocked tasks retain absolute vruntime the migration needs to
+	 * deal with this by subtracting the old and adding the new
+	 * min_vruntime -- the latter is done by enqueue_entity() when placing
+	 * the task on the new runqueue.
+	 */
+	if (!sysctl_sched_use_eevdf && READ_ONCE(p->__state) == TASK_WAKING) {
+		struct sched_entity *se = &p->se;
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+		u64 min_vruntime;
+
+#ifndef CONFIG_64BIT
+		u64 min_vruntime_copy;
+
+		do {
+			min_vruntime_copy = cfs_rq->min_vruntime_copy;
+			smp_rmb();
+			min_vruntime = cfs_rq->min_vruntime;
+		} while (min_vruntime != min_vruntime_copy);
+#else
+		min_vruntime = cfs_rq->min_vruntime;
+#endif
+
+		se->vruntime -= min_vruntime;
+	}
+
 	if (p->on_rq == TASK_ON_RQ_MIGRATING) {
 		/*
 		 * In case of TASK_ON_RQ_MIGRATING we in fact hold the 'old'
@@ -7501,6 +7911,66 @@ balance_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 }
 #endif /* CONFIG_SMP */
 
+static unsigned long wakeup_gran(struct sched_entity *se)
+{
+	unsigned long gran = sysctl_sched_wakeup_granularity;
+
+	/*
+	 * Since its curr running now, convert the gran from real-time
+	 * to virtual-time in his units.
+	 *
+	 * By using 'se' instead of 'curr' we penalize light tasks, so
+	 * they get preempted easier. That is, if 'se' < 'curr' then
+	 * the resulting gran will be larger, therefore penalizing the
+	 * lighter, if otoh 'se' > 'curr' then the resulting gran will
+	 * be smaller, again penalizing the lighter task.
+	 *
+	 * This is especially important for buddies when the leftmost
+	 * task is higher priority than the buddy.
+	 */
+	return calc_delta_fair(gran, se);
+}
+
+/*
+ * Should 'se' preempt 'curr'.
+ *
+ *             |s1
+ *        |s2
+ *   |s3
+ *         g
+ *      |<--->|c
+ *
+ *  w(c, s1) = -1
+ *  w(c, s2) =  0
+ *  w(c, s3) =  1
+ *
+ */
+static int
+wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
+{
+	s64 gran, vdiff = curr->vruntime - se->vruntime;
+
+	if (vdiff <= 0)
+		return -1;
+
+	gran = wakeup_gran(se);
+	if (vdiff > gran)
+		return 1;
+
+	return 0;
+}
+
+static void set_last_buddy(struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		if (SCHED_WARN_ON(!se->on_rq))
+			return;
+		if (se_is_idle(se))
+			return;
+		cfs_rq_of(se)->last = se;
+	}
+}
+
 static void set_next_buddy(struct sched_entity *se)
 {
 	for_each_sched_entity(se) {
@@ -7512,6 +7982,12 @@ static void set_next_buddy(struct sched_entity *se)
 	}
 }
 
+static void set_skip_buddy(struct sched_entity *se)
+{
+	for_each_sched_entity(se)
+		cfs_rq_of(se)->skip = se;
+}
+
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -7520,6 +7996,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 	struct task_struct *curr = rq->curr;
 	struct sched_entity *se = &curr->se, *pse = &p->se;
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+	int scale = (cfs_rq->nr_running >= sched_nr_latency || sysctl_sched_use_eevdf);
 	int next_buddy_marked = 0;
 	int cse_is_idle, pse_is_idle;
 
@@ -7535,7 +8012,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 	if (unlikely(throttled_hierarchy(cfs_rq_of(pse))))
 		return;
 
-	if (sched_feat(NEXT_BUDDY) && !(wake_flags & WF_FORK)) {
+	if (sched_feat(NEXT_BUDDY) && scale && !(wake_flags & WF_FORK)) {
 		set_next_buddy(pse);
 		next_buddy_marked = 1;
 	}
@@ -7586,13 +8063,41 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 	/*
 	 * XXX pick_eevdf(cfs_rq) != se ?
 	 */
-	if (pick_eevdf(cfs_rq) == pse)
-		goto preempt;
+	if (!sysctl_sched_use_eevdf) {
+		if (wakeup_preempt_entity(se, pse) == 1) {
+			/*
+			* Bias pick_next to pick the sched entity that is
+			* triggering this preemption.
+			*/
+			if (!next_buddy_marked)
+				set_next_buddy(pse);
+			goto preempt;
+		}
+	} else if (pick_eevdf(cfs_rq) == pse) {
+			goto preempt;
+	}
 
 	return;
 
 preempt:
 	resched_curr(rq);
+
+	if (!sysctl_sched_use_eevdf) {
+		/*
+		* Only set the backward buddy when the current task is still
+		* on the rq. This can happen when a wakeup gets interleaved
+		* with schedule on the ->pre_schedule() or idle_balance()
+		* point, either of which can * drop the rq lock.
+		*
+		* Also, during early boot the idle thread is in the fair class,
+		* for obvious reasons its a bad idea to schedule back to it.
+		*/
+		if (unlikely(!se->on_rq || curr == rq->idle))
+			return;
+
+		if (sched_feat(LAST_BUDDY) && scale && entity_is_task(se))
+			set_last_buddy(se);
+	}
 }
 
 #ifdef CONFIG_SMP
@@ -7808,17 +8313,23 @@ static void yield_task_fair(struct rq *rq)
 
 	clear_buddies(cfs_rq, se);
 
-	update_rq_clock(rq);
-	/*
-	 * Update run-time statistics of the 'current'.
-	 */
-	update_curr(cfs_rq);
-	/*
-	 * Tell update_rq_clock() that we've just updated,
-	 * so we don't do microscopic update in schedule()
-	 * and double the fastpath cost.
-	 */
-	rq_clock_skip_update(rq);
+	if (sysctl_sched_use_eevdf || curr->policy != SCHED_BATCH) {
+
+		update_rq_clock(rq);
+		/*
+		* Update run-time statistics of the 'current'.
+		*/
+		update_curr(cfs_rq);
+		/*
+		* Tell update_rq_clock() that we've just updated,
+		* so we don't do microscopic update in schedule()
+		* and double the fastpath cost.
+		*/
+		rq_clock_skip_update(rq);
+	}
+
+	if (!sysctl_sched_use_eevdf)
+		set_skip_buddy(se);
 
 	se->deadline += calc_delta_fair(se->slice, se);
 }
@@ -8063,7 +8574,8 @@ static int task_hot(struct task_struct *p, struct lb_env *env)
 	 * Buddy candidates are cache hot:
 	 */
 	if (sched_feat(CACHE_HOT_BUDDY) && env->dst_rq->nr_running &&
-	    (&p->se == cfs_rq_of(&p->se)->next))
+	    (&p->se == cfs_rq_of(&p->se)->next ||
+			 (!sysctl_sched_use_eevdf && &p->se == cfs_rq_of(&p->se)->last)))
 		return 1;
 
 	if (sysctl_sched_migration_cost == -1)
@@ -11595,8 +12107,9 @@ static void rq_offline_fair(struct rq *rq)
 static inline bool
 __entity_slice_used(struct sched_entity *se, int min_nr_tasks)
 {
+	u64 slice = sysctl_sched_use_eevdf ?
+		se->slice : sched_slice(cfs_rq_of(se), se);
 	u64 rtime = se->sum_exec_runtime - se->prev_sum_exec_runtime;
-	u64 slice = se->slice;
 
 	return (rtime * min_nr_tasks > slice);
 }
@@ -11748,9 +12261,24 @@ static void task_fork_fair(struct task_struct *p)
 
 	cfs_rq = task_cfs_rq(current);
 	curr = cfs_rq->curr;
-	if (curr)
+	if (curr) {
 		update_curr(cfs_rq);
+		if (!sysctl_sched_use_eevdf)
+			se->vruntime = curr->vruntime;
+	}
 	place_entity(cfs_rq, se, ENQUEUE_INITIAL);
+	if (!sysctl_sched_use_eevdf) {
+		if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
+			/*
+			* Upon rescheduling, sched_class::put_prev_task() will place
+			* 'current' within the tree based on its new key value.
+			*/
+			swap(curr->vruntime, se->vruntime);
+			resched_curr(rq);
+		}
+
+		se->vruntime -= cfs_rq->min_vruntime;
+	}
 	rq_unlock(rq, &rf);
 }
 
@@ -11777,6 +12305,34 @@ prio_changed_fair(struct rq *rq, struct task_struct *p, int oldprio)
 			resched_curr(rq);
 	} else
 		check_preempt_curr(rq, p, 0);
+}
+
+static inline bool vruntime_normalized(struct task_struct *p)
+{
+	struct sched_entity *se = &p->se;
+
+	/*
+	 * In both the TASK_ON_RQ_QUEUED and TASK_ON_RQ_MIGRATING cases,
+	 * the dequeue_entity(.flags=0) will already have normalized the
+	 * vruntime.
+	 */
+	if (p->on_rq)
+		return true;
+
+	/*
+	 * When !on_rq, vruntime of the task has usually NOT been normalized.
+	 * But there are some cases where it has already been normalized:
+	 *
+	 * - A forked child which is waiting for being woken up by
+	 *   wake_up_new_task().
+	 * - A task which has been woken up by try_to_wake_up() and
+	 *   waiting for actually being woken up by sched_ttwu_pending().
+	 */
+	if (!se->sum_exec_runtime ||
+	    (READ_ONCE(p->__state) == TASK_WAKING && p->sched_remote_wakeup))
+		return true;
+
+	return false;
 }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -11843,6 +12399,16 @@ static void attach_entity_cfs_rq(struct sched_entity *se)
 static void detach_task_cfs_rq(struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+	if (!sysctl_sched_use_eevdf && !vruntime_normalized(p)) {
+		/*
+		 * Fix up our vruntime so that the current sleep doesn't
+		 * cause 'unlimited' sleep bonus.
+		 */
+		place_entity(cfs_rq, se, 0);
+		se->vruntime -= cfs_rq->min_vruntime;
+	}
 
 	detach_entity_cfs_rq(se);
 }
@@ -11850,8 +12416,12 @@ static void detach_task_cfs_rq(struct task_struct *p)
 static void attach_task_cfs_rq(struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 	attach_entity_cfs_rq(se);
+
+	if (!sysctl_sched_use_eevdf && !vruntime_normalized(p))
+		se->vruntime += cfs_rq->min_vruntime;
 }
 
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
@@ -12219,13 +12789,14 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 {
 	struct sched_entity *se = &task->se;
 	unsigned int rr_interval = 0;
+	uint64_t slice = sysctl_sched_use_eevdf ? se->slice : sched_slice(cfs_rq_of(se), se);
 
 	/*
 	 * Time slice is 0 for SCHED_OTHER tasks that are on an otherwise
 	 * idle runqueue:
 	 */
 	if (rq->cfs.load.weight)
-		rr_interval = NS_TO_JIFFIES(se->slice);
+		rr_interval = NS_TO_JIFFIES(slice);
 
 	return rr_interval;
 }
