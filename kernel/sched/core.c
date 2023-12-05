@@ -2060,7 +2060,7 @@ bool sched_task_on_rq(struct task_struct *p)
 	return task_on_rq_queued(p);
 }
 
-static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
+inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	/*
 	 * TODO: currently request for boosting remote vcpus is not implemented. So
@@ -2088,7 +2088,7 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 		sched_core_enqueue(rq, p);
 }
 
-static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (sched_core_enabled(rq))
 		sched_core_dequeue(rq, p);

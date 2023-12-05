@@ -12886,6 +12886,105 @@ void show_numa_stats(struct task_struct *p, struct seq_file *m)
 #endif /* CONFIG_NUMA_BALANCING */
 #endif /* CONFIG_SCHED_DEBUG */
 
+DEFINE_PER_CPU(struct list_head, eevdf_switch_tasks);
+
+extern inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags);
+extern inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags);
+
+int scheduler_switch_eevdf(void *arg)
+{
+	unsigned int use_eevdf = (unsigned int)((size_t) arg);
+	int cpu;
+	struct task_struct *p;
+	struct rq *rq;
+	int num_deq;
+	struct list_head* cpu_list;
+	struct list_head* cfs_tasks;
+	struct rq_flags rf;
+
+	// 1. Remove all the scheduling entities from all rq.
+	// 2. Change the use_eevdf rq flags.
+	// 3. Add all the entities removed back to the rqs.
+	lockdep_assert_irqs_disabled();
+
+	if (use_eevdf == sysctl_sched_use_eevdf)
+		return 0;
+
+	// Dequeue all the tasks
+	for_each_cpu(cpu, cpu_possible_mask) {
+		num_deq = 0;
+		cpu_list = &per_cpu(eevdf_switch_tasks, (cpu));
+
+		INIT_LIST_HEAD(cpu_list);
+		// Since this is running in a stop_machine we don't need to take the
+		// lock, but to make lockdep_asserts happy.
+		rq = cpu_rq(cpu);
+		rq_lock(rq, &rf);
+		cfs_tasks = &rq->cfs_tasks;
+		while(!list_empty(cfs_tasks)) {
+			p = list_first_entry(cfs_tasks, struct task_struct, se.group_node);
+			num_deq++;
+			dequeue_task(rq, p, DEQUEUE_SAVE);
+			list_add(&p->se.group_node, cpu_list);
+		}
+		if (rb_first_cached(&rq->cfs.tasks_timeline) || rq->cfs.nr_running)
+			pr_err("unexpected tasks on rq: num_deq=%d, cfs_rq->nr_running=%d\n",
+					num_deq, rq->cfs.nr_running);
+		rq_unlock(rq, &rf);
+	}
+
+	// Switch the EEVDF flag
+	sysctl_sched_use_eevdf = use_eevdf;
+
+	// Enqueue all the taks back into the rqs
+	for_each_cpu(cpu, cpu_possible_mask) {
+		cpu_list = &per_cpu(eevdf_switch_tasks, (cpu));
+		rq = cpu_rq(cpu);
+		rq_lock(rq, &rf);
+		while(!list_empty(cpu_list)) {
+			p = list_first_entry(cpu_list, struct task_struct, se.group_node);
+			list_del(&p->se.group_node);
+			enqueue_task(rq, p, ENQUEUE_RESTORE);
+		}
+		rq_unlock(rq, &rf);
+	}
+
+	return 0;
+}
+
+int sched_use_eevdf(struct ctl_table *table, int write,
+			  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table t;
+	int err;
+	unsigned int state = sysctl_sched_use_eevdf;
+
+	t = *table;
+	t.data = &state;
+	err = proc_dointvec_minmax(&t, write, buffer, lenp, ppos);
+	if (err < 0)
+		return err;
+
+	if (write)
+		stop_machine_cpuslocked(
+			scheduler_switch_eevdf, (void *)((size_t)state), NULL);
+
+	return err;
+}
+
+static struct ctl_table fair_sysctl_table[] = {
+	{
+		.procname	= "sched_use_eevdf",
+		.data		= NULL,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_use_eevdf,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{}
+};
+
 __init void init_sched_fair_class(void)
 {
 #ifdef CONFIG_SMP
@@ -12898,6 +12997,7 @@ __init void init_sched_fair_class(void)
 #endif
 #endif /* SMP */
 
+	register_sysctl("kernel", fair_sysctl_table);
 }
 
 /*
