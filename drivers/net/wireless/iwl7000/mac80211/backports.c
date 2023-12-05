@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018, 2020, 2022 Intel Corporation
+ * Copyright (C) 2018, 2020, 2022-2023 Intel Corporation
  *
  * Backport functionality introduced in Linux 4.4.
  *
@@ -148,302 +148,6 @@ EXPORT_SYMBOL(/* don't auto-generate a rename */
 	ieee80211_data_to_8023_exthdr);
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5,18,0) */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,9,0)
-static void
-__frame_add_frag(struct sk_buff *skb, struct page *page,
-		 void *ptr, int len, int size)
-{
-	struct skb_shared_info *sh = skb_shinfo(skb);
-	int page_offset;
-
-	get_page(page);
-	page_offset = ptr - page_address(page);
-	skb_add_rx_frag(skb, sh->nr_frags, page, page_offset, len, size);
-}
-
-static void
-__ieee80211_amsdu_copy_frag(struct sk_buff *skb, struct sk_buff *frame,
-			    int offset, int len)
-{
-	struct skb_shared_info *sh = skb_shinfo(skb);
-	const skb_frag_t *frag = &sh->frags[0];
-	struct page *frag_page;
-	void *frag_ptr;
-	int frag_len, frag_size;
-	int head_size = skb->len - skb->data_len;
-	int cur_len;
-
-	frag_page = virt_to_head_page(skb->head);
-	frag_ptr = skb->data;
-	frag_size = head_size;
-
-	while (offset >= frag_size) {
-		offset -= frag_size;
-		frag_page = skb_frag_page(frag);
-		frag_ptr = skb_frag_address(frag);
-		frag_size = skb_frag_size(frag);
-		frag++;
-	}
-
-	frag_ptr += offset;
-	frag_len = frag_size - offset;
-
-	cur_len = min(len, frag_len);
-
-	__frame_add_frag(frame, frag_page, frag_ptr, cur_len, frag_size);
-	len -= cur_len;
-
-	while (len > 0) {
-		frag_len = skb_frag_size(frag);
-		cur_len = min(len, frag_len);
-		__frame_add_frag(frame, skb_frag_page(frag),
-				 skb_frag_address(frag), cur_len, frag_len);
-		len -= cur_len;
-		frag++;
-	}
-}
-
-static struct sk_buff *
-__ieee80211_amsdu_copy(struct sk_buff *skb, unsigned int hlen,
-		       int offset, int len, bool reuse_frag)
-{
-	struct sk_buff *frame;
-	int cur_len = len;
-
-	if (skb->len - offset < len)
-		return NULL;
-
-	/*
-	 * When reusing framents, copy some data to the head to simplify
-	 * ethernet header handling and speed up protocol header processing
-	 * in the stack later.
-	 */
-	if (reuse_frag)
-		cur_len = min_t(int, len, 32);
-
-	/*
-	 * Allocate and reserve two bytes more for payload
-	 * alignment since sizeof(struct ethhdr) is 14.
-	 */
-	frame = dev_alloc_skb(hlen + sizeof(struct ethhdr) + 2 + cur_len);
-	if (!frame)
-		return NULL;
-
-	skb_reserve(frame, hlen + sizeof(struct ethhdr) + 2);
-	skb_copy_bits(skb, offset, skb_put(frame, cur_len), cur_len);
-
-	len -= cur_len;
-	if (!len)
-		return frame;
-
-	offset += cur_len;
-	__ieee80211_amsdu_copy_frag(skb, frame, offset, len);
-
-	return frame;
-}
-
-void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
-			      const u8 *addr, enum nl80211_iftype iftype,
-			      const unsigned int extra_headroom,
-			      const u8 *check_da, const u8 *check_sa)
-{
-	unsigned int hlen = ALIGN(extra_headroom, 4);
-	struct sk_buff *frame = NULL;
-	u16 ethertype;
-	u8 *payload;
-	int offset = 0, remaining;
-	struct ethhdr eth;
-	bool reuse_frag = skb->head_frag && !skb_has_frag_list(skb);
-	bool reuse_skb = false;
-	bool last = false;
-
-	while (!last) {
-		unsigned int subframe_len;
-		int len;
-		u8 padding;
-
-		skb_copy_bits(skb, offset, &eth, sizeof(eth));
-		len = ntohs(eth.h_proto);
-		subframe_len = sizeof(struct ethhdr) + len;
-		padding = (4 - subframe_len) & 0x3;
-
-		/* the last MSDU has no padding */
-		remaining = skb->len - offset;
-		if (subframe_len > remaining)
-			goto purge;
-
-		offset += sizeof(struct ethhdr);
-		last = remaining <= subframe_len + padding;
-
-		/* FIXME: should we really accept multicast DA? */
-		if ((check_da && !is_multicast_ether_addr(eth.h_dest) &&
-		     !ether_addr_equal(check_da, eth.h_dest)) ||
-		    (check_sa && !ether_addr_equal(check_sa, eth.h_source))) {
-			offset += len + padding;
-			continue;
-		}
-
-		/* reuse skb for the last subframe */
-		if (!skb_is_nonlinear(skb) && !reuse_frag && last) {
-			skb_pull(skb, offset);
-			frame = skb;
-			reuse_skb = true;
-		} else {
-			frame = __ieee80211_amsdu_copy(skb, hlen, offset, len,
-						       reuse_frag);
-			if (!frame)
-				goto purge;
-
-			offset += len + padding;
-		}
-
-		skb_reset_network_header(frame);
-		frame->dev = skb->dev;
-		frame->priority = skb->priority;
-
-		payload = frame->data;
-		ethertype = (payload[6] << 8) | payload[7];
-		if (likely((ether_addr_equal(payload, rfc1042_header) &&
-			    ethertype != ETH_P_AARP && ethertype != ETH_P_IPX) ||
-			   ether_addr_equal(payload, bridge_tunnel_header))) {
-			eth.h_proto = htons(ethertype);
-			skb_pull(frame, ETH_ALEN + 2);
-		}
-
-		memcpy(skb_push(frame, sizeof(eth)), &eth, sizeof(eth));
-		__skb_queue_tail(list, frame);
-	}
-
-	if (!reuse_skb)
-		dev_kfree_skb(skb);
-
-	return;
-
- purge:
-	__skb_queue_purge(list);
-	dev_kfree_skb(skb);
-}
-EXPORT_SYMBOL(/* don't auto-generate a rename */
-	ieee80211_amsdu_to_8023s);
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
-#include <linux/devcoredump.h>
-
-static void devcd_free_sgtable(void *data)
-{
-	struct scatterlist *table = data;
-	int i;
-	struct page *page;
-	struct scatterlist *iter;
-	struct scatterlist *delete_iter;
-
-	/* free pages */
-	iter = table;
-	for_each_sg(table, iter, sg_nents(table), i) {
-		page = sg_page(iter);
-		if (page)
-			__free_page(page);
-	}
-
-	/* then free all chained tables */
-	iter = table;
-	delete_iter = table;	/* always points on a head of a table */
-	while (!sg_is_last(iter)) {
-		iter++;
-		if (sg_is_chain(iter)) {
-			iter = sg_chain_ptr(iter);
-			kfree(delete_iter);
-			delete_iter = iter;
-		}
-	}
-
-	/* free the last table */
-	kfree(delete_iter);
-}
-
-static ssize_t devcd_read_from_sgtable(char *buffer, loff_t offset,
-				       size_t buf_len, void *data,
-				       size_t data_len)
-{
-	struct scatterlist *table = data;
-
-	if (offset > data_len)
-		return -EINVAL;
-
-	if (offset + buf_len > data_len)
-		buf_len = data_len - offset;
-	return sg_pcopy_to_buffer(table, sg_nents(table), buffer, buf_len,
-				  offset);
-}
-
-void dev_coredumpsg(struct device *dev, struct scatterlist *table,
-		    size_t datalen, gfp_t gfp)
-{
-	/*
-	 * those casts are needed due to const issues, but it's fine
-	 * since calling convention for const/non-const is identical
-	 */
-	dev_coredumpm(dev, THIS_MODULE, table, datalen, gfp,
-		      (void *)devcd_read_from_sgtable,
-		      (void *)devcd_free_sgtable);
-}
-EXPORT_SYMBOL_GPL(dev_coredumpsg);
-#endif /* < 4.7.0 */
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
-int kstrtobool(const char *s, bool *res)
-{
-	if (!s)
-		return -EINVAL;
-
-	switch (s[0]) {
-	case 'y':
-	case 'Y':
-	case '1':
-		*res = true;
-		return 0;
-	case 'n':
-	case 'N':
-	case '0':
-		*res = false;
-		return 0;
-	case 'o':
-	case 'O':
-		switch (s[1]) {
-		case 'n':
-		case 'N':
-			*res = true;
-			return 0;
-		case 'f':
-		case 'F':
-			*res = false;
-			return 0;
-		default:
-			break;
-		}
-	default:
-		break;
-	}
-
-	return -EINVAL;
-}
-EXPORT_SYMBOL_GPL(kstrtobool);
-
-int kstrtobool_from_user(const char __user *s, size_t count, bool *res)
-{
-	/* Longest string needed to differentiate, newline, terminator */
-	char buf[4];
-
-	count = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, s, count))
-		return -EFAULT;
-	buf[count] = '\0';
-	return kstrtobool(buf, res);
-}
-EXPORT_SYMBOL_GPL(kstrtobool_from_user);
-#endif /* < 4.6.0 */
-
 #if CFG80211_VERSION < KERNEL_VERSION(5,8,0)
 #include "mac80211/ieee80211_i.h"
 #include "mac80211/driver-ops.h"
@@ -488,3 +192,277 @@ void ieee80211_mgmt_frame_register(struct wiphy *wiphy,
 	}
 }
 #endif /* < 5.8 */
+
+#ifdef CONFIG_THERMAL
+#if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
+struct thermal_zone_device *
+thermal_zone_device_register_with_trips(const char *type,
+					struct thermal_trip *trips,
+					int num_trips, int mask, void *devdata,
+					struct thermal_zone_device_ops *ops,
+					struct thermal_zone_params *tzp, int passive_delay,
+					int polling_delay)
+{
+	return thermal_zone_device_register(type, num_trips, mask, devdata, ops, tzp,
+					    passive_delay, polling_delay);
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
+{
+	return tzd->devdata;
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_priv);
+#endif /* < 6.4 */
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+/*
+ * How many Beacon frames need to have been used in average signal strength
+ * before starting to indicate signal change events.
+ */
+#define IEEE80211_SIGNAL_AVE_MIN_COUNT	4
+
+struct ieee80211_per_bw_puncturing_values {
+	u8 len;
+	const u16 *valid_values;
+};
+
+static const u16 puncturing_values_80mhz[] = {
+	0x8, 0x4, 0x2, 0x1
+};
+
+static const u16 puncturing_values_160mhz[] = {
+	 0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1, 0xc0, 0x30, 0xc, 0x3
+};
+
+static const u16 puncturing_values_320mhz[] = {
+	0xc000, 0x3000, 0xc00, 0x300, 0xc0, 0x30, 0xc, 0x3, 0xf000, 0xf00,
+	0xf0, 0xf, 0xfc00, 0xf300, 0xf0c0, 0xf030, 0xf00c, 0xf003, 0xc00f,
+	0x300f, 0xc0f, 0x30f, 0xcf, 0x3f
+};
+
+#define IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(_bw) \
+	{ \
+		.len = ARRAY_SIZE(puncturing_values_ ## _bw ## mhz), \
+		.valid_values = puncturing_values_ ## _bw ## mhz \
+	}
+
+static const struct ieee80211_per_bw_puncturing_values per_bw_puncturing[] = {
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(80),
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(160),
+	IEEE80211_PER_BW_VALID_PUNCTURING_VALUES(320)
+};
+
+static bool
+ieee80211_valid_disable_subchannel_bitmap(u16 *bitmap, enum nl80211_chan_width bw)
+{
+	u32 idx, i;
+
+	switch (bw) {
+	case NL80211_CHAN_WIDTH_80:
+		idx = 0;
+		break;
+	case NL80211_CHAN_WIDTH_160:
+		idx = 1;
+		break;
+#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
+	case NL80211_CHAN_WIDTH_320:
+		idx = 2;
+		break;
+#endif
+	default:
+		*bitmap = 0;
+		break;
+	}
+
+	if (!*bitmap)
+		return true;
+
+	for (i = 0; i < per_bw_puncturing[idx].len; i++)
+		if (per_bw_puncturing[idx].valid_values[i] == *bitmap)
+			return true;
+
+	return false;
+}
+
+bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					      struct cfg80211_chan_def *chandef)
+{
+	return ieee80211_valid_disable_subchannel_bitmap(bitmap, chandef->width);
+}
+
+#endif /* < 6.3  */
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+#include "mac80211/ieee80211_i.h"
+
+static void cfg80211_wiphy_work(struct work_struct *work)
+{
+	struct ieee80211_local *local;
+	struct wiphy_work *wk;
+
+	local = container_of(work, struct ieee80211_local, wiphy_work);
+
+#if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
+	rtnl_lock();
+#else
+	wiphy_lock(local->hw.wiphy);
+#endif
+	if (local->suspended)
+		goto out;
+
+	spin_lock_irq(&local->wiphy_work_lock);
+	wk = list_first_entry_or_null(&local->wiphy_work_list,
+				      struct wiphy_work, entry);
+	if (wk) {
+		list_del_init(&wk->entry);
+		if (!list_empty(&local->wiphy_work_list))
+			schedule_work(work);
+		spin_unlock_irq(&local->wiphy_work_lock);
+
+		wk->func(local->hw.wiphy, wk);
+	} else {
+		spin_unlock_irq(&local->wiphy_work_lock);
+	}
+out:
+#if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
+	rtnl_unlock();
+#else
+	wiphy_unlock(local->hw.wiphy);
+#endif
+}
+
+void wiphy_work_setup(struct ieee80211_local *local)
+{
+	INIT_WORK(&local->wiphy_work, cfg80211_wiphy_work);
+	INIT_LIST_HEAD(&local->wiphy_work_list);
+	spin_lock_init(&local->wiphy_work_lock);
+}
+
+void wiphy_work_flush(struct wiphy *wiphy, struct wiphy_work *end)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct ieee80211_local *local = hw_to_local(hw);
+	struct wiphy_work *wk;
+	unsigned long flags;
+	int runaway_limit = 100;
+
+	lockdep_assert_wiphy(wiphy);
+
+	spin_lock_irqsave(&local->wiphy_work_lock, flags);
+	while (!list_empty(&local->wiphy_work_list)) {
+		struct wiphy_work *wk;
+
+		wk = list_first_entry(&local->wiphy_work_list,
+				      struct wiphy_work, entry);
+		list_del_init(&wk->entry);
+		spin_unlock_irqrestore(&local->wiphy_work_lock, flags);
+
+		wk->func(local->hw.wiphy, wk);
+
+		spin_lock_irqsave(&local->wiphy_work_lock, flags);
+
+		if (wk == end)
+			break;
+
+		if (WARN_ON(--runaway_limit == 0))
+			INIT_LIST_HEAD(&local->wiphy_work_list);
+	}
+	spin_unlock_irqrestore(&local->wiphy_work_lock, flags);
+}
+
+void wiphy_delayed_work_flush(struct wiphy *wiphy,
+			      struct wiphy_delayed_work *dwork)
+{
+	del_timer_sync(&dwork->timer);
+	wiphy_work_flush(wiphy, &dwork->work);
+}
+
+void wiphy_work_teardown(struct ieee80211_local *local)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
+	rtnl_lock();
+#else
+	wiphy_lock(local->hw.wiphy);
+#endif
+
+	wiphy_work_flush(local->hw.wiphy, NULL);
+
+#if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
+	rtnl_unlock();
+#else
+	wiphy_unlock(local->hw.wiphy);
+#endif
+
+	cancel_work_sync(&local->wiphy_work);
+}
+
+void wiphy_work_queue(struct wiphy *wiphy, struct wiphy_work *work)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct ieee80211_local *local = hw_to_local(hw);
+	unsigned long flags;
+
+	spin_lock_irqsave(&local->wiphy_work_lock, flags);
+	if (list_empty(&work->entry))
+		list_add_tail(&work->entry, &local->wiphy_work_list);
+	spin_unlock_irqrestore(&local->wiphy_work_lock, flags);
+
+	schedule_work(&local->wiphy_work);
+}
+EXPORT_SYMBOL_GPL(wiphy_work_queue);
+
+void wiphy_work_cancel(struct wiphy *wiphy, struct wiphy_work *work)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct ieee80211_local *local = hw_to_local(hw);
+	unsigned long flags;
+
+#if CFG80211_VERSION < KERNEL_VERSION(5,12,0)
+	ASSERT_RTNL();
+#else
+	lockdep_assert_held(&wiphy->mtx);
+#endif
+
+	spin_lock_irqsave(&local->wiphy_work_lock, flags);
+	if (!list_empty(&work->entry))
+		list_del_init(&work->entry);
+	spin_unlock_irqrestore(&local->wiphy_work_lock, flags);
+}
+EXPORT_SYMBOL_GPL(wiphy_work_cancel);
+
+void wiphy_delayed_work_timer(struct timer_list *t)
+{
+	struct wiphy_delayed_work *dwork = from_timer(dwork, t, timer);
+
+	wiphy_work_queue(dwork->wiphy, &dwork->work);
+}
+EXPORT_SYMBOL(wiphy_delayed_work_timer);
+
+void wiphy_delayed_work_queue(struct wiphy *wiphy,
+			      struct wiphy_delayed_work *dwork,
+			      unsigned long delay)
+{
+	if (!delay) {
+		wiphy_work_queue(wiphy, &dwork->work);
+		return;
+	}
+
+	dwork->wiphy = wiphy;
+	mod_timer(&dwork->timer, jiffies + delay);
+}
+EXPORT_SYMBOL_GPL(wiphy_delayed_work_queue);
+
+void wiphy_delayed_work_cancel(struct wiphy *wiphy,
+			       struct wiphy_delayed_work *dwork)
+{
+	lockdep_assert_held(&wiphy->mtx);
+
+	del_timer_sync(&dwork->timer);
+	wiphy_work_cancel(wiphy, &dwork->work);
+}
+EXPORT_SYMBOL_GPL(wiphy_delayed_work_cancel);
+#endif /* CFG80211_VERSION < KERNEL_VERSION(6,5,0) */

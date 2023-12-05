@@ -4,7 +4,7 @@
  *
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
- * Copyright (C) 2018 - 2019, 2021-2022 Intel Corporation
+ * Copyright (C) 2018 - 2019, 2021-2023 Intel Corporation
  */
 
 #include <linux/debugfs.h>
@@ -288,10 +288,14 @@ static ssize_t aql_txq_limit_write(struct file *file,
 	q_limit_low_old = local->aql_txq_limit_low[ac];
 	q_limit_high_old = local->aql_txq_limit_high[ac];
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(local->hw.wiphy);
+#else
+	rtnl_lock();
+#endif
 	local->aql_txq_limit_low[ac] = q_limit_low;
 	local->aql_txq_limit_high[ac] = q_limit_high;
 
-	mutex_lock(&local->sta_mtx);
 	list_for_each_entry(sta, &local->sta_list, list) {
 		/* If a sta has customized queue limits, keep it */
 		if (sta->airtime[ac].aql_limit_low == q_limit_low_old &&
@@ -300,7 +304,12 @@ static ssize_t aql_txq_limit_write(struct file *file,
 			sta->airtime[ac].aql_limit_high = q_limit_high;
 		}
 	}
-	mutex_unlock(&local->sta_mtx);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(local->hw.wiphy);
+#else
+	rtnl_unlock();
+#endif
+
 	return count;
 }
 
@@ -604,9 +613,17 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 	char buf[20];
 	int res;
 
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(local->hw.wiphy);
+#else
 	rtnl_lock();
+#endif
 	res = drv_get_stats(local, &stats);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(local->hw.wiphy);
+#else
 	rtnl_unlock();
+#endif
 	if (res)
 		return res;
 	res = printvalue(&stats, buf, sizeof(buf));
@@ -684,10 +701,6 @@ void debugfs_hw_add(struct ieee80211_local *local)
 			   phyd, &local->aql_threshold);
 
 	statsd = debugfs_create_dir("statistics", phyd);
-
-	/* if the dir failed, don't put all the other things into the root! */
-	if (!statsd)
-		return;
 
 #ifdef CPTCFG_MAC80211_DEBUG_COUNTERS
 	DEBUGFS_STATS_ADD(dot11TransmittedFragmentCount);

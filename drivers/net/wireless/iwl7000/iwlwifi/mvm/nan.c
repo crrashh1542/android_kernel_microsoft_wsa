@@ -90,13 +90,13 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	/* 2GHz is mandatory and nl80211 should make sure it is set.
 	 * Warn and add 2GHz if this happens anyway.
 	 */
-	if (WARN_ON(ieee80211_nan_bands(conf) && !(ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ))))
+	if (WARN_ON(conf->bands && !(conf->bands & BIT(NL80211_BAND_2GHZ))))
 		return -EINVAL;
 
 	/* This function should not be called when using ADD_STA ver >=12 */
 	WARN_ON_ONCE(iwl_fw_lookup_cmd_ver(mvm->fw, ADD_STA, 0) >= 12);
 
-	ieee80211_nan_set_band(conf, NL80211_BAND_2GHZ);
+	conf->bands |= BIT(NL80211_BAND_2GHZ);
 	cmd = kzalloc(iwl_mvm_nan_cfg_cmd_len(hw), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
@@ -115,7 +115,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	umac_cfg->sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
 	umac_cfg->master_pref = conf->master_pref;
 
-	if (ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) {
+	if (conf->bands & BIT(NL80211_BAND_2GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_2GHZ,
 					NAN_CHANNEL_24)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_24);
@@ -126,7 +126,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		tb_cfg->chan24 = NAN_CHANNEL_24;
 	}
 
-	if (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)) {
+	if (conf->bands & BIT(NL80211_BAND_5GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_5GHZ,
 					NAN_CHANNEL_52)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_52);
@@ -141,8 +141,8 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	tb_cfg->op_bands = 3;
 	nan2_cfg->cdw = cpu_to_le16(cdw);
 
-	if ((ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) &&
-	    (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)))
+	if ((conf->bands & BIT(NL80211_BAND_2GHZ)) &&
+	    (conf->bands & BIT(NL80211_BAND_5GHZ)))
 		umac_cfg->dual_band = cpu_to_le32(1);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, WIDE_ID(NAN_GROUP, NAN_CONFIG_CMD),

@@ -1252,7 +1252,8 @@ iwl_dbg_tlv_tp_trigger(struct iwl_fw_runtime *fwrt, bool sync,
 		fwrt->trans->dbg.restart_required = FALSE;
 		IWL_DEBUG_FW(fwrt, "WRT: tp %d, reset_fw %d\n",
 			     tp, dump_data.trig->reset_fw);
-		IWL_DEBUG_FW(fwrt, "WRT: restart_required %d, last_tp_resetfw %d\n",
+		IWL_DEBUG_FW(fwrt,
+			     "WRT: restart_required %d, last_tp_resetfw %d\n",
 			     fwrt->trans->dbg.restart_required,
 			     fwrt->trans->dbg.last_tp_resetfw);
 
@@ -1271,7 +1272,8 @@ iwl_dbg_tlv_tp_trigger(struct iwl_fw_runtime *fwrt, bool sync,
 			fwrt->trans->dbg.restart_required = TRUE;
 		} else if (le32_to_cpu(dump_data.trig->reset_fw) ==
 			   IWL_FW_INI_RESET_FW_MODE_STOP_FW_ONLY) {
-			IWL_DEBUG_FW(fwrt, "WRT: stop only and no reload firmware\n");
+			IWL_DEBUG_FW(fwrt,
+				     "WRT: stop only and no reload firmware\n");
 			fwrt->trans->dbg.restart_required = FALSE;
 			fwrt->trans->dbg.last_tp_resetfw =
 				le32_to_cpu(dump_data.trig->reset_fw);
@@ -1287,7 +1289,7 @@ iwl_dbg_tlv_tp_trigger(struct iwl_fw_runtime *fwrt, bool sync,
 	return 0;
 }
 
-static void iwl_dbg_tlv_init_cfg(struct iwl_fw_runtime *fwrt)
+void iwl_dbg_tlv_init_cfg(struct iwl_fw_runtime *fwrt)
 {
 	enum iwl_fw_ini_buffer_location *ini_dest = &fwrt->trans->dbg.ini_dest;
 	int ret, i;
@@ -1305,8 +1307,7 @@ static void iwl_dbg_tlv_init_cfg(struct iwl_fw_runtime *fwrt)
 			iwl_dbg_tlv_gen_active_trig_list(fwrt, tp);
 		}
 	} else if (*ini_dest != IWL_FW_INI_LOCATION_DRAM_PATH) {
-		/*
-		 * For DRAM, go through the loop below to clear all the buffers
+		/* For DRAM, go through the loop below to clear all the buffers
 		 * properly on restart, otherwise garbage may be left there and
 		 * leak into new debug dumps.
 		 */

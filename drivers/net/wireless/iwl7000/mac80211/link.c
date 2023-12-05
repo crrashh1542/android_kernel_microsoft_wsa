@@ -37,16 +37,18 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 	link_conf->link_id = link_id;
 	link_conf->vif = &sdata->vif;
 
-	INIT_WORK(&link->csa_finalize_work,
-		  ieee80211_csa_finalize_work);
+	wiphy_work_init(&link->csa_finalize_work,
+			ieee80211_csa_finalize_work);
 #if CFG80211_VERSION >= KERNEL_VERSION(5,15,0)
-	INIT_WORK(&link->color_change_finalize_work,
-		  ieee80211_color_change_finalize_work);
+	wiphy_work_init(&link->color_change_finalize_work,
+			ieee80211_color_change_finalize_work);
 #endif
+	INIT_DELAYED_WORK(&link->color_collision_detect_work,
+			  ieee80211_color_collision_detection_work);
 	INIT_LIST_HEAD(&link->assigned_chanctx_list);
 	INIT_LIST_HEAD(&link->reserved_chanctx_list);
-	INIT_DELAYED_WORK(&link->dfs_cac_timer_work,
-			  ieee80211_dfs_cac_timer_work);
+	wiphy_delayed_work_init(&link->dfs_cac_timer_work,
+				ieee80211_dfs_cac_timer_work);
 
 	if (!deflink) {
 		switch (sdata->vif.type) {
@@ -74,6 +76,7 @@ void ieee80211_link_stop(struct ieee80211_link_data *link)
 	if (link->sdata->vif.type == NL80211_IFTYPE_STATION)
 		ieee80211_mgd_stop_link(link);
 
+	cancel_delayed_work_sync(&link->color_collision_detect_work);
 	ieee80211_link_release_channel(link);
 }
 
@@ -192,11 +195,11 @@ static int ieee80211_vif_update_links(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_link_data *old_data[IEEE80211_MLD_MAX_NUM_LINKS];
 	bool use_deflink = old_links == 0; /* set for error case */
 
-	sdata_assert_lock(sdata);
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
 	memset(to_free, 0, sizeof(links));
 
-	if (old_links == new_links)
+	if (old_links == new_links && dormant_links == sdata->vif.dormant_links)
 		return 0;
 
 	/* if there were no old links, need to clear the pointers to deflink */
@@ -236,6 +239,9 @@ static int ieee80211_vif_update_links(struct ieee80211_sub_if_data *sdata,
 		RCU_INIT_POINTER(sdata->vif.link_conf[link_id], NULL);
 	}
 
+	if (!old_links)
+		ieee80211_debugfs_recreate_netdev(sdata, true);
+
 	/* link them into data structures */
 	for_each_set_bit(link_id, &add, IEEE80211_MLD_MAX_NUM_LINKS) {
 		WARN_ON(!use_deflink &&
@@ -262,6 +268,8 @@ static int ieee80211_vif_update_links(struct ieee80211_sub_if_data *sdata,
 					   old_links & old_active,
 					   new_links & sdata->vif.active_links,
 					   old);
+		if (!new_links)
+			ieee80211_debugfs_recreate_netdev(sdata, false);
 	}
 
 	if (ret) {
@@ -302,23 +310,6 @@ int ieee80211_vif_set_links(struct ieee80211_sub_if_data *sdata,
 	ieee80211_free_links(sdata, links);
 
 	return ret;
-}
-
-void ieee80211_vif_clear_links(struct ieee80211_sub_if_data *sdata)
-{
-	struct link_container *links[IEEE80211_MLD_MAX_NUM_LINKS];
-
-	/*
-	 * The locking here is different because when we free links
-	 * in the station case we need to be able to cancel_work_sync()
-	 * something that also takes the lock.
-	 */
-
-	sdata_lock(sdata);
-	ieee80211_vif_update_links(sdata, links, 0, 0);
-	sdata_unlock(sdata);
-
-	ieee80211_free_links(sdata, links);
 }
 
 static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
@@ -456,10 +447,8 @@ int ieee80211_set_active_links(struct ieee80211_vif *vif, u16 active_links)
 	u16 old_active;
 	int ret;
 
-	sdata_lock(sdata);
-	mutex_lock(&local->sta_mtx);
-	mutex_lock(&local->mtx);
-	mutex_lock(&local->key_mtx);
+	lockdep_assert_wiphy(local->hw.wiphy);
+
 	old_active = sdata->vif.active_links;
 	if (old_active & active_links) {
 		/*
@@ -475,10 +464,6 @@ int ieee80211_set_active_links(struct ieee80211_vif *vif, u16 active_links)
 		/* otherwise switch directly */
 		ret = _ieee80211_set_active_links(sdata, active_links);
 	}
-	mutex_unlock(&local->key_mtx);
-	mutex_unlock(&local->mtx);
-	mutex_unlock(&local->sta_mtx);
-	sdata_unlock(sdata);
 
 	return ret;
 }
@@ -503,6 +488,6 @@ void ieee80211_set_active_links_async(struct ieee80211_vif *vif,
 		return;
 
 	sdata->desired_active_links = active_links;
-	schedule_work(&sdata->activate_links_work);
+	wiphy_work_queue(sdata->local->hw.wiphy, &sdata->activate_links_work);
 }
 EXPORT_SYMBOL_GPL(ieee80211_set_active_links_async);

@@ -70,7 +70,8 @@ static void iwl_mvm_quota_iterator(void *_data, u8 *mac,
 	if (data->colors[id] < 0)
 		data->colors[id] = mvmvif->deflink.phy_ctxt->color;
 	else
-		WARN_ON_ONCE(data->colors[id] != mvmvif->deflink.phy_ctxt->color);
+		WARN_ON_ONCE(data->colors[id] !=
+			     mvmvif->deflink.phy_ctxt->color);
 
 	data->n_interfaces[id]++;
 

@@ -261,7 +261,7 @@ int iwl_mvm_mld_mac_ctxt_add(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	int ret;
 
-	if (WARN_ON_ONCE(ieee80211_viftype_nan(vif->type)))
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
 		return -EOPNOTSUPP;
 
 	if (WARN_ONCE(mvmvif->uploaded, "Adding active MAC %pM/%d\n",
@@ -286,7 +286,7 @@ int iwl_mvm_mld_mac_ctxt_changed(struct iwl_mvm *mvm,
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
-	if (WARN_ON_ONCE(ieee80211_viftype_nan(vif->type)))
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
 		return -EOPNOTSUPP;
 
 	if (WARN_ONCE(!mvmvif->uploaded, "Changing inactive MAC %pM/%d\n",
@@ -306,7 +306,7 @@ int iwl_mvm_mld_mac_ctxt_remove(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	};
 	int ret;
 
-	if (WARN_ON_ONCE(ieee80211_viftype_nan(vif->type)))
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
 		return -EOPNOTSUPP;
 
 	if (WARN_ONCE(!mvmvif->uploaded, "Removing inactive MAC %pM/%d\n",

@@ -150,10 +150,24 @@ struct iwl_rfi_lut_entry iwl_rfi_ddr_table[IWL_RFI_DDR_LUT_SIZE] = {
 		PHY_BAND_6,}},
 };
 
-bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm)
+static inline bool iwl_rfi_enabled_by_mac_type(struct iwl_mvm *mvm,
+					       bool so_rfi_mode)
+{
+	u32 mac_type = CSR_HW_REV_TYPE(mvm->trans->hw_rev);
+	bool enable_rfi = false;
+
+	if ((mac_type != IWL_CFG_ANY && mac_type >= IWL_CFG_MAC_TYPE_MA) ||
+	    (mac_type == IWL_CFG_MAC_TYPE_SO && so_rfi_mode))
+		enable_rfi = true;
+
+	return enable_rfi;
+}
+
+bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm, bool so_rfi_mode)
 {
 	u8 dsm_rfi_ddr = iwl_mvm_eval_dsm_rfi_ddr(mvm);
-	u32 mac_type = CSR_HW_REV_TYPE(mvm->trans->hw_rev);
+	bool rfi_enable_mac_type = iwl_rfi_enabled_by_mac_type(mvm,
+							       so_rfi_mode);
 	bool ddr_capa = fw_has_capa(&mvm->fw->ucode_capa,
 				    IWL_UCODE_TLV_CAPA_RFI_DDR_SUPPORT);
 
@@ -162,20 +176,20 @@ bool iwl_rfi_ddr_supported(struct iwl_mvm *mvm)
 		     ddr_capa ? "yes" : "no",
 		     dsm_rfi_ddr == DSM_VALUE_RFI_DDR_ENABLE ? "yes" : "no");
 	IWL_DEBUG_FW(mvm,
-		     "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
+		     "HW is integrated:%s rfi_enabled:%s fw_rfi_state:%d\n",
 		     mvm->trans->trans_cfg->integrated ? "yes" : "no",
-		     mac_type, mvm->fw_rfi_state);
+		     rfi_enable_mac_type ? "yes" : "no", mvm->fw_rfi_state);
 
 	return ddr_capa && dsm_rfi_ddr == DSM_VALUE_RFI_DDR_ENABLE &&
-		mac_type >= IWL_CFG_MAC_TYPE_MA &&
-		mvm->trans->trans_cfg->integrated &&
+		rfi_enable_mac_type && mvm->trans->trans_cfg->integrated &&
 		mvm->fw_rfi_state == IWL_RFI_PMC_SUPPORTED;
 }
 
-bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm)
+bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm, bool so_rfi_mode)
 {
 	u8 dsm_rfi_dlvr = iwl_mvm_eval_dsm_rfi_dlvr(mvm);
-	u32 mac_type = CSR_HW_REV_TYPE(mvm->trans->hw_rev);
+	bool rfi_enable_mac_type = iwl_rfi_enabled_by_mac_type(mvm,
+							       so_rfi_mode);
 	bool dlvr_capa = fw_has_capa(&mvm->fw->ucode_capa,
 				     IWL_UCODE_TLV_CAPA_RFI_DLVR_SUPPORT);
 
@@ -183,35 +197,52 @@ bool iwl_rfi_dlvr_supported(struct iwl_mvm *mvm)
 		     "FW has RFI DLVR capability:%s DLVR enabled in BIOS:%s\n",
 		     dlvr_capa ? "yes" : "no",
 		     dsm_rfi_dlvr == DSM_VALUE_RFI_DLVR_ENABLE ? "yes" : "no");
+
 	IWL_DEBUG_FW(mvm,
-		     "HW is integrated:%s mac type:%d fw_rfi_state:%d\n",
+		     "HW is integrated:%s rfi_enabled:%s fw_rfi_state:%d\n",
 		     mvm->trans->trans_cfg->integrated ? "yes" : "no",
-		     mac_type, mvm->fw_rfi_state);
+		     rfi_enable_mac_type ? "yes" : "no", mvm->fw_rfi_state);
 
 	return dlvr_capa && dsm_rfi_dlvr == DSM_VALUE_RFI_DLVR_ENABLE &&
-		mac_type >= IWL_CFG_MAC_TYPE_MA &&
-		mvm->trans->trans_cfg->integrated &&
+		rfi_enable_mac_type && mvm->trans->trans_cfg->integrated &&
 		mvm->fw_rfi_state == IWL_RFI_PMC_SUPPORTED;
 }
 
 int iwl_rfi_send_config_cmd(struct iwl_mvm *mvm,
-			    struct iwl_rfi_lut_entry *rfi_ddr_table)
+			    struct iwl_rfi_lut_entry *rfi_ddr_table,
+			    bool is_set_master_cmd, bool force_send_table)
 {
-	int ret;
 	struct iwl_rfi_config_cmd *cmd = NULL;
+	bool rfi_ddr_support;
+	bool rfi_dlvr_support;
+	bool old_force_rfi = mvm->force_enable_rfi;
+	bool so_rfi_mode;
+	int ret = 0;
 	struct iwl_host_cmd hcmd = {
 		.id = WIDE_ID(SYSTEM_GROUP, RFI_CONFIG_CMD),
 		.dataflags[0] = IWL_HCMD_DFL_DUP,
 		.len[0] = sizeof(*cmd),
 	};
-	bool rfi_ddr_support = iwl_rfi_ddr_supported(mvm);
-	bool rfi_dlvr_support = iwl_rfi_dlvr_supported(mvm);
 	u8 cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw,
 					   WIDE_ID(SYSTEM_GROUP,
 						   RFI_CONFIG_CMD), 0);
 
 	if (cmd_ver != 3)
 		return -EOPNOTSUPP;
+
+	/* for SO, rfi support is enabled only when vendor
+	 * command explicitly asked us to manage RFI.
+	 * vendor command can change SO enablement mode
+	 */
+	if (is_set_master_cmd) {
+		mvm->force_enable_rfi = mvm->rfi_wlan_master;
+		so_rfi_mode = old_force_rfi ? true : mvm->force_enable_rfi;
+	} else {
+		so_rfi_mode = mvm->force_enable_rfi;
+	}
+
+	rfi_ddr_support = iwl_rfi_ddr_supported(mvm, so_rfi_mode);
+	rfi_dlvr_support = iwl_rfi_dlvr_supported(mvm, so_rfi_mode);
 
 	if (!rfi_ddr_support && !rfi_dlvr_support)
 		return -EOPNOTSUPP;
@@ -223,27 +254,89 @@ int iwl_rfi_send_config_cmd(struct iwl_mvm *mvm,
 
 	lockdep_assert_held(&mvm->mutex);
 
+	IWL_DEBUG_FW(mvm, "wlan is %s rfi master\n",
+		     mvm->rfi_wlan_master ? "" : "Not");
+
+	/* Drop stored rfi_config_cmd buffer when there is change in master */
+	if (is_set_master_cmd) {
+		kfree(mvm->iwl_prev_rfi_config_cmd);
+		mvm->iwl_prev_rfi_config_cmd = NULL;
+	}
+
+	/* Zero iwl_rfi_config_cmd is legal for FW API and since it has
+	 * rfi_memory_support equal to 0, it will disable all RFIm operation
+	 * in the FW.
+	 * Not having rfi_ddr_table when wlan driver is not the master means
+	 * user-space requested to stop RFIm.
+	 */
+	if (!rfi_ddr_table && !mvm->rfi_wlan_master) {
+		if (force_send_table || !mvm->iwl_prev_rfi_config_cmd ||
+		    memcmp(mvm->iwl_prev_rfi_config_cmd, cmd, sizeof(*cmd))) {
+			IWL_DEBUG_FW(mvm, "Sending zero DDR superset table\n");
+			goto send_empty_cmd;
+		} else {
+			IWL_DEBUG_FW(mvm, "Skip RFI_CONFIG_CMD sending\n");
+			goto out;
+		}
+	}
+
 	if (rfi_ddr_support) {
 		cmd->rfi_memory_support = cpu_to_le32(RFI_DDR_SUPPORTED_MSK);
-		/* in case no table is passed, use the default one */
-		if (!rfi_ddr_table) {
-			memcpy(cmd->table, iwl_rfi_ddr_table,
-			       sizeof(cmd->table));
-		} else {
+
+		/* don't send RFI_CONFIG_CMD to FW when DDR table passed by
+		 * caller and previously sent table is same.
+		 */
+		if (!force_send_table && rfi_ddr_table &&
+		    mvm->iwl_prev_rfi_config_cmd &&
+		    !memcmp(rfi_ddr_table, mvm->iwl_prev_rfi_config_cmd->table,
+			    sizeof(mvm->iwl_prev_rfi_config_cmd->table))) {
+			IWL_DEBUG_FW(mvm, "Skip RFI_CONFIG_CMD sending\n");
+			goto out;
+		/* send RFI_CONFIG_CMD to FW with OEM ddr table */
+		} else if (rfi_ddr_table) {
+			IWL_DEBUG_FW(mvm, "Sending oem DDR superset table\n");
 			memcpy(cmd->table, rfi_ddr_table, sizeof(cmd->table));
 			/* notify FW the table is not the default one */
 			cmd->oem = 1;
+		/* send previous RFI_CONFIG_CMD once again as FW lost RFI DDR
+		 * table in reset
+		 */
+		} else if (mvm->iwl_prev_rfi_config_cmd && force_send_table) {
+			IWL_DEBUG_FW(mvm,
+				     "Sending buffered %s DDR superset table\n",
+				     mvm->iwl_prev_rfi_config_cmd->oem ?
+					"oem" : "default");
+			memcpy(cmd->table, mvm->iwl_prev_rfi_config_cmd->table,
+			       sizeof(cmd->table));
+			cmd->oem = mvm->iwl_prev_rfi_config_cmd->oem;
+		/* don't send previous RFI_CONFIG_CMD as FW has same table */
+		} else if (mvm->iwl_prev_rfi_config_cmd) {
+			IWL_DEBUG_FW(mvm, "Skip RFI_CONFIG_CMD sending\n");
+			goto out;
+		/* send default ddr table for the first time */
+		} else {
+			IWL_DEBUG_FW(mvm,
+				     "Sending default DDR superset table\n");
+			memcpy(cmd->table, iwl_rfi_ddr_table,
+			       sizeof(cmd->table));
 		}
 	}
 
 	if (rfi_dlvr_support)
 		cmd->rfi_memory_support |= cpu_to_le32(RFI_DLVR_SUPPORTED_MSK);
 
+send_empty_cmd:
 	ret = iwl_mvm_send_cmd(mvm, &hcmd);
-
-	if (ret)
+	kfree(mvm->iwl_prev_rfi_config_cmd);
+	if (ret) {
+		mvm->iwl_prev_rfi_config_cmd = NULL;
 		IWL_ERR(mvm, "Failed to send RFI config cmd %d\n", ret);
+	} else {
+		mvm->iwl_prev_rfi_config_cmd = cmd;
+		cmd = NULL;
+	}
 
+out:
 	kfree(cmd);
 	return ret;
 }
@@ -258,7 +351,7 @@ struct iwl_rfi_freq_table_resp_cmd *iwl_rfi_get_freq_table(struct iwl_mvm *mvm)
 		.flags = CMD_WANT_SKB,
 	};
 
-	if (!iwl_rfi_ddr_supported(mvm))
+	if (!iwl_rfi_ddr_supported(mvm, mvm->force_enable_rfi))
 		return ERR_PTR(-EOPNOTSUPP);
 
 	mutex_lock(&mvm->mutex);

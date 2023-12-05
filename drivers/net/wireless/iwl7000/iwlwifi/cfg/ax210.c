@@ -10,7 +10,7 @@
 #include "fw/api/txq.h"
 
 /* Highest firmware API version supported */
-#define IWL_AX210_UCODE_API_MAX	83
+#define IWL_AX210_UCODE_API_MAX	86
 
 /* Lowest firmware API version supported */
 #define IWL_AX210_UCODE_API_MIN	59
@@ -36,12 +36,10 @@
 #define IWL_MA_A_GF_A_FW_PRE		"iwlwifi-ma-a0-gf-a0"
 #define IWL_MA_A_GF4_A_FW_PRE		"iwlwifi-ma-a0-gf4-a0"
 #define IWL_MA_A_MR_A_FW_PRE		"iwlwifi-ma-a0-mr-a0"
-#define IWL_MA_A_FM_A_FW_PRE		"iwlwifi-ma-a0-fm-a0"
 #define IWL_MA_B_HR_B_FW_PRE		"iwlwifi-ma-b0-hr-b0"
 #define IWL_MA_B_GF_A_FW_PRE		"iwlwifi-ma-b0-gf-a0"
 #define IWL_MA_B_GF4_A_FW_PRE		"iwlwifi-ma-b0-gf4-a0"
 #define IWL_MA_B_MR_A_FW_PRE		"iwlwifi-ma-b0-mr-a0"
-#define IWL_MA_B_FM_A_FW_PRE		"iwlwifi-ma-b0-fm-a0"
 
 #define IWL_SO_A_JF_B_MODULE_FIRMWARE(api) \
 	IWL_SO_A_JF_B_FW_PRE "-" __stringify(api) ".ucode"
@@ -59,8 +57,6 @@
 	IWL_MA_A_GF4_A_FW_PRE "-" __stringify(api) ".ucode"
 #define IWL_MA_A_MR_A_FW_MODULE_FIRMWARE(api) \
 	IWL_MA_A_MR_A_FW_PRE "-" __stringify(api) ".ucode"
-#define IWL_MA_A_FM_A_FW_MODULE_FIRMWARE(api)		\
-	IWL_MA_A_FM_A_FW_PRE "-" __stringify(api) ".ucode"
 #define IWL_MA_B_HR_B_FW_MODULE_FIRMWARE(api)		\
 	IWL_MA_B_HR_B_FW_PRE "-" __stringify(api) ".ucode"
 #define IWL_MA_B_GF_A_FW_MODULE_FIRMWARE(api)		\
@@ -69,8 +65,6 @@
 	IWL_MA_B_GF4_A_FW_PRE "-" __stringify(api) ".ucode"
 #define IWL_MA_B_MR_A_FW_MODULE_FIRMWARE(api) \
 	IWL_MA_B_MR_A_FW_PRE "-" __stringify(api) ".ucode"
-#define IWL_MA_B_FM_A_FW_MODULE_FIRMWARE(api)		\
-	IWL_MA_B_FM_A_FW_PRE "-" __stringify(api) ".ucode"
 
 static const struct iwl_base_params iwl_ax210_base_params = {
 	.eeprom_size = OTP_LOW_IMAGE_SIZE_32K,
@@ -301,10 +295,8 @@ MODULE_FIRMWARE(IWL_MA_A_HR_B_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_A_GF_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_A_GF4_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_A_MR_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
-MODULE_FIRMWARE(IWL_MA_A_FM_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_B_HR_B_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_B_GF_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_B_GF4_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_MA_B_MR_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
-MODULE_FIRMWARE(IWL_MA_B_FM_A_FW_MODULE_FIRMWARE(IWL_AX210_UCODE_API_MAX));
 

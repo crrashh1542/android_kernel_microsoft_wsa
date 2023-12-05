@@ -581,34 +581,46 @@ static ssize_t iwl_dbgfs_rx_phyinfo_write(struct ieee80211_vif *vif, char *buf,
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mvm *mvm = mvmvif->mvm;
-	struct ieee80211_chanctx_conf *chanctx_conf;
-	struct iwl_mvm_phy_ctxt *phy_ctxt;
+	struct ieee80211_bss_conf *link_conf;
 	u16 value;
-	int ret;
+	int link_id, ret = -EINVAL;
 
 	ret = kstrtou16(buf, 0, &value);
 	if (ret)
 		return ret;
 
 	mutex_lock(&mvm->mutex);
-	rcu_read_lock();
-
-	chanctx_conf = rcu_dereference(vif->bss_conf.chanctx_conf);
-	/* make sure the channel context is assigned */
-	if (!chanctx_conf) {
-		rcu_read_unlock();
-		mutex_unlock(&mvm->mutex);
-		return -EINVAL;
-	}
-
-	phy_ctxt = &mvm->phy_ctxts[*(u16 *)chanctx_conf->drv_priv];
-	rcu_read_unlock();
 
 	mvm->dbgfs_rx_phyinfo = value;
 
-	ret = iwl_mvm_phy_ctxt_changed(mvm, phy_ctxt, &chanctx_conf->min_def,
-				       chanctx_conf->rx_chains_static,
-				       chanctx_conf->rx_chains_dynamic);
+	for_each_vif_active_link(vif, link_conf, link_id) {
+		struct ieee80211_chanctx_conf *chanctx_conf;
+		struct cfg80211_chan_def min_def;
+		struct iwl_mvm_phy_ctxt *phy_ctxt;
+		u8 chains_static, chains_dynamic;
+
+		rcu_read_lock();
+		chanctx_conf = rcu_dereference(link_conf->chanctx_conf);
+		if (!chanctx_conf) {
+			rcu_read_unlock();
+			continue;
+		}
+		/* A command can't be sent with RCU lock held, so copy
+		 * everything here and use it after unlocking
+		 */
+		min_def = chanctx_conf->min_def;
+		chains_static = chanctx_conf->rx_chains_static;
+		chains_dynamic = chanctx_conf->rx_chains_dynamic;
+		rcu_read_unlock();
+
+		phy_ctxt = mvmvif->link[link_id]->phy_ctxt;
+		if (!phy_ctxt)
+			continue;
+
+		ret = iwl_mvm_phy_ctxt_changed(mvm, phy_ctxt, &min_def,
+					       chains_static, chains_dynamic);
+	}
+
 	mutex_unlock(&mvm->mutex);
 
 	return ret ?: count;
@@ -760,29 +772,29 @@ static ssize_t iwl_dbgfs_twt_setup_write(struct ieee80211_vif *vif, char *buf,
 	return ret ?: count;
 }
 
-static ssize_t iwl_dbgfs_eht_puncturing_read(struct file *file,
-					     char __user *user_buf,
-					     size_t count, loff_t *ppos)
+static ssize_t iwl_dbgfs_link_eht_puncturing_read(struct file *file,
+						  char __user *user_buf,
+						  size_t count, loff_t *ppos)
 {
-	struct ieee80211_vif *vif = file->private_data;
+	struct ieee80211_bss_conf *link = file->private_data;
 	char buf[8];
 	int len;
 
 	len = scnprintf(buf, sizeof(buf), "0x%04x\n",
-			vif->bss_conf.eht_puncturing);
+			link->eht_puncturing);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
 
-static ssize_t iwl_dbgfs_eht_puncturing_write(struct ieee80211_vif *vif, char *buf,
-					      size_t count, loff_t *ppos)
+static
+ssize_t iwl_dbgfs_link_eht_puncturing_write(struct ieee80211_bss_conf *link,
+					    char *buf, size_t count,
+					    loff_t *ppos)
 {
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	struct ieee80211_sta *sta;
-	struct iwl_mvm_sta *mvmsta;
+	struct ieee80211_vif *vif = link->vif;
+	struct iwl_mvm *mvm = iwl_mvm_vif_from_mac80211(vif)->mvm;
 	u16 puncturing;
-	int ret, i;
+	int ret;
 
 	if (!iwl_mvm_firmware_running(mvm))
 		return -EIO;
@@ -798,26 +810,16 @@ static ssize_t iwl_dbgfs_eht_puncturing_write(struct ieee80211_vif *vif, char *b
 	 * MVM is not supposed to modify the BSS info,
 	 * but softAP doesn't use this field anyway.
 	 */
-	vif->bss_conf.eht_puncturing = puncturing;
+	link->eht_puncturing = puncturing;
 
 	mutex_lock(&mvm->mutex);
 
-	for (i = 0; i < mvm->fw->ucode_capa.num_stations; i++) {
-		sta = rcu_dereference_protected(mvm->fw_id_to_mac_id[i],
-						lockdep_is_held(&mvm->mutex));
-
-		if (IS_ERR_OR_NULL(sta))
-			continue;
-
-		mvmsta = iwl_mvm_sta_from_mac80211(sta);
-		if (mvmsta->vif != vif)
-			continue;
-
-		iwl_mvm_cfg_he_sta(mvm, vif, mvmsta->deflink.sta_id);
-	}
+	/* All links are always active in ap mode */
+	ret = iwl_mvm_link_changed(mvm, vif, link,
+				   LINK_CONTEXT_MODIFY_EHT_PARAMS, true);
 
 	mutex_unlock(&mvm->mutex);
-	return count;
+	return ret ?: count;
 }
 
 static ssize_t iwl_dbgfs_max_tx_op_write(struct ieee80211_vif *vif, char *buf,
@@ -876,22 +878,13 @@ MVM_DEBUGFS_READ_WRITE_FILE_OPS(rx_phyinfo, 10);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(quota_min, 32);
 MVM_DEBUGFS_READ_FILE_OPS(os_device_timediff);
 MVM_DEBUGFS_WRITE_FILE_OPS(twt_setup, 256);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(eht_puncturing, 16);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(max_tx_op, 10);
 
-
-void iwl_mvm_vif_dbgfs_register(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
+void iwl_mvm_vif_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct dentry *dbgfs_dir = vif->debugfs_dir;
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	char buf[100];
-
-	/*
-	 * Check if debugfs directory already exist before creating it.
-	 * This may happen when, for example, resetting hw or suspend-resume
-	 */
-	if (!dbgfs_dir || mvmvif->dbgfs_dir)
-		return;
 
 	mvmvif->dbgfs_dir = debugfs_create_dir("iwlmvm", dbgfs_dir);
 	if (IS_ERR_OR_NULL(mvmvif->dbgfs_dir)) {
@@ -914,12 +907,23 @@ void iwl_mvm_vif_dbgfs_register(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	MVM_DEBUGFS_ADD_FILE_VIF(quota_min, mvmvif->dbgfs_dir, 0600);
 	MVM_DEBUGFS_ADD_FILE_VIF(os_device_timediff, mvmvif->dbgfs_dir, 0400);
 	MVM_DEBUGFS_ADD_FILE_VIF(twt_setup, mvmvif->dbgfs_dir, 0200);
-	MVM_DEBUGFS_ADD_FILE_VIF(eht_puncturing, mvmvif->dbgfs_dir, 0600);
 	MVM_DEBUGFS_ADD_FILE_VIF(max_tx_op, mvmvif->dbgfs_dir, 0600);
 
 	if (vif->type == NL80211_IFTYPE_STATION && !vif->p2p &&
 	    mvmvif == mvm->bf_allowed_vif)
 		MVM_DEBUGFS_ADD_FILE_VIF(bf_params, mvmvif->dbgfs_dir, 0600);
+
+}
+
+void iwl_mvm_vif_dbgfs_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
+{
+	struct dentry *dbgfs_dir = vif->debugfs_dir;
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	char buf[100];
+
+	/* this will happen in monitor mode */
+	if (!dbgfs_dir)
+		return;
 
 	/*
 	 * Create symlink for convenience pointing to interface specific
@@ -928,21 +932,65 @@ void iwl_mvm_vif_dbgfs_register(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	 * find
 	 * netdev:wlan0 -> ../../../ieee80211/phy0/netdev:wlan0/iwlmvm/
 	 */
-	snprintf(buf, 100, "../../../%pd3/%pd",
-		 dbgfs_dir,
-		 mvmvif->dbgfs_dir);
+	snprintf(buf, 100, "../../../%pd3/iwlmvm", dbgfs_dir);
 
 	mvmvif->dbgfs_slink = debugfs_create_symlink(dbgfs_dir->d_name.name,
 						     mvm->debugfs_dir, buf);
 }
 
-void iwl_mvm_vif_dbgfs_clean(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
+void iwl_mvm_vif_dbgfs_rm_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
 	debugfs_remove(mvmvif->dbgfs_slink);
 	mvmvif->dbgfs_slink = NULL;
+}
 
-	debugfs_remove_recursive(mvmvif->dbgfs_dir);
-	mvmvif->dbgfs_dir = NULL;
+#define MVM_DEBUGFS_WRITE_LINK_FILE_OPS(name, bufsz)			\
+	_MVM_DEBUGFS_WRITE_FILE_OPS(link_##name, bufsz,			\
+				    struct ieee80211_bss_conf)
+#define MVM_DEBUGFS_READ_WRITE_LINK_FILE_OPS(name, bufsz)		\
+	_MVM_DEBUGFS_READ_WRITE_FILE_OPS(link_##name, bufsz,		\
+					 struct ieee80211_bss_conf)
+#define MVM_DEBUGFS_ADD_LINK_FILE(name, parent, mode)			\
+	debugfs_create_file(#name, mode, parent, link_conf,		\
+			    &iwl_dbgfs_link_##name##_ops)
+
+MVM_DEBUGFS_READ_WRITE_LINK_FILE_OPS(eht_puncturing, 16);
+
+static void iwl_mvm_debugfs_add_link_files(struct ieee80211_vif *vif,
+					   struct ieee80211_bss_conf *link_conf,
+					   struct dentry *mvm_dir)
+{
+	if (vif->type == NL80211_IFTYPE_AP)
+		MVM_DEBUGFS_ADD_LINK_FILE(eht_puncturing, mvm_dir, 0600);
+}
+
+void iwl_mvm_link_add_debugfs(struct ieee80211_hw *hw,
+			      struct ieee80211_vif *vif,
+			      struct ieee80211_bss_conf *link_conf,
+			      struct dentry *dir)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	struct iwl_mvm *mvm = mvmvif->mvm;
+	unsigned int link_id = link_conf->link_id;
+	struct iwl_mvm_vif_link_info *link_info = mvmvif->link[link_id];
+	struct dentry *mvm_dir;
+
+	if (WARN_ON(!link_info) || !dir)
+		return;
+
+	if (dir == vif->debugfs_dir) {
+		WARN_ON(!mvmvif->dbgfs_dir);
+		mvm_dir = mvmvif->dbgfs_dir;
+	} else {
+		mvm_dir = debugfs_create_dir("iwlmvm", dir);
+		if (IS_ERR_OR_NULL(mvm_dir)) {
+			IWL_ERR(mvm, "Failed to create debugfs directory under %pd\n",
+				dir);
+			return;
+		}
+	}
+
+	iwl_mvm_debugfs_add_link_files(vif, link_conf, mvm_dir);
 }

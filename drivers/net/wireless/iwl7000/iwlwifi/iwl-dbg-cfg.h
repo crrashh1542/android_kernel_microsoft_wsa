@@ -105,6 +105,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_RANGE(u8, MVM_UAPSD_NOAGG_LIST_LEN,
 			  1, IWL_MVM_UAPSD_NOAGG_BSSIDS_NUM)
 	IWL_DBG_CFG(bool, MVM_NON_TRANSMITTING_AP)
+	IWL_DBG_CFG(u16, MVM_CONN_LISTEN_INTERVAL)
 	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_A)
 	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_B)
 	IWL_DBG_CFG_NODEF(u32, MVM_PHY_FILTER_CHAIN_C)
@@ -188,6 +189,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u8, MVM_MIN_BEACON_INTERVAL_TU)
 	IWL_DBG_CFG_RANGE(u8, MVM_ADAPTIVE_DWELL_NUM_APS_OVERRIDE, 0, 10)
 	IWL_DBG_CFG_DEF(int, eml_capa_override, -1)
+	IWL_DBG_CFG(bool, MVM_AUTO_EML_ENABLE)
 #endif /* CPTCFG_IWLMVM */
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	IWL_DBG_CFG_NODEF(u32, dnt_out_mode)
@@ -267,6 +269,9 @@ struct iwl_dbg_cfg {
 	IWL_MOD_PARAM(int, swcrypto)
 	IWL_MOD_PARAM(uint, disable_11n)
 	IWL_MOD_PARAM(u32, enable_ini)
+	IWL_MOD_PARAM(bool, disable_11ac)
+	IWL_MOD_PARAM(bool, disable_11ax)
+	IWL_MOD_PARAM(bool, disable_11be)
 	IWL_DBG_CFG_BIN(he_ppe_thres)
 	IWL_DBG_CFG_NODEF(u8, he_chan_width_dis)
 	IWL_DBG_CFG_NODEF(u32, vht_cap_flip)
@@ -288,6 +293,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(bool, ht_dynamic_smps)
 	IWL_DBG_CFG_NODEF(bool, amsdu_in_ampdu_disabled)
 	IWL_DBG_CFG_NODEF(bool, disable_eml)
+	IWL_DBG_CFG_NODEF(u32, step_analog_params)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */

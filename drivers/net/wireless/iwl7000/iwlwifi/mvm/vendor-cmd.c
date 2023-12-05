@@ -90,6 +90,7 @@ iwl_mvm_vendor_attr_policy[NUM_IWL_MVM_VENDOR_ATTR] = {
 	[IWL_MVM_VENDOR_ATTR_RFIM_FREQ]		    = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_RFIM_CHANNELS]	    = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_RFIM_BANDS]	    = { .type = NLA_U32 },
+	[IWL_MVM_VENDOR_ATTR_RFIM_CNVI_MASTER]	    = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_ROAMING_FORBIDDEN] = { .type = NLA_U8 },
 	[IWL_MVM_VENDOR_ATTR_AUTH_MODE] = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_CHANNEL_NUM] = { .type = NLA_U8 },
@@ -421,15 +422,16 @@ static int iwl_vendor_rfim_get_capa(struct wiphy *wiphy,
 		return -ENOMEM;
 
 	if (mvm->trans->trans_cfg->integrated) {
-		if (iwl_rfi_ddr_supported(mvm))
+		if (iwl_rfi_ddr_supported(mvm, mvm->force_enable_rfi))
 			capa = IWL_MVM_RFI_DDR_CAPA_ALL;
 		else
 			capa = IWL_MVM_RFI_DDR_CAPA_CNVI;
 	}
 
-	if (iwl_rfi_dlvr_supported(mvm))
+	if (iwl_rfi_dlvr_supported(mvm, mvm->force_enable_rfi))
 		capa |= IWL_MVM_RFI_DLVR_CAPA;
 
+	IWL_DEBUG_FW(mvm, "RFIm capabilities:%04x\n", capa);
 	if (nla_put_u16(skb, IWL_MVM_VENDOR_ATTR_RFIM_CAPA, capa)) {
 		kfree_skb(skb);
 		return -ENOBUFS;
@@ -555,12 +557,89 @@ static int iwl_vendor_rfi_ddr_set_table(struct wiphy *wiphy,
 		}
 	}
 
-	err = iwl_rfi_send_config_cmd(mvm, rfi_ddr_table);
+	mutex_lock(&mvm->mutex);
+	err = iwl_rfi_send_config_cmd(mvm, rfi_ddr_table, false, false);
+	mutex_unlock(&mvm->mutex);
 	if (err)
 		IWL_ERR(mvm, "Failed to send rfi table to FW, error %d\n", err);
 
 out:
 	kfree(rfi_ddr_table);
+	kfree(tb);
+	return err;
+}
+
+enum iwl_rfi_cnvi_master_conf {
+	IWL_MVM_RFI_CNVI_DLVR_NOT_MASTER	= BIT(0),
+	IWL_MVM_RFI_CNVI_DDR_NOT_MASTER		= BIT(1),
+};
+
+#define IWL_MVM_RFI_CNVI_NOT_MASTER	(IWL_MVM_RFI_CNVI_DLVR_NOT_MASTER |\
+					 IWL_MVM_RFI_CNVI_DDR_NOT_MASTER)
+
+static int iwl_vendor_rfi_set_cnvi_master(struct wiphy *wiphy,
+					  struct wireless_dev *wdev,
+					  const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	bool old_rfi_wlan_master = mvm->rfi_wlan_master;
+	struct nlattr **tb;
+	int err = 0;
+	u32 rfi_master_conf;
+
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
+
+	if (!tb[IWL_MVM_VENDOR_ATTR_RFIM_CNVI_MASTER]) {
+		err = -EINVAL;
+		goto free;
+	}
+
+	rfi_master_conf = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_RFIM_CNVI_MASTER]);
+	IWL_DEBUG_FW(mvm, "rfi cnvi master conf is 0x%08x\n", rfi_master_conf);
+	rfi_master_conf &= IWL_MVM_RFI_CNVI_NOT_MASTER;
+
+	mutex_lock(&mvm->mutex);
+
+	/* rfi_master_conf can be 0 or 3 only.
+	 * i.e 0 means CNVI is master. 3 means user-space application is master.
+	 * 1 and 2 are invalid configurations, which means there is no way for
+	 * the user space to take partial control.
+	 */
+	if (!rfi_master_conf) {
+		mvm->rfi_wlan_master = true;
+	} else if (rfi_master_conf == IWL_MVM_RFI_CNVI_NOT_MASTER) {
+		mvm->rfi_wlan_master = false;
+	} else {
+		mutex_unlock(&mvm->mutex);
+		err = -EINVAL;
+		goto free;
+	}
+
+	/* if app sends two consecutive enable/disable then
+	 * driver will not send the same table to the firmware
+	 */
+	if (old_rfi_wlan_master != mvm->rfi_wlan_master ||
+	    mvm->force_enable_rfi != mvm->rfi_wlan_master) {
+		/* By-pass sending of RFI_CONFIG command, if user space
+		 * takes control when "fw_rfi_state" is not PMC_SUPPORTED.
+		 */
+		if (mvm->fw_rfi_state == IWL_RFI_PMC_SUPPORTED ||
+		    mvm->rfi_wlan_master)
+			err = iwl_rfi_send_config_cmd(mvm, NULL, true, false);
+	} else {
+		IWL_ERR(mvm,
+			"Wlan RFI master configuration is same as old:%d\n",
+			old_rfi_wlan_master);
+	}
+
+	if (err)
+		mvm->rfi_wlan_master = old_rfi_wlan_master;
+
+	mutex_unlock(&mvm->mutex);
+free:
 	kfree(tb);
 	return err;
 }
@@ -1348,6 +1427,8 @@ static int iwl_mvm_vendor_validate_aes_vector(struct nlattr **tb)
  *
  * This function returns the length of the command buffer (in bytes) in case of
  * success, or a negative error code on failure.
+ *
+ * Returns: an error code
  */
 static int iwl_mvm_vendor_build_vector(u8 **cmd_buf, struct nlattr *vector,
 				       u8 flags)
@@ -2052,6 +2133,21 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV,
 		.doit = iwl_vendor_rfim_get_capa,
+#if CFG80211_VERSION >= KERNEL_VERSION(5,3,0)
+		.policy = iwl_mvm_vendor_attr_policy,
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(5,3,0)
+		.maxattr = MAX_IWL_MVM_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = INTEL_OUI,
+			.subcmd = IWL_MVM_VENDOR_CMD_RFIM_SET_CNVI_MASTER,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = iwl_vendor_rfi_set_cnvi_master,
 #if CFG80211_VERSION >= KERNEL_VERSION(5,3,0)
 		.policy = iwl_mvm_vendor_attr_policy,
 #endif
