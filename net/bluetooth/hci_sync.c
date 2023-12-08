@@ -5365,6 +5365,8 @@ int hci_resume_sync(struct hci_dev *hdev)
 		return 0;
 
 	hdev->suspended = false;
+	if (hdev->clear_wakeup)
+		hdev->clear_wakeup(hdev);
 
 	/* Restore event mask */
 	hci_set_event_mask_sync(hdev);
