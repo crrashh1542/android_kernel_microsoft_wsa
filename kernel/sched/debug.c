@@ -883,6 +883,9 @@ void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 #ifdef CONFIG_SMP
 	PU(rt_nr_migratory);
 #endif
+	P(rt_throttled);
+	PN(rt_time);
+	PN(rt_runtime);
 
 #undef PN
 #undef PU
