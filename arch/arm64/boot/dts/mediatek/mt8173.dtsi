@@ -606,6 +606,15 @@
 			svs_calibration: calib@100 {
 				reg = <0x100 0x8c>;
 			};
+
+			socinfo-data1@40 {
+				reg = <0x040 0x4>;
+			};
+
+			socinfo-data2@44 {
+				reg = <0x044 0x4>;
+			};
+
 			thermal_calibration: calib@528 {
 				reg = <0x528 0xc>;
 			};
