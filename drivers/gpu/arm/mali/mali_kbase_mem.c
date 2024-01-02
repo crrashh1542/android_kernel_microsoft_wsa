@@ -4051,9 +4051,6 @@ static int kbase_jit_grow(struct kbase_context *kctx,
 	if (reg->gpu_alloc->nents >= info->commit_pages)
 		goto done;
 
-	/* Grow the backing */
-	old_size = reg->gpu_alloc->nents;
-
 	/* Allocate some more pages */
 	delta = info->commit_pages - reg->gpu_alloc->nents;
 	pages_required = delta;
@@ -4096,8 +4093,19 @@ static int kbase_jit_grow(struct kbase_context *kctx,
 		kbase_mem_pool_lock(pool);
 	}
 
-	gpu_pages = kbase_alloc_phy_pages_helper_locked(reg->gpu_alloc, pool,
-			delta, &prealloc_sas[0]);
+	if (reg->gpu_alloc->nents >= info->commit_pages) {
+		kbase_mem_pool_unlock(pool);
+		spin_unlock(&kctx->mem_partials_lock);
+		dev_info(
+			kctx->kbdev->dev,
+			"JIT alloc grown beyond the required number of initially required pages, this grow no longer needed.");
+		goto done;
+	}
+
+	old_size = reg->gpu_alloc->nents;
+	delta = info->commit_pages - old_size;
+	gpu_pages =
+		kbase_alloc_phy_pages_helper_locked(reg->gpu_alloc, pool, delta, &prealloc_sas[0]);
 	if (!gpu_pages) {
 		kbase_mem_pool_unlock(pool);
 		spin_unlock(&kctx->mem_partials_lock);
