@@ -85,6 +85,16 @@
 						120000 54
 						125000 47>;
 	};
+
+	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_tchscr_report_disable";
+		pinctrl-names = "default";
+		enable-active-low;
+		regulator-boot-on;
+		pinctrl-0 = <&touch_pin_report>;
+		gpio = <&pio 37 GPIO_ACTIVE_LOW>;
+	};
 };
 
 &dsi_out {
@@ -317,5 +327,12 @@
 		polling-delay = <1000>; /* milliseconds */
 		polling-delay-passive = <0>; /* milliseconds */
 		thermal-sensors = <&tboard_thermistor2>;
+	};
+};
+
+&pio {
+	touch_pin_report: pin-report {
+		pinmux = <PINMUX_GPIO37__FUNC_GPIO37>;
+		output-low;
 	};
 };
