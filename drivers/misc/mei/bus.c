@@ -240,7 +240,7 @@ out:
 }
 
 /**
- * mei_cldev_send_vtag - me device send with vtag (write)
+ * mei_cldev_send_vtag - me device send with vtag  (write)
  *
  * @cldev: me client device
  * @buf: buffer to send
@@ -260,29 +260,6 @@ ssize_t mei_cldev_send_vtag(struct mei_cl_device *cldev, const u8 *buf,
 	return __mei_cl_send(cl, buf, length, vtag, MEI_CL_IO_TX_BLOCKING);
 }
 EXPORT_SYMBOL_GPL(mei_cldev_send_vtag);
-
-/**
- * mei_cldev_send_vtag_timeout - me device send with vtag and timeout (write)
- *
- * @cldev: me client device
- * @buf: buffer to send
- * @length: buffer length
- * @vtag: virtual tag
- * @timeout: send timeout, 0 for infinite timeout
- *
- * Return:
- *  * written size in bytes
- *  * < 0 on error
- */
-
-ssize_t mei_cldev_send_vtag_timeout(struct mei_cl_device *cldev, const u8 *buf,
-				    size_t length, u8 vtag, unsigned long timeout)
-{
-	struct mei_cl *cl = cldev->cl;
-
-	return __mei_cl_send_timeout(cl, buf, length, vtag, MEI_CL_IO_TX_BLOCKING, timeout);
-}
-EXPORT_SYMBOL_GPL(mei_cldev_send_vtag_timeout);
 
 /**
  * mei_cldev_recv_vtag - client receive with vtag (read)
@@ -329,7 +306,7 @@ ssize_t mei_cldev_recv_nonblock_vtag(struct mei_cl_device *cldev, u8 *buf,
 EXPORT_SYMBOL_GPL(mei_cldev_recv_nonblock_vtag);
 
 /**
- * mei_cldev_send - me device send (write)
+ * mei_cldev_send - me device send  (write)
  *
  * @cldev: me client device
  * @buf: buffer to send
@@ -344,25 +321,6 @@ ssize_t mei_cldev_send(struct mei_cl_device *cldev, const u8 *buf, size_t length
 	return mei_cldev_send_vtag(cldev, buf, length, 0);
 }
 EXPORT_SYMBOL_GPL(mei_cldev_send);
-
-/**
- * mei_cldev_send_timeout - me device send with timeout (write)
- *
- * @cldev: me client device
- * @buf: buffer to send
- * @length: buffer length
- * @timeout: send timeout, 0 for infinite timeout
- *
- * Return:
- *  * written size in bytes
- *  * < 0 on error
- */
-ssize_t mei_cldev_send_timeout(struct mei_cl_device *cldev, const u8 *buf, size_t length,
-			       unsigned long timeout)
-{
-	return mei_cldev_send_vtag_timeout(cldev, buf, length, 0, timeout);
-}
-EXPORT_SYMBOL_GPL(mei_cldev_send_timeout);
 
 /**
  * mei_cldev_recv - client receive (read)
