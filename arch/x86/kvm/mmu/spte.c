@@ -89,7 +89,8 @@ static bool kvm_is_mmio_pfn(kvm_pfn_t pfn)
 				     E820_TYPE_RAM);
 }
 
-int make_spte(struct kvm_vcpu *vcpu, unsigned int pte_access, int level,
+int make_spte(struct kvm_vcpu *vcpu, const struct kvm_memory_slot *slot,
+		     unsigned int pte_access, int level,
 		     gfn_t gfn, kvm_pfn_t pfn, u64 old_spte, bool speculative,
 		     bool can_unsync, bool host_writable, bool ad_disabled,
 		     u64 *new_spte)
@@ -129,7 +130,8 @@ int make_spte(struct kvm_vcpu *vcpu, unsigned int pte_access, int level,
 		spte |= PT_PAGE_SIZE_MASK;
 	if (tdp_enabled)
 		spte |= static_call(kvm_x86_get_mt_mask)(vcpu, gfn,
-			kvm_is_mmio_pfn(pfn));
+			kvm_is_mmio_pfn(pfn),
+			slot);
 
 	if (host_writable)
 		spte |= shadow_host_writable_mask;

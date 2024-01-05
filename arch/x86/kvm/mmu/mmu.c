@@ -2684,8 +2684,8 @@ static int set_spte(struct kvm_vcpu *vcpu, u64 *sptep,
 
 	sp = sptep_to_sp(sptep);
 
-	ret = make_spte(vcpu, pte_access, level, gfn, pfn, *sptep, speculative,
-			can_unsync, host_writable, sp_ad_disabled(sp), &spte);
+	ret = make_spte(vcpu, kvm_vcpu_gfn_to_memslot(vcpu, gfn), pte_access, level, gfn, pfn,
+			*sptep, speculative, can_unsync, host_writable, sp_ad_disabled(sp), &spte);
 
 	if (spte & PT_WRITABLE_MASK)
 		kvm_vcpu_mark_page_dirty(vcpu, gfn);
