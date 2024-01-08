@@ -313,6 +313,7 @@
 		MATRIX_KEY(0x01, 0x0e, KEY_LEFTCTRL)	   /* Left Control*/
 		MATRIX_KEY(0x06, 0x0d, KEY_LEFTALT)        /* Left ALT*/
 		MATRIX_KEY(0x03, 0x0e, KEY_RIGHTCTRL)      /* Right Control*/
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)      /* BACKSLASH*/
 	>;
 };
 
