@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * mac80211 - channel management
- * Copyright 2020 - 2023 Intel Corporation
+ * Copyright 2020 - 2024 Intel Corporation
  */
 
 #include <linux/nl80211.h>
@@ -822,9 +822,6 @@ void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 			break;
 	}
 	rcu_read_unlock();
-
-	if (!compat)
-		return;
 
 	ieee80211_change_chanctx(local, ctx, ctx, compat);
 }
