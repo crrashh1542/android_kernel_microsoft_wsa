@@ -8,8 +8,8 @@
 
 / {
 	model = "Google chinchou sku0 board";
-	compatible = "google,chinchou-sku0","google,chinchou",
-			"mediatek,mt8186";
+	compatible = "google,chinchou-sku0", "google,chinchou-sku2",
+			"google,chinchou", "mediatek,mt8186";
 };
 
 &gpio_keys {
