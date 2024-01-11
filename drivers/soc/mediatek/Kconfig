@@ -86,7 +86,7 @@ config MTK_SVS
 config MTK_SOCINFO
 	tristate "MediaTek SoC Information"
 	default y
-	depends on NVMEM_MTK_EFUSE
+	depends on MTK_EFUSE
 	help
 	  The MediaTek SoC Information (mtk-socinfo) driver provides
 	  information about the SoC to the userspace including the
