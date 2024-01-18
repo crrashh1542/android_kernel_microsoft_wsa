@@ -210,10 +210,8 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 		trigger_all_cpu_backtrace();
 	}
 
-	if (hung_task_call_panic) {
-		show_state_filter(TASK_UNINTERRUPTIBLE);
+	if (hung_task_call_panic)
 		panic("hung_task: blocked tasks");
-	}
 }
 
 static long hung_timeout_jiffies(unsigned long last_checked,
