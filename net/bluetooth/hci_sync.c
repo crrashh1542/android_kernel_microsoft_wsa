@@ -4204,6 +4204,8 @@ setup_failed:
 			ret = hci_init_sync(hdev);
 			if (!ret && hdev->post_init)
 				ret = hdev->post_init(hdev);
+		} else if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+			ret = hci_read_local_codecs_sync(hdev);
 		}
 	}
 
