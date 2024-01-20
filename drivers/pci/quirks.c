@@ -5933,4 +5933,69 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b0, aspm_l1_acceptable_latency
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b1, aspm_l1_acceptable_latency);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c0, aspm_l1_acceptable_latency);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c1, aspm_l1_acceptable_latency);
+
+
+static const struct dmi_system_id chromebox_puff_match_table[] = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Dooly"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		}
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Duffy"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		}
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Faffy"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Kaisa"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Noibat"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Puff"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Wyvern"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{ }
+};
+
+static void puff_rtl8168_aspm_settings(struct pci_dev *dev)
+{
+	const u8 CFG_9346         = 0x50;
+	const u8 CFG_9346_LOCK    = 0x00;
+	const u8 CFG_9346_UNLOCK  = 0xc0;
+	const u8 CMD_REG_ASPM     = 0xb0;
+	const u32 ASPM_L1_2_MASK  = 0xe059000f;
+
+	if (dmi_check_system(chromebox_puff_match_table)) {
+		pci_write_config_byte(dev,  CFG_9346,     CFG_9346_LOCK);
+		pci_write_config_dword(dev, CMD_REG_ASPM, ASPM_L1_2_MASK);
+		pci_write_config_byte(dev,  CFG_9346,     CFG_9346_UNLOCK);
+	}
+
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8168,
+			puff_rtl8168_aspm_settings);
 #endif
