@@ -21,6 +21,7 @@
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/freezer.h>
+#include <linux/sched/sysctl.h>
 
 #include <linux/uaccess.h>
 #include <linux/blkdev.h>
@@ -28,12 +29,6 @@
 #include "power.h"
 
 static bool need_wait;
-
-struct snapshot_bdev {
-	struct block_device *bdev;
-	unsigned long nr_blocks;
-	unsigned long nr_blocks_used;
-};
 
 static struct snapshot_data {
 	struct snapshot_handle handle;
@@ -43,8 +38,7 @@ static struct snapshot_data {
 	bool ready;
 	bool platform_support;
 	bool free_bitmaps;
-	struct snapshot_bdev snapshot_bdev;
-	bool read_failure;
+	struct block_device *bdev;
 	dev_t dev;
 } snapshot_state;
 
@@ -119,7 +113,7 @@ static int snapshot_release(struct inode *inode, struct file *filp)
 
 	swsusp_free();
 	data = filp->private_data;
-	if (!data->snapshot_bdev.bdev) {
+	if (!data->bdev) {
 		data->dev = 0;
 		free_all_swap_pages(data->swap);
 	}
@@ -226,7 +220,7 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 	if (swsusp_swap_in_use())
 		return -EPERM;
 
-	if (data->snapshot_bdev.bdev)
+	if (data->bdev)
 		return -EBUSY;
 
 	if (in_compat_syscall()) {
@@ -265,7 +259,7 @@ static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 	if (swsusp_swap_in_use())
 		return -EPERM;
 
-	if (data->swap > 0 || data->snapshot_bdev.bdev)
+	if (data->swap > 0 || data->bdev)
 		return -EBUSY;
 
 	dev = new_decode_dev(device);
@@ -281,12 +275,9 @@ static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 	}
 
 	data->dev = dev;
-	data->snapshot_bdev.bdev = bdev;
-	data->snapshot_bdev.nr_blocks = i_size_read(bdev->bd_inode) >> PAGE_SHIFT;
-	data->snapshot_bdev.nr_blocks_used = 0;
-
+	data->bdev = bdev;
 	pr_info("snapshot block device set to %02x:%02x: %ld blocks", MAJOR(dev), MINOR(dev),
-			data->snapshot_bdev.nr_blocks);
+		i_size_read(bdev->bd_inode) >> PAGE_SHIFT);
 	return 0;
 }
 
@@ -294,164 +285,141 @@ static int snapshot_release_block_device(struct snapshot_data *data) {
 	if (swsusp_swap_in_use())
 		return -EPERM;
 
-	if (!data->dev || !data->snapshot_bdev.bdev)
+	if (!data->dev || !data->bdev)
 		return -ENODEV;
 
-	blkdev_put(data->snapshot_bdev.bdev, FMODE_WRITE | FMODE_READ | FMODE_EXCL);
+	blkdev_put(data->bdev, FMODE_WRITE | FMODE_READ | FMODE_EXCL);
 	data->dev = 0;
-	data->snapshot_bdev.bdev = NULL;
-	data->snapshot_bdev.nr_blocks = 0;
-	data->snapshot_bdev.nr_blocks_used = 0;
+	data->bdev = NULL;
 
 	return 0;
 }
 
-static int snapshot_write_block_device(struct snapshot_data *data) {
-	int res = 0;
-	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
-	struct bio bio;
-	struct bio_vec bio_vec;
-	int sector = 0;
+struct snapshot_bio_batch {
+	atomic_t		count;
+	wait_queue_head_t	wait;
+	atomic_t 		status;
+	struct blk_plug		plug;
+	struct block_device    *bdev;
+};
 
-	while (1) {
-		struct bio_vec bvec;
-
-		res = snapshot_read_next(&data->handle);
-		if (!res)
-			break;
-		else if (res < (int)PAGE_SIZE) {
-			if (res > 0)
-				res = -EFAULT;
-			break;
-		}
-
-		bvec.bv_page = virt_to_page(data_of(data->handle));
-		bvec.bv_len = PAGE_SIZE;
-		bvec.bv_offset = 0;
-
-		bio_init(&bio, &bio_vec, 1);
-		bio_set_dev(&bio, sbdev->bdev);
-		bio.bi_iter.bi_sector = sector;
-		bio.bi_opf = REQ_OP_WRITE | REQ_SYNC | REQ_IDLE;
-		bio_add_page(&bio, bvec.bv_page, bvec.bv_len, bvec.bv_offset);
-
-		res = submit_bio_wait(&bio);
-
-		if (res) {
-			pr_err("submitting bio failed at sector: %llu block number: %lu\n",
-			       (unsigned long long)bio.bi_iter.bi_sector,
-			       sbdev->nr_blocks_used);
-			res = -EFAULT;
-			break;
-		}
-
-		sector = bio_end_sector(&bio);
-		bio_uninit(&bio);
-		sbdev->nr_blocks_used++;
-	}
-
-	/* flush buffers before returning */
-	if (!res) {
-		bio_init(&bio, &bio_vec, 0);
-		bio_set_dev(&bio, sbdev->bdev);
-		bio.bi_opf = REQ_OP_WRITE | REQ_SYNC | REQ_PREFLUSH;
-		res = submit_bio_wait(&bio);
-		bio_uninit(&bio);
-	}
-
-	return res;
-}
-
-static struct bio *new_snapshot_bio(struct snapshot_bdev *sbdev, sector_t sector)
+static void snapshot_bio_batch_init(struct snapshot_bio_batch *batch, struct block_device *bdev)
 {
-	struct bio *bio = bio_alloc(GFP_KERNEL, BIO_MAX_VECS);
-	if (!bio)
-		return ERR_PTR(-ENOMEM);
-
-	bio_set_dev(bio, sbdev->bdev);
-	bio->bi_iter.bi_sector = sector;
-	bio->bi_opf = REQ_OP_READ | REQ_IDLE;
-	return bio;
+	atomic_set(&batch->count, 0);
+	init_waitqueue_head(&batch->wait);
+	atomic_set(&batch->status, BLK_STS_OK);
+	blk_start_plug(&batch->plug);
+	batch->bdev = bdev;
 }
 
-static int snapshot_read_block_device(struct snapshot_data *data) {
-	int res;
-	struct snapshot_bdev *sbdev = &data->snapshot_bdev;
-	struct page *page;
-	struct bio *bio;
-        ktime_t start = ktime_get();
-	ktime_t stop;
+static void snapshot_bio_batch_finish(struct snapshot_bio_batch *batch)
+{
+	blk_finish_plug(&batch->plug);
+}
 
-	bio = new_snapshot_bio(sbdev, /* sector= */0);
-	if (IS_ERR(bio)) {
-		res = PTR_ERR(bio);
-		bio = NULL;
-		goto out_err;
-	}
+static void snapshot_bio_end_io(struct bio *bio)
+{
+	struct snapshot_bio_batch *batch = bio->bi_private;
+	struct page *page = bio_first_page_all(bio);
 
-	while (true) {
-		res = snapshot_write_next(&data->handle);
-		if (res == 0)
-			goto transfer_complete_wait;
-		else if (res < 0)
-			goto out_err;
+	if (bio->bi_status) {
+		pr_alert_ratelimited("snapshot io error sector %Lu block error %d\n",
+			 (unsigned long long)bio->bi_iter.bi_sector,
+			 bio->bi_status);
+		atomic_cmpxchg(&batch->status, BLK_STS_OK, bio->bi_status);
+	} else if (bio_data_dir(bio) == READ)
+		flush_icache_range((unsigned long)page_address(page),
+				   (unsigned long)page_address(page) + PAGE_SIZE);
 
-		if (!data_of(data->handle)) {
-			res = -EINVAL;
-			goto out_err;
-		}
+	if (atomic_dec_and_test(&batch->count))
+		wake_up(&batch->wait);
 
-		page = virt_to_page(data_of(data->handle));
-add_page:
-		if (bio_add_page(bio, page, PAGE_SIZE, 0) != PAGE_SIZE) {
-			/* The bio is full, submit it and create a new one */
-			struct bio *next_bio = new_snapshot_bio(sbdev, bio_end_sector(bio));
-			if (IS_ERR(next_bio)) {
-				res = PTR_ERR(next_bio);
-				goto out_err;
-			}
-
-			bio_chain(bio, next_bio);
-			submit_bio(bio);
-			bio = next_bio;
-			goto add_page;
-		}
-
-		sbdev->nr_blocks_used++;
-
-		/* We need to do sync reads until we've read all metadata */
-		if (data->handle.sync_read) {
-			struct bio *next_bio = new_snapshot_bio(sbdev, bio_end_sector(bio));
-			if (IS_ERR(next_bio)) {
-				res = PTR_ERR(next_bio);
-				goto out_err;
-			}
-
-			res = submit_bio_wait(bio);
-			if (res) {
-				bio_put(next_bio);
-				goto out_err;
-			}
-
-			bio_put(bio);
-			bio = next_bio;
-		}
-	}
-
-transfer_complete_wait:
-	res = submit_bio_wait(bio);
 	bio_put(bio);
-	if (res) {
-		data->read_failure = true;
-		return res;
+}
+
+static int snapshot_bio_batch_wait(struct snapshot_bio_batch *batch)
+{
+	unsigned long hung_task_timeout = sysctl_hung_task_timeout_secs;
+	if (hung_task_timeout) {
+		while (!wait_event_timeout(batch->wait,
+			atomic_read(&batch->count) == 0, hung_task_timeout * (HZ/2)));
+	} else {
+		wait_event(batch->wait, atomic_read(&batch->count) == 0);
 	}
 
-	stop = ktime_get();
-	swsusp_show_speed(start, stop, sbdev->nr_blocks_used, "loaded image via ioctl");
-	return 0;
-out_err:
-	if (bio)
+	return blk_status_to_errno(atomic_read(&batch->status));
+}
+
+static int snapshot_submit_io(int op, int op_flags, sector_t sector,
+		struct snapshot_bio_batch *batch, void *data)
+{
+	struct bio *bio = bio_alloc(GFP_NOIO | __GFP_HIGH, 1);
+	if (!bio)
+		return -ENOMEM;
+
+	if (data && !bio_add_page(bio, virt_to_page(data), PAGE_SIZE, 0)) {
+		pr_err("Adding page to bio failed at %llu\n",
+		       (unsigned long long)bio->bi_iter.bi_sector);
 		bio_put(bio);
+		return -EFAULT;
+	}
+
+	bio_set_dev(bio, batch->bdev);
+	bio->bi_iter.bi_sector = sector;
+	bio->bi_opf = op | op_flags;
+	bio->bi_end_io = snapshot_bio_end_io;
+	bio->bi_private = batch;
+	atomic_inc(&batch->count);
+	submit_bio(bio);
+
+	if (bio->bi_opf & REQ_SYNC)
+		return snapshot_bio_batch_wait(batch);
+
+	return 0;
+}
+
+static int snapshot_rw_block_device(int direction, struct snapshot_data *data) {
+	struct snapshot_bio_batch batch;
+	ktime_t start = ktime_get();
+	sector_t sector = 0;
+	int res;
+
+	BUG_ON(direction != WRITE && direction != READ);
+	snapshot_bio_batch_init(&batch, data->bdev);
+
+	while (atomic_read(&batch.status) == BLK_STS_OK) {
+		/* When writing we're reading from the snapshot, vice-versa. */
+		if (direction == WRITE)
+			res = snapshot_read_next(&data->handle);
+		else
+			res = snapshot_write_next(&data->handle);
+
+		if (res <= 0)
+			break;
+
+		res = snapshot_submit_io(direction == WRITE ? REQ_OP_WRITE : REQ_OP_READ,
+				REQ_IDLE | (data->handle.sync_read ? REQ_SYNC : 0), sector,
+				&batch, data_of(data->handle));
+		if (res)
+			break;
+
+		sector += PAGE_SECTORS;
+	}
+
+	snapshot_bio_batch_wait(&batch);
+	snapshot_bio_batch_finish(&batch);
+
+	if (!res)
+		res = blk_status_to_errno(atomic_read(&batch.status));
+
+	/* Issue a final flush to make sure everything is committed to disk */
+	if (!res && direction == WRITE)
+		res = snapshot_submit_io(REQ_OP_WRITE, REQ_FUA | REQ_SYNC | REQ_PREFLUSH,
+				sector, &batch, NULL);
+
+	if (!res)
+		swsusp_show_speed(start, ktime_get(), sector >> PAGE_SECTORS_SHIFT, "transferred image via ioctl");
+
 	return res;
 }
 
@@ -463,21 +431,18 @@ static int snapshot_transfer_block_device(struct snapshot_data *data)
 	if (data->swap > 0)
 		return -EBUSY;
 
-	if (!data->snapshot_bdev.bdev)
+	if (!data->bdev)
 		return -ENODEV;
-
-	if (data->read_failure)
-		return -ENODEV; /* a read had previously failed, we need to bail */
 
 	if (data->mode == O_RDONLY) {
 		if (!data->ready)
 			return -ENODATA;
 
-		return snapshot_write_block_device(data);
+		return snapshot_rw_block_device(WRITE, data);
 	} else if (data->mode == O_WRONLY) {
 		if (snapshot_image_loaded(&data->handle))
 			return -EBUSY;
-		return snapshot_read_block_device(data);
+		return snapshot_rw_block_device(READ, data);
 	}
 
 	return -EINVAL;
@@ -543,7 +508,8 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_CREATE_IMAGE:
-		if (data->mode != O_RDONLY || !data->frozen  || data->ready) {
+		if (!hibernation_available() ||
+			data->mode != O_RDONLY || !data->frozen  || data->ready) {
 			error = -EPERM;
 			break;
 		}
@@ -597,7 +563,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_AVAIL_SWAP_SIZE:
-		if (data->snapshot_bdev.bdev) {
+		if (data->bdev) {
 			error = -ENODEV;
 			break;
 		}
@@ -608,7 +574,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 
 	case SNAPSHOT_ALLOC_SWAP_PAGE:
 		if (data->swap < 0 || data->swap >= MAX_SWAPFILES ||
-				data->snapshot_bdev.bdev) {
+				data->bdev) {
 			error = -ENODEV;
 			break;
 		}
@@ -623,7 +589,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 
 	case SNAPSHOT_FREE_SWAP_PAGES:
 		if (data->swap < 0 || data->swap >= MAX_SWAPFILES ||
-				data->snapshot_bdev.bdev) {
+				data->bdev) {
 			error = -ENODEV;
 			break;
 		}

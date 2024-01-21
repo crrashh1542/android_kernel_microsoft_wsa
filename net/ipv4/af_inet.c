@@ -838,16 +838,15 @@ EXPORT_SYMBOL_GPL(inet_send_prepare);
 
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
-	int rv;
 	struct sock *sk = sock->sk;
+
+	trace_cros_inet_sendmsg_enter(sock, msg, size);
 
 	if (unlikely(inet_send_prepare(sk)))
 		return -EAGAIN;
 
-	rv = INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
+	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			     sk, msg, size);
-	trace_cros_inet_sendmsg_exit(sock, msg, size, rv);
-	return rv;
 }
 EXPORT_SYMBOL(inet_sendmsg);
 

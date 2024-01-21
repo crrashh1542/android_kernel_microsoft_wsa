@@ -33,7 +33,6 @@
 #include <linux/stddef.h>
 #include <linux/swap.h>
 #include <linux/low-mem-notify.h>
-#include <linux/mm_inline.h>
 
 #define MB (1 << 20)
 
@@ -67,8 +66,8 @@ static unsigned long get_available_file_mem(void)
 			global_node_page_state(NR_ACTIVE_FILE) +
 			global_node_page_state(NR_INACTIVE_FILE);
 	unsigned long dirty_mem = global_node_page_state(NR_FILE_DIRTY);
-	unsigned long min_file_mem = lru_gen_enabled() ?
-				     0 : min_filelist_kbytes >> (PAGE_SHIFT - 10);
+	/* Since mglru is enabled by default, min_filelist_kbytes is not needed */
+	unsigned long min_file_mem = 0;
 	unsigned long clean_file_mem = file_mem > dirty_mem ?
 			file_mem - dirty_mem : 0;
 	/* Conservatively estimate the amount of available_file_mem */

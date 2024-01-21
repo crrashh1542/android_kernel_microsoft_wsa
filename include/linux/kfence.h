@@ -17,6 +17,8 @@
 #include <linux/atomic.h>
 #include <linux/static_key.h>
 
+extern unsigned long kfence_sample_interval;
+
 /*
  * We allocate an even number of pages, as it simplifies calculations to map
  * address to metadata indices; effectively, the very first page serves as an
@@ -219,6 +221,8 @@ bool __kfence_obj_info(struct kmem_obj_info *kpp, void *object, struct page *pag
 #endif
 
 #else /* CONFIG_KFENCE */
+
+#define kfence_sample_interval	(0)
 
 static inline bool is_kfence_address(const void *addr) { return false; }
 static inline void kfence_alloc_pool(void) { }

@@ -187,6 +187,7 @@ struct blocked_key {
 struct smp_csrk {
 	bdaddr_t bdaddr;
 	u8 bdaddr_type;
+	u8 link_type;
 	u8 type;
 	u8 val[16];
 };
@@ -196,6 +197,7 @@ struct smp_ltk {
 	struct rcu_head rcu;
 	bdaddr_t bdaddr;
 	u8 bdaddr_type;
+	u8 link_type;
 	u8 authenticated;
 	u8 type;
 	u8 enc_size;
@@ -211,6 +213,7 @@ struct smp_irk {
 	__u32 rpa_timestamp;
 	bdaddr_t bdaddr;
 	u8 addr_type;
+	u8 link_type;
 	u8 val[16];
 };
 
@@ -218,6 +221,8 @@ struct link_key {
 	struct list_head list;
 	struct rcu_head rcu;
 	bdaddr_t bdaddr;
+	u8 bdaddr_type;
+	u8 link_type;
 	u8 type;
 	u8 val[HCI_LINK_KEY_SIZE];
 	u8 pin_len;
@@ -337,7 +342,7 @@ struct hci_dev {
 	struct list_head list;
 	struct mutex	lock;
 
-	char		name[8];
+	const char	*name;
 	unsigned long	flags;
 	__u16		id;
 	__u8		bus;
@@ -655,6 +660,7 @@ struct hci_dev {
 	bool (*is_quality_report_evt)(struct sk_buff *skb);
 	bool (*pull_quality_report_data)(struct sk_buff *skb);
 	void (*do_wakeup)(struct hci_dev *hdev);
+	void (*clear_wakeup)(struct hci_dev *hdev);
 };
 
 #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
@@ -718,7 +724,6 @@ struct hci_conn {
 	unsigned long	flags;
 
 	enum conn_reasons conn_reason;
-	__u8		abort_reason;
 
 	__u32		clock;
 	__u16		clock_accuracy;
@@ -738,6 +743,7 @@ struct hci_conn {
 	struct delayed_work auto_accept_work;
 	struct delayed_work idle_work;
 	struct delayed_work le_conn_timeout;
+	struct work_struct  le_scan_cleanup;
 
 	struct device	dev;
 	struct dentry	*debugfs;
@@ -749,6 +755,7 @@ struct hci_conn {
 
 	struct hci_conn	*link;
 	struct bt_codec codec;
+	__u8		force_retrans_effort;
 
 	void (*connect_cfm_cb)	(struct hci_conn *conn, u8 status);
 	void (*security_cfm_cb)	(struct hci_conn *conn, u8 status);
@@ -1128,6 +1135,25 @@ static inline struct hci_conn *hci_lookup_le_connect(struct hci_dev *hdev)
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type == LE_LINK && c->state == BT_CONNECT &&
 		    !test_bit(HCI_CONN_SCANNING, &c->flags)) {
+			rcu_read_unlock();
+			return c;
+		}
+	}
+
+	rcu_read_unlock();
+
+	return NULL;
+}
+
+static inline struct hci_conn *hci_lookup_connect(struct hci_dev *hdev)
+{
+	struct hci_conn_hash *h = &hdev->conn_hash;
+	struct hci_conn  *c;
+
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(c, &h->list, list) {
+		if (c->state == BT_CONNECT) {
 			rcu_read_unlock();
 			return c;
 		}
@@ -1951,4 +1977,6 @@ void hci_copy_identity_address(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 #define TRANSPORT_TYPE_MAX	0x04
 
+/* An arbitrarily invalid number for SCO retransmission effort */
+#define SCO_NO_FORCE_RETRANS_EFFORT	0x3F
 #endif /* __HCI_CORE_H */

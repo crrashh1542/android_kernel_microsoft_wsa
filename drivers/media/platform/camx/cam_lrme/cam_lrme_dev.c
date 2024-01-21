@@ -24,8 +24,6 @@
 #include "cam_lrme_hw_mgr.h"
 #include "cam_lrme_hw_mgr_intf.h"
 
-#define CAM_LRME_DEV_NAME "cam-lrme"
-
 /**
  * struct cam_lrme_dev
  *
@@ -153,7 +151,7 @@ static int cam_lrme_dev_probe(struct platform_device *pdev)
 		goto err_mutex_destroy;
 	}
 
-	rc = cam_subdev_probe(&g_lrme_dev->sd, pdev, CAM_LRME_DEV_NAME,
+	rc = cam_subdev_probe(&g_lrme_dev->sd, pdev, cam_lrme_dev_name(),
 		CAM_LRME_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_LRME, "LRME cam_subdev_probe failed");
@@ -178,7 +176,7 @@ static int cam_lrme_dev_probe(struct platform_device *pdev)
 	}
 
 	rc = cam_node_init(node, &hw_mgr_intf, g_lrme_dev->ctx, CAM_CTX_MAX,
-		CAM_LRME_DEV_NAME);
+		cam_lrme_dev_name());
 	if (rc) {
 		CAM_ERR(CAM_LRME, "LRME node init failed");
 		goto deinit_ctx;

@@ -118,18 +118,29 @@ void watchdog_check_hardlockup(void)
 		if (per_cpu(hard_watchdog_warn, next_cpu) == true)
 			return;
 
+		pr_emerg("Watchdog detected hard LOCKUP on cpu %d\n", next_cpu);
+		print_modules();
+		print_irqtrace_events(current);
+		trigger_single_cpu_backtrace(next_cpu);
 		/*
 		 * Perform all-CPU dump only once to avoid multiple hardlockups
 		 * generating interleaving traces
 		 */
 		if (sysctl_hardlockup_all_cpu_backtrace &&
-				!test_and_set_bit(0, &hardlockup_allcpu_dumped))
-			trigger_allbutself_cpu_backtrace();
+				!test_and_set_bit(0, &hardlockup_allcpu_dumped)) {
+			static struct cpumask backtrace_mask;
+
+			cpumask_copy(&backtrace_mask, cpu_online_mask);
+			cpumask_clear_cpu(next_cpu, &backtrace_mask);
+			cpumask_clear_cpu(smp_processor_id(), &backtrace_mask);
+
+			trigger_cpumask_backtrace(&backtrace_mask);
+		}
 
 		if (hardlockup_panic)
-			panic("Watchdog detected hard LOCKUP on cpu %u", next_cpu);
+			panic("Hard LOCKUP");
 		else
-			WARN(1, "Watchdog detected hard LOCKUP on cpu %u", next_cpu);
+			WARN(1, "Hard LOCKUP");
 
 		per_cpu(hard_watchdog_warn, next_cpu) = true;
 	} else {

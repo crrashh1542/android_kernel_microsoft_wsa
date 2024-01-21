@@ -791,6 +791,12 @@ static void sco_conn_defer_accept(struct hci_conn *conn, u16 setting)
 			else
 				cp.max_latency = cpu_to_le16(0x000D);
 			cp.retrans_effort = 0x02;
+
+			if (conn->force_retrans_effort != SCO_NO_FORCE_RETRANS_EFFORT) {
+				cp.retrans_effort = conn->force_retrans_effort;
+				bt_dev_info(hdev, "Force dst:%pMR retrans effort to %d",
+					    &conn->dst, cp.retrans_effort);
+			}
 			break;
 		case SCO_AIRMODE_CVSD:
 			cp.max_latency = cpu_to_le16(0xffff);

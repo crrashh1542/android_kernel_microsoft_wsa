@@ -6,6 +6,10 @@
  * Unprovisioned SKU: 0x7FFFFFF0UL | 0x08
  * Panel ID: 0x3 (K&D-Ili9882t)
  * Unprovisioned SKU: 0x7FFFFFF0UL | 0x03
+ * Panel ID: 0x6 (K&D-Ili9882t)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x06
+ * Panel ID: 0x9 (Starry-Ilitek9882t)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x09
  */
 
 /dts-v1/;
@@ -15,7 +19,8 @@
 	model = "Google Starmie sku0/unprovisioned board";
 	compatible = "google,starmie-sku0", "google,starmie-sku2147483640",
 		     "google,starmie-sku2", "google,starmie-sku2147483635",
-		     "google,starmie-sku3", "google,starmie", "mediatek,mt8186";
+		     "google,starmie-sku3", "google,starmie-sku2147483638",
+		     "google,starmie-sku2147483641","google,starmie", "mediatek,mt8186";
 };
 
 &panel {

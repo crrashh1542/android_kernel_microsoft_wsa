@@ -237,15 +237,11 @@ static void g4x_read_infoframe(struct intel_encoder *encoder,
 			       void *frame, ssize_t len)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	u32 val, *data = frame;
+	u32 *data = frame;
 	int i;
 
-	val = intel_de_read(dev_priv, VIDEO_DIP_CTL);
-
-	val &= ~(VIDEO_DIP_SELECT_MASK | 0xf); /* clear DIP data offset */
-	val |= g4x_infoframe_index(type);
-
-	intel_de_write(dev_priv, VIDEO_DIP_CTL, val);
+	intel_de_rmw(dev_priv, VIDEO_DIP_CTL,
+		     VIDEO_DIP_SELECT_MASK | 0xf, g4x_infoframe_index(type));
 
 	for (i = 0; i < len; i += 4)
 		*data++ = intel_de_read(dev_priv, VIDEO_DIP_DATA);
@@ -313,15 +309,11 @@ static void ibx_read_infoframe(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	u32 val, *data = frame;
+	u32 *data = frame;
 	int i;
 
-	val = intel_de_read(dev_priv, TVIDEO_DIP_CTL(crtc->pipe));
-
-	val &= ~(VIDEO_DIP_SELECT_MASK | 0xf); /* clear DIP data offset */
-	val |= g4x_infoframe_index(type);
-
-	intel_de_write(dev_priv, TVIDEO_DIP_CTL(crtc->pipe), val);
+	intel_de_rmw(dev_priv, TVIDEO_DIP_CTL(crtc->pipe),
+		     VIDEO_DIP_SELECT_MASK | 0xf, g4x_infoframe_index(type));
 
 	for (i = 0; i < len; i += 4)
 		*data++ = intel_de_read(dev_priv, TVIDEO_DIP_DATA(crtc->pipe));
@@ -395,15 +387,11 @@ static void cpt_read_infoframe(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	u32 val, *data = frame;
+	u32 *data = frame;
 	int i;
 
-	val = intel_de_read(dev_priv, TVIDEO_DIP_CTL(crtc->pipe));
-
-	val &= ~(VIDEO_DIP_SELECT_MASK | 0xf); /* clear DIP data offset */
-	val |= g4x_infoframe_index(type);
-
-	intel_de_write(dev_priv, TVIDEO_DIP_CTL(crtc->pipe), val);
+	intel_de_rmw(dev_priv, TVIDEO_DIP_CTL(crtc->pipe),
+		     VIDEO_DIP_SELECT_MASK | 0xf, g4x_infoframe_index(type));
 
 	for (i = 0; i < len; i += 4)
 		*data++ = intel_de_read(dev_priv, TVIDEO_DIP_DATA(crtc->pipe));
@@ -471,15 +459,11 @@ static void vlv_read_infoframe(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	u32 val, *data = frame;
+	u32 *data = frame;
 	int i;
 
-	val = intel_de_read(dev_priv, VLV_TVIDEO_DIP_CTL(crtc->pipe));
-
-	val &= ~(VIDEO_DIP_SELECT_MASK | 0xf); /* clear DIP data offset */
-	val |= g4x_infoframe_index(type);
-
-	intel_de_write(dev_priv, VLV_TVIDEO_DIP_CTL(crtc->pipe), val);
+	intel_de_rmw(dev_priv, VLV_TVIDEO_DIP_CTL(crtc->pipe),
+		     VIDEO_DIP_SELECT_MASK | 0xf, g4x_infoframe_index(type));
 
 	for (i = 0; i < len; i += 4)
 		*data++ = intel_de_read(dev_priv,
@@ -1675,9 +1659,10 @@ intel_hdmi_hdcp2_wait_for_msg(struct intel_digital_port *dig_port,
 }
 
 static
-int intel_hdmi_hdcp2_write_msg(struct intel_digital_port *dig_port,
+int intel_hdmi_hdcp2_write_msg(struct intel_connector *connector,
 			       void *buf, size_t size)
 {
+	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
 	unsigned int offset;
 
 	offset = HDCP_2_2_HDMI_REG_WR_MSG_OFFSET;
@@ -1685,9 +1670,10 @@ int intel_hdmi_hdcp2_write_msg(struct intel_digital_port *dig_port,
 }
 
 static
-int intel_hdmi_hdcp2_read_msg(struct intel_digital_port *dig_port,
+int intel_hdmi_hdcp2_read_msg(struct intel_connector *connector,
 			      u8 msg_id, void *buf, size_t size)
 {
+	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
 	struct drm_i915_private *i915 = to_i915(dig_port->base.base.dev);
 	struct intel_hdmi *hdmi = &dig_port->hdmi;
 	struct intel_hdcp *hdcp = &hdmi->attached_connector->hdcp;
@@ -1743,9 +1729,10 @@ int intel_hdmi_hdcp2_check_link(struct intel_digital_port *dig_port,
 }
 
 static
-int intel_hdmi_hdcp2_capable(struct intel_digital_port *dig_port,
+int intel_hdmi_hdcp2_capable(struct intel_connector *connector,
 			     bool *capable)
 {
+	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
 	u8 hdcp2_version;
 	int ret;
 

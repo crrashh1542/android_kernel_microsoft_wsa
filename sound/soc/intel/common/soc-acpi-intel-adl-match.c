@@ -455,6 +455,11 @@ static const struct snd_soc_acpi_codecs adl_nau8318_amp = {
 	.codecs = {"NVTN2012"}
 };
 
+static struct snd_soc_acpi_codecs adl_rt5650_amp = {
+	.num_codecs = 1,
+	.codecs = {"10EC5650"}
+};
+
 struct snd_soc_acpi_mach snd_soc_acpi_intel_adl_machines[] = {
 	{
 		.comp_ids = &adl_rt5682_rt5682s_hp,
@@ -533,6 +538,13 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_adl_machines[] = {
 	},
 	{
 		.comp_ids = &adl_rt5682_rt5682s_hp,
+		.drv_name = "adl_rt5682_c1_h02",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &adl_lt6911_hdmi,
+		.sof_tplg_filename = "sof-adl-rt5682-ssp1-hdmi-ssp02.tplg",
+	},
+	{
+		.comp_ids = &adl_rt5682_rt5682s_hp,
 		.drv_name = "adl_rt5682",
 		.sof_tplg_filename = "sof-adl-rt5682.tplg",
 	},
@@ -542,6 +554,20 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_adl_machines[] = {
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &adl_max98360a_amp,
 		.sof_tplg_filename = "sof-adl-max98360a-cs42l42.tplg",
+	},
+	{
+		.id = "10EC5650",
+		.drv_name = "adl_rt5650",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &adl_rt5650_amp,
+		.sof_tplg_filename = "sof-adl-rt5650.tplg",
+	},
+	{
+		.id = "DLGS7219",
+		.drv_name = "adl_mx98360_da7219",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &adl_max98360a_amp,
+		.sof_tplg_filename = "sof-adl-max98360a-da7219.tplg",
 	},
 	/* place amp-only boards in the end of table */
 	{

@@ -23,7 +23,12 @@
 #include "cam_debug_util.h"
 #include "cam_packet_util.h"
 
-static const char jpeg_dev_name[] = "cam-jpeg";
+const char *cam_jpeg_dev_name(void)
+{
+	static const char *dev_name = "cam-jpeg";
+
+	return dev_name;
+}
 
 static int cam_jpeg_context_dump_active_request(void *data, unsigned long iova,
 	uint32_t buf_info)
@@ -192,7 +197,7 @@ int cam_jpeg_context_init(struct cam_jpeg_context *ctx,
 	for (i = 0; i < CAM_CTX_REQ_MAX; i++)
 		ctx->req_base[i].req_priv = ctx;
 
-	rc = cam_context_init(ctx_base, jpeg_dev_name, CAM_JPEG, ctx_id,
+	rc = cam_context_init(ctx_base, cam_jpeg_dev_name(), CAM_JPEG, ctx_id,
 		NULL, hw_intf, ctx->req_base, CAM_CTX_REQ_MAX);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "Camera Context Base init failed");

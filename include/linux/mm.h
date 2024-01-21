@@ -2459,7 +2459,7 @@ static inline unsigned long get_num_physpages(void)
  * unsigned long max_zone_pfns[MAX_NR_ZONES] = {max_dma, max_normal_pfn,
  * 							 max_highmem_pfn};
  * for_each_valid_physical_page_range()
- * 	memblock_add_node(base, size, nid)
+ *	memblock_add_node(base, size, nid, MEMBLOCK_NONE)
  * free_area_init(max_zone_pfns);
  */
 void free_area_init(unsigned long *max_zone_pfn);
@@ -3270,9 +3270,6 @@ unsigned long wp_shared_mapping_range(struct address_space *mapping,
 #endif
 
 extern int sysctl_nr_trim_pages;
-extern int min_filelist_kbytes;
-extern int min_filelist_kbytes_handler(struct ctl_table *table, int write,
-		void *buf, size_t *len, loff_t *pos);
 
 #ifdef CONFIG_PRINTK
 void mem_dump_obj(void *object);

@@ -35,6 +35,8 @@
 #define MT7921_FW_TAG_FEATURE		4
 #define MT7921_FW_CAP_CNM		BIT(7)
 
+#define MT7921_CHIP_CAP_CLC_EVT_EN BIT(0)
+
 #define MT7921_FIRMWARE_WM		"mediatek/WIFI_RAM_CODE_MT7961_1.bin"
 #define MT7921_ROM_PATCH		"mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin"
 
@@ -57,6 +59,7 @@
 #define MT7921_SDIO_HDR_PKT_TYPE	GENMASK(17, 16)
 
 #define MCU_UNI_EVENT_ROC  0x27
+#define MCU_UNI_EVENT_CLC  0x80
 
 enum {
 	UNI_ROC_ACQUIRE,
@@ -209,6 +212,14 @@ enum {
 	MT7921_CLC_MAX_NUM,
 };
 
+enum mt7921_reg_power_type {
+	MT_AP_UNSET = 0,
+	MT_AP_DEFAULT,
+	MT_AP_LPI,
+	MT_AP_SP,
+	MT_AP_VLP,
+};
+
 struct mt7921_clc_rule {
 	u8 alpha2[2];
 	u8 type[2];
@@ -246,6 +257,8 @@ struct mt7921_phy {
 
 	u8 sta_work_count;
 
+	u8 clc_chan_conf;
+	enum mt7921_reg_power_type power_type;
 	struct sk_buff_head scan_event_list;
 	struct delayed_work scan_work;
 #ifdef CONFIG_ACPI
@@ -253,6 +266,7 @@ struct mt7921_phy {
 #endif
 
 	struct mt7921_clc *clc[MT7921_CLC_MAX_NUM];
+	u64 chip_cap;
 
 	struct work_struct roc_work;
 	struct timer_list roc_timer;
@@ -288,6 +302,8 @@ struct mt7921_dev {
 	bool hw_full_reset:1;
 	bool hw_init_done:1;
 	bool fw_assert:1;
+	bool regd_in_progress:1;
+	wait_queue_head_t wait;
 
 	struct list_head sta_poll_list;
 	spinlock_t sta_poll_lock;
@@ -455,6 +471,7 @@ mt7921_skb_add_usb_sdio_hdr(struct mt7921_dev *dev, struct sk_buff *skb,
 }
 
 void mt7921_stop(struct ieee80211_hw *hw);
+void mt7921_regd_update(struct mt7921_dev *dev);
 int mt7921_mac_init(struct mt7921_dev *dev);
 bool mt7921_mac_wtbl_update(struct mt7921_dev *dev, int idx, u32 mask);
 void mt7921_mac_reset_counters(struct mt7921_phy *phy);
@@ -565,6 +582,7 @@ int mt7921_mcu_uni_add_beacon_offload(struct mt7921_dev *dev,
 int mt7921_init_acpi_sar(struct mt7921_dev *dev);
 int mt7921_init_acpi_sar_power(struct mt7921_phy *phy, bool set_default);
 u8 mt7921_acpi_get_flags(struct mt7921_phy *phy);
+u8 mt7921_acpi_get_mtcl_conf(struct mt7921_phy *phy, char *alpha2);
 #else
 static inline int
 mt7921_init_acpi_sar(struct mt7921_dev *dev)
@@ -582,6 +600,11 @@ static inline u8
 mt7921_acpi_get_flags(struct mt7921_phy *phy)
 {
 	return 0;
+}
+
+static inline u8 mt7921_acpi_get_mtcl_conf(struct mt7921_phy *phy, char *alpha2)
+{
+	return 0xf;
 }
 #endif
 int mt7921_set_tx_sar_pwr(struct ieee80211_hw *hw,

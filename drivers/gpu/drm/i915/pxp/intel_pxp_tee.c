@@ -14,6 +14,8 @@
 #include "intel_pxp_tee.h"
 #include "intel_pxp_tee_interface.h"
 
+#define PXP_TRANSPORT_TIMEOUT_MS 5000 /* 5 sec */
+
 static inline struct intel_pxp *i915_dev_to_pxp(struct device *i915_kdev)
 {
 	struct drm_i915_private *i915 = kdev_to_i915(i915_kdev);
@@ -48,14 +50,15 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 	if (pxp->last_tee_msg_interrupted) {
 		/* read and drop data from the previous iteration */
 		ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out,
-					msg_out_max_size, vtag);
+					msg_out_max_size, vtag, PXP_TRANSPORT_TIMEOUT_MS);
 		if (ret == -EINTR)
 			goto unlock;
 
 		pxp->last_tee_msg_interrupted = false;
 	}
 
-	ret = pxp_component->ops->send(pxp_component->tee_dev, msg_in, msg_in_size, vtag);
+	ret = pxp_component->ops->send(pxp_component->tee_dev, msg_in, msg_in_size, vtag,
+				       PXP_TRANSPORT_TIMEOUT_MS);
 	if (ret) {
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)
@@ -65,7 +68,8 @@ static int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		goto unlock;
 	}
 
-	ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out, msg_out_max_size, vtag);
+	ret = pxp_component->ops->recv(pxp_component->tee_dev, msg_out, msg_out_max_size, vtag,
+				       PXP_TRANSPORT_TIMEOUT_MS);
 	if (ret < 0) {
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)

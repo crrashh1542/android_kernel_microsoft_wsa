@@ -131,6 +131,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI,
 	MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
 	MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE,
+	MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
 };
 
 static const u16 mgmt_events[] = {
@@ -2448,7 +2449,8 @@ static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_link_key_info *key = &cp->keys[i];
 
-		if (key->addr.type != BDADDR_BREDR || key->type > 0x08)
+		/* Considering SMP over BREDR/LE, there is no need to check addr_type */
+		if (key->type > 0x08)
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_LOAD_LINK_KEYS,
 					       MGMT_STATUS_INVALID_PARAMS);
@@ -3137,6 +3139,18 @@ unlock:
 	return err;
 }
 
+static int abort_conn_sync(struct hci_dev *hdev, void *data)
+{
+	struct hci_conn *conn;
+	u16 handle = PTR_ERR(data);
+
+	conn = hci_conn_hash_lookup_handle(hdev, handle);
+	if (!conn)
+		return 0;
+
+	return hci_abort_conn_sync(hdev, conn, HCI_ERROR_REMOTE_USER_TERM);
+}
+
 static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 			      u16 len)
 {
@@ -3187,7 +3201,8 @@ static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 					      le_addr_type(addr->type));
 
 	if (conn->conn_reason == CONN_REASON_PAIR_DEVICE)
-		hci_abort_conn(conn, HCI_ERROR_REMOTE_USER_TERM);
+		hci_cmd_sync_queue(hdev, abort_conn_sync, ERR_PTR(conn->handle),
+				   NULL);
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -6537,6 +6552,7 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 
 	for (i = 0; i < irk_count; i++) {
 		struct mgmt_irk_info *irk = &cp->irks[i];
+		u8 addr_type = le_addr_type(irk->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_IRK,
@@ -6546,8 +6562,12 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (irk->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_irk(hdev, &irk->addr.bdaddr,
-			    le_addr_type(irk->addr.type), irk->val,
+			    addr_type, irk->val,
 			    BDADDR_ANY);
 	}
 
@@ -6628,6 +6648,7 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_ltk_info *key = &cp->keys[i];
 		u8 type, authenticated;
+		u8 addr_type = le_addr_type(key->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_LTK,
@@ -6662,8 +6683,12 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (key->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_ltk(hdev, &key->addr.bdaddr,
-			    le_addr_type(key->addr.type), type, authenticated,
+			    addr_type, type, authenticated,
 			    key->val, key->enc_size, key->ediv, key->rand);
 	}
 
@@ -8898,6 +8923,53 @@ static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, voi
 	return 0;
 }
 
+static int sco_force_retrans_effort(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_sco_force_retrans_effort *cp = data;
+	struct hci_conn *acl;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	hci_dev_lock(hdev);
+
+	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->addr.bdaddr);
+
+	if (!acl) {
+		bt_dev_err(hdev, "%s: no acl found for %pMR",
+			   __func__, &cp->addr.bdaddr);
+		goto failed;
+	}
+
+	switch (cp->retrans_effort) {
+	/* optimize for power consumption and optimize for link quality
+	 * require esco
+	 */
+	case 0x01:
+	case 0x02:
+		if (!lmp_esco_capable(acl))
+			goto failed;
+		/* fall through */
+	/* No retransmission and Don’t care don't require esco  */
+	case 0x00:
+	case 0xFF:
+		break;
+	default:
+		goto failed;
+	}
+
+	acl->force_retrans_effort = cp->retrans_effort;
+	bt_dev_info(hdev, "set retrans effort to %d for %pMR", acl->force_retrans_effort,
+		    &cp->addr.bdaddr);
+
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+					MGMT_STATUS_SUCCESS);
+failed:
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+			       MGMT_STATUS_INVALID_PARAMS);
+}
+
 static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ NULL }, /* 0x0000 (no command) */
 	{ read_version,            MGMT_READ_VERSION_SIZE,
@@ -9047,6 +9119,9 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	[MGMT_OP_SCO_FORCE_RETRANS_EFFORT] = {
+	sco_force_retrans_effort,
+				   MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE },
 };
 
 void mgmt_index_added(struct hci_dev *hdev)
@@ -9201,7 +9276,7 @@ void mgmt_new_link_key(struct hci_dev *hdev, struct link_key *key,
 
 	ev.store_hint = persistent;
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = BDADDR_BREDR;
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = key->type;
 	memcpy(ev.key.val, key->val, HCI_LINK_KEY_SIZE);
 	ev.key.pin_len = key->pin_len;
@@ -9252,7 +9327,7 @@ void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, key->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = mgmt_ltk_type(key);
 	ev.key.enc_size = key->enc_size;
 	ev.key.ediv = key->ediv;
@@ -9281,7 +9356,7 @@ void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent)
 
 	bacpy(&ev.rpa, &irk->rpa);
 	bacpy(&ev.irk.addr.bdaddr, &irk->bdaddr);
-	ev.irk.addr.type = link_to_bdaddr(LE_LINK, irk->addr_type);
+	ev.irk.addr.type = link_to_bdaddr(irk->link_type, irk->addr_type);
 	memcpy(ev.irk.val, irk->val, sizeof(irk->val));
 
 	mgmt_event(MGMT_EV_NEW_IRK, hdev, &ev, sizeof(ev), NULL);
@@ -9310,7 +9385,7 @@ void mgmt_new_csrk(struct hci_dev *hdev, struct smp_csrk *csrk,
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &csrk->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, csrk->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(csrk->link_type, csrk->bdaddr_type);
 	ev.key.type = csrk->type;
 	memcpy(ev.key.val, csrk->val, sizeof(csrk->val));
 

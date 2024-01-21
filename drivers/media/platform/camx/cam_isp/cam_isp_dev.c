@@ -146,7 +146,7 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 
 	g_isp_dev->sd.internal_ops = &cam_isp_subdev_internal_ops;
 	/* Initialize the v4l2 subdevice first. (create cam_node) */
-	rc = cam_subdev_probe(&g_isp_dev->sd, pdev, CAM_ISP_DEV_NAME,
+	rc = cam_subdev_probe(&g_isp_dev->sd, pdev, cam_isp_dev_name(),
 		CAM_IFE_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "ISP cam_subdev_probe failed!");
@@ -181,7 +181,7 @@ static int cam_isp_dev_probe(struct platform_device *pdev)
 	}
 
 	rc = cam_node_init(node, &hw_mgr_intf, g_isp_dev->ctx, CAM_CTX_MAX,
-		CAM_ISP_DEV_NAME);
+		cam_isp_dev_name());
 	if (rc) {
 		CAM_ERR(CAM_ISP, "ISP node init failed!");
 		goto unregister;

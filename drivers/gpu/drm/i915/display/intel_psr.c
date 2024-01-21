@@ -1111,7 +1111,7 @@ void intel_psr_get_config(struct intel_encoder *encoder,
 	}
 
 	if (DISPLAY_VER(dev_priv) >= 12) {
-		val = intel_de_read(dev_priv, EXITLINE(intel_dp->psr.transcoder));
+		val = intel_de_read(dev_priv, TRANS_EXITLINE(intel_dp->psr.transcoder));
 		val &= EXITLINE_MASK;
 		pipe_config->dc3co_exitline = val;
 	}
@@ -1190,11 +1190,11 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
 		 * TODO: if future platforms supports DC3CO in more than one
 		 * transcoder, EXITLINE will need to be unset when disabling PSR
 		 */
-		val = intel_de_read(dev_priv, EXITLINE(cpu_transcoder));
+		val = intel_de_read(dev_priv, TRANS_EXITLINE(cpu_transcoder));
 		val &= ~EXITLINE_MASK;
 		val |= intel_dp->psr.dc3co_exitline << EXITLINE_SHIFT;
 		val |= EXITLINE_ENABLE;
-		intel_de_write(dev_priv, EXITLINE(cpu_transcoder), val);
+		intel_de_write(dev_priv, TRANS_EXITLINE(cpu_transcoder), val);
 	}
 
 	if (HAS_PSR_HW_TRACKING(dev_priv) && HAS_PSR2_SEL_FETCH(dev_priv))

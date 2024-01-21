@@ -27,8 +27,9 @@
 
 /* DOWNSTREAM ioctl's */
 
-/* DOWNSTREAM ioctl numbers go down from 0x5f */
-#define DOWNSTREAM_DRM_I915_PXP_OPS		0x5f
+/* DOWNSTREAM ioctl numbers go down from 0x5f
+ * We are just skipping the reserved numbers */
+#define DOWNSTREAM_DRM_I915_PXP_OPS		0x52
 
 #define DOWNSTREAM_DRM_IOCTL_I915_PXP_OPS	DRM_IOWR(DRM_COMMAND_BASE + \
 						DOWNSTREAM_DRM_I915_PXP_OPS, \

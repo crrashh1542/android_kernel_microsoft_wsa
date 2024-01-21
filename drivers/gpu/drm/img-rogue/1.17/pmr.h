@@ -74,8 +74,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define PMR_MAX_TRANSLATION_STACK_ALLOC				(32)
 
-/* Maximum number of pages a PMR can have is 1G of memory */
-#define PMR_MAX_SUPPORTED_PAGE_COUNT				(262144)
+/* Maximum size PMR can have is 8G of memory */
+#define PMR_MAX_SUPPORTED_SIZE IMG_UINT64_C(0x200000000)
+/* Max number of pages in a PMR at 4k page size */
+#define PMR_MAX_SUPPORTED_PAGE_COUNT (PMR_MAX_SUPPORTED_SIZE >> 12ULL)
 
 typedef IMG_UINT64 PMR_BASE_T;
 typedef IMG_UINT64 PMR_SIZE_T;
@@ -99,6 +101,18 @@ struct _PMR_MAPPING_TABLE_
 typedef struct _PMR_EXPORT_ PMR_EXPORT;
 
 typedef struct _PMR_PAGELIST_ PMR_PAGELIST;
+
+/*
+ * PMRValidateSize
+ *
+ * Given a size value, check the value against the max supported
+ * PMR size of 1GB. Return IMG_FALSE if size exceeds max, IMG_TRUE
+ * otherwise.
+ */
+static inline IMG_BOOL PMRValidateSize(IMG_UINT64 uiSize)
+{
+	return (uiSize > PMR_MAX_SUPPORTED_SIZE) ? IMG_FALSE : IMG_TRUE;
+}
 
 /*
  * PMRCreatePMR
@@ -469,14 +483,19 @@ PMR_WriteBytes(PMR *psPMR,
                 address space. The caller does not need to call
                 PMRLockSysPhysAddresses before calling this function.
 
-@Input          psPMR           PMR to map.
+@Input          psPMR            PMR to map.
 
-@Input          pOSMMapData     OS specific data needed to create a mapping.
+@Input          pOSMMapData      OS specific data needed to create a mapping.
+
+@Input          uiCpuAccessFlags Flags to indicate if the mapping request
+                                 requires read, write or both access.
 
 @Return         PVRSRV_ERROR:   PVRSRV_OK on success or an error otherwise.
 */ /**************************************************************************/
 PVRSRV_ERROR
-PMRMMapPMR(PMR *psPMR, PMR_MMAP_DATA pOSMMapData);
+PMRMMapPMR(PMR *psPMR,
+           PMR_MMAP_DATA pOSMMapData,
+           PVRSRV_MEMALLOCFLAGS_T uiCpuAccessFlags);
 
 /*
  * PMRRefPMR()
@@ -498,6 +517,29 @@ PMRRefPMR(PMR *psPMR);
  */
 PVRSRV_ERROR
 PMRUnrefPMR(PMR *psPMR);
+
+/*
+ * PMRRefPMR2()
+ *
+ * Take a reference on the passed in PMR.
+ *
+ * This function does not perform address locking as opposed to PMRRefPMR().
+ */
+void
+PMRRefPMR2(PMR *psPMR);
+
+/*
+ * PMRUnrefPMR2()
+ *
+ * This undoes a call to any of the PhysmemNew* family of APIs
+ * (i.e. any PMR factory "constructor").
+ *
+ * This relinquishes a reference to the PMR, and, where the refcount
+ * reaches 0, causes the PMR to be destroyed (calling the finalizer
+ * callback on the PMR, if there is one)
+ */
+void
+PMRUnrefPMR2(PMR *psPMR);
 
 /*
  * PMRUnrefUnlockPMR()
@@ -524,6 +566,9 @@ PMRCpuMapCountIncr(PMR *psPMR);
  */
 void
 PMRCpuMapCountDecr(PMR *psPMR);
+
+IMG_BOOL
+PMR_IsCpuMapped(PMR *psPMR);
 
 PPVRSRV_DEVICE_NODE
 PMR_DeviceNode(const PMR *psPMR);
@@ -571,6 +616,14 @@ PMR_GetMappingTable(const PMR *psPMR);
 
 IMG_UINT32
 PMR_GetLog2Contiguity(const PMR *psPMR);
+
+/*
+ * PMRGetMaxChunkCount
+ *
+ * Given a PMR, calculate the maximum number of chunks supported by
+ * the PMR from the contiguity and return it.
+ */
+IMG_UINT32 PMRGetMaxChunkCount(PMR *psPMR);
 
 const IMG_CHAR *
 PMR_GetAnnotation(const PMR *psPMR);
@@ -1037,5 +1090,23 @@ PMRDeInit(void);
 PVRSRV_ERROR
 PMRStoreRIHandle(PMR *psPMR, void *hRIHandle);
 #endif
+
+/*
+ * PMRLockPMR()
+ *
+ * To be called when the PMR must not be modified by any other call-stack.
+ * Acquires the mutex on the passed in PMR.
+ */
+void
+PMRLockPMR(PMR *psPMR);
+
+/*
+ * PMRUnlockPMR()
+ *
+ * To be called when the PMR is no longer being modified.
+ * Releases the per-PMR mutex.
+ */
+void
+PMRUnlockPMR(PMR *psPMR);
 
 #endif /* #ifdef SRVSRV_PMR_H */

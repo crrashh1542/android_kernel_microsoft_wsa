@@ -1596,9 +1596,12 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 		DRM_MODE_ROTATE_180 | DRM_MODE_ROTATE_270;
 
 	if (dm->adev->asic_type >= CHIP_BONAIRE &&
-	    plane->type != DRM_PLANE_TYPE_CURSOR)
+	    dm->adev->asic_type != CHIP_RAVEN &&
+	    plane->type != DRM_PLANE_TYPE_CURSOR) {
+		/*it won't create rotation property for zork. */
 		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
 						   supported_rotations);
+	}
 
 	drm_plane_helper_add(plane, &dm_plane_helper_funcs);
 

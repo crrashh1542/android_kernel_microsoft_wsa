@@ -1852,6 +1852,10 @@ static const struct dmi_system_id ec_dmi_table[] __initconst = {
 	{
 	ec_clear_on_resume, "Samsung hardware", {
 	DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD.")}, NULL},
+	{
+	ec_honor_dsdt_gpe, "HP 250 G7 Notebook PC", {
+	DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+	DMI_MATCH(DMI_PRODUCT_NAME, "HP 250 G7 Notebook PC"),}, NULL},
 	{},
 };
 

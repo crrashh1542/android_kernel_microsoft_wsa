@@ -168,6 +168,8 @@ static void wakeup_trace_open(struct trace_iterator *iter)
 {
 	if (is_graph(iter->tr))
 		graph_trace_open(iter);
+	else
+		iter->private = NULL;
 }
 
 static void wakeup_trace_close(struct trace_iterator *iter)
@@ -380,7 +382,9 @@ tracing_sched_switch_trace(struct trace_array *tr,
 	struct ctx_switch_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_CTX,
-					  sizeof(*entry), trace_ctx);
+					  sizeof(*entry),
+					  tr->trace_flags,
+					  trace_ctx);
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);
@@ -408,7 +412,9 @@ tracing_sched_wakeup_trace(struct trace_array *tr,
 	struct trace_buffer *buffer = tr->array_buffer.buffer;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_WAKE,
-					  sizeof(*entry), trace_ctx);
+					  sizeof(*entry),
+					  tr->trace_flags,
+					  trace_ctx);
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);

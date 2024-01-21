@@ -441,9 +441,10 @@ TEST_F_FORK(layout1, inval)
 #define ACCESS_FILE ( \
 	LANDLOCK_ACCESS_FS_EXECUTE | \
 	LANDLOCK_ACCESS_FS_WRITE_FILE | \
-	LANDLOCK_ACCESS_FS_READ_FILE)
+	LANDLOCK_ACCESS_FS_READ_FILE | \
+	LANDLOCK_ACCESS_FS_TRUNCATE)
 
-#define ACCESS_LAST LANDLOCK_ACCESS_FS_REFER
+#define ACCESS_LAST LANDLOCK_ACCESS_FS_TRUNCATE
 
 #define ACCESS_ALL ( \
 	ACCESS_FILE | \
@@ -457,7 +458,7 @@ TEST_F_FORK(layout1, inval)
 	LANDLOCK_ACCESS_FS_MAKE_FIFO | \
 	LANDLOCK_ACCESS_FS_MAKE_BLOCK | \
 	LANDLOCK_ACCESS_FS_MAKE_SYM | \
-	ACCESS_LAST)
+	LANDLOCK_ACCESS_FS_REFER)
 
 /* clang-format on */
 
@@ -3190,6 +3191,180 @@ TEST_F_FORK(layout1, proc_pipe)
 
 	ASSERT_EQ(0, close(pipe_fds[0]));
 	ASSERT_EQ(0, close(pipe_fds[1]));
+}
+
+/* clang-format off */
+FIXTURE(ftruncate) {};
+/* clang-format on */
+
+FIXTURE_SETUP(ftruncate)
+{
+	prepare_layout(_metadata);
+	create_file(_metadata, file1_s1d1);
+}
+
+FIXTURE_TEARDOWN(ftruncate)
+{
+	EXPECT_EQ(0, remove_path(file1_s1d1));
+	cleanup_layout(_metadata);
+}
+
+FIXTURE_VARIANT(ftruncate)
+{
+	const __u64 handled;
+	const __u64 permitted;
+	const int expected_open_result;
+	const int expected_ftruncate_result;
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(ftruncate, w_w) {
+	/* clang-format on */
+	.handled = LANDLOCK_ACCESS_FS_WRITE_FILE,
+	.permitted = LANDLOCK_ACCESS_FS_WRITE_FILE,
+	.expected_open_result = 0,
+	.expected_ftruncate_result = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(ftruncate, t_t) {
+	/* clang-format on */
+	.handled = LANDLOCK_ACCESS_FS_TRUNCATE,
+	.permitted = LANDLOCK_ACCESS_FS_TRUNCATE,
+	.expected_open_result = 0,
+	.expected_ftruncate_result = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(ftruncate, wt_w) {
+	/* clang-format on */
+	.handled = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE,
+	.permitted = LANDLOCK_ACCESS_FS_WRITE_FILE,
+	.expected_open_result = 0,
+	.expected_ftruncate_result = EACCES,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(ftruncate, wt_wt) {
+	/* clang-format on */
+	.handled = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE,
+	.permitted = LANDLOCK_ACCESS_FS_WRITE_FILE |
+		     LANDLOCK_ACCESS_FS_TRUNCATE,
+	.expected_open_result = 0,
+	.expected_ftruncate_result = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(ftruncate, wt_t) {
+	/* clang-format on */
+	.handled = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE,
+	.permitted = LANDLOCK_ACCESS_FS_TRUNCATE,
+	.expected_open_result = EACCES,
+};
+
+TEST_F_FORK(ftruncate, open_and_ftruncate)
+{
+	const char *const path = file1_s1d1;
+	const struct rule rules[] = {
+		{
+			.path = path,
+			.access = variant->permitted,
+		},
+		{},
+	};
+	int fd, ruleset_fd;
+
+	/* Enable Landlock. */
+	ruleset_fd = create_ruleset(_metadata, variant->handled, rules);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	fd = open(path, O_WRONLY);
+	EXPECT_EQ(variant->expected_open_result, (fd < 0 ? errno : 0));
+	if (fd >= 0) {
+		EXPECT_EQ(variant->expected_ftruncate_result,
+			  test_ftruncate(fd));
+		ASSERT_EQ(0, close(fd));
+	}
+}
+
+TEST_F_FORK(ftruncate, open_and_ftruncate_in_different_processes)
+{
+	int child, fd, status;
+	int socket_fds[2];
+
+	ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0,
+				socket_fds));
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		/*
+		 * Enables Landlock in the child process, open a file descriptor
+		 * where truncation is forbidden and send it to the
+		 * non-landlocked parent process.
+		 */
+		const char *const path = file1_s1d1;
+		const struct rule rules[] = {
+			{
+				.path = path,
+				.access = variant->permitted,
+			},
+			{},
+		};
+		int fd, ruleset_fd;
+
+		ruleset_fd = create_ruleset(_metadata, variant->handled, rules);
+		ASSERT_LE(0, ruleset_fd);
+		enforce_ruleset(_metadata, ruleset_fd);
+		ASSERT_EQ(0, close(ruleset_fd));
+
+		fd = open(path, O_WRONLY);
+		ASSERT_EQ(variant->expected_open_result, (fd < 0 ? errno : 0));
+
+		if (fd >= 0) {
+			ASSERT_EQ(0, send_fd(socket_fds[0], fd));
+			ASSERT_EQ(0, close(fd));
+		}
+
+		ASSERT_EQ(0, close(socket_fds[0]));
+
+		_exit(_metadata->passed ? EXIT_SUCCESS : EXIT_FAILURE);
+		return;
+	}
+
+	if (variant->expected_open_result == 0) {
+		fd = recv_fd(socket_fds[1]);
+		ASSERT_LE(0, fd);
+
+		EXPECT_EQ(variant->expected_ftruncate_result,
+			  test_ftruncate(fd));
+		ASSERT_EQ(0, close(fd));
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_EQ(1, WIFEXITED(status));
+	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+
+	ASSERT_EQ(0, close(socket_fds[0]));
+	ASSERT_EQ(0, close(socket_fds[1]));
+}
+
+TEST(memfd_ftruncate)
+{
+	int fd;
+
+	fd = memfd_create("name", MFD_CLOEXEC);
+	ASSERT_LE(0, fd);
+
+	/*
+	 * Checks that ftruncate is permitted on file descriptors that are
+	 * created in ways other than open(2).
+	 */
+	EXPECT_EQ(0, test_ftruncate(fd));
+
+	ASSERT_EQ(0, close(fd));
 }
 
 /* clang-format off */

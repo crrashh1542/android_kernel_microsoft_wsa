@@ -81,6 +81,7 @@ static const struct reg_sequence init_list[] = {
 
 static const struct reg_sequence rt5650_init_list[] = {
 	{0xf6,	0x0100},
+	{RT5645_PWR_ANLG1, 0x02},
 };
 
 static const struct reg_default rt5645_reg[] = {
@@ -448,6 +449,7 @@ struct rt5645_priv {
 	struct regulator_bulk_data supplies[ARRAY_SIZE(rt5645_supply_names)];
 	struct rt5645_eq_param_s *eq_param;
 	struct timer_list btn_check_timer;
+	struct mutex jd_mutex;
 
 	int codec_type;
 	int sysclk;
@@ -1697,6 +1699,9 @@ static void hp_amp_power(struct snd_soc_component *component, int on)
 				regmap_write(rt5645->regmap, RT5645_PR_BASE +
 					RT5645_MAMP_INT_REG2, 0xfc00);
 				snd_soc_component_write(component, RT5645_DEPOP_M2, 0x1140);
+				snd_soc_component_update_bits(component, RT5645_PWR_ANLG1,
+					RT5645_PWR_HP_L | RT5645_PWR_HP_R,
+					RT5645_PWR_HP_L | RT5645_PWR_HP_R);
 				msleep(90);
 			} else {
 				/* depop parameters */
@@ -1744,7 +1749,8 @@ static void hp_amp_power(struct snd_soc_component *component, int on)
 				snd_soc_component_write(component, RT5645_DEPOP_M2, 0x1140);
 				msleep(100);
 				snd_soc_component_write(component, RT5645_DEPOP_M1, 0x0001);
-
+				snd_soc_component_update_bits(component, RT5645_PWR_ANLG1,
+					RT5645_PWR_HP_L | RT5645_PWR_HP_R, 0);
 			} else {
 				snd_soc_component_update_bits(component, RT5645_DEPOP_M1,
 					RT5645_HP_SG_MASK |
@@ -3151,7 +3157,7 @@ static int rt5645_jack_detect(struct snd_soc_component *component, int jack_inse
 	unsigned int val;
 
 	if (jack_insert) {
-		regmap_write(rt5645->regmap, RT5645_CHARGE_PUMP, 0x0e06);
+		regmap_write(rt5645->regmap, RT5645_CHARGE_PUMP, 0x0206);
 
 		/* for jack type detect */
 		snd_soc_dapm_force_enable_pin(dapm, "LDO2");
@@ -3189,6 +3195,8 @@ static int rt5645_jack_detect(struct snd_soc_component *component, int jack_inse
 				rt5645_enable_push_button_irq(component, true);
 			}
 		} else {
+			if (rt5645->en_button_func)
+				rt5645_enable_push_button_irq(component, false);
 			snd_soc_dapm_disable_pin(dapm, "Mic Det Power");
 			snd_soc_dapm_sync(dapm);
 			rt5645->jack_type = SND_JACK_HEADPHONE;
@@ -3196,6 +3204,8 @@ static int rt5645_jack_detect(struct snd_soc_component *component, int jack_inse
 		if (rt5645->pdata.level_trigger_irq)
 			regmap_update_bits(rt5645->regmap, RT5645_IRQ_CTRL2,
 				RT5645_JD_1_1_MASK, RT5645_JD_1_1_NOR);
+
+		regmap_write(rt5645->regmap, RT5645_CHARGE_PUMP, 0x0e06);
 	} else { /* jack out */
 		rt5645->jack_type = 0;
 
@@ -3251,6 +3261,8 @@ int rt5645_set_jack_detect(struct snd_soc_component *component,
 				RT5645_GP1_PIN_IRQ, RT5645_GP1_PIN_IRQ);
 		regmap_update_bits(rt5645->regmap, RT5645_GEN_CTRL1,
 				RT5645_DIG_GATE_CTRL, RT5645_DIG_GATE_CTRL);
+		regmap_update_bits(rt5645->regmap, RT5645_DEPOP_M1,
+				RT5645_HP_CB_MASK, RT5645_HP_CB_PU);
 	}
 	rt5645_irq(0, rt5645);
 
@@ -3263,13 +3275,17 @@ static int rt5645_component_set_jack(struct snd_soc_component *component,
 {
 	struct snd_soc_jack *mic_jack = NULL;
 	struct snd_soc_jack *btn_jack = NULL;
-	int *type = (int *)data;
+	int type;
 
-	if (*type & SND_JACK_MICROPHONE)
-		mic_jack = hs_jack;
-	if (*type & (SND_JACK_BTN_0 | SND_JACK_BTN_1 |
-		SND_JACK_BTN_2 | SND_JACK_BTN_3))
-		btn_jack = hs_jack;
+	if (hs_jack) {
+		type = *(int *)data;
+
+		if (type & SND_JACK_MICROPHONE)
+			mic_jack = hs_jack;
+		if (type & (SND_JACK_BTN_0 | SND_JACK_BTN_1 |
+			SND_JACK_BTN_2 | SND_JACK_BTN_3))
+			btn_jack = hs_jack;
+	}
 
 	return rt5645_set_jack_detect(component, hs_jack, mic_jack, btn_jack);
 }
@@ -3282,6 +3298,8 @@ static void rt5645_jack_detect_work(struct work_struct *work)
 
 	if (!rt5645->component)
 		return;
+
+	mutex_lock(&rt5645->jd_mutex);
 
 	switch (rt5645->pdata.jd_mode) {
 	case 0: /* Not using rt5645 JD */
@@ -3309,7 +3327,7 @@ static void rt5645_jack_detect_work(struct work_struct *work)
 
 	if (!val && (rt5645->jack_type == 0)) { /* jack in */
 		report = rt5645_jack_detect(rt5645->component, 1);
-	} else if (!val && rt5645->jack_type != 0) {
+	} else if (!val && rt5645->jack_type == SND_JACK_HEADSET) {
 		/* for push button and jack out */
 		btn_type = 0;
 		if (snd_soc_component_read(rt5645->component, RT5645_INT_IRQ_ST) & 0x4) {
@@ -3364,6 +3382,8 @@ static void rt5645_jack_detect_work(struct work_struct *work)
 				    RT5645_INT_IRQ_ST, 0x1, 0x0);
 		rt5645_jack_detect(rt5645->component, 0);
 	}
+
+	mutex_unlock(&rt5645->jd_mutex);
 
 	snd_soc_jack_report(rt5645->hp_jack, report, SND_JACK_HEADPHONE);
 	snd_soc_jack_report(rt5645->mic_jack, report, SND_JACK_MICROPHONE);
@@ -4004,13 +4024,13 @@ static int rt5645_i2c_probe(struct i2c_client *i2c)
 
 	regmap_write(rt5645->regmap, RT5645_AD_DA_MIXER, 0x8080);
 
-	ret = regmap_register_patch(rt5645->regmap, init_list,
+	ret = regmap_multi_reg_write(rt5645->regmap, init_list,
 				    ARRAY_SIZE(init_list));
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
 
 	if (rt5645->codec_type == CODEC_TYPE_RT5650) {
-		ret = regmap_register_patch(rt5645->regmap, rt5650_init_list,
+		ret = regmap_multi_reg_write(rt5645->regmap, rt5650_init_list,
 				    ARRAY_SIZE(rt5650_init_list));
 		if (ret != 0)
 			dev_warn(&i2c->dev, "Apply rt5650 patch failed: %d\n",
@@ -4138,6 +4158,7 @@ static int rt5645_i2c_probe(struct i2c_client *i2c)
 	}
 	timer_setup(&rt5645->btn_check_timer, rt5645_btn_check_callback, 0);
 
+	mutex_init(&rt5645->jd_mutex);
 	INIT_DELAYED_WORK(&rt5645->jack_detect_work, rt5645_jack_detect_work);
 	INIT_DELAYED_WORK(&rt5645->rcclock_work, rt5645_rcclock_work);
 
@@ -4223,8 +4244,7 @@ static int __maybe_unused rt5645_sys_resume(struct device *dev)
 
 	if (rt5645->hp_jack) {
 		rt5645->jack_type = 0;
-		queue_delayed_work(system_power_efficient_wq,
-			&rt5645->jack_detect_work, msecs_to_jiffies(0));
+		rt5645_jack_detect_work(&rt5645->jack_detect_work.work);
 	}
 	return 0;
 }

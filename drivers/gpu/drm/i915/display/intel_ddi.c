@@ -66,7 +66,6 @@
 #include "intel_sprite.h"
 #include "intel_tc.h"
 #include "intel_vdsc.h"
-#include "intel_vrr.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 
@@ -2724,8 +2723,6 @@ static void intel_ddi_post_disable(struct intel_atomic_state *state,
 
 		intel_disable_transcoder(old_crtc_state);
 
-		intel_vrr_disable(old_crtc_state);
-
 		intel_ddi_disable_transcoder_func(old_crtc_state);
 
 		intel_dsc_disable(old_crtc_state);
@@ -2953,8 +2950,6 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 	if (!intel_crtc_is_bigjoiner_slave(crtc_state))
 		intel_ddi_enable_transcoder_func(encoder, crtc_state);
 
-	intel_vrr_enable(encoder, crtc_state);
-
 	intel_enable_transcoder(crtc_state);
 
 	intel_crtc_vblank_on(crtc_state);
@@ -2964,10 +2959,7 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 	else
 		intel_enable_ddi_dp(state, encoder, crtc_state, conn_state);
 
-	/* Enable hdcp if it's desired */
-	if (conn_state->content_protection ==
-	    DRM_MODE_CONTENT_PROTECTION_DESIRED)
-		intel_hdcp_enable(state, encoder, crtc_state, conn_state);
+	intel_hdcp_enable(state, encoder, crtc_state, conn_state);
 }
 
 static void intel_disable_ddi_dp(struct intel_atomic_state *state,

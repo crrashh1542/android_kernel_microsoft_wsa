@@ -314,6 +314,11 @@ static const struct snd_soc_acpi_codecs rpl_nau8318_amp = {
 	.codecs = {"NVTN2012"}
 };
 
+static struct snd_soc_acpi_codecs rpl_rt5650_amp = {
+	.num_codecs = 1,
+	.codecs = {"10EC5650"}
+};
+
 struct snd_soc_acpi_mach snd_soc_acpi_intel_rpl_machines[] = {
 	{
 		.comp_ids = &rpl_rt5682_hp,
@@ -338,6 +343,13 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_rpl_machines[] = {
 	},
 	{
 		.id = "10508825",
+		.drv_name = "rpl_mx98360a_8825",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &rpl_max98360a_amp,
+		.sof_tplg_filename = "sof-rpl-max98360a-nau8825.tplg",
+	},
+	{
+		.id = "10508825",
 		.drv_name = "rpl_nau8318_8825",
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &rpl_nau8318_amp,
@@ -349,6 +361,13 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_rpl_machines[] = {
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &rpl_rt1019p_amp,
 		.sof_tplg_filename = "sof-rpl-rt1019-rt5682.tplg",
+	},
+	{
+		.id = "10EC5650",
+		.drv_name = "rpl_rt5650",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &rpl_rt5650_amp,
+		.sof_tplg_filename = "sof-rpl-rt5650.tplg",
 	},
 	{},
 };

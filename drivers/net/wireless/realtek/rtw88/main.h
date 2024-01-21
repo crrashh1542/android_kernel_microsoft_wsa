@@ -414,13 +414,6 @@ enum rtw_wow_flags {
 	RTW_WOW_FLAG_MAX,
 };
 
-enum rtw_sar_sources {
-	RTW_SAR_SOURCE_NONE,
-	RTW_SAR_SOURCE_VNDCMD,
-	RTW_SAR_SOURCE_ACPI_STATIC,
-	RTW_SAR_SOURCE_ACPI_DYNAMIC,
-};
-
 /* the power index is represented by differences, which cck-1s & ht40-1s are
  * the base values, so for 1s's differences, there are only ht20 & ofdm
  */
@@ -1830,8 +1823,31 @@ struct rtw_fw_state {
 	u32 feature_ext;
 };
 
+enum rtw_sar_sources {
+	RTW_SAR_SOURCE_NONE,
+	RTW_SAR_SOURCE_COMMON,
+};
+
+enum rtw_sar_bands {
+	RTW_SAR_BAND_0,
+	RTW_SAR_BAND_1,
+	/* RTW_SAR_BAND_2, not used now */
+	RTW_SAR_BAND_3,
+	RTW_SAR_BAND_4,
+
+	RTW_SAR_BAND_NR,
+};
+
+/* the union is reserved for other knids of SAR sources
+ * which might not re-use same format with array common.
+ */
+union rtw_sar_cfg {
+	s8 common[RTW_SAR_BAND_NR];
+};
+
 struct rtw_sar {
-	enum rtw_sar_sources source;
+	enum rtw_sar_sources src;
+	union rtw_sar_cfg cfg[RTW_RF_PATH_MAX][RTW_RATE_SECTION_MAX];
 };
 
 struct rtw_hal {
@@ -1881,12 +1897,11 @@ struct rtw_hal {
 			  [RTW_CHANNEL_WIDTH_MAX]
 			  [RTW_RATE_SECTION_MAX]
 			  [RTW_MAX_CHANNEL_NUM_5G];
-	s8 tx_pwr_sar_2g[RTW_REGD_MAX][RTW_RF_PATH_MAX][RTW_RATE_SECTION_MAX]
-			[RTW_MAX_CHANNEL_NUM_2G];
-	s8 tx_pwr_sar_5g[RTW_REGD_MAX][RTW_RF_PATH_MAX][RTW_RATE_SECTION_MAX]
-			[RTW_MAX_CHANNEL_NUM_5G];
 	s8 tx_pwr_tbl[RTW_RF_PATH_MAX]
 		     [DESC_RATE_MAX];
+
+	enum rtw_sar_bands sar_band;
+	struct rtw_sar sar;
 };
 
 struct rtw_path_div {
@@ -2002,8 +2017,6 @@ struct rtw_dev {
 	bool need_rfk;
 	struct completion fw_scan_density;
 	bool ap_active;
-
-	struct rtw_sar sar;
 
 	/* hci related data, must be last */
 	u8 priv[] __aligned(sizeof(void *));

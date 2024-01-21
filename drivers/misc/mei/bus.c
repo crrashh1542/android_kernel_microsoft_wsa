@@ -34,6 +34,26 @@
 ssize_t __mei_cl_send(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
 		      unsigned int mode)
 {
+	return __mei_cl_send_timeout(cl, buf, length, vtag, mode, MAX_SCHEDULE_TIMEOUT);
+}
+
+/**
+ * __mei_cl_send_timeout - internal client send (write)
+ *
+ * @cl: host client
+ * @buf: buffer to send
+ * @length: buffer length
+ * @vtag: virtual tag
+ * @mode: sending mode
+ * @timeout: send timeout in milliseconds.
+ *           effective only for blocking writes: the MEI_CL_IO_TX_BLOCKING mode bit is set.
+ *           set timeout to the MAX_SCHEDULE_TIMEOUT to maixum allowed wait.
+ *
+ * Return: written size bytes or < 0 on error
+ */
+ssize_t __mei_cl_send_timeout(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
+			      unsigned int mode, unsigned long timeout)
+{
 	struct mei_device *bus;
 	struct mei_cl_cb *cb;
 	ssize_t rets;
@@ -101,7 +121,7 @@ ssize_t __mei_cl_send(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
 	cb->blocking = !!(mode & MEI_CL_IO_TX_BLOCKING);
 	memcpy(cb->buf.data, buf, length);
 
-	rets = mei_cl_write(cl, cb);
+	rets = mei_cl_write(cl, cb, timeout);
 
 out:
 	mutex_unlock(&bus->device_lock);
@@ -220,7 +240,7 @@ out:
 }
 
 /**
- * mei_cldev_send_vtag - me device send with vtag  (write)
+ * mei_cldev_send_vtag - me device send with vtag (write)
  *
  * @cldev: me client device
  * @buf: buffer to send
@@ -240,6 +260,29 @@ ssize_t mei_cldev_send_vtag(struct mei_cl_device *cldev, const u8 *buf,
 	return __mei_cl_send(cl, buf, length, vtag, MEI_CL_IO_TX_BLOCKING);
 }
 EXPORT_SYMBOL_GPL(mei_cldev_send_vtag);
+
+/**
+ * mei_cldev_send_vtag_timeout - me device send with vtag and timeout (write)
+ *
+ * @cldev: me client device
+ * @buf: buffer to send
+ * @length: buffer length
+ * @vtag: virtual tag
+ * @timeout: send timeout in milliseconds, 0 for infinite timeout
+ *
+ * Return:
+ *  * written size in bytes
+ *  * < 0 on error
+ */
+
+ssize_t mei_cldev_send_vtag_timeout(struct mei_cl_device *cldev, const u8 *buf,
+				    size_t length, u8 vtag, unsigned long timeout)
+{
+	struct mei_cl *cl = cldev->cl;
+
+	return __mei_cl_send_timeout(cl, buf, length, vtag, MEI_CL_IO_TX_BLOCKING, timeout);
+}
+EXPORT_SYMBOL_GPL(mei_cldev_send_vtag_timeout);
 
 /**
  * mei_cldev_recv_vtag - client receive with vtag (read)
@@ -286,7 +329,49 @@ ssize_t mei_cldev_recv_nonblock_vtag(struct mei_cl_device *cldev, u8 *buf,
 EXPORT_SYMBOL_GPL(mei_cldev_recv_nonblock_vtag);
 
 /**
- * mei_cldev_send - me device send  (write)
+ * mei_cldev_recv_timeout - client receive with timeout (read)
+ *
+ * @cldev: me client device
+ * @buf: buffer to receive
+ * @length: buffer length
+ * @timeout: send timeout in milliseconds, 0 for infinite timeout
+ *
+ * Return:
+ * * read size in bytes
+ * *  < 0 on error
+ */
+ssize_t mei_cldev_recv_timeout(struct mei_cl_device *cldev, u8 *buf, size_t length,
+			       unsigned long timeout)
+{
+	return mei_cldev_recv_vtag_timeout(cldev, buf, length, NULL, timeout);
+}
+EXPORT_SYMBOL_GPL(mei_cldev_recv_timeout);
+
+/**
+ * mei_cldev_recv_vtag_timeout - client receive with vtag (read)
+ *
+ * @cldev: me client device
+ * @buf: buffer to receive
+ * @length: buffer length
+ * @vtag: virtual tag
+ * @timeout: recv timeout in milliseconds, 0 for infinite timeout
+ *
+ * Return:
+ * * read size in bytes
+ * *  < 0 on error
+ */
+
+ssize_t mei_cldev_recv_vtag_timeout(struct mei_cl_device *cldev, u8 *buf, size_t length,
+				    u8 *vtag, unsigned long timeout)
+{
+	struct mei_cl *cl = cldev->cl;
+
+	return __mei_cl_recv(cl, buf, length, vtag, 0, timeout);
+}
+EXPORT_SYMBOL_GPL(mei_cldev_recv_vtag_timeout);
+
+/**
+ * mei_cldev_send - me device send (write)
  *
  * @cldev: me client device
  * @buf: buffer to send
@@ -301,6 +386,25 @@ ssize_t mei_cldev_send(struct mei_cl_device *cldev, const u8 *buf, size_t length
 	return mei_cldev_send_vtag(cldev, buf, length, 0);
 }
 EXPORT_SYMBOL_GPL(mei_cldev_send);
+
+/**
+ * mei_cldev_send_timeout - me device send with timeout (write)
+ *
+ * @cldev: me client device
+ * @buf: buffer to send
+ * @length: buffer length
+ * @timeout: send timeout in milliseconds, 0 for infinite timeout
+ *
+ * Return:
+ *  * written size in bytes
+ *  * < 0 on error
+ */
+ssize_t mei_cldev_send_timeout(struct mei_cl_device *cldev, const u8 *buf, size_t length,
+			       unsigned long timeout)
+{
+	return mei_cldev_send_vtag_timeout(cldev, buf, length, 0, timeout);
+}
+EXPORT_SYMBOL_GPL(mei_cldev_send_timeout);
 
 /**
  * mei_cldev_recv - client receive (read)
@@ -1111,6 +1215,7 @@ static struct mei_cl_device *mei_cl_bus_dev_alloc(struct mei_device *bus,
 	mei_cl_bus_set_name(cldev);
 	cldev->is_added   = 0;
 	INIT_LIST_HEAD(&cldev->bus_list);
+	device_enable_async_suspend(&cldev->dev);
 
 	return cldev;
 }

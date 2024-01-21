@@ -53,7 +53,7 @@ static int cam_spi_txfr_read(struct spi_device *spi, char *txbuf,
  * cam_set_addr() - helper function to set transfer address
  * @addr:	device address
  * @addr_len:	the addr field length of an instruction
- * @type:	type (i.e. byte-length) of @addr
+ * @addr_type:	type (i.e. byte-length) of @addr
  * @str:	shifted address output, must be zeroed when passed in
  *
  * This helper function sets @str based on the addr field length of an
@@ -83,7 +83,8 @@ static void cam_set_addr(uint32_t addr, uint8_t addr_len,
 	}
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_spi_tx_helper() - wrapper for SPI transaction
  * @client:     io client
  * @inst:       inst of this transaction
@@ -361,7 +362,8 @@ static int32_t cam_spi_write_enable(struct camera_io_master *client,
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_spi_page_program() - core function to perform write
  * @client: need for obtaining SPI device
  * @addr: address to program on device

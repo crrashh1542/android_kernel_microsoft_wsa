@@ -274,12 +274,12 @@ void DevPhysMemFree(PVRSRV_DEVICE_NODE *psDevNode,
 
 
 /* Checks the input parameters and adjusts them if possible and necessary */
-static inline PVRSRV_ERROR _ValidateParams(IMG_UINT32 ui32NumPhysChunks,
-                                           IMG_UINT32 ui32NumVirtChunks,
-                                           PVRSRV_MEMALLOCFLAGS_T uiFlags,
-                                           IMG_UINT32 *puiLog2AllocPageSize,
-                                           IMG_DEVMEM_SIZE_T *puiSize,
-                                           PMR_SIZE_T *puiChunkSize)
+PVRSRV_ERROR PhysMemValidateParams(IMG_UINT32 ui32NumPhysChunks,
+                                   IMG_UINT32 ui32NumVirtChunks,
+                                   PVRSRV_MEMALLOCFLAGS_T uiFlags,
+                                   IMG_UINT32 *puiLog2AllocPageSize,
+                                   IMG_DEVMEM_SIZE_T *puiSize,
+                                   PMR_SIZE_T *puiChunkSize)
 {
 	IMG_UINT32 uiLog2AllocPageSize = *puiLog2AllocPageSize;
 	IMG_DEVMEM_SIZE_T uiSize = *puiSize;
@@ -289,31 +289,36 @@ static inline PVRSRV_ERROR _ValidateParams(IMG_UINT32 ui32NumPhysChunks,
 	IMG_BOOL bIsSparse = (ui32NumVirtChunks != ui32NumPhysChunks ||
 			ui32NumVirtChunks > 1) ? IMG_TRUE : IMG_FALSE;
 
-	if (ui32NumPhysChunks == 0 && ui32NumVirtChunks == 0)
+	if (ui32NumVirtChunks == 0)
 	{
-		PVR_DPF((PVR_DBG_ERROR,
-				"%s: Number of physical chunks and number of virtual chunks "
-				"cannot be both 0",
-				__func__));
+		PVR_DPF((PVR_DBG_ERROR, "%s: Number of virtual chunks cannot be 0",
+		         __func__));
 
 		return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
-	/* Protect against ridiculous page sizes */
-	if (uiLog2AllocPageSize > RGX_HEAP_2MB_PAGE_SHIFT)
+	/* Protect against invalid page sizes */
+	switch (uiLog2AllocPageSize)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "Page size is too big: 2^%u.", uiLog2AllocPageSize));
-		return PVRSRV_ERROR_INVALID_PARAMS;
+		#define X(_name, _shift) case _shift:
+			RGX_HEAP_PAGE_SHIFTS_DEF
+		#undef X
+			break;
+		default:
+			PVR_LOG_VA(PVR_DBG_ERROR,
+			           "page size of %" IMG_UINT64_FMTSPEC " is invalid.",
+			           IMG_UINT64_C(1) << uiLog2AllocPageSize);
+			return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
 	/* Range check of the alloc size */
-	if (uiSize >= 0x1000000000ULL)
+	if (!PMRValidateSize(uiSize))
 	{
-		PVR_DPF((PVR_DBG_ERROR,
-				 "%s: Cancelling allocation request of over 64 GB. "
-				 "This is likely a bug."
-				, __func__));
-		return PVRSRV_ERROR_INVALID_PARAMS;
+		PVR_LOG_VA(PVR_DBG_ERROR,
+				 "PMR size exceeds limit #Chunks: %u ChunkSz %"IMG_UINT64_FMTSPECX"",
+				 ui32NumVirtChunks,
+				 (IMG_UINT64)IMG_UINT64_C(1) << uiLog2AllocPageSize);
+		return PVRSRV_ERROR_PMR_TOO_LARGE;
 	}
 
 	/* Fail if requesting coherency on one side but uncached on the other */
@@ -373,7 +378,9 @@ static inline PVRSRV_ERROR _ValidateParams(IMG_UINT32 ui32NumPhysChunks,
 					 "%s: Total alloc size (%#" IMG_UINT64_FMTSPECx ") "
 					 "is not equal to virtual chunks * chunk size "
 					 "(%#" IMG_UINT64_FMTSPECx ")",
-					__func__, uiSize, ui32NumVirtChunks * uiChunkSize));
+					 __func__,
+					 uiSize,
+					 (IMG_UINT64)ui32NumVirtChunks << uiLog2AllocPageSize));
 
 			return PVRSRV_ERROR_PMR_NOT_PAGE_MULTIPLE;
 		}
@@ -481,12 +488,12 @@ PhysmemNewRamBackedPMR_direct(CONNECTION_DATA *psConnection,
 
 	PVR_UNREFERENCED_PARAMETER(uiAnnotationLength);
 
-	eError = _ValidateParams(ui32NumPhysChunks,
-	                         ui32NumVirtChunks,
-	                         uiFlags,
-	                         &uiLog2AllocPageSize,
-	                         &uiSize,
-	                         &uiChunkSize);
+	eError = PhysMemValidateParams(ui32NumPhysChunks,
+	                               ui32NumVirtChunks,
+	                               uiFlags,
+	                               &uiLog2AllocPageSize,
+	                               &uiSize,
+	                               &uiChunkSize);
 	PVR_RETURN_IF_ERROR(eError);
 
 	eError = _DevPhysHeapFromFlags(uiFlags, &ePhysHeapIdx);
@@ -621,6 +628,7 @@ PhysmemNewRamBackedPMR(CONNECTION_DATA *psConnection,
 {
 	PVRSRV_PHYS_HEAP ePhysHeap = PVRSRV_GET_PHYS_HEAP_HINT(uiFlags);
 
+	PVR_LOG_RETURN_IF_INVALID_PARAM(ePhysHeap < PVRSRV_PHYS_HEAP_LAST, "uiFlags");
 	PVR_LOG_RETURN_IF_INVALID_PARAM(uiAnnotationLength != 0, "uiAnnotationLength");
 	PVR_LOG_RETURN_IF_INVALID_PARAM(pszAnnotation != NULL, "pszAnnotation");
 

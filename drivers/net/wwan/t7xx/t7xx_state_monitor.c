@@ -235,6 +235,7 @@ static void t7xx_lk_stage_event_handling(struct t7xx_fsm_ctl *ctl, unsigned int 
 	dev = &md->t7xx_dev->pdev->dev;
 	lk_event = FIELD_GET(LK_EVENT_MASK, dev_status);
 	dev_info(dev, "Device enter next stage from LK stage/n");
+	ctl->curr_state = FSM_STATE_STARTING;
 	switch (lk_event) {
 	case LK_EVENT_NORMAL:
 		break;
@@ -297,7 +298,9 @@ static void fsm_routine_stopping(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_comma
 	struct cldma_ctrl *md_ctrl;
 	int err;
 
-	if (ctl->curr_state == FSM_STATE_STOPPED || ctl->curr_state == FSM_STATE_STOPPING) {
+	if (ctl->curr_state == FSM_STATE_STOPPED ||
+	    ctl->curr_state == FSM_STATE_STOPPING ||
+	    ctl->md->rgu_irq_asserted) {
 		fsm_finish_command(ctl, cmd, -EINVAL);
 		return;
 	}
@@ -309,24 +312,22 @@ static void fsm_routine_stopping(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_comma
 	t7xx_fsm_broadcast_state(ctl, MD_STATE_WAITING_TO_STOP);
 	t7xx_cldma_stop(md_ctrl);
 
-	if (!ctl->md->rgu_irq_asserted) {
-		if (t7xx_dev->dl->set_fastboot_dl)
-			t7xx_host_event_notify(ctl->md, FASTBOOT_DL_NOTY);
+	if (t7xx_dev->dl->set_fastboot_dl)
+		t7xx_host_event_notify(ctl->md, FASTBOOT_DL_NOTY);
 
-		t7xx_mhccif_h2d_swint_trigger(t7xx_dev, H2D_CH_DRM_DISABLE_AP);
-		/* Wait for the DRM disable to take effect */
-		msleep(FSM_DRM_DISABLE_DELAY_MS);
+	t7xx_mhccif_h2d_swint_trigger(t7xx_dev, H2D_CH_DRM_DISABLE_AP);
+	/* Wait for the DRM disable to take effect */
+	msleep(FSM_DRM_DISABLE_DELAY_MS);
 
-		if (t7xx_dev->dl->set_fastboot_dl) {
-			/* Do not try fldr because device will always wait for
-			 * MHCCIF bit 13 in fastboot download flow.
-			 */
+	if (t7xx_dev->dl->set_fastboot_dl) {
+		/* Do not try fldr because device will always wait for
+		 * MHCCIF bit 13 in fastboot download flow.
+		 */
+		t7xx_mhccif_h2d_swint_trigger(t7xx_dev, H2D_CH_DEVICE_RESET);
+	} else {
+		err = t7xx_acpi_fldr_func(t7xx_dev);
+		if (err)
 			t7xx_mhccif_h2d_swint_trigger(t7xx_dev, H2D_CH_DEVICE_RESET);
-		} else {
-			err = t7xx_acpi_fldr_func(t7xx_dev);
-			if (err)
-				t7xx_mhccif_h2d_swint_trigger(t7xx_dev, H2D_CH_DEVICE_RESET);
-		}
 	}
 
 	fsm_finish_command(ctl, cmd, fsm_stopped_handler(ctl));
@@ -424,7 +425,7 @@ static void fsm_routine_start(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_command 
 	t7xx_md_event_notify(md, FSM_PRE_START);
 
 	device_stage = FIELD_GET(MISC_STAGE_MASK, dev_status);
-	if (dev_status == ctl->prev_dev_status) {
+	if (dev_status == ctl->prev_dev_status && cmd->flag == 0) {
 		if (ctl->device_stage_check_cnt++ >= DEVICE_STAGE_POLL_COUNT) {
 			dev_err(dev, "Timeout at device stage 0x%x\n", device_stage);
 			ctl->device_stage_check_cnt = 0;
@@ -450,6 +451,8 @@ static void fsm_routine_start(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_command 
 		break;
 
 	case LINUX_STAGE:
+		if (cmd->flag == 0)
+			break;
 		t7xx_cldma_hif_hw_init(md->md_ctrl[CLDMA_ID_AP]);
 		t7xx_cldma_hif_hw_init(md->md_ctrl[CLDMA_ID_MD]);
 		t7xx_port_proxy_set_cfg(md, PORT_CFG_ID_NORMAL);

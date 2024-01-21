@@ -878,6 +878,10 @@ static int cfg80211_scan_6ghz(struct cfg80211_registered_device *rdev)
 		    !cfg80211_find_ssid_match(ap, request))
 			continue;
 
+		if (!is_broadcast_ether_addr(request->bssid) &&
+		    !ether_addr_equal(request->bssid, ap->bssid))
+			continue;
+
 		if (!request->n_ssids && ap->multi_bss && !ap->transmitted_bssid)
 			continue;
 
@@ -1938,22 +1942,21 @@ cfg80211_get_bss_channel(struct wiphy *wiphy, const u8 *ie, size_t ielen,
 	freq = ieee80211_channel_to_freq_khz(channel_number, channel->band);
 
 	/*
-	 * In 6GHz, duplicated beacon indication is relevant for
-	 * beacons only.
+	 * Frame info (beacon/prob res) is the same as received channel,
+	 * no need for further processing.
 	 */
-	if (channel->band == NL80211_BAND_6GHZ &&
-	    (freq == channel->center_freq ||
-	     abs(freq - channel->center_freq) > 80))
+	if (freq == ieee80211_channel_to_khz(channel))
 		return channel;
 
 	alt_channel = ieee80211_get_channel_khz(wiphy, freq);
 	if (!alt_channel) {
-		if (channel->band == NL80211_BAND_2GHZ) {
+		if (channel->band == NL80211_BAND_2GHZ ||
+		    channel->band == NL80211_BAND_6GHZ) {
 			/*
 			 * Better not allow unexpected channels when that could
 			 * be going beyond the 1-11 range (e.g., discovering
 			 * BSS on channel 12 when radio is configured for
-			 * channel 11.
+			 * channel 11) or beyond the 6 GHz channel range.
 			 */
 			return NULL;
 		}

@@ -634,9 +634,8 @@ static int rtw_debugfs_get_tx_pwr_tbl(struct seq_file *m, void *v)
 	regd = rtw_regd_get(rtwdev);
 
 	seq_printf(m, "regulatory: %s\n", rtw_get_regd_string(regd));
-	seq_printf(m, "%-4s %-10s %-3s%6s %-4s %4s (%-4s %-4s %-4s) %-4s\n",
-		   "path", "rate", "pwr", "", "base", "", "byr", "lmt", "sar",
-		   "rem");
+	seq_printf(m, "%-4s %-10s %-9s %-9s (%-4s %-4s %-4s) %-4s\n",
+		   "path", "rate", "pwr", "base", "byr", "lmt", "sar", "rem");
 
 	mutex_lock(&hal->tx_power_mutex);
 	for (path = RF_PATH_A; path <= RF_PATH_B; path++) {
@@ -666,7 +665,8 @@ static int rtw_debugfs_get_tx_pwr_tbl(struct seq_file *m, void *v)
 					pwr_param.pwr_limit,
 					pwr_param.pwr_sar),
 				   pwr_param.pwr_offset, pwr_param.pwr_limit,
-				   pwr_param.pwr_sar, pwr_param.pwr_remnant);
+				   pwr_param.pwr_sar,
+				   pwr_param.pwr_remnant);
 		}
 	}
 
@@ -1191,9 +1191,9 @@ static struct rtw_debugfs_priv rtw_debug_priv_dm_cap = {
 #define rtw_debugfs_add_core(name, mode, fopname, parent)		\
 	do {								\
 		rtw_debug_priv_ ##name.rtwdev = rtwdev;			\
-		if (!debugfs_create_file(#name, mode,			\
+		if (IS_ERR(debugfs_create_file(#name, mode,		\
 					 parent, &rtw_debug_priv_ ##name,\
-					 &file_ops_ ##fopname))		\
+					 &file_ops_ ##fopname)))	\
 			pr_debug("Unable to initialize debugfs:%s\n",	\
 			       #name);					\
 	} while (0)

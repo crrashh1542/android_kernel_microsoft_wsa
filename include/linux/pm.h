@@ -35,6 +35,14 @@ static inline void pm_vt_switch_unregister(struct device *dev)
 }
 #endif /* CONFIG_VT_CONSOLE_SLEEP */
 
+#ifdef CONFIG_HIBERNATION
+void disable_hibernate_aeskl(void);
+#else
+static inline void disable_hibernate_aeskl(void)
+{
+}
+#endif /* CONFIG_HIBERNATION */
+
 /*
  * Device power management
  */

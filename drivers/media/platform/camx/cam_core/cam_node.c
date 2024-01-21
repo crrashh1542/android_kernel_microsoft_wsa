@@ -149,14 +149,14 @@ static int __cam_node_handle_acquire_hw_v1(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(acquire->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(acquire->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			acquire->dev_handle);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -194,14 +194,14 @@ static int __cam_node_handle_start_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(start->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(start->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			start->dev_handle);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -233,14 +233,14 @@ static int __cam_node_handle_stop_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(stop->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(stop->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			stop->dev_handle);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -272,14 +272,14 @@ static int __cam_node_handle_config_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(config->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(config->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			config->dev_handle);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -313,14 +313,14 @@ static int __cam_node_handle_flush_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(flush->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(flush->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			flush->dev_handle);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -352,10 +352,16 @@ static int __cam_node_handle_dump_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(dump->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(dump->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			dump->dev_handle);
+		return -EINVAL;
+	}
+
+	if (node->name != ctx->dev_name) {
+		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
+			node->name, ctx->dev_name);
 		return -EINVAL;
 	}
 
@@ -385,14 +391,14 @@ static int __cam_node_handle_release_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(release->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(release->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d node %s",
 			release->dev_handle, node->name);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -413,7 +419,7 @@ static int __cam_node_handle_release_dev(struct cam_node *node,
 	cam_context_putref(ctx);
 
 destroy_dev_hdl:
-	rc = cam_destroy_device_hdl(release->dev_handle);
+	rc = cam_destroy_device_ctx_hdl(release->dev_handle);
 	if (rc)
 		CAM_ERR(CAM_CORE, "destroy device hdl failed for node %s",
 			node->name);
@@ -446,14 +452,14 @@ static int __cam_node_handle_release_hw_v1(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *)cam_get_device_priv(release->dev_handle);
+	ctx = (struct cam_context *)cam_get_device_ctx(release->dev_handle);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d node %s",
 			release->dev_handle, node->name);
 		return -EINVAL;
 	}
 
-	if (strcmp(node->name, ctx->dev_name)) {
+	if (node->name != ctx->dev_name) {
 		CAM_ERR(CAM_CORE, "node name %s dev name:%s not matching",
 			node->name, ctx->dev_name);
 		return -EINVAL;
@@ -477,7 +483,7 @@ static int __cam_node_crm_get_dev_info(struct cam_req_mgr_device_info *info)
 	if (!info)
 		return -EINVAL;
 
-	ctx = (struct cam_context *) cam_get_device_priv(info->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(info->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context  for handle %d",
 			info->dev_hdl);
@@ -495,7 +501,7 @@ static int __cam_node_crm_link_setup(
 	if (!setup)
 		return -EINVAL;
 
-	ctx = (struct cam_context *) cam_get_device_priv(setup->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(setup->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			setup->dev_hdl);
@@ -517,7 +523,7 @@ static int __cam_node_crm_apply_req(struct cam_req_mgr_apply_request *apply)
 	if (!apply)
 		return -EINVAL;
 
-	ctx = (struct cam_context *) cam_get_device_priv(apply->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(apply->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			apply->dev_hdl);
@@ -538,7 +544,7 @@ static int __cam_node_crm_flush_req(struct cam_req_mgr_flush_request *flush)
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *) cam_get_device_priv(flush->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(flush->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			flush->dev_hdl);
@@ -558,7 +564,7 @@ static int __cam_node_crm_process_evt(
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *) cam_get_device_priv(evt_data->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(evt_data->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			evt_data->dev_hdl);
@@ -576,7 +582,7 @@ static int __cam_node_crm_dump_req(struct cam_req_mgr_dump_info *dump)
 		return -EINVAL;
 	}
 
-	ctx = (struct cam_context *) cam_get_device_priv(dump->dev_hdl);
+	ctx = (struct cam_context *) cam_get_device_ctx(dump->dev_hdl);
 	if (!ctx) {
 		CAM_ERR(CAM_CORE, "Can not get context for handle %d",
 			dump->dev_hdl);
@@ -620,7 +626,7 @@ int cam_node_shutdown(struct cam_node *node)
 }
 
 int cam_node_init(struct cam_node *node, struct cam_hw_mgr_intf *hw_mgr_intf,
-	struct cam_context *ctx_list, uint32_t ctx_size, char *name)
+	struct cam_context *ctx_list, uint32_t ctx_size, const char *name)
 {
 	int rc = 0;
 	int i;
@@ -632,8 +638,7 @@ int cam_node_init(struct cam_node *node, struct cam_hw_mgr_intf *hw_mgr_intf,
 
 	memset(node, 0, sizeof(*node));
 
-	strlcpy(node->name, name, sizeof(node->name));
-
+	node->name = name;
 	memcpy(&node->hw_mgr_intf, hw_mgr_intf, sizeof(node->hw_mgr_intf));
 	node->crm_node_intf.apply_req = __cam_node_crm_apply_req;
 	node->crm_node_intf.get_dev_info = __cam_node_crm_get_dev_info;

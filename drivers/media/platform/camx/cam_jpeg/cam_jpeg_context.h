@@ -72,4 +72,6 @@ int cam_jpeg_context_init(struct cam_jpeg_context *ctx,
  */
 int cam_jpeg_context_deinit(struct cam_jpeg_context *ctx);
 
+const char *cam_jpeg_dev_name(void);
+
 #endif  /* __CAM_JPEG_CONTEXT_H__ */

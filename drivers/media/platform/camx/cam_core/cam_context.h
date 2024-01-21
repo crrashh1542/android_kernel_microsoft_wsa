@@ -198,7 +198,7 @@ struct cam_ctx_ops {
  *
  */
 struct cam_context {
-	char                         dev_name[CAM_CTX_DEV_NAME_MAX_LENGTH];
+	const char                  *dev_name;
 	uint64_t                     dev_id;
 	uint32_t                     ctx_id;
 	struct list_head             list;

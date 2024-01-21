@@ -375,7 +375,7 @@ static int pxp_create_arb_session(struct intel_pxp *pxp)
 	return 0;
 }
 
-static int pxp_terminate_all_sessions(struct intel_pxp *pxp)
+static int pxp_terminate_all_sessions(struct intel_pxp *pxp, u32 active_hw_slots)
 {
 	int ret;
 	u32 idx;
@@ -390,6 +390,14 @@ static int pxp_terminate_all_sessions(struct intel_pxp *pxp)
 		pxp->hwdrm_sessions[idx]->is_valid = false;
 		mask |= BIT(idx);
 	}
+	/*
+	 * if a user-space (multi-session client) reserved a session but
+	 * timed out on pxp_wait_for_session_state, its possible that SW
+	 * state of pxp->reserved_sessions maybe out of sync with HW.
+	 * So lets combine active_hw_slots in for termination which would
+	 * normally match pxp->reserved_sessions
+	 */
+	mask |= active_hw_slots;
 
 	if (mask) {
 		ret = intel_pxp_terminate_sessions(pxp, mask);
@@ -424,7 +432,7 @@ static int pxp_terminate_all_sessions_and_global(struct intel_pxp *pxp)
 	intel_pxp_tee_end_all_fw_sessions(pxp, active_sip_slots);
 
 	/* terminate the hw sessions */
-	ret = pxp_terminate_all_sessions(pxp);
+	ret = pxp_terminate_all_sessions(pxp, active_sip_slots);
 	if (ret) {
 		drm_err(&gt->i915->drm, "Failed to submit session termination\n");
 		goto out;

@@ -43,8 +43,6 @@ struct nvkm_disp_func {
 };
 
 int  nvkm_disp_ntfy(struct nvkm_object *, u32, struct nvkm_event **);
-int nv04_disp_mthd(struct nvkm_object *, u32, void *, u32);
-int nv50_disp_root_mthd_(struct nvkm_object *, u32, void *, u32);
 
 int nv50_disp_oneinit(struct nvkm_disp *);
 int nv50_disp_init(struct nvkm_disp *);
@@ -86,4 +84,5 @@ extern const struct nvkm_event_func gv100_disp_chan_uevent;
 int nvkm_udisp_new(const struct nvkm_oclass *, void *, u32, struct nvkm_object **);
 int nvkm_uconn_new(const struct nvkm_oclass *, void *, u32, struct nvkm_object **);
 int nvkm_uoutp_new(const struct nvkm_oclass *, void *, u32, struct nvkm_object **);
+int nvkm_uhead_new(const struct nvkm_oclass *, void *, u32, struct nvkm_object **);
 #endif
