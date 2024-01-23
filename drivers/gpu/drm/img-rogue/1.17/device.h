@@ -459,7 +459,9 @@ typedef struct _PVRSRV_DEVICE_NODE_
 	PVRSRV_DEF_PAGE			sDummyPage;
 	PVRSRV_DEF_PAGE			sDevZeroPage;
 
-	POSWR_LOCK				hMemoryContextPageFaultNotifyListLock;
+	/* Lock protects access to sMemoryContextPageFaultNotifyListHead and
+	 * per memory context DEVMEMINT_CTX::sProcessNotifyListHead lists. */
+	POSWR_LOCK				hPageFaultNotifyLock;
 	DLLIST_NODE				sMemoryContextPageFaultNotifyListHead;
 
 	/* System DMA capability */

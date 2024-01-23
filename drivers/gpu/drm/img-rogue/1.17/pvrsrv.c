@@ -1894,8 +1894,8 @@ PVRSRV_ERROR PVRSRVCommonDeviceCreate(void *pvOSDevice,
 	TUtilsInit(psDeviceNode);
 #endif
 
-	OSWRLockCreate(&psDeviceNode->hMemoryContextPageFaultNotifyListLock);
-	if (psDeviceNode->hMemoryContextPageFaultNotifyListLock == NULL)
+	OSWRLockCreate(&psDeviceNode->hPageFaultNotifyLock);
+	if (psDeviceNode->hPageFaultNotifyLock == NULL)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s: Failed to create lock for PF notify list",
 		        __func__));
@@ -1979,8 +1979,8 @@ ErrorRegisterDVFSDeviceFail:
 #endif
 
 ErrorDestroyMemoryContextPageFaultNotifyListLock:
-	OSWRLockDestroy(psDeviceNode->hMemoryContextPageFaultNotifyListLock);
-	psDeviceNode->hMemoryContextPageFaultNotifyListLock = NULL;
+	OSWRLockDestroy(psDeviceNode->hPageFaultNotifyLock);
+	psDeviceNode->hPageFaultNotifyLock = NULL;
 
 ErrorPageFaultLockFailCreate:
 #if defined(PVR_TESTING_UTILS)
@@ -2253,11 +2253,6 @@ PVRSRV_ERROR PVRSRVCommonDeviceDestroy(PVRSRV_DEVICE_NODE *psDeviceNode)
 
 	DebugCommonDeInitDevice(psDeviceNode);
 
-	if (psDeviceNode->hMemoryContextPageFaultNotifyListLock != NULL)
-	{
-		OSWRLockDestroy(psDeviceNode->hMemoryContextPageFaultNotifyListLock);
-	}
-
 #if defined(SUPPORT_VALIDATION)
 	OSLockDestroyNoStats(psDeviceNode->hValidationLock);
 	psDeviceNode->hValidationLock = NULL;
@@ -2379,6 +2374,11 @@ PVRSRV_ERROR PVRSRVCommonDeviceDestroy(PVRSRV_DEVICE_NODE *psDeviceNode)
 	PVRSRVPowerLockDeInit(psDeviceNode);
 
 	PVRSRVUnregisterDeviceDbgTable(psDeviceNode);
+
+	if (psDeviceNode->hPageFaultNotifyLock != NULL)
+	{
+		OSWRLockDestroy(psDeviceNode->hPageFaultNotifyLock);
+	}
 
 	/* Release the Connection-Data lock as late as possible. */
 	if (psDeviceNode->hConnectionsLock)
