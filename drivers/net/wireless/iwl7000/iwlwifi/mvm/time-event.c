@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2017 Intel Deutschland GmbH
  */
@@ -893,10 +893,6 @@ void iwl_mvm_stop_session_protection(struct iwl_mvm *mvm,
 	iwl_mvm_remove_time_event(mvm, mvmvif, te_data);
 }
 
-#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
-static int session_prot_fail_dump_num = 3;
-#endif
-
 void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 				      struct iwl_rx_cmd_buffer *rxb)
 {
@@ -933,7 +929,7 @@ void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 
 	if (WARN(ver > 2 && mvmvif->time_event_data.link_id >= 0 &&
 		 mvmvif->time_event_data.link_id != notif_link_id,
-		 "SESION_PROTECTION_NOTIF was received for link %u, while the current time event is on link %u\n",
+		 "SESSION_PROTECTION_NOTIF was received for link %u, while the current time event is on link %u\n",
 		 notif_link_id, mvmvif->time_event_data.link_id))
 		goto out_unlock;
 
@@ -968,23 +964,6 @@ void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 			spin_lock_bh(&mvm->time_event_lock);
 			iwl_mvm_te_clear_data(mvm, te_data);
 			spin_unlock_bh(&mvm->time_event_lock);
-#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
-			/*
-			 * We failed to complete the association, increase the
-			 * debug level so that we'll get more information when
-			 * the userspace will retry to associate.
-			 */
-			iwl_debug_session_prot(true);
-			if (session_prot_fail_dump_num) {
-				session_prot_fail_dump_num--;
-				IWL_ERR(mvm,
-					"Restarting the firmware to collect logs, %d more dumps\n",
-					session_prot_fail_dump_num);
-				iwl_dbg_tlv_time_point(&mvm->fwrt,
-						       IWL_FW_INI_TIME_POINT_USER_TRIGGER,
-						       NULL);
-			}
-#endif
 		}
 
 		goto out_unlock;
@@ -993,6 +972,7 @@ void iwl_mvm_rx_session_protect_notif(struct iwl_mvm *mvm,
 	if (!le32_to_cpu(notif->status) || !le32_to_cpu(notif->start)) {
 		/* End TE, notify mac80211 */
 		mvmvif->time_event_data.id = SESSION_PROTECT_CONF_MAX_ID;
+		mvmvif->time_event_data.link_id = -1;
 		iwl_mvm_p2p_roc_finished(mvm);
 		ieee80211_remain_on_channel_expired(mvm->hw);
 	} else if (le32_to_cpu(notif->start)) {
@@ -1184,8 +1164,15 @@ void iwl_mvm_stop_roc(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_SESSION_PROT_CMD)) {
 		mvmvif = iwl_mvm_vif_from_mac80211(vif);
+		te_data = &mvmvif->time_event_data;
 
 		if (vif->type == NL80211_IFTYPE_P2P_DEVICE) {
+			if (te_data->id >= SESSION_PROTECT_CONF_MAX_ID) {
+				IWL_DEBUG_TE(mvm,
+					     "No remain on channel event\n");
+				return;
+			}
+
 			iwl_mvm_cancel_session_protection(mvm, vif,
 							  mvmvif->time_event_data.id,
 							  mvmvif->time_event_data.link_id);

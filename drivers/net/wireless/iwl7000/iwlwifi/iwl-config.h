@@ -12,6 +12,7 @@
 #include <linux/ieee80211.h>
 #include <linux/nl80211.h>
 #include "iwl-csr.h"
+#include "iwl-drv.h"
 
 enum iwl_device_family {
 	IWL_DEVICE_FAMILY_UNDEFINED,
@@ -377,7 +378,6 @@ struct iwl_cfg {
 	u16 nvm_calib_ver;
 	u32 rx_with_siso_diversity:1,
 	    tx_with_siso_diversity:1,
-	    bt_shared_single_ant:1,
 	    internal_wimax_coex:1,
 	    host_interrupt_operation_mode:1,
 	    high_temp:1,

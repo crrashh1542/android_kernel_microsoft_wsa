@@ -376,12 +376,6 @@ static int iwl_tm_gnl_get_build_info(struct iwl_trans *trans,
 	memset(resp, 0 , sizeof(*resp));
 	strncpy(resp->driver_version, BACKPORTS_GIT_TRACKED,
 		sizeof(resp->driver_version));
-#ifdef BACKPORTS_BRANCH_TSTAMP
-	strncpy(resp->branch_time, BACKPORTS_BRANCH_TSTAMP,
-		sizeof(resp->branch_time));
-#endif
-	strncpy(resp->build_time, BACKPORTS_BUILD_TSTAMP,
-		sizeof(resp->build_time));
 
 	return 0;
 }

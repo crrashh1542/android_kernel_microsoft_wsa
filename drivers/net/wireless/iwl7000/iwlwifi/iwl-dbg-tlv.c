@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  */
 #include <linux/firmware.h>
 #include "iwl-drv.h"
@@ -64,21 +64,22 @@ dbg_ver_table[IWL_DBG_TLV_TYPE_NUM] = {
 	[IWL_DBG_TLV_TYPE_CONF_SET]	= {.min_ver = 1, .max_ver = 1,},
 };
 
-static int iwl_dbg_tlv_add(const struct iwl_ucode_tlv *tlv,
-			   struct list_head *list)
+/* add a new TLV node, returning it so it can be modified */
+static struct iwl_ucode_tlv *iwl_dbg_tlv_add(const struct iwl_ucode_tlv *tlv,
+					     struct list_head *list)
 {
 	u32 len = le32_to_cpu(tlv->length);
 	struct iwl_dbg_tlv_node *node;
 
-	node = kzalloc(sizeof(*node) + len, GFP_KERNEL);
+	node = kzalloc(struct_size(node, tlv.data, len), GFP_KERNEL);
 	if (!node)
-		return -ENOMEM;
+		return NULL;
 
 	memcpy(&node->tlv, tlv, sizeof(node->tlv));
 	memcpy(node->tlv.data, tlv->data, len);
 	list_add_tail(&node->list, list);
 
-	return 0;
+	return &node->tlv;
 }
 
 static bool iwl_dbg_tlv_ver_support(const struct iwl_ucode_tlv *tlv)
@@ -103,10 +104,18 @@ static int iwl_dbg_tlv_alloc_debug_info(struct iwl_trans *trans,
 	if (le32_to_cpu(tlv->length) != sizeof(*debug_info))
 		return -EINVAL;
 
+	/* we use this as a string, ensure input was NUL terminated */
+	if (strnlen(debug_info->debug_cfg_name,
+		    sizeof(debug_info->debug_cfg_name)) ==
+			sizeof(debug_info->debug_cfg_name))
+		return -EINVAL;
+
 	IWL_DEBUG_FW(trans, "WRT: Loading debug cfg: %s\n",
 		     debug_info->debug_cfg_name);
 
-	return iwl_dbg_tlv_add(tlv, &trans->dbg.debug_info_tlv_list);
+	if (!iwl_dbg_tlv_add(tlv, &trans->dbg.debug_info_tlv_list))
+		return -ENOMEM;
+	return 0;
 }
 
 static int iwl_dbg_tlv_alloc_buf_alloc(struct iwl_trans *trans,
@@ -175,7 +184,9 @@ static int iwl_dbg_tlv_alloc_hcmd(struct iwl_trans *trans,
 		return -EINVAL;
 	}
 
-	return iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].hcmd_list);
+	if (!iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].hcmd_list))
+		return -ENOMEM;
+	return 0;
 }
 
 static int iwl_dbg_tlv_alloc_region(struct iwl_trans *trans,
@@ -261,11 +272,9 @@ static int iwl_dbg_tlv_alloc_trigger(struct iwl_trans *trans,
 				     const struct iwl_ucode_tlv *tlv)
 {
 	const struct iwl_fw_ini_trigger_tlv *trig = (const void *)tlv->data;
-	struct iwl_fw_ini_trigger_tlv *dup_trig;
 	u32 tp = le32_to_cpu(trig->time_point);
 	u32 rf = le32_to_cpu(trig->reset_fw);
-	struct iwl_ucode_tlv *dup = NULL;
-	int ret;
+	struct iwl_ucode_tlv *new_tlv;
 
 	if (le32_to_cpu(tlv->length) < sizeof(*trig))
 		return -EINVAL;
@@ -282,20 +291,18 @@ static int iwl_dbg_tlv_alloc_trigger(struct iwl_trans *trans,
 		     "WRT: time point %u for trigger TLV with reset_fw %u\n",
 		     tp, rf);
 	trans->dbg.last_tp_resetfw = 0xFF;
+
+	new_tlv = iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].trig_list);
+	if (!new_tlv)
+		return -ENOMEM;
+
 	if (!le32_to_cpu(trig->occurrences)) {
-		dup = kmemdup(tlv, sizeof(*tlv) + le32_to_cpu(tlv->length),
-				GFP_KERNEL);
-		if (!dup)
-			return -ENOMEM;
-		dup_trig = (void *)dup->data;
-		dup_trig->occurrences = cpu_to_le32(-1);
-		tlv = dup;
+		struct iwl_fw_ini_trigger_tlv *new_trig = (void *)new_tlv->data;
+
+		new_trig->occurrences = cpu_to_le32(-1);
 	}
 
-	ret = iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].trig_list);
-	kfree(dup);
-
-	return ret;
+	return 0;
 }
 
 static int iwl_dbg_tlv_config_set(struct iwl_trans *trans,
@@ -319,7 +326,9 @@ static int iwl_dbg_tlv_config_set(struct iwl_trans *trans,
 		return -EINVAL;
 	}
 
-	return iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].config_list);
+	if (!iwl_dbg_tlv_add(tlv, &trans->dbg.time_point[tp].config_list))
+		return -ENOMEM;
+	return 0;
 }
 
 static int (*dbg_tlv_alloc[])(struct iwl_trans *trans,
@@ -1111,7 +1120,7 @@ static int iwl_dbg_tlv_override_trig_node(struct iwl_fw_runtime *fwrt,
 		node_trig = (void *)node_tlv->data;
 	}
 
-	memcpy(node_trig->data + offset, trig->data, trig_data_len);
+	memcpy((u8 *)node_trig->data + offset, trig->data, trig_data_len);
 	node_tlv->length = cpu_to_le32(size);
 
 	if (policy & IWL_FW_INI_APPLY_POLICY_OVERRIDE_CFG) {
@@ -1163,7 +1172,9 @@ iwl_dbg_tlv_add_active_trigger(struct iwl_fw_runtime *fwrt,
 	if (!match) {
 		IWL_DEBUG_FW(fwrt, "WRT: Enabling trigger (time point %u)\n",
 			     le32_to_cpu(trig->time_point));
-		return iwl_dbg_tlv_add(trig_tlv, trig_list);
+		if (!iwl_dbg_tlv_add(trig_tlv, trig_list))
+			return -ENOMEM;
+		return 0;
 	}
 
 	return iwl_dbg_tlv_override_trig_node(fwrt, trig_tlv, match);

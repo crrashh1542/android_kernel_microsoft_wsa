@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -149,9 +149,40 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 			iwl_xvt_user_send_notif(xvt, IWL_XVT_CMD_TX_CMD_RESP,
 						data, size, GFP_ATOMIC);
 		break;
+	case WIDE_ID(STATISTICS_GROUP, STATISTICS_OPER_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_OPER,
+					data, size, GFP_ATOMIC);
+		break;
+	case WIDE_ID(STATISTICS_GROUP, STATISTICS_OPER_PART1_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART1,
+					data, size, GFP_ATOMIC);
+		break;
+	case WIDE_ID(STATISTICS_GROUP, STATISTICS_OPER_PART2_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART2,
+					data, size, GFP_ATOMIC);
+		break;
+	case WIDE_ID(STATISTICS_GROUP, STATISTICS_OPER_PART3_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART3,
+					data, size, GFP_ATOMIC);
+		break;
+	case WIDE_ID(STATISTICS_GROUP, STATISTICS_OPER_PART4_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART4,
+					data, size, GFP_ATOMIC);
+		break;
+	case WIDE_ID(SYSTEM_GROUP, SYSTEM_STATISTICS_END_NOTIF):
+		iwl_xvt_user_send_notif(xvt,
+					IWL_TM_USER_CMD_NOTIF_STATS_END,
+					data, size, GFP_ATOMIC);
+		break;
 	default:
-		IWL_DEBUG_INFO(xvt, "xVT mode RX command 0x%x not handled\n",
-			       pkt->hdr.cmd);
+		IWL_DEBUG_INFO(xvt,
+			       "xVT mode RX group 0x%x command 0x%x not handled\n",
+			       pkt->hdr.group_id, pkt->hdr.cmd);
 	}
 }
 
@@ -437,7 +468,7 @@ static int iwl_xvt_continue_init_unified(struct iwl_xvt *xvt)
 	iwl_init_notification_wait(&xvt->notif_wait,
 				   &init_complete_wait,
 				   init_complete,
-				   sizeof(init_complete),
+				   ARRAY_SIZE(init_complete),
 				   NULL,
 				   NULL);
 
@@ -451,6 +482,8 @@ static int iwl_xvt_continue_init_unified(struct iwl_xvt *xvt)
 				    XVT_UCODE_CALIB_TIMEOUT);
 	if (err)
 		goto init_error;
+
+	iwl_acpi_get_guid_lock_status(&xvt->fwrt);
 
 	ret = iwl_xvt_init_ppag_tables(xvt);
 	if (ret < 0) {
@@ -1542,9 +1575,18 @@ static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
 }
 
 static int iwl_xvt_start_tx(struct iwl_xvt *xvt,
-			    struct iwl_xvt_driver_command_req *req)
+			    struct iwl_xvt_driver_command_req *req,
+			    u32 req_data_len)
 {
 	struct iwl_xvt_enhanced_tx_data *task_data;
+	struct iwl_xvt_tx_start *tx_start = (void *)req->input_data;
+	u32 tx_start_size = struct_size(tx_start, frames_data,
+					tx_start->num_of_different_frames);
+
+	if (WARN(tx_start_size > req_data_len,
+		 "start_tx is out of limits nr_frames:%d, req_len: %d\n",
+		 tx_start->num_of_different_frames, req_data_len))
+		return -EINVAL;
 
 	if (WARN(xvt->is_enhanced_tx ||
 		 xvt->tx_meta_data[XVT_LMAC_0_ID].tx_task_operating ||
@@ -1554,15 +1596,18 @@ static int iwl_xvt_start_tx(struct iwl_xvt *xvt,
 
 	xvt->is_enhanced_tx = true;
 
-	task_data = kzalloc(sizeof(*task_data), GFP_KERNEL);
+	task_data = kzalloc(struct_size(task_data, tx_start_data.frames_data,
+					tx_start->num_of_different_frames),
+			    GFP_KERNEL);
 	if (!task_data) {
 		xvt->is_enhanced_tx = false;
 		return -ENOMEM;
 	}
 
 	task_data->xvt = xvt;
-	memcpy(&task_data->tx_start_data, req->input_data,
-	       sizeof(struct iwl_xvt_tx_start));
+	task_data->tx_start_data = *tx_start;
+	memcpy(&task_data->tx_start_data.frames_data, tx_start->frames_data,
+	       tx_start_size - sizeof(*tx_start));
 
 	init_completion(&xvt->tx_task_completion);
 	xvt->tx_task = kthread_run(iwl_xvt_start_tx_handler,
@@ -2169,7 +2214,8 @@ static int iwl_xvt_handle_driver_cmd(struct iwl_xvt *xvt,
 		err = iwl_xvt_set_tx_payload(xvt, req);
 		break;
 	case IWL_DRV_CMD_TX_START:
-		err = iwl_xvt_start_tx(xvt, req);
+		err = iwl_xvt_start_tx(xvt, req, data_in->len -
+				       offsetof(typeof(*req), input_data));
 		break;
 	case IWL_DRV_CMD_TX_STOP:
 		err = iwl_xvt_stop_tx(xvt);

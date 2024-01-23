@@ -53,7 +53,8 @@ int iwl_mvm_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	unsigned int link_id = link_conf->link_id;
 	struct iwl_mvm_vif_link_info *link_info = mvmvif->link[link_id];
 	struct iwl_link_config_cmd cmd = {};
-	struct iwl_mvm_phy_ctxt *phyctxt;
+	unsigned int cmd_id = WIDE_ID(MAC_CONF_GROUP, LINK_CONFIG_CMD);
+	u8 cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw, cmd_id, 1);
 
 	if (WARN_ON_ONCE(!link_info))
 		return -EINVAL;
@@ -77,19 +78,16 @@ int iwl_mvm_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	cmd.link_id = cpu_to_le32(link_info->fw_link_id);
 	cmd.mac_id = cpu_to_le32(mvmvif->id);
 	cmd.spec_link_id = link_conf->link_id;
-	/* P2P-Device already has a valid PHY context during add */
-	phyctxt = link_info->phy_ctxt;
-	if (phyctxt)
-		cmd.phy_id = cpu_to_le32(phyctxt->id);
-	else
-		cmd.phy_id = cpu_to_le32(FW_CTXT_INVALID);
+	WARN_ON_ONCE(link_info->phy_ctxt);
+	cmd.phy_id = cpu_to_le32(FW_CTXT_INVALID);
 
 	memcpy(cmd.local_link_addr, link_conf->addr, ETH_ALEN);
 
 	if (vif->type == NL80211_IFTYPE_ADHOC && link_conf->bssid)
 		memcpy(cmd.ibss_bssid_addr, link_conf->bssid, ETH_ALEN);
 
-	cmd.listen_lmac = cpu_to_le32(link_info->listen_lmac);
+	if (cmd_ver < 2)
+		cmd.listen_lmac = cpu_to_le32(link_info->listen_lmac);
 
 	return iwl_mvm_link_cmd_send(mvm, &cmd, FW_CTXT_ACTION_ADD);
 }
@@ -105,6 +103,8 @@ int iwl_mvm_link_changed(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	struct iwl_link_config_cmd cmd = {};
 	u32 ht_flag, flags = 0, flags_mask = 0;
 	int ret;
+	unsigned int cmd_id = WIDE_ID(MAC_CONF_GROUP, LINK_CONFIG_CMD);
+	u8 cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw, cmd_id, 1);
 
 	if (WARN_ON_ONCE(!link_info ||
 			 link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID))
@@ -233,7 +233,8 @@ send_cmd:
 	cmd.flags = cpu_to_le32(flags);
 	cmd.flags_mask = cpu_to_le32(flags_mask);
 	cmd.spec_link_id = link_conf->link_id;
-	cmd.listen_lmac = cpu_to_le32(link_info->listen_lmac);
+	if (cmd_ver < 2)
+		cmd.listen_lmac = cpu_to_le32(link_info->listen_lmac);
 
 	ret = iwl_mvm_link_cmd_send(mvm, &cmd, FW_CTXT_ACTION_MODIFY);
 	if (!ret && (changes & LINK_CONTEXT_MODIFY_ACTIVE))

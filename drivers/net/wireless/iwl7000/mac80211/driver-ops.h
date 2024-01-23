@@ -123,7 +123,7 @@ static inline void drv_set_wakeup(struct ieee80211_local *local,
 {
 	might_sleep();
 	/* this doesn't really matter - nothing interesting happens here */
-#if CFG80211_VERSION >= KERNEL_VERSION(6,6,0)
+#if CFG80211_VERSION >= KERNEL_VERSION(6,7,0)
 	lockdep_assert_wiphy(local->hw.wiphy);
 #endif
 
@@ -802,7 +802,7 @@ drv_cancel_remain_on_channel(struct ieee80211_local *local,
 static inline int drv_set_ringparam(struct ieee80211_local *local,
 				    u32 tx, u32 rx)
 {
-	int ret = -ENOTSUPP;
+	int ret = -EOPNOTSUPP;
 
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
@@ -1663,6 +1663,26 @@ static inline int drv_net_setup_tc(struct ieee80211_local *local,
 	return ret;
 }
 
+static inline bool drv_can_activate_links(struct ieee80211_local *local,
+					  struct ieee80211_sub_if_data *sdata,
+					  u16 active_links)
+{
+	bool ret = true;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (!check_sdata_in_driver(sdata))
+		return false;
+
+	trace_drv_can_activate_links(local, sdata, active_links);
+	if (local->ops->can_activate_links)
+		ret = local->ops->can_activate_links(&local->hw, &sdata->vif,
+						     active_links);
+	trace_drv_return_bool(local, ret);
+
+	return ret;
+}
+
 int drv_change_vif_links(struct ieee80211_local *local,
 			 struct ieee80211_sub_if_data *sdata,
 			 u16 old_links, u16 new_links,
@@ -1672,4 +1692,23 @@ int drv_change_sta_links(struct ieee80211_local *local,
 			 struct ieee80211_sta *sta,
 			 u16 old_links, u16 new_links);
 
+static inline enum ieee80211_neg_ttlm_res
+drv_can_neg_ttlm(struct ieee80211_local *local,
+		 struct ieee80211_sub_if_data *sdata,
+		 struct ieee80211_neg_ttlm *neg_ttlm)
+{
+	enum ieee80211_neg_ttlm_res res = NEG_TTLM_RES_REJECT;
+
+	might_sleep();
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
+	trace_drv_can_neg_ttlm(local, sdata, neg_ttlm);
+	if (local->ops->can_neg_ttlm)
+		res = local->ops->can_neg_ttlm(&local->hw, &sdata->vif,
+					       neg_ttlm);
+	trace_drv_neg_ttlm_res(local, sdata, res, neg_ttlm);
+
+	return res;
+}
 #endif /* __MAC80211_DRIVER_OPS */

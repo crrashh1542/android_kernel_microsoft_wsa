@@ -177,7 +177,9 @@ ssize_t cfg80211_defragment_element(const struct element *elem, const u8 *ies,
 	return copied;
 }
 EXPORT_SYMBOL(cfg80211_defragment_element);
+#endif
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,7,0)
 void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id)
 {
 	unsigned int elem_len;
@@ -206,4 +208,48 @@ void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id)
 	*len_pos = elem_len;
 }
 EXPORT_SYMBOL(ieee80211_fragment_element);
+#endif
+
+#if CFG80211_VERSION <= KERNEL_VERSION(6,8,0)
+bool
+ieee80211_uhb_power_type_valid(struct ieee80211_mgmt *mgmt, size_t len,
+			       struct ieee80211_channel *channel)
+{
+	const struct element *tmp;
+	struct ieee80211_he_operation *he_oper;
+	bool ret = false;
+	size_t ielen, min_hdr_len;
+	u8 *variable = mgmt->u.probe_resp.variable;
+
+	min_hdr_len = offsetof(struct ieee80211_mgmt,
+			       u.probe_resp.variable);
+	ielen = len - min_hdr_len;
+
+	if (!nl80211_is_6ghz(channel->band))
+		return true;
+
+	tmp = cfg80211_find_ext_elem(WLAN_EID_EXT_HE_OPERATION,
+				     variable, ielen);
+	if (tmp && tmp->datalen >= sizeof(*he_oper) + 1) {
+		const struct ieee80211_he_6ghz_oper *he_6ghz_oper;
+
+		he_oper = (void *)&tmp->data[1];
+		he_6ghz_oper = ieee80211_he_6ghz_oper(he_oper);
+		if (!he_6ghz_oper)
+			return false;
+
+		switch (u8_get_bits(he_6ghz_oper->control,
+				    IEEE80211_HE_6GHZ_OPER_CTRL_REG_INFO)) {
+			case IEEE80211_6GHZ_CTRL_REG_LPI_AP:
+				return true;
+			case IEEE80211_6GHZ_CTRL_REG_SP_AP:
+				return !(channel->flags &
+					 IEEE80211_CHAN_NO_UHB_AFC_CLIENT);
+			case IEEE80211_6GHZ_CTRL_REG_VLP_AP:
+				return !(channel->flags &
+					 IEEE80211_CHAN_NO_UHB_VLP_CLIENT);
+		}
+	}
+	return false;
+}
 #endif
