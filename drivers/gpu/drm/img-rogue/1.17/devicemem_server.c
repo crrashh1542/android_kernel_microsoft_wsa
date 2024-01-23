@@ -68,6 +68,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define DEVMEMHEAP_REFCOUNT_MAX IMG_INT32_MAX
 #define DEVMEMRESERVATION_REFCOUNT_MIN 1
 #define DEVMEMRESERVATION_REFCOUNT_MAX IMG_INT32_MAX
+#define DEVMEMCTX_REFCOUNT_MIN 1
+#define DEVMEMCTX_REFCOUNT_MAX IMG_INT32_MAX
 
 struct _DEVMEMINT_CTX_
 {
@@ -249,11 +251,21 @@ static void DevmemIntReservationSetMappingIndex(DEVMEMINT_RESERVATION2 *psReserv
 /*************************************************************************/ /*!
 @Function       DevmemIntCtxAcquire
 @Description    Acquire a reference to the provided device memory context.
-@Return         None
+@Return         IMG_TRUE on success, IMG_FALSE on overflow
 */ /**************************************************************************/
-static INLINE void DevmemIntCtxAcquire(DEVMEMINT_CTX *psDevmemCtx)
+static INLINE IMG_BOOL DevmemIntCtxAcquire(DEVMEMINT_CTX *psDevmemCtx)
 {
-	OSAtomicIncrement(&psDevmemCtx->hRefCount);
+	IMG_BOOL bSuccess = OSAtomicAddUnless(&psDevmemCtx->hRefCount, 1,
+	                                      DEVMEMCTX_REFCOUNT_MAX);
+
+	if (!bSuccess)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to acquire the device memory "
+		         "context, reference count has overflowed.", __func__));
+		return IMG_FALSE;
+	}
+
+	return IMG_TRUE;
 }
 
 /*************************************************************************/ /*!
@@ -655,7 +667,10 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 
 	psDevmemHeap->psDevmemCtx = psDevmemCtx;
 
-	DevmemIntCtxAcquire(psDevmemHeap->psDevmemCtx);
+	if (!DevmemIntCtxAcquire(psDevmemHeap->psDevmemCtx))
+	{
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_REFCOUNT_OVERFLOW, ErrorFreeDevmemHeap);
+	}
 
 	OSAtomicWrite(&psDevmemHeap->uiRefCount, 1);
 
@@ -741,6 +756,7 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 
 ErrorCtxRelease:
 	DevmemIntCtxRelease(psDevmemHeap->psDevmemCtx);
+ErrorFreeDevmemHeap:
 	OSFreeMem(psDevmemHeap);
 
 	return eError;
@@ -2280,11 +2296,15 @@ DevmemIntExportCtx(DEVMEMINT_CTX *psContext,
                    DEVMEMINT_CTX_EXPORT **ppsContextExport)
 {
 	DEVMEMINT_CTX_EXPORT *psCtxExport;
+	PVRSRV_ERROR eError;
 
 	psCtxExport = OSAllocMem(sizeof(DEVMEMINT_CTX_EXPORT));
 	PVR_LOG_RETURN_IF_NOMEM(psCtxExport, "psCtxExport");
 
-	DevmemIntCtxAcquire(psContext);
+	if (!DevmemIntCtxAcquire(psContext))
+	{
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_REFCOUNT_OVERFLOW, ErrorFreeCtxExport);
+	}
 	PMRRefPMR(psPMR);
 	/* Now that the source PMR is exported, the layout
 	 * can't change as there could be outstanding importers
@@ -2300,6 +2320,11 @@ DevmemIntExportCtx(DEVMEMINT_CTX *psContext,
 	*ppsContextExport = psCtxExport;
 
 	return PVRSRV_OK;
+
+ErrorFreeCtxExport:
+	OSFreeMem(psCtxExport);
+
+	return eError;
 }
 
 PVRSRV_ERROR
@@ -2331,7 +2356,12 @@ DevmemIntAcquireRemoteCtx(PMR *psPMR,
 		psCtxExport = IMG_CONTAINER_OF(psListNode, DEVMEMINT_CTX_EXPORT, sNode);
 		if (psCtxExport->psPMR == psPMR)
 		{
-			DevmemIntCtxAcquire(psCtxExport->psDevmemCtx);
+			if (!DevmemIntCtxAcquire(psCtxExport->psDevmemCtx))
+			{
+				OSWRLockReleaseRead(g_hExportCtxListLock);
+
+				return PVRSRV_ERROR_REFCOUNT_OVERFLOW;
+			}
 			*ppsContext = psCtxExport->psDevmemCtx;
 			*phPrivData = psCtxExport->psDevmemCtx->hPrivData;
 
