@@ -1559,6 +1559,9 @@ enum kbase_file_state {
  *                       present.
  * @zero_fops_count_wait: Waitqueue used to wait for the @fops_count to become 0.
  *                        Currently needed only for the "mem_view" debugfs file.
+ * @event_queue:          Wait queue used for blocking the thread, which consumes
+ *                        the base_jd_event corresponding to an atom, when there
+ *                        are no more posted events.
  */
 struct kbase_file {
 	struct kbase_device  *kbdev;
@@ -1574,6 +1577,7 @@ struct kbase_file {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	wait_queue_head_t     zero_fops_count_wait;
 #endif
+	wait_queue_head_t event_queue;
 };
 #if MALI_JIT_PRESSURE_LIMIT_BASE
 /**
@@ -1797,9 +1801,6 @@ struct kbase_sub_alloc {
  *                        used in conjunction with @cookies bitmask mainly for
  *                        providing a mechansim to have the same value for CPU &
  *                        GPU virtual address.
- * @event_queue:          Wait queue used for blocking the thread, which consumes
- *                        the base_jd_event corresponding to an atom, when there
- *                        are no more posted events.
  * @tgid:                 Thread group ID of the process whose thread created
  *                        the context (by calling KBASE_IOCTL_VERSION_CHECK or
  *                        KBASE_IOCTL_SET_FLAGS, depending on the @api_version).
@@ -2055,7 +2056,6 @@ struct kbase_context {
 	DECLARE_BITMAP(cookies, BITS_PER_LONG);
 	struct kbase_va_region *pending_regions[BITS_PER_LONG];
 
-	wait_queue_head_t event_queue;
 	pid_t tgid;
 	pid_t pid;
 	atomic_t used_pages;

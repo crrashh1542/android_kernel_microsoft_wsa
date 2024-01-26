@@ -194,7 +194,6 @@ int kbase_context_common_init(struct kbase_context *kctx)
 	spin_lock_init(&kctx->waiting_soft_jobs_lock);
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
 
-	init_waitqueue_head(&kctx->event_queue);
 	atomic_set(&kctx->event_count, 0);
 
 #if !MALI_USE_CSF
