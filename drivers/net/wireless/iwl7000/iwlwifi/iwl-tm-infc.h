@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2010-2014, 2018-2022 Intel Corporation
+ * Copyright (C) 2010-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2023 Intel Corporation
  */
 #ifndef __iwl_tm_infc__
 #define __iwl_tm_infc__
@@ -41,7 +40,6 @@ enum iwl_tm_gnl_cmd_t {
 #define IWL_XVT_TX_MODULATED_INFINITE (0)
 
 #define IWL_XVT_MAX_MAC_HEADER_LENGTH (36)
-#define IWL_XVT_MAX_NUM_OF_FRAMES (32)
 
 /*
  * Periphery registers absolute lower bound. This is used in order to
@@ -95,6 +93,12 @@ enum {
 	IWL_TM_USER_CMD_NOTIF_MPAPD_EXEC_DONE,
 	IWL_TM_USER_CMD_NOTIF_DTS_MEASUREMENTS_XVT,
 	IWL_TM_USER_CMD_NOTIF_STATISTICS,
+	IWL_TM_USER_CMD_NOTIF_STATS_OPER,
+	IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART1,
+	IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART2,
+	IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART3,
+	IWL_TM_USER_CMD_NOTIF_STATS_OPER_PART4,
+	IWL_TM_USER_CMD_NOTIF_STATS_END,
 };
 
 /*
@@ -583,7 +587,7 @@ struct iwl_xvt_tx_queue_cfg {
 struct iwl_xvt_driver_command_req {
 	__u32 command_id;
 	__u32 max_out_length;
-	__u8 input_data[0];
+	__u8 input_data[];
 } __packed __aligned(4);
 
 /**
@@ -595,7 +599,7 @@ struct iwl_xvt_driver_command_req {
 struct iwl_xvt_driver_command_resp {
 	__u32 command_id;
 	__u32 length;
-	__u8 resp_data[0];
+	__u8 resp_data[];
 } __packed __aligned(4);
 
 /**
@@ -753,7 +757,7 @@ struct iwl_xvt_tx_start {
 	u8 reserved1;
 	u16 reserved2;
 	struct tx_cmd_commom_data tx_data;
-	struct tx_cmd_frame_data frames_data[IWL_XVT_MAX_NUM_OF_FRAMES];
+	struct tx_cmd_frame_data frames_data[];
 } __packed __aligned(4);
 
 /**
@@ -874,7 +878,7 @@ struct iwl_xvt_get_fw_tlv_data_request {
 */
 struct iwl_xvt_fw_tlv_data_response {
 	u32 bytes_len;
-	u8 data[0];
+	u8 data[];
 } __packed __aligned(4);
 
 /**

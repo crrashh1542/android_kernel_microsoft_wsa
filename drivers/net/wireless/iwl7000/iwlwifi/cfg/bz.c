@@ -10,7 +10,7 @@
 #include "fw/api/txq.h"
 
 /* Highest firmware API version supported */
-#define IWL_BZ_UCODE_API_MAX	86
+#define IWL_BZ_UCODE_API_MAX	88
 
 /* Lowest firmware API version supported */
 #define IWL_BZ_UCODE_API_MIN	80
@@ -128,10 +128,6 @@ static const struct iwl_base_params iwl_bz_base_params = {
 #define IWL_DEVICE_BZ							\
 	IWL_DEVICE_BZ_COMMON,						\
 	.ht_params = &iwl_22000_ht_params
-
-#define IWL_DEVICE_GL_A							\
-	IWL_DEVICE_BZ_COMMON,						\
-	.ht_params = &iwl_gl_a_ht_params
 
 /*
  * This size was picked according to 8 MSDUs inside 512 A-MSDUs in an

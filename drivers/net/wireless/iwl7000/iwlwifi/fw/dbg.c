@@ -2433,9 +2433,12 @@ static u32 iwl_dump_ini_info(struct iwl_fw_runtime *fwrt,
 		struct iwl_fw_ini_debug_info_tlv *debug_info =
 			(void *)node->tlv.data;
 
+		BUILD_BUG_ON(sizeof(cfg_name->cfg_name) !=
+			     sizeof(debug_info->debug_cfg_name));
+
 		cfg_name->image_type = debug_info->image_type;
 		cfg_name->cfg_name_len =
-			cpu_to_le32(IWL_FW_INI_MAX_CFG_NAME);
+			cpu_to_le32(sizeof(cfg_name->cfg_name));
 		memcpy(cfg_name->cfg_name, debug_info->debug_cfg_name,
 		       sizeof(cfg_name->cfg_name));
 		cfg_name++;
@@ -3113,6 +3116,13 @@ static void iwl_fw_dbg_collect_sync(struct iwl_fw_runtime *fwrt, u8 wk_idx)
 			 "WRT: Data collection disabled by iwl-dbg-cfg.ini\n");
 		goto out;
 	}
+	if (fwrt->trans->dbg_cfg.wrt_filter_timepoints &&
+	    !(fwrt->trans->dbg_cfg.wrt_filter_timepoints &
+	      BIT(le32_to_cpu(dump_data->trig->time_point)))) {
+		IWL_INFO(fwrt,
+			 "WRT: Data collection disabled by iwl-dbg-cfg.ini timepoints\n");
+		goto out;
+	}
 #endif
 
 	iwl_fw_dbg_stop_restart_recording(fwrt, &params, true);
@@ -3436,6 +3446,15 @@ void iwl_fw_dbg_clear_monitor_buf(struct iwl_fw_runtime *fwrt)
 	struct iwl_fw_dbg_params params = {0};
 
 	iwl_fw_dbg_stop_sync(fwrt);
+
+	if (fw_has_api(&fwrt->fw->ucode_capa,
+		       IWL_UCODE_TLV_API_INT_DBG_BUF_CLEAR)) {
+		struct iwl_host_cmd hcmd = {
+			.id = WIDE_ID(DEBUG_GROUP, FW_CLEAR_BUFFER),
+		};
+		iwl_trans_send_cmd(fwrt->trans, &hcmd);
+	}
+
 	iwl_dbg_tlv_init_cfg(fwrt);
 	iwl_fw_dbg_stop_restart_recording(fwrt, &params, false);
 }
