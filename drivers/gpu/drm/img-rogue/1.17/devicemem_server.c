@@ -82,8 +82,6 @@ struct _DEVMEMINT_CTX_
 	   know about us at all. */
 	MMU_CONTEXT *psMMUContext;
 
-	ATOMIC_T hRefCount;
-
 	/* This handle is for devices that require notification when a new
 	   memory context is created and they need to store private data that
 	   is associated with the context. */
@@ -102,6 +100,12 @@ struct _DEVMEMINT_CTX_
 	/* Device virtual address of a page fault on this context */
 	IMG_DEV_VIRTADDR sFaultAddress;
 
+	/* Bitfield stating which heaps were created on this context. */
+	IMG_UINT64 uiCreatedHeaps;
+
+	/* Context's reference count */
+	ATOMIC_T hRefCount;
+
 	/* General purpose flags */
 	IMG_UINT32 ui32Flags;
 };
@@ -117,10 +121,17 @@ struct _DEVMEMINT_CTX_EXPORT_
 struct _DEVMEMINT_HEAP_
 {
 	struct _DEVMEMINT_CTX_ *psDevmemCtx;
-	IMG_UINT32 uiLog2PageSize;
 	IMG_DEV_VIRTADDR sBaseAddr;
 	IMG_DEV_VIRTADDR sLastAddr;
+
+	/* Heap's reference count */
 	ATOMIC_T uiRefCount;
+
+	/* Page shift of the heap */
+	IMG_UINT32 uiLog2PageSize;
+
+	/* Copy of the heap index from Device Heap Configuration module */
+	IMG_UINT32 uiHeapIndex;
 };
 
 struct _DEVMEMINT_RESERVATION_
@@ -626,6 +637,8 @@ DevmemIntCtxCreate(CONNECTION_DATA *psConnection,
 	/* Initialise flags */
 	psDevmemCtx->ui32Flags = 0;
 
+	psDevmemCtx->uiCreatedHeaps = 0;
+
 	return PVRSRV_OK;
 
 fail_register:
@@ -665,21 +678,13 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 
 	PVR_DPF((PVR_DBG_MESSAGE, "%s", __func__));
 
-	/* allocate a Devmem context */
-	psDevmemHeap = OSAllocMem(sizeof(*psDevmemHeap));
-	PVR_LOG_RETURN_IF_NOMEM(psDevmemHeap, "psDevmemHeap");
-
-	psDevmemHeap->psDevmemCtx = psDevmemCtx;
-
-	if (!DevmemIntCtxAcquire(psDevmemHeap->psDevmemCtx))
+	if (!DevmemIntCtxAcquire(psDevmemCtx))
 	{
-		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_REFCOUNT_OVERFLOW, ErrorFreeDevmemHeap);
+		return PVRSRV_ERROR_REFCOUNT_OVERFLOW;
 	}
 
-	OSAtomicWrite(&psDevmemHeap->uiRefCount, 1);
-
 	/* getting number of heaps and heap configs */
-	eError = HeapCfgHeapConfigCount(NULL, psDevmemHeap->psDevmemCtx->psDevNode, &ui32NumHeapConfigsOut);
+	eError = HeapCfgHeapConfigCount(NULL, psDevmemCtx->psDevNode, &ui32NumHeapConfigsOut);
 
 	if (eError != PVRSRV_OK)
 	{
@@ -690,7 +695,7 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 
 	for(uiHeapConfigIndex = 0; uiHeapConfigIndex < ui32NumHeapConfigsOut; uiHeapConfigIndex++)
 	{
-		eError = HeapCfgHeapCount(NULL, psDevmemHeap->psDevmemCtx->psDevNode, uiHeapConfigIndex, &ui32NumHeapsOut);
+		eError = HeapCfgHeapCount(NULL, psDevmemCtx->psDevNode, uiHeapConfigIndex, &ui32NumHeapsOut);
 		if (eError != PVRSRV_OK)
 		{
 			PVR_DPF((PVR_DBG_ERROR, "%s: Failed to retrieve the number of heaps for heap config index %d.\n",
@@ -704,7 +709,7 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 			{
 				/* Check page size and base addr match the heap blueprint */
 				eError = HeapCfgHeapDetails(NULL,
-											psDevmemHeap->psDevmemCtx->psDevNode,
+											psDevmemCtx->psDevNode,
 											uiHeapConfigIndex,
 											uiHeapIndex,
 											0, NULL,
@@ -747,21 +752,40 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 		goto ErrorCtxRelease;
 	}
 
+	/* We must assert that the index is less than the number of bits in
+	 * uiCreatedHeaps bitfield (we assume 8 bits in a byte and bitfield
+	 * width of 64). */
+	PVR_ASSERT(uiHeapIndex < sizeof(psDevmemCtx->uiCreatedHeaps) * 8);
+
+	if (BIT_ISSET(psDevmemCtx->uiCreatedHeaps, uiHeapIndex))
+	{
+		eError = PVRSRV_ERROR_ALREADY_EXISTS;
+		goto ErrorCtxRelease;
+	}
+
+	/* allocate the heap object */
+	psDevmemHeap = OSAllocMem(sizeof(*psDevmemHeap));
+	PVR_LOG_GOTO_IF_NOMEM(psDevmemHeap, eError, ErrorCtxRelease);
+
+	psDevmemHeap->psDevmemCtx = psDevmemCtx;
 	psDevmemHeap->uiLog2PageSize = uiLog2DataPageSize;
 	psDevmemHeap->sBaseAddr = sHeapBaseAddr;
 	/* Store the last accessible address as our LastAddr. We can access
 	 * every address between sHeapBaseAddr and sHeapBaseAddr + HeapLength - 1
 	 */
 	psDevmemHeap->sLastAddr.uiAddr = sHeapBaseAddr.uiAddr + uiBlueprintHeapLength - 1;
+	psDevmemHeap->uiHeapIndex = uiHeapIndex;
+
+	OSAtomicWrite(&psDevmemHeap->uiRefCount, 1);
+
+	BIT_SET(psDevmemCtx->uiCreatedHeaps, uiHeapIndex);
 
 	*ppsDevmemHeapPtr = psDevmemHeap;
 
 	return PVRSRV_OK;
 
 ErrorCtxRelease:
-	DevmemIntCtxRelease(psDevmemHeap->psDevmemCtx);
-ErrorFreeDevmemHeap:
-	OSFreeMem(psDevmemHeap);
+	DevmemIntCtxRelease(psDevmemCtx);
 
 	return eError;
 }
