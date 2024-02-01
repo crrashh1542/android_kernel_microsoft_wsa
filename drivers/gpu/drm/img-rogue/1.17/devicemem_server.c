@@ -1018,25 +1018,62 @@ ErrorReturnError:
 PVRSRV_ERROR
 DevmemXIntUnreserveRange(DEVMEMXINT_RESERVATION *psRsrv)
 {
-	IMG_UINT32 i;
-
-	MMU_Free(psRsrv->psDevmemHeap->psDevmemCtx->psMMUContext,
-	         psRsrv->sBase,
-	         psRsrv->uiLength,
-	         psRsrv->psDevmemHeap->uiLog2PageSize);
+	IMG_UINT32 ui32FirstMappedIdx = IMG_UINT32_MAX; // Initialise with invalid value.
+	IMG_UINT32 ui32ContigPageCount = 0;
+	IMG_UINT32 ui32PageIdx;
+	PVRSRV_ERROR eError = PVRSRV_OK;
 
 	/* No need to lock the mapping here since this is a handle destruction path which can not be
 	 * executed while there are outstanding handle lookups, i.e. other operations are performed
 	 * on the mapping. Bridge and handle framework also make sure this path can also not be executed
 	 * concurrently. */
 
-	for (i = 0; i < _DevmemXReservationPageCount(psRsrv); i++)
+	for (ui32PageIdx = 0; ui32PageIdx < _DevmemXReservationPageCount(psRsrv); ui32PageIdx++)
 	{
-		if (psRsrv->ppsPMR[i] != NULL)
+		if (psRsrv->ppsPMR[ui32PageIdx] != NULL)
 		{
-			PMRUnrefPMR2(psRsrv->ppsPMR[i]);
+			if (ui32ContigPageCount == 0)
+			{
+#if defined(DEBUG)
+				if(ui32FirstMappedIdx == IMG_UINT32_MAX)
+				{
+					PVR_DPF((PVR_DBG_WARNING,
+					         "%s: Reservation was not unmapped! The reservation will "
+					         "be unmapped before proceeding.",
+					         __func__));
+				}
+#endif
+				ui32FirstMappedIdx = ui32PageIdx;
+			}
+
+			ui32ContigPageCount++;
+		}
+		else
+		{
+			if (ui32ContigPageCount != 0)
+			{
+				eError = DevmemXIntUnmapPages(psRsrv,
+				                              ui32FirstMappedIdx,
+				                              ui32ContigPageCount);
+				PVR_RETURN_IF_ERROR(eError);
+			}
+
+			ui32ContigPageCount = 0;
 		}
 	}
+
+	if (ui32ContigPageCount != 0)
+	{
+		eError = DevmemXIntUnmapPages(psRsrv,
+		                              ui32FirstMappedIdx,
+		                              ui32ContigPageCount);
+		PVR_RETURN_IF_ERROR(eError);
+	}
+
+	MMU_Free(psRsrv->psDevmemHeap->psDevmemCtx->psMMUContext,
+	         psRsrv->sBase,
+	         psRsrv->uiLength,
+	         psRsrv->psDevmemHeap->uiLog2PageSize);
 
 	/* Don't bother with refcount on reservation, as a reservation only ever
 	 * holds one mapping, so we directly decrement the refcount on the heap
