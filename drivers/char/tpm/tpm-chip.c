@@ -465,21 +465,14 @@ static void tpm_del_char_device(struct tpm_chip *chip)
 static void tpm_del_legacy_sysfs(struct tpm_chip *chip)
 {
 	struct attribute **i;
-	int k;
 
 	if (chip->flags & TPM_CHIP_FLAG_VIRTUAL)
 		return;
 
 	sysfs_remove_link(&chip->dev.parent->kobj, "ppi");
 
-	for (k = 0; k < chip->groups_cnt; k++) {
-		if (chip->groups[k]->name)
-			continue;
-		else {
-			for (i = chip->groups[k]->attrs; *i != NULL; ++i)
-				sysfs_remove_link(&chip->dev.parent->kobj, (*i)->name);
-		}
-	}
+	for (i = chip->groups[0]->attrs; *i != NULL; ++i)
+		sysfs_remove_link(&chip->dev.parent->kobj, (*i)->name);
 }
 
 /* For compatibility with legacy sysfs paths we provide symlinks from the
@@ -490,7 +483,6 @@ static int tpm_add_legacy_sysfs(struct tpm_chip *chip)
 {
 	struct attribute **i;
 	int rc;
-	int k;
 
 	if (chip->flags & TPM_CHIP_FLAG_VIRTUAL)
 		return 0;
@@ -501,18 +493,12 @@ static int tpm_add_legacy_sysfs(struct tpm_chip *chip)
 		return rc;
 
 	/* All the names from tpm-sysfs */
-	for (k = 0; k < chip->groups_cnt; k++) {
-		if (chip->groups[k]->name)
-			continue;
-		else {
-			for (i = chip->groups[k]->attrs; *i != NULL; ++i) {
-				rc = compat_only_sysfs_link_entry_to_kobj(
-					&chip->dev.parent->kobj, &chip->dev.kobj, (*i)->name, NULL);
-				if (rc) {
-					tpm_del_legacy_sysfs(chip);
-					return rc;
-				}
-			}
+	for (i = chip->groups[0]->attrs; *i != NULL; ++i) {
+		rc = compat_only_sysfs_link_entry_to_kobj(
+		    &chip->dev.parent->kobj, &chip->dev.kobj, (*i)->name, NULL);
+		if (rc) {
+			tpm_del_legacy_sysfs(chip);
+			return rc;
 		}
 	}
 
