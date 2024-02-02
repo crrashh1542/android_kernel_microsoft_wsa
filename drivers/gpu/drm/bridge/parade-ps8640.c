@@ -109,6 +109,9 @@ struct ps8640 {
 	bool pre_enabled;
 	bool need_post_hpd_delay;
 	struct mutex aux_lock;
+
+	/* Lock around waiting for HPD */
+	struct mutex hpd_lock;
 };
 
 static const struct regmap_config ps8640_regmap_config[] = {
@@ -173,33 +176,93 @@ static bool ps8640_of_panel_on_aux_bus(struct device *dev)
 	return true;
 }
 
-static int _ps8640_wait_hpd_asserted(struct ps8640 *ps_bridge, unsigned long wait_us)
+static void ps8640_reset(struct ps8640 *ps_bridge)
+{
+	gpiod_set_value(ps_bridge->gpio_reset, 1);
+	usleep_range(2000, 2500);
+	gpiod_set_value(ps_bridge->gpio_reset, 0);
+
+	/* Double reset for T4 and T5 */
+	msleep(50);
+	gpiod_set_value(ps_bridge->gpio_reset, 1);
+	msleep(50);
+	gpiod_set_value(ps_bridge->gpio_reset, 0);
+
+	/* We just reset things, so we need a delay after the first HPD */
+	ps_bridge->need_post_hpd_delay = true;
+
+	/*
+	 * Mystery 200 ms delay for the "MCU to be ready". It's unclear if
+	 * this is truly necessary since the MCU will already signal that
+	 * things are "good to go" by signaling HPD on "gpio 9". See
+	 * _ps8640_wait_hpd_asserted(). For now we'll keep this mystery delay
+	 * just in case.
+	 */
+	msleep(200);
+}
+
+static int _ps8640_poll_hpd(struct ps8640 *ps_bridge, unsigned long wait_us)
 {
 	struct regmap *map = ps_bridge->regmap[PAGE2_TOP_CNTL];
 	int status;
-	int ret;
 
 	/*
 	 * Apparently something about the firmware in the chip signals that
 	 * HPD goes high by reporting GPIO9 as high (even though HPD isn't
 	 * actually connected to GPIO9).
 	 */
-	ret = regmap_read_poll_timeout(map, PAGE2_GPIO_H, status,
-				       status & PS_GPIO9, 20000, wait_us);
+	return regmap_read_poll_timeout(map, PAGE2_GPIO_H, status,
+					status & PS_GPIO9, 20000, wait_us);
+}
+
+static int _ps8640_wait_hpd_asserted(struct ps8640 *ps_bridge, unsigned long wait_us)
+{
+	struct device *dev = &ps_bridge->page[PAGE0_DP_CNTL]->dev;
+	int ret;
+
+	/*
+	 * Grab a lock around polling HPD so that we make sure that two calers
+	 * don't end up deciding to call ps8640_reset at the same time.
+	 */
+	mutex_lock(&ps_bridge->hpd_lock);
+
+	ret = _ps8640_poll_hpd(ps_bridge, wait_us);
+	if (ret) {
+		/*
+		 * If HPD never asserts then there's a chance that the bridge
+		 * chip's firmware is just confused. Try resetting it and trying
+		 * again.
+
+		 * NOTE: in theory we _should_ just need a single read here.
+		 * After all, we're not resetting the eDP panel so its HPD
+		 * should already be high (if it's going to be) because we
+		 * already waited `wait_us`. However, it appears that if we just
+		 * do a single read that it's not enough. Apparently the 200 ms
+		 * delay at the end of ps8640_reset() isn't truly enough for
+		 * the embedded firmware to reset. We'll just be super
+		 * conservative and wait the whole `wait_us` again.
+		 */
+		ps8640_reset(ps_bridge);
+		ret = _ps8640_poll_hpd(ps_bridge, wait_us);
+
+		/* TODO: remove these prints*/
+		if (ret)
+			dev_info(dev, "reset failure after HPD timeout\n");
+		else
+			dev_info(dev, "reset success after HPD timeout\n");
+	}
 
 	/*
 	 * The first time we see HPD go high after a reset we delay an extra
 	 * 50 ms. The best guess is that the MCU is doing "stuff" during this
 	 * time (maybe talking to the panel) and we don't want to interrupt it.
-	 *
-	 * No locking is done around "need_post_hpd_delay". If we're here we
-	 * know we're holding a PM Runtime reference and the only other place
-	 * that touches this is PM Runtime resume.
 	 */
 	if (!ret && ps_bridge->need_post_hpd_delay) {
 		ps_bridge->need_post_hpd_delay = false;
 		msleep(50);
 	}
+
+	mutex_unlock(&ps_bridge->hpd_lock);
 
 	return ret;
 }
@@ -410,26 +473,7 @@ static int __maybe_unused ps8640_resume(struct device *dev)
 	}
 
 	gpiod_set_value(ps_bridge->gpio_powerdown, 0);
-	gpiod_set_value(ps_bridge->gpio_reset, 1);
-	usleep_range(2000, 2500);
-	gpiod_set_value(ps_bridge->gpio_reset, 0);
-	/* Double reset for T4 and T5 */
-	msleep(50);
-	gpiod_set_value(ps_bridge->gpio_reset, 1);
-	msleep(50);
-	gpiod_set_value(ps_bridge->gpio_reset, 0);
-
-	/* We just reset things, so we need a delay after the first HPD */
-	ps_bridge->need_post_hpd_delay = true;
-
-	/*
-	 * Mystery 200 ms delay for the "MCU to be ready". It's unclear if
-	 * this is truly necessary since the MCU will already signal that
-	 * things are "good to go" by signaling HPD on "gpio 9". See
-	 * _ps8640_wait_hpd_asserted(). For now we'll keep this mystery delay
-	 * just in case.
-	 */
-	msleep(200);
+	ps8640_reset(ps_bridge);
 
 	return 0;
 }
@@ -704,6 +748,7 @@ static int ps8640_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	mutex_init(&ps_bridge->aux_lock);
+	mutex_init(&ps_bridge->hpd_lock);
 
 	ps_bridge->supplies[0].supply = "vdd12";
 	ps_bridge->supplies[1].supply = "vdd33";
