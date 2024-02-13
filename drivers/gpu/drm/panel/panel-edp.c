@@ -616,6 +616,14 @@ static int panel_edp_get_modes(struct drm_panel *panel,
 				      p->detected_panel != ERR_PTR(-EINVAL) &&
 				      p->detected_panel->override_edid_mode;
 
+	/*
+	 * CHROMIUM temporary hack: only use the override_edid_mode for
+	 * corsola (mediatek,mt8186) since it's causing problems for hana
+	 * boards.
+	 */
+	if (has_override_edid_mode && !of_machine_is_compatible("mediatek,mt8186"))
+		has_override_edid_mode = false;
+
 	/* probe EDID if a DDC bus is available */
 	if (p->ddc) {
 		pm_runtime_get_sync(panel->dev);
