@@ -72,10 +72,10 @@ static unsigned int sched_nr_latency = 8;
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 3 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
-unsigned int sysctl_sched_base_slice			= 750000ULL;
-static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
+unsigned int sysctl_sched_base_slice			= 3000000ULL;
+static unsigned int normalized_sysctl_sched_base_slice	= 3000000ULL;
 
 /*
  * After fork, child runs first. If set to 0 (default) then
