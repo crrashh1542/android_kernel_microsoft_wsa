@@ -1334,21 +1334,9 @@ static u64 grub_reclaim(u64 delta, struct rq *rq, struct sched_dl_entity *dl_se)
 	return (delta * u_act) >> BW_SHIFT;
 }
 
-static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 delta_exec)
+s64 dl_scalled_delta_exec(struct rq *rq, struct sched_dl_entity *dl_se, s64 delta_exec)
 {
 	s64 scaled_delta_exec;
-
-	if (unlikely(delta_exec <= 0)) {
-		if (unlikely(dl_se->dl_yielded))
-			goto throttle;
-		return;
-	}
-
-	if (dl_server(dl_se) && dl_se->dl_throttled && !dl_se->dl_defer)
-		return;
-
-	if (dl_entity_is_special(dl_se))
-		return;
 
 	/*
 	 * For tasks that participate in GRUB, we implement GRUB-PA: the
@@ -1368,7 +1356,34 @@ static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 
 		scaled_delta_exec = cap_scale(scaled_delta_exec, scale_cpu);
 	}
 
+	return scaled_delta_exec;
+}
+
+static inline void
+update_stats_dequeue_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se,
+			int flags);
+static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 delta_exec)
+{
+	s64 scaled_delta_exec;
+
+	if (unlikely(delta_exec <= 0)) {
+		if (unlikely(dl_se->dl_yielded))
+			goto throttle;
+		return;
+	}
+
+	if (dl_server(dl_se) && dl_se->dl_throttled && !dl_se->dl_defer)
+		return;
+
+	if (dl_entity_is_special(dl_se))
+		return;
+
+	scaled_delta_exec = dl_scalled_delta_exec(rq, dl_se, delta_exec);
+
 	dl_se->runtime -= scaled_delta_exec;
+
+	if (dl_server(dl_se) && !rq->curr->pid)
+		return;
 
 	/*
 	 * The fair server can consume its runtime while throttled (not queued).
