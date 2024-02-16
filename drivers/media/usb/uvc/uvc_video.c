@@ -1074,16 +1074,9 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 	 * that discontinuous sequence numbers always indicate lost frames.
 	 */
 	if (stream->last_fid != fid) {
-		struct v4l2_event event = {
-			.type = V4L2_EVENT_FRAME_SYNC,
-		};
-
 		stream->sequence++;
 		if (stream->sequence)
 			uvc_video_stats_update(stream);
-
-		event.u.frame_sync.frame_sequence = stream->sequence;
-		v4l2_event_queue(&stream->vdev, &event);
 	}
 
 	uvc_video_clock_decode(stream, buf, data, len);
