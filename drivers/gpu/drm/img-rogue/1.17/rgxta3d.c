@@ -2227,14 +2227,6 @@ PVRSRV_ERROR RGXCreateZSBufferKM2(CONNECTION_DATA * psConnection,
 
 	psZSBuffer->ui32RefCount = 0;
 	psZSBuffer->bOnDemand = bOnDemand;
-	if (bOnDemand)
-	{
-		/* psZSBuffer->ui32ZSBufferID set below with lock... */
-		OSLockAcquire(psDevInfo->hLockZSBuffer);
-		psZSBuffer->ui32ZSBufferID = psDevInfo->ui32ZSBufferCurrID++;
-		dllist_add_to_tail(&psDevInfo->sZSBufferHead, &psZSBuffer->sNode);
-		OSLockRelease(psDevInfo->hLockZSBuffer);
-	}
 
 	/* Allocate firmware memory for ZS-Buffer. */
 	PDUMPCOMMENT(psDeviceNode, "Allocate firmware ZS-Buffer data structure");
@@ -2275,14 +2267,23 @@ PVRSRV_ERROR RGXCreateZSBufferKM2(CONNECTION_DATA * psConnection,
 		goto ErrorAcquireFWZSBuffer;
 	}
 
+	/* Get firmware address of ZS-Buffer. */
+	eError = RGXSetFirmwareAddress(&psZSBuffer->sZSBufferFWDevVAddr, psFWZSBufferMemDesc, 0, RFW_FWADDR_FLAG_NONE);
+	PVR_LOG_GOTO_IF_ERROR(eError, "RGXSetFirmwareAddress", ErrorSetFwAddr);
+
+	if (bOnDemand)
+	{
+		/* psZSBuffer->ui32ZSBufferID set below with lock... */
+		OSLockAcquire(psDevInfo->hLockZSBuffer);
+		psZSBuffer->ui32ZSBufferID = psDevInfo->ui32ZSBufferCurrID++;
+		dllist_add_to_tail(&psDevInfo->sZSBufferHead, &psZSBuffer->sNode);
+		OSLockRelease(psDevInfo->hLockZSBuffer);
+	}
+
 	/* Populate FW ZS-Buffer data structure */
 	psFWZSBuffer->bOnDemand = bOnDemand;
 	psFWZSBuffer->eState = (bOnDemand) ? RGXFWIF_PRBUFFER_UNBACKED : RGXFWIF_PRBUFFER_BACKED;
 	psFWZSBuffer->ui32BufferID = psZSBuffer->ui32ZSBufferID;
-
-	/* Get firmware address of ZS-Buffer. */
-	eError = RGXSetFirmwareAddress(&psZSBuffer->sZSBufferFWDevVAddr, psFWZSBufferMemDesc, 0, RFW_FWADDR_FLAG_NONE);
-	PVR_LOG_GOTO_IF_ERROR(eError, "RGXSetFirmwareAddress", ErrorSetFwAddr);
 
 	/* Dump the ZS-Buffer and the memory content */
 #if defined(PDUMP)
