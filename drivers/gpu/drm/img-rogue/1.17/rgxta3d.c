@@ -1361,22 +1361,6 @@ static PVRSRV_ERROR RGXCreateHWRTData_aux(
 	psHWRTData->sRgnHeaderDevVAddr		= sRgnHeaderDevVAddr;
 	psHWRTData->sRTCDevVAddr			= sRTCDevVAddr;
 
-	OSLockAcquire(psDevInfo->hLockFreeList);
-	for (ui32Loop = 0; ui32Loop < RGXFW_MAX_FREELISTS; ui32Loop++)
-	{
-		psKMHWRTDataSet->apsFreeLists[ui32Loop] = apsFreeLists[ui32Loop];
-		psKMHWRTDataSet->apsFreeLists[ui32Loop]->ui32RefCount++;
-		psHWRTData->apsFreeLists[ui32Loop].ui32Addr = psKMHWRTDataSet->apsFreeLists[ui32Loop]->sFreeListFWDevVAddr.ui32Addr;
-		/* invalid initial snapshot value, the snapshot is always taken during first kick
-		 * and hence the value get replaced during the first kick anyway. So it's safe to set it 0.
-		 */
-		psHWRTData->aui32FreeListHWRSnapshot[ui32Loop] = 0;
-	}
-#if !defined(SUPPORT_SHADOW_FREELISTS)
-	dllist_add_to_tail(&apsFreeLists[RGXFW_LOCAL_FREELIST]->sNodeHWRTDataHead, &(psKMHWRTDataSet->sNodeHWRTData));
-#endif
-	OSLockRelease(psDevInfo->hLockFreeList);
-
 	{
 		RGXFWIF_RTA_CTL *psRTACtl = &psHWRTData->sRTACtl;
 
@@ -1445,6 +1429,22 @@ static PVRSRV_ERROR RGXCreateHWRTData_aux(
 		}
 	}
 
+	OSLockAcquire(psDevInfo->hLockFreeList);
+	for (ui32Loop = 0; ui32Loop < RGXFW_MAX_FREELISTS; ui32Loop++)
+	{
+		psKMHWRTDataSet->apsFreeLists[ui32Loop] = apsFreeLists[ui32Loop];
+		psKMHWRTDataSet->apsFreeLists[ui32Loop]->ui32RefCount++;
+		psHWRTData->apsFreeLists[ui32Loop].ui32Addr = psKMHWRTDataSet->apsFreeLists[ui32Loop]->sFreeListFWDevVAddr.ui32Addr;
+		/* invalid initial snapshot value, the snapshot is always taken during first kick
+		 * and hence the value get replaced during the first kick anyway. So it's safe to set it 0.
+		 */
+		psHWRTData->aui32FreeListHWRSnapshot[ui32Loop] = 0;
+	}
+#if !defined(SUPPORT_SHADOW_FREELISTS)
+	dllist_add_to_tail(&apsFreeLists[RGXFW_LOCAL_FREELIST]->sNodeHWRTDataHead, &(psKMHWRTDataSet->sNodeHWRTData));
+#endif
+	OSLockRelease(psDevInfo->hLockFreeList);
+
 #if defined(PDUMP)
 	PDUMPCOMMENT(psDeviceNode, "Dump HWRTData 0x%08X", psKMHWRTDataSet->sHWRTDataFwAddr.ui32Addr);
 	DevmemPDumpLoadMem(psKMHWRTDataSet->psHWRTDataFwMemDesc, 0, sizeof(*psHWRTData), PDUMP_FLAGS_CONTINUOUS);
@@ -1460,13 +1460,6 @@ FWAllocateRTAccArryError:
 FWAllocateRTArryFwAddrError:
 	DevmemFwUnmapAndFree(psDevInfo, psKMHWRTDataSet->psRTArrayFwMemDesc);
 FWAllocateRTArryError:
-	OSLockAcquire(psDevInfo->hLockFreeList);
-	for (ui32Loop = 0; ui32Loop < RGXFW_MAX_FREELISTS; ui32Loop++)
-	{
-		PVR_ASSERT(psKMHWRTDataSet->apsFreeLists[ui32Loop]->ui32RefCount > 0);
-		psKMHWRTDataSet->apsFreeLists[ui32Loop]->ui32RefCount--;
-	}
-	OSLockRelease(psDevInfo->hLockFreeList);
 	DevmemReleaseCpuVirtAddr(psKMHWRTDataSet->psHWRTDataFwMemDesc);
 FWRTDataCpuMapError:
 	RGXUnsetFirmwareAddress(psKMHWRTDataSet->psHWRTDataFwMemDesc);
