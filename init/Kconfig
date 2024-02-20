@@ -2411,6 +2411,7 @@ config ARCH_HAS_SYSCALL_WRAPPER
 
 config SCHED_EEVDF
 	bool "EEVDF cpu scheduler"
+	depends on !COMPILE_TEST
 	help
 	  Enable dynamic switching between EEVDF and CFS.
 	default y
