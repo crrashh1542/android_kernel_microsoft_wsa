@@ -2395,11 +2395,13 @@ ErrorFreeCtxExport:
 PVRSRV_ERROR
 DevmemIntUnexportCtx(DEVMEMINT_CTX_EXPORT *psContextExport)
 {
-	PMRUnrefPMR(psContextExport->psPMR);
-	DevmemIntCtxRelease(psContextExport->psDevmemCtx);
 	OSWRLockAcquireWrite(g_hExportCtxListLock);
 	dllist_remove_node(&psContextExport->sNode);
 	OSWRLockReleaseWrite(g_hExportCtxListLock);
+
+	PMRUnrefPMR(psContextExport->psPMR);
+	DevmemIntCtxRelease(psContextExport->psDevmemCtx);
+
 	OSFreeMem(psContextExport);
 
 	/* Unable to find exported context, return error */
