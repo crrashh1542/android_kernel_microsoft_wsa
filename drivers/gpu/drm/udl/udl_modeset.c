@@ -306,6 +306,7 @@ out_drm_gem_fb_end_cpu_access:
 static const uint32_t udl_simple_display_pipe_formats[] = {
 	DRM_FORMAT_RGB565,
 	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
 };
 
 static enum drm_mode_status
