@@ -405,3 +405,7 @@
 		sbs,poll-retry-count = <1>;
 	};
 };
+
+&pen_insert {
+	wakeup-event-action = <EV_ACT_ANY>;
+};
