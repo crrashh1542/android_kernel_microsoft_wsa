@@ -92,9 +92,6 @@ static void mtk_drm_crtc_finish_page_flip(struct mtk_drm_crtc *mtk_crtc)
 	unsigned long flags;
 
 	spin_lock_irqsave(&crtc->dev->event_lock, flags);
-	if (!mtk_crtc->event)
-		DRM_INFO("%s %dd 0x%px mtk_crtc 0x%px\n",
-			 __func__, __LINE__, mtk_crtc->event, mtk_crtc);
 	drm_crtc_send_vblank_event(crtc, mtk_crtc->event);
 	drm_crtc_vblank_put(crtc);
 	mtk_crtc->event = NULL;
@@ -454,9 +451,6 @@ static void mtk_crtc_ddp_hw_fini(struct mtk_drm_crtc *mtk_crtc)
 
 	if (crtc->state->event && !crtc->state->active) {
 		spin_lock_irq(&crtc->dev->event_lock);
-		DRM_INFO("%s %d event 0x%px 0x%px 0x%px\n",
-			 __func__, __LINE__,
-			 mtk_crtc->event, mtk_crtc, crtc);
 		drm_crtc_send_vblank_event(crtc, crtc->state->event);
 		crtc->state->event = NULL;
 		spin_unlock_irq(&crtc->dev->event_lock);
@@ -756,11 +750,6 @@ static void mtk_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 
 		mtk_crtc_state->base.event = NULL;
-
-		if (!mtk_crtc->event)
-			DRM_INFO("%s event 0x%px 0x%px 0x%px\n",
-				 __func__,
-				 mtk_crtc->event, mtk_crtc, crtc);
 	}
 }
 
