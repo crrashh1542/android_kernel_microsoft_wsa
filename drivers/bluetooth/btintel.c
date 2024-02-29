@@ -2566,6 +2566,11 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 			err = btintel_legacy_rom_setup(hdev, &ver);
 			break;
 		case 0x0b:      /* SfP */
+			/* Apply the device specific controller quirk
+			 *
+			 * Use packet size 24 for the chip
+			 */
+			hdev->wbs_pkt_len = 24;
 		case 0x11:      /* JfP */
 		case 0x12:      /* ThP */
 		case 0x13:      /* HrP */
