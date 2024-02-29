@@ -267,10 +267,10 @@ static void DevmemIntReservationSetMappingIndex(DEVMEMINT_RESERVATION2 *psReserv
 */ /**************************************************************************/
 static INLINE IMG_BOOL DevmemIntCtxAcquire(DEVMEMINT_CTX *psDevmemCtx)
 {
-	IMG_BOOL bSuccess = OSAtomicAddUnless(&psDevmemCtx->hRefCount, 1,
-	                                      DEVMEMCTX_REFCOUNT_MAX);
+	IMG_INT32 iOldValue = OSAtomicAddUnless(&psDevmemCtx->hRefCount, 1,
+	                                        DEVMEMCTX_REFCOUNT_MAX);
 
-	if (!bSuccess)
+	if (iOldValue == DEVMEMCTX_REFCOUNT_MAX)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to acquire the device memory "
 		         "context, reference count has overflowed.", __func__));
@@ -337,10 +337,10 @@ static INLINE void DevmemIntCtxRelease(DEVMEMINT_CTX *psDevmemCtx)
 */ /**************************************************************************/
 static INLINE IMG_BOOL DevmemIntHeapAcquire(DEVMEMINT_HEAP *psDevmemHeap)
 {
-	IMG_BOOL bSuccess = OSAtomicAddUnless(&psDevmemHeap->uiRefCount, 1,
-	                                      DEVMEMHEAP_REFCOUNT_MAX);
+	IMG_INT32 iOldValue = OSAtomicAddUnless(&psDevmemHeap->uiRefCount, 1,
+	                                        DEVMEMHEAP_REFCOUNT_MAX);
 
-	if (!bSuccess)
+	if (iOldValue == DEVMEMHEAP_REFCOUNT_MAX)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to acquire the device memory "
 		         "heap, reference count has overflowed.", __func__));
@@ -359,10 +359,10 @@ static INLINE IMG_BOOL DevmemIntHeapAcquire(DEVMEMINT_HEAP *psDevmemHeap)
 */ /**************************************************************************/
 static INLINE void DevmemIntHeapRelease(DEVMEMINT_HEAP *psDevmemHeap)
 {
-	IMG_BOOL bSuccess = OSAtomicSubtractUnless(&psDevmemHeap->uiRefCount, 1,
-	                                           DEVMEMHEAP_REFCOUNT_MIN);
+	IMG_INT32 iOldValue = OSAtomicSubtractUnless(&psDevmemHeap->uiRefCount, 1,
+	                                             DEVMEMHEAP_REFCOUNT_MIN);
 
-	if (!bSuccess)
+	if (iOldValue == DEVMEMHEAP_REFCOUNT_MIN)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to acquire the device memory "
 		         "heap, reference count has underflowed.", __func__));
@@ -724,7 +724,7 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 						(sHeapBaseAddr.uiAddr == sBlueprintHeapBaseAddr.uiAddr) &&
 						(uiBlueprintHeapLength == uiHeapLength))
 					{
-						bHeapParamsValidated = IMG_TRUE; 
+						bHeapParamsValidated = IMG_TRUE;
 						break;
 					}
 				}

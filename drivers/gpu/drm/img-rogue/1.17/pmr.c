@@ -1798,11 +1798,7 @@ PMRUnrefUnlockPMR(PMR *psPMR)
 void
 PMRCpuMapCountIncr(PMR *psPMR)
 {
-	IMG_BOOL bSuccess;
-
-	bSuccess = OSAtomicAddUnless(&psPMR->iCpuMapCount, 1,
-	                             PMR_CPUMAPCOUNT_MAX);
-	if (!bSuccess)
+	if (OSAtomicAddUnless(&psPMR->iCpuMapCount, 1, PMR_CPUMAPCOUNT_MAX) == PMR_CPUMAPCOUNT_MAX)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s: iCpuMapCount for PMR: @0x%p (%s) has overflowed.",
 		                        __func__,
@@ -1815,11 +1811,7 @@ PMRCpuMapCountIncr(PMR *psPMR)
 void
 PMRCpuMapCountDecr(PMR *psPMR)
 {
-	IMG_BOOL bSuccess;
-
-	bSuccess = OSAtomicSubtractUnless(&psPMR->iCpuMapCount, 1,
-	                                  PMR_CPUMAPCOUNT_MIN);
-	if (!bSuccess)
+	if (OSAtomicSubtractUnless(&psPMR->iCpuMapCount, 1, PMR_CPUMAPCOUNT_MIN) == PMR_CPUMAPCOUNT_MIN)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "%s: iCpuMapCount (now %d) for PMR: @0x%p (%s) has underflowed.",
 		                        __func__,

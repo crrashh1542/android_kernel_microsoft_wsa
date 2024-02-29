@@ -53,6 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "allocmem.h"
 #include <linux/atomic.h>
+#include <linux/version.h>
 
 #define OSLockCreateNoStats(phLock) ({ \
 	PVRSRV_ERROR e = PVRSRV_ERROR_OUT_OF_MEMORY; \
@@ -114,7 +115,11 @@ static inline IMG_INT OSAtomicOr(ATOMIC_T *pCounter, IMG_INT iVal)
 }
 
 #define OSAtomicAdd(pCounter, incr) atomic_add_return(incr,pCounter)
-#define OSAtomicAddUnless(pCounter, incr, test) atomic_add_unless(pCounter, (incr), (test))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#define OSAtomicAddUnless(pCounter, incr, test) atomic_fetch_add_unless(pCounter, (incr), (test))
+#else
+#define OSAtomicAddUnless(pCounter, incr, test) __atomic_add_unless(pCounter,incr,test)
+#endif
 
 #define OSAtomicSubtract(pCounter, incr) atomic_add_return(-(incr),pCounter)
 #define OSAtomicSubtractUnless(pCounter, incr, test) OSAtomicAddUnless(pCounter, -(incr), (test))
