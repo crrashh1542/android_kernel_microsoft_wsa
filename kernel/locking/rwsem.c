@@ -1018,6 +1018,8 @@ queue:
 			raw_spin_unlock_irq(&sem->wait_lock);
 			rwsem_set_reader_owned(sem);
 			lockevent_inc(rwsem_rlock_fast);
+			trace_android_vh_record_rwsem_lock_starttime(
+							current, jiffies);
 			return sem;
 		}
 		adjustment += RWSEM_FLAG_WAITERS;
@@ -1263,6 +1265,8 @@ static struct rw_semaphore *rwsem_downgrade_wake(struct rw_semaphore *sem)
 
 	if (!list_empty(&sem->wait_list))
 		rwsem_mark_wake(sem, RWSEM_WAKE_READ_OWNED, &wake_q);
+
+	trace_android_vh_rwsem_downgrade_wake_finish(sem);
 
 	raw_spin_unlock_irqrestore(&sem->wait_lock, flags);
 	wake_up_q(&wake_q);

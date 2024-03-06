@@ -243,14 +243,9 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 		break;
 	case NFPROTO_BRIDGE:
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
-		hook_head = rcu_dereference(net->nf.hooks_bridge[hook]);
+		hook_head = rcu_dereference(get_nf_hooks_bridge(net)[hook]);
 #endif
 		break;
-#if IS_ENABLED(CONFIG_DECNET)
-	case NFPROTO_DECNET:
-		hook_head = rcu_dereference(net->nf.hooks_decnet[hook]);
-		break;
-#endif
 	default:
 		WARN_ON_ONCE(1);
 		break;

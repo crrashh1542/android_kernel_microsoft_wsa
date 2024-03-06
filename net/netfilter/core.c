@@ -39,6 +39,12 @@ struct static_key nf_hooks_needed[NFPROTO_NUMPROTO][NF_MAX_HOOKS];
 EXPORT_SYMBOL(nf_hooks_needed);
 #endif
 
+#ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
+struct nf_hook_entries __rcu *init_nf_hooks_bridge[NF_INET_NUMHOOKS];
+struct nf_hook_entries __rcu **init_nf_hooks_bridgep = &init_nf_hooks_bridge[0];
+EXPORT_SYMBOL_GPL(init_nf_hooks_bridgep);
+#endif
+
 static DEFINE_MUTEX(nf_hook_mutex);
 
 /* max hooks per family/hooknum */
@@ -278,9 +284,9 @@ nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum,
 #endif
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
 	case NFPROTO_BRIDGE:
-		if (WARN_ON_ONCE(ARRAY_SIZE(net->nf.hooks_bridge) <= hooknum))
+		if (WARN_ON_ONCE(hooknum >= NF_INET_NUMHOOKS))
 			return NULL;
-		return net->nf.hooks_bridge + hooknum;
+		return get_nf_hooks_bridge(net) + hooknum;
 #endif
 #ifdef CONFIG_NETFILTER_INGRESS
 	case NFPROTO_INET:
@@ -300,12 +306,6 @@ nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum,
 		if (WARN_ON_ONCE(ARRAY_SIZE(net->nf.hooks_ipv6) <= hooknum))
 			return NULL;
 		return net->nf.hooks_ipv6 + hooknum;
-#if IS_ENABLED(CONFIG_DECNET)
-	case NFPROTO_DECNET:
-		if (WARN_ON_ONCE(ARRAY_SIZE(net->nf.hooks_decnet) <= hooknum))
-			return NULL;
-		return net->nf.hooks_decnet + hooknum;
-#endif
 	default:
 		WARN_ON_ONCE(1);
 		return NULL;
@@ -675,9 +675,11 @@ void nf_conntrack_destroy(struct nf_conntrack *nfct)
 
 	rcu_read_lock();
 	ct_hook = rcu_dereference(nf_ct_hook);
-	BUG_ON(ct_hook == NULL);
-	ct_hook->destroy(nfct);
+	if (ct_hook)
+		ct_hook->destroy(nfct);
 	rcu_read_unlock();
+
+	WARN_ON(!ct_hook);
 }
 EXPORT_SYMBOL(nf_conntrack_destroy);
 
@@ -721,12 +723,8 @@ static int __net_init netfilter_net_init(struct net *net)
 	__netfilter_net_init(net->nf.hooks_arp, ARRAY_SIZE(net->nf.hooks_arp));
 #endif
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
-	__netfilter_net_init(net->nf.hooks_bridge, ARRAY_SIZE(net->nf.hooks_bridge));
+	__netfilter_net_init(get_nf_hooks_bridge(net), NF_INET_NUMHOOKS);
 #endif
-#if IS_ENABLED(CONFIG_DECNET)
-	__netfilter_net_init(net->nf.hooks_decnet, ARRAY_SIZE(net->nf.hooks_decnet));
-#endif
-
 #ifdef CONFIG_PROC_FS
 	net->nf.proc_netfilter = proc_net_mkdir(net, "netfilter",
 						net->proc_net);

@@ -344,6 +344,21 @@
   device_unregister
   _dev_info
   __dev_kfree_skb_any
+  devlink_alloc_ns
+  devlink_flash_update_status_notify
+  devlink_fmsg_binary_pair_nest_end
+  devlink_fmsg_binary_pair_nest_start
+  devlink_fmsg_binary_put
+  devlink_free
+  devlink_health_report
+  devlink_health_reporter_create
+  devlink_health_reporter_destroy
+  devlink_health_reporter_priv
+  devlink_health_reporter_state_update
+  devlink_region_create
+  devlink_region_destroy
+  devlink_register
+  devlink_unregister
   devm_add_action
   __devm_alloc_percpu
   devm_blk_ksm_init
@@ -778,6 +793,7 @@
   fwnode_property_read_string
   fwnode_property_read_u32_array
   fwnode_property_read_u64_array
+  fwnode_typec_mux_get
   g_audio_cleanup
   g_audio_setup
   gcd
@@ -2175,10 +2191,13 @@
   tty_unregister_ldisc
   tty_write_room
   typec_mux_get_drvdata
+  typec_mux_put
   typec_mux_register
   typec_mux_set
   typec_mux_unregister
   typec_partner_set_identity
+  typec_partner_set_pd_revision
+  typec_partner_set_svdm_version
   typec_register_partner
   typec_register_port
   typec_set_data_role
