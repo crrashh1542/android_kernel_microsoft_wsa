@@ -6012,6 +6012,6 @@ static void puff_rtl8168_aspm_settings(struct pci_dev *dev)
 	}
 
 }
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8168,
+DECLARE_PCI_FIXUP_ENABLE(PCI_VENDOR_ID_REALTEK, 0x8168,
 			puff_rtl8168_aspm_settings);
 #endif
