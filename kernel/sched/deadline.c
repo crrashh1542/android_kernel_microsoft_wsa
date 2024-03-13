@@ -856,7 +856,7 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se)
 	 * is in the future, throttle the server and arm the zero laxity timer.
 	 */
 	if (dl_se->dl_defer &&
-	    dl_time_before(dl_se->deadline - dl_se->runtime, rq_clock(rq))) {
+	    dl_time_before(rq_clock(rq), dl_se->deadline - dl_se->runtime)) {
 		if (!is_dl_boosted(dl_se)) {
 			dl_se->dl_defer_armed = 1;
 			dl_se->dl_throttled = 1;
