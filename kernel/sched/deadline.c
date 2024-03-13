@@ -860,7 +860,16 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se)
 		if (!is_dl_boosted(dl_se)) {
 			dl_se->dl_defer_armed = 1;
 			dl_se->dl_throttled = 1;
-			start_dl_timer(dl_se);
+			if (!start_dl_timer(dl_se)) {
+				/*
+				 * If for whatever reason (delays), if a previous timer was
+				 * queued but not serviced, cancel it.
+				*/
+				hrtimer_try_to_cancel(&dl_se->dl_timer);
+				dl_se->dl_defer_armed = 0;
+				dl_se->dl_throttled = 0;
+				return;
+			}
 		}
 	}
 }
@@ -1413,7 +1422,14 @@ static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 
 		hrtimer_try_to_cancel(&dl_se->dl_timer);
 
 		replenish_dl_new_period(dl_se, dl_se->rq);
-		start_dl_timer(dl_se);
+
+		/*
+		 * Not being able to start the timer seems problematic. If it could not
+		 * be started for whatever reason, we need to "unthrottle" the DL server
+		 * and queue right away. Otherwise nothing might queue it. That's similar
+		 * to what enqueue_dl_entity() does on start_dl_timer==0. For now, just warn.
+		 */
+		WARN_ON_ONCE(!start_dl_timer(dl_se));
 
 		return;
 	}
