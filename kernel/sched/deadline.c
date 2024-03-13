@@ -857,7 +857,7 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se)
 	 */
 	if (dl_se->dl_defer &&
 	    dl_time_before(rq_clock(rq), dl_se->deadline - dl_se->runtime)) {
-		if (!is_dl_boosted(dl_se)) {
+		if (!is_dl_boosted(dl_se) && dl_se->server_has_tasks(dl_se)) {
 			dl_se->dl_defer_armed = 1;
 			dl_se->dl_throttled = 1;
 			if (!start_dl_timer(dl_se)) {
