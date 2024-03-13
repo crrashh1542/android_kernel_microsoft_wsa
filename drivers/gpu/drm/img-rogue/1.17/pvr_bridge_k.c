@@ -79,6 +79,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "srvcore.h"
 #include "common_srvcore_bridge.h"
+#include "kernel_compatibility.h"
 
 PVRSRV_ERROR InitDMABUFBridge(void);
 void DeinitDMABUFBridge(void);
@@ -557,6 +558,13 @@ PVRSRV_MMap(struct file *pFile, struct vm_area_struct *ps_vma)
 	}
 
 	mutex_lock(&g_sMMapMutex);
+
+	/* Forcibly clear the VM_MAYWRITE flag as this is inherited from the
+	 * kernel mmap code and we do not want to produce a potentially writable
+	 * mapping from a read-only mapping.
+	 */
+	pvr_vm_flags_clear(ps_vma, VM_MAYWRITE);
+
 	/* Note: PMRMMapPMR will take a reference on the PMR.
 	 * Unref the handle immediately, because we have now done
 	 * the required operation on the PMR (whether it succeeded or not)
