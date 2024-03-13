@@ -1402,23 +1402,6 @@ static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 
 	 * starting a new period, pushing the activation to the zero-lax time.
 	 */
 	if (dl_se->dl_defer && dl_se->dl_throttled && dl_runtime_exceeded(dl_se)) {
-		s64 runtime_diff = dl_se->runtime + dl_se->dl_runtime;
-
-		/*
-		 * If this is a regular throttling case, let it run negative until
-		 * the dl_runtime - runtime > 0. The reason being is that the next
-		 * replenishment will result in a positive runtime one period ahead.
-		 *
-		 * Otherwise, the deadline will be pushed more than one period, not
-		 * providing runtime/period anymore.
-		 *
-		 * If the dl_runtime - runtime < 0, then the server was able to get
-		 * the runtime/period before the replenishment. So it is safe
-		 * to start a new deffered period.
-		 */
-		if (!dl_se->dl_defer_armed && runtime_diff > 0)
-			return;
-
 		hrtimer_try_to_cancel(&dl_se->dl_timer);
 
 		replenish_dl_new_period(dl_se, dl_se->rq);
