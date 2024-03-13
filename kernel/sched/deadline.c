@@ -1818,6 +1818,18 @@ enqueue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 	if (dl_se->dl_throttled && start_dl_timer(dl_se))
 		return;
 
+	/*
+	 * We're about to enqueue, make sure we're not ->dl_throttled!
+	 * In case the timer was not started, say because the 0-lax time
+	 * has passed, mark as not throttled and mark unarmed.
+	 * Also cancel earlier timers, since letting those run is pointless.
+	 */
+	if (dl_se->dl_throttled) {
+		hrtimer_try_to_cancel(&dl_se->dl_timer);
+		dl_se->dl_defer_armed = 0;
+		dl_se->dl_throttled = 0;
+	}
+
 	__enqueue_dl_entity(dl_se);
 }
 
