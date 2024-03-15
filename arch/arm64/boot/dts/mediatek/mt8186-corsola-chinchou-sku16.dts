@@ -9,8 +9,8 @@
 / {
 	model = "Google chinchou sku16/sku2147483647 board";
 	compatible = "google,chinchou-sku16", "google,chinchou-sku18",
-			"google,chinchou-sku19", "google,chinchou-sku2147483647",
-			"mediatek,mt8186";
+			"google,chinchou-sku19", "google,chinchou-sku21",
+			"google,chinchou-sku2147483647", "mediatek,mt8186";
 };
 
 &i2c1 {

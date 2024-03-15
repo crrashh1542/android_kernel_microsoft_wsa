@@ -9,6 +9,7 @@
 / {
 	model = "Google chinchou sku0 board";
 	compatible = "google,chinchou-sku0", "google,chinchou-sku2",
+			"google,chinchou-sku4", "google,chinchou-sku5",
 			"google,chinchou", "mediatek,mt8186";
 };
 
