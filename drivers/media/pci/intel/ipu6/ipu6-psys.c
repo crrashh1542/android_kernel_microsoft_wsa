@@ -247,7 +247,7 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 	}
 
 	/* check and remap if possibe */
-	ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
+	ret = ipu_psys_mapbuf_locked(fd, fh);
 	if (ret) {
 		dev_err(&psys->adev->dev, "%s remap failed\n", __func__);
 		mutex_unlock(&fh->mutex);
@@ -345,7 +345,7 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 			goto error;
 		}
 
-		ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
+		ret = ipu_psys_mapbuf_locked(fd, fh);
 		if (ret) {
 			dev_err(&psys->adev->dev, "%s remap failed\n",
 				__func__);
