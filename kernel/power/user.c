@@ -299,8 +299,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SNAPSHOT_CREATE_IMAGE:
-		if (!hibernation_available() ||
-			data->mode != O_RDONLY || !data->frozen  || data->ready) {
+		if (data->mode != O_RDONLY || !data->frozen  || data->ready) {
 			error = -EPERM;
 			break;
 		}
