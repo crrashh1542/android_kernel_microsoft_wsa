@@ -41,6 +41,8 @@ extern unsigned int sysctl_iowait_apply_ticks;
 extern unsigned int sysctl_sched_dl_period_max;
 extern unsigned int sysctl_sched_dl_period_min;
 
+extern unsigned int sysctl_sched_dlserver_maxdefer_ms;
+
 #ifdef CONFIG_UCLAMP_TASK
 extern unsigned int sysctl_sched_uclamp_util_min;
 extern unsigned int sysctl_sched_uclamp_util_max;
