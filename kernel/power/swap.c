@@ -196,8 +196,6 @@ sector_t alloc_swapdev_block(int swap)
 void free_all_swap_pages(int swap)
 {
 	struct rb_node *node;
-	if (swap < 0 || swap >= MAX_SWAPFILES)
-		return;
 
 	while ((node = swsusp_extents.rb_node)) {
 		struct swsusp_extent *ext;
