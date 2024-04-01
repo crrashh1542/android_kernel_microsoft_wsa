@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ *
+ * Panel ID: 0x4 (Kingdisplay-Ilitek2900)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x04
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-wugtrio.dtsi"
+
+/ {
+	model = "Google wugtrio sku0/unprovisioned board";
+	compatible = "google,wugtrio-sku0", "google,wugtrio-sku2147483636",
+		     "google,wugtrio", "mediatek,mt8186";
+};
+
+&panel {
+	compatible = "kingdisplay,kd101ne3-40ti";
+};
