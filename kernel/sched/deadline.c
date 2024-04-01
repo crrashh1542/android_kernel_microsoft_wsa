@@ -1071,12 +1071,6 @@ static int start_dl_timer(struct sched_dl_entity *dl_se)
 	if (dl_se->dl_defer_armed) {
 		WARN_ON_ONCE(!dl_se->dl_throttled);
 		act = ns_to_ktime(dl_se->deadline - dl_se->runtime);
-		if (sysctl_sched_dlserver_maxdefer_ms >= 0) {
-			ktime_t dlserver_maxdefer = rq_clock(rq) +
-				ms_to_ktime(sysctl_sched_dlserver_maxdefer_ms);
-			if (ktime_after(act, dlserver_maxdefer))
-				act = dlserver_maxdefer;
-		}
 	} else {
 		act = ns_to_ktime(dl_next_period(dl_se));
 	}
@@ -3104,13 +3098,6 @@ void __getparam_dl(struct task_struct *p, struct sched_attr *attr)
  */
 unsigned int sysctl_sched_dl_period_max = 1 << 22; /* ~4 seconds */
 unsigned int sysctl_sched_dl_period_min = 100;     /* 100 us */
-/*
- * Maximum time in milliseconds dlserver is allowed to be deferred so as to not
- * preempt the running RT task immediately.
- * Negative value disables this sysctl, Default logic kicks in and dlserver
- * is throttled until (deadline - runtime).
- */
-unsigned int sysctl_sched_dlserver_maxdefer_ms = 8;
 
 /*
  * This function validates the new parameters of a -deadline task.
