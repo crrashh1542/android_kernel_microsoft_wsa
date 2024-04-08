@@ -8,16 +8,6 @@
 #include "mt8186-corsola-it6505.dtsi"
 
 / {
-	pp3300_micvdd_s3: regulator-pp3300_micvdd_s3 {
-		compatible = "regulator-fixed";
-		regulator-name = "pp3300_micvdd_s3";
-		pinctrl-names = "default";
-		pinctrl-0 = <&rt1019p_pins_default>;
-		enable-active-high;
-		gpio = <&pio 150 GPIO_ACTIVE_HIGH>;
-		vin-supply = <&pp3300_z2>;
-	};
-
 	tboard_thermistor1: thermal-sensor1 {
 		compatible = "generic-adc-thermal";
 		#thermal-sensor-cells = <0>;
@@ -175,7 +165,9 @@
 		compatible = "realtek,rt5650";
 		reg = <0x1a>;
 		avdd-supply = <&mt6366_vio18_reg>;
-		cpvdd-supply = <&pp3300_micvdd_s3>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rt1019p_pins_default>;
+		cbj-sleeve-gpio = <&pio 150 GPIO_ACTIVE_HIGH>;
 		interrupt-parent = <&pio>;
 		interrupts = <17 IRQ_TYPE_EDGE_BOTH>;
 		#sound-dai-cells = <0>;
