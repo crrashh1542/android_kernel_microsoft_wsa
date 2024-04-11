@@ -5618,6 +5618,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long task_delta, idle_task_delta, dequeue = 1;
+	long rq_h_nr_running = rq->cfs.h_nr_running;
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5691,6 +5692,13 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 done:
 	/*
+	 * Stop the dlserver if throttling resulted in no runnable
+	 * tasks.
+	 */
+	if (rq_h_nr_running && !rq->cfs.h_nr_running)
+		dl_server_stop(&rq->fair_server);
+
+	/*
 	 * Note: distribution will already see us throttled via the
 	 * throttled-list.  rq->lock protects completion.
 	 */
@@ -5705,6 +5713,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long task_delta, idle_task_delta;
+	long rq_h_nr_running = rq->cfs.h_nr_running;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
@@ -5788,6 +5797,13 @@ unthrottle_throttle:
 	}
 
 	assert_list_leaf_cfs_rq(rq);
+
+	/*
+	 * Start the dlserver if un-throttling resulted in new runnable
+	 * tasks.
+	 */
+	if (!rq_h_nr_running && rq->cfs.h_nr_running)
+		dl_server_start(&rq->fair_server);
 
 	/* Determine whether we need to wake up potentially idle CPU: */
 	if (rq->curr == rq->idle && rq->cfs.nr_running)
@@ -6395,7 +6411,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
-	if (!rq->cfs.h_nr_running) {
+	if (!rq->cfs.h_nr_running && !throttled_hierarchy(task_cfs_rq(p))) {
 		/* Account for idle runtime */
 		if (!rq->nr_running)
 			dl_server_update_idle_time(rq, rq->curr);
@@ -6579,7 +6595,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		rq->next_balance = jiffies;
 
 dequeue_throttle:
-	if (!rq->cfs.h_nr_running)
+	if (!rq->cfs.h_nr_running && !throttled_hierarchy(task_cfs_rq(p)))
 		dl_server_stop(&rq->fair_server);
 
 	util_est_update(&rq->cfs, p, task_sleep);
