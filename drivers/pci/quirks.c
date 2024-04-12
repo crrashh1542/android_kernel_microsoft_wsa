@@ -5950,4 +5950,65 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b0, aspm_l1_acceptable_latency
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56b1, aspm_l1_acceptable_latency);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c0, aspm_l1_acceptable_latency);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x56c1, aspm_l1_acceptable_latency);
+
+
+/*
+ * Puff chromeboxes specifically have an issue with the RTL811h chip
+ * enabling ASPM 1.1.  Disable it on those models.
+ */
+static const struct dmi_system_id chromebox_puff_match_table[] = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Dooly"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		}
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Duffy"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		}
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Faffy"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Kaisa"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Noibat"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Puff"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Wyvern"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
+		},
+	},
+	{ }
+};
+
+static void puff_rtl8168_aspm_settings(struct pci_dev *dev)
+{
+	if (dmi_check_system(chromebox_puff_match_table)) {
+		pci_info(dev, "Disabling ASPM L1\n");
+		pci_disable_link_state(dev, PCIE_LINK_STATE_L1);
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8168,
+			puff_rtl8168_aspm_settings);
 #endif
