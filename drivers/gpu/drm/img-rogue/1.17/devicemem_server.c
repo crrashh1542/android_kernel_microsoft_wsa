@@ -2103,22 +2103,7 @@ DevmemIntChangeSparse2(DEVMEMINT_HEAP *psDevmemHeap,
 			}
 		}
 
-		/* Do the PMR specific changes first */
-		eError = PMR_ChangeSparseMem(psPMR,
-		                             ui32AllocPageCount,
-		                             pai32AllocIndices,
-		                             ui32FreePageCount,
-		                             pai32FreeIndices,
-		                             uiSparseFlags);
-		if (PVRSRV_OK != eError)
-		{
-			PVR_DPF((PVR_DBG_MESSAGE,
-					"%s: Failed to do PMR specific changes.",
-					__func__));
-			goto e1;
-		}
-
-		/* Invalidate the page table entries for the free pages. */
+		/* Invalidate the page table entries before freeing the physical pages. */
 		if (uiSparseFlags & SPARSE_RESIZE_FREE)
 		{
 			PMR_FLAGS_T uiPMRFlags;
@@ -2149,6 +2134,21 @@ DevmemIntChangeSparse2(DEVMEMINT_HEAP *psDevmemHeap,
 					                                    IMG_FALSE);
 				}
 			}
+		}
+
+		/* Do the PMR specific changes */
+		eError = PMR_ChangeSparseMem(psPMR,
+		                             ui32AllocPageCount,
+		                             pai32AllocIndices,
+		                             ui32FreePageCount,
+		                             pai32FreeIndices,
+		                             uiSparseFlags);
+		if (PVRSRV_OK != eError)
+		{
+			PVR_DPF((PVR_DBG_MESSAGE,
+			         "%s: Failed to do PMR specific changes.",
+			         __func__));
+			goto e1;
 		}
 
 		/* Wire the pages tables that got allocated */
