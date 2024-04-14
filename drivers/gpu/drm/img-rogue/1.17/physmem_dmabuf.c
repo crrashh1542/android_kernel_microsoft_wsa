@@ -853,7 +853,16 @@ PhysmemExportDmaBuf(CONNECTION_DATA *psConnection,
 	return PVRSRV_OK;
 
 fail_dma_buf:
+	/*
+	 * In this error path the dmabuf will always drop its last reference
+	 * since we just created it with export, 0 ref count will
+	 * call into our release function which will Unref the PMR.
+	 */
 	dma_buf_put(psDmaBuf);
+	mutex_unlock(&g_HashLock);
+
+	PVR_ASSERT(eError != PVRSRV_OK);
+	return eError;
 
 fail_pmr_ref:
 	mutex_unlock(&g_HashLock);
