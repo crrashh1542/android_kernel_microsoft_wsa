@@ -143,8 +143,11 @@ static int cam_eeprom_read(void *priv, unsigned int off, void *val,
 			   size_t count)
 {
 	struct cam_eeprom_ctrl_t *e_ctrl = priv;
+	loff_t offset = off;
 
-	return cam_eeprom_nvmem_read(e_ctrl, off, val, count);
+	return memory_read_from_buffer(val, count, &offset,
+				       e_ctrl->eeprom_content,
+				       e_ctrl->memory_bytes);
 }
 
 static int cam_eeprom_init_subdev(struct cam_eeprom_ctrl_t *e_ctrl)
@@ -425,13 +428,53 @@ static void cam_eeprom_spi_driver_remove(struct spi_device *sdev)
 	kfree(e_ctrl);
 }
 
+static struct nvmem_device *cam_eeprom_init_nvmem(struct cam_eeprom_ctrl_t *e_ctrl)
+{
+	struct device *dev = &e_ctrl->soc_info.pdev->dev;
+	struct nvmem_config nvmem_config = {};
+	struct nvmem_device *nvmem;
+	int ret;
+	int i;
+
+	e_ctrl->eeprom_content = kzalloc(e_ctrl->memory_bytes, GFP_KERNEL);
+	if (!e_ctrl->eeprom_content)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < e_ctrl->memory_bytes; i += I2C_REG_DATA_MAX) {
+		int block = min(I2C_REG_DATA_MAX, e_ctrl->memory_bytes - i);
+
+		ret = cam_eeprom_nvmem_read(e_ctrl, i,
+					    e_ctrl->eeprom_content + i, block);
+		if (ret) {
+			kfree(e_ctrl->eeprom_content);
+			return ERR_PTR(ret);
+		}
+	}
+
+	nvmem_config.dev = dev;
+	nvmem_config.read_only = true;
+	nvmem_config.root_only = false;
+	nvmem_config.owner = THIS_MODULE;
+	nvmem_config.compat = true;
+	nvmem_config.base_dev = dev;
+	nvmem_config.reg_read = cam_eeprom_read;
+	nvmem_config.priv = e_ctrl;
+	nvmem_config.stride = 1;
+	nvmem_config.word_size = 1;
+	nvmem_config.size = e_ctrl->memory_bytes;
+	nvmem = nvmem_register(&nvmem_config);
+	if (IS_ERR(nvmem))
+		kfree(e_ctrl->eeprom_content);
+
+	return nvmem;
+}
+
 static int32_t cam_eeprom_platform_driver_probe(
 	struct platform_device *pdev)
 {
 	int32_t                         rc = 0;
 	struct cam_eeprom_ctrl_t       *e_ctrl = NULL;
 	struct cam_eeprom_soc_private  *soc_private = NULL;
-	struct nvmem_config nvmem_config = { };
 	struct device *dev = &pdev->dev;
 
 	e_ctrl = kzalloc(sizeof(struct cam_eeprom_ctrl_t), GFP_KERNEL);
@@ -470,6 +513,12 @@ static int32_t cam_eeprom_platform_driver_probe(
 		CAM_ERR(CAM_EEPROM, "failed: soc init rc %d", rc);
 		goto free_soc;
 	}
+
+	if (!cam_cci_get_subdev(e_ctrl->cci_num)) {
+		rc = -EPROBE_DEFER;
+		goto free_soc;
+	}
+
 	rc = cam_eeprom_update_i2c_info(e_ctrl, &soc_private->i2c_info);
 	if (rc) {
 		CAM_ERR(CAM_EEPROM, "failed: to update i2c info rc %d", rc);
@@ -498,19 +547,7 @@ static int32_t cam_eeprom_platform_driver_probe(
 		}
 	}
 
-	nvmem_config.dev = dev;
-	nvmem_config.read_only = true;
-	nvmem_config.root_only = false;
-	nvmem_config.owner = THIS_MODULE;
-	nvmem_config.compat = true;
-	nvmem_config.base_dev = dev;
-	nvmem_config.reg_read = cam_eeprom_read;
-	nvmem_config.priv = e_ctrl;
-	nvmem_config.stride = 1;
-	nvmem_config.word_size = 1;
-	nvmem_config.size = e_ctrl->memory_bytes;
-
-	e_ctrl->nvmem = nvmem_register(&nvmem_config);
+	e_ctrl->nvmem = cam_eeprom_init_nvmem(e_ctrl);
 	if (IS_ERR(e_ctrl->nvmem)) {
 		rc = PTR_ERR(e_ctrl->nvmem);
 		goto free_soc;
@@ -530,6 +567,7 @@ static int32_t cam_eeprom_platform_driver_probe(
 	return rc;
 unreg_nvmem:
 	nvmem_unregister(e_ctrl->nvmem);
+	kfree(e_ctrl->eeprom_content);
 free_soc:
 	kfree(soc_private);
 free_cci_client:
@@ -556,6 +594,7 @@ static int cam_eeprom_platform_driver_remove(struct platform_device *pdev)
 	soc_info = &e_ctrl->soc_info;
 
 	nvmem_unregister(e_ctrl->nvmem);
+	kfree(e_ctrl->eeprom_content);
 
 	for (i = 0; i < soc_info->num_clk; i++)
 		devm_clk_put(soc_info->dev, soc_info->clk[i]);
