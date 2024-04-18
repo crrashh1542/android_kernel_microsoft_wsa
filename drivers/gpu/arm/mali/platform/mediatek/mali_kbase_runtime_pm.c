@@ -25,10 +25,16 @@ int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq)
 	if (kbdev->current_freqs[0] == freq)
 		return 0;
 
-	err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[sub].clk);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to set sub clock as src: %d\n", err);
-		return err;
+	if (ctx->manual_mux_reparent && cfg->num_clks > 1) {
+		/*
+		 * The mux clock doesn't automatically switch to a stable clock
+		 * parent during PLL rate change, so we do it here.
+		 */
+		err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[sub].clk);
+		if (err) {
+			dev_err(kbdev->dev, "Failed to set sub clock as src: %d\n", err);
+			return err;
+		}
 	}
 
 	/* Hard-coded rules about which clock should be used for freq setting */
@@ -38,6 +44,9 @@ int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq)
 		break;
 	case 4:
 		err = clk_set_rate(ctx->clks[main].clk, freq);
+		break;
+	case 1: /* upstream: only cg clock; set_rate is passed upwards; auto reparenting */
+		err = clk_set_rate(ctx->clks[0].clk, freq);
 		break;
 	default:
 		err = -EINVAL;
@@ -49,10 +58,12 @@ int mtk_set_frequency(struct kbase_device *kbdev, unsigned long freq)
 	}
 	kbdev->current_freqs[0] = freq;
 
-	err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[main].clk);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to set main clock as src: %d\n", err);
-		return err;
+	if (ctx->manual_mux_reparent && cfg->num_clks > 1) {
+		err = clk_set_parent(ctx->clks[mux].clk, ctx->clks[main].clk);
+		if (err) {
+			dev_err(kbdev->dev, "Failed to set main clock as src: %d\n", err);
+			return err;
+		}
 	}
 
 	return 0;
@@ -108,6 +119,20 @@ int mtk_set_voltages(struct kbase_device *kbdev, unsigned long *target_volts, bo
 	if ((inc && kbdev->current_voltages[0] > target_volts[0]) ||
 	   (!inc && kbdev->current_voltages[0] < target_volts[0]))
 		return 0;
+
+	/* With upstream bindings, we let mtk-regulator-coupler driver handle vsram_gpu */
+	if (kbdev->nr_regulators == 1) {
+		err = regulator_set_voltage(kbdev->regulators[0], target_volts[0],
+					    target_volts[0] + cfg->supply_tolerance_microvolt);
+		if (err) {
+			dev_err(kbdev->dev, "Failed to set regulator voltage: %d\n", err);
+			return err;
+		}
+
+		kbdev->current_voltages[0] = target_volts[0];
+
+		return 0;
+	}
 
 	for (i = 0; i < kbdev->nr_regulators; i++)
 		step_volts[i] = kbdev->current_voltages[i];
@@ -325,25 +350,25 @@ void kbase_pm_domain_term(struct kbase_device *kbdev)
 			dev_pm_domain_detach(kbdev->pm_domain_devs[i], true);
 }
 
-int kbase_pm_runtime_callback_init(struct kbase_device *kbdev)
+static int kbase_pm_runtime_callback_init(struct kbase_device *kbdev)
 {
 	return 0;
 }
 
-void kbase_pm_runtime_callback_term(struct kbase_device *kbdev)
+static void kbase_pm_runtime_callback_term(struct kbase_device *kbdev)
 {
 }
 
-int kbase_pm_runtime_callback_on(struct kbase_device *kbdev)
+static int kbase_pm_runtime_callback_on(struct kbase_device *kbdev)
 {
 	return 0;
 }
 
-void kbase_pm_runtime_callback_off(struct kbase_device *kbdev)
+static void kbase_pm_runtime_callback_off(struct kbase_device *kbdev)
 {
 }
 
-int kbase_pm_callback_power_on(struct kbase_device *kbdev)
+static int kbase_pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int ret, err, reg_idx, pm_idx;
 	struct mtk_platform_context *ctx = kbdev->platform_context;
@@ -417,7 +442,7 @@ reg_err:
 	return ret;
 }
 
-void kbase_pm_callback_power_off(struct kbase_device *kbdev)
+static void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 {
 	int err, i;
 	struct mtk_platform_context *ctx = kbdev->platform_context;
@@ -452,15 +477,33 @@ void kbase_pm_callback_power_off(struct kbase_device *kbdev)
 	}
 }
 
-void kbase_pm_callback_suspend(struct kbase_device *kbdev)
+static void kbase_pm_callback_suspend(struct kbase_device *kbdev)
 {
 	kbase_pm_callback_power_off(kbdev);
 }
 
-void kbase_pm_callback_resume(struct kbase_device *kbdev)
+static void kbase_pm_callback_resume(struct kbase_device *kbdev)
 {
 	kbase_pm_callback_power_on(kbdev);
 }
+
+struct kbase_pm_callback_conf mtk_pm_callbacks = {
+	.power_on_callback = kbase_pm_callback_power_on,
+	.power_off_callback = kbase_pm_callback_power_off,
+	.power_suspend_callback = kbase_pm_callback_suspend,
+	.power_resume_callback = kbase_pm_callback_resume,
+#ifdef KBASE_PM_RUNTIME
+	.power_runtime_init_callback = kbase_pm_runtime_callback_init,
+	.power_runtime_term_callback = kbase_pm_runtime_callback_term,
+	.power_runtime_on_callback = kbase_pm_runtime_callback_on,
+	.power_runtime_off_callback = kbase_pm_runtime_callback_off,
+#else				/* KBASE_PM_RUNTIME */
+	.power_runtime_init_callback = NULL,
+	.power_runtime_term_callback = NULL,
+	.power_runtime_on_callback = NULL,
+	.power_runtime_off_callback = NULL,
+#endif				/* KBASE_PM_RUNTIME */
+};
 
 int mtk_platform_init(struct kbase_device *kbdev)
 {

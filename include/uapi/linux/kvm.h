@@ -110,6 +110,8 @@ struct kvm_userspace_memory_region {
  */
 #define KVM_MEM_LOG_DIRTY_PAGES	(1UL << 0)
 #define KVM_MEM_READONLY	(1UL << 1)
+/* KVM_MEM_GUEST_MEMFD (1UL << 2) */
+#define KVM_MEM_NON_COHERENT_DMA (1UL << 3)
 
 /* for KVM_IRQ_LINE */
 struct kvm_irq_level {
@@ -1112,9 +1114,11 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_BINARY_STATS_FD 203
 #define KVM_CAP_EXIT_ON_EMULATION_FAILURE 204
 #define KVM_CAP_ARM_MTE 205
+#define KVM_CAP_USER_CONFIGURE_NONCOHERENT_DMA 236
 #define KVM_CAP_GET_CUR_CPUFREQ 512
 #define KVM_CAP_UTIL_HINT 513
 #define KVM_CAP_GET_CPUFREQ_TBL 514
+#define KVM_CAP_PV_SCHED	600
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -2009,5 +2013,9 @@ struct kvm_stats_desc {
 };
 
 #define KVM_GET_STATS_FD  _IO(KVMIO,  0xce)
+
+/* Available with KVM_CAP_PV_SCHED */
+#define KVM_SET_PV_SCHED_ENABLED	_IOW(KVMIO, 0xe0, int)
+#define KVM_GET_PV_SCHED_ENABLED	_IOR(KVMIO, 0xe1, int)
 
 #endif /* __LINUX_KVM_H */

@@ -12,6 +12,7 @@
 #define IPU6_FIRMWARE_NAME		"intel/ipu6_fw.bin"
 #define IPU6EPMTL_FIRMWARE_NAME		"intel/ipu6epmtl_fw.bin"
 #define IPU6EPADLN_FIRMWARE_NAME	"intel/ipu6epadln_fw.bin"
+#define IPU6EPMTLES_FIRMWARE_NAME	"intel/ipu6epmtles_fw.bin"
 
 /*
  * The following definitions are encoded to the media_device's model field so

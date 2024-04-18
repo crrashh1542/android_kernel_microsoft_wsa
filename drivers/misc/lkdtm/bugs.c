@@ -29,7 +29,7 @@ struct lkdtm_list {
 #if defined(CONFIG_FRAME_WARN) && (CONFIG_FRAME_WARN > 0)
 #define REC_STACK_SIZE (_AC(CONFIG_FRAME_WARN, UL) / 2)
 #else
-#define REC_STACK_SIZE (THREAD_SIZE / 8)
+#define REC_STACK_SIZE (THREAD_SIZE / 8UL)
 #endif
 #define REC_NUM_DEFAULT ((THREAD_SIZE / REC_STACK_SIZE) * 2)
 
@@ -188,10 +188,11 @@ void lkdtm_SPINLOCKUP(void)
 	__release(&lock_me_up);
 }
 
-void lkdtm_HUNG_TASK(void)
+void __noreturn lkdtm_HUNG_TASK(void)
 {
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule();
+	BUG();
 }
 
 volatile unsigned int huge = INT_MAX - 2;

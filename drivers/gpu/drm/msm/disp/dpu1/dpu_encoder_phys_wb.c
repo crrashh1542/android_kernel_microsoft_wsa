@@ -181,10 +181,10 @@ static void dpu_encoder_phys_wb_setup_fb(struct dpu_encoder_phys *phys_enc,
 }
 
 /**
- * dpu_encoder_phys_wb_setup_cdp - setup chroma down prefetch block
+ * dpu_encoder_phys_wb_setup_ctl - setup wb pipeline for ctl path
  * @phys_enc:Pointer to physical encoder
  */
-static void dpu_encoder_phys_wb_setup_cdp(struct dpu_encoder_phys *phys_enc)
+static void dpu_encoder_phys_wb_setup_ctl(struct dpu_encoder_phys *phys_enc)
 {
 	struct dpu_hw_wb *hw_wb;
 	struct dpu_hw_ctl *ctl;
@@ -349,7 +349,7 @@ static void dpu_encoder_phys_wb_setup(
 
 	dpu_encoder_phys_wb_setup_fb(phys_enc, fb);
 
-	dpu_encoder_phys_wb_setup_cdp(phys_enc);
+	dpu_encoder_phys_wb_setup_ctl(phys_enc);
 
 }
 
@@ -460,7 +460,8 @@ static int dpu_encoder_phys_wb_wait_for_commit_done(
 	wait_info.atomic_cnt = &phys_enc->pending_kickoff_cnt;
 	wait_info.timeout_ms = KICKOFF_TIMEOUT_MS;
 
-	ret = dpu_encoder_helper_wait_for_irq(phys_enc, INTR_IDX_WB_DONE,
+	ret = dpu_encoder_helper_wait_for_irq(phys_enc,
+			phys_enc->irq[INTR_IDX_WB_DONE],
 			dpu_encoder_phys_wb_done_irq, &wait_info);
 	if (ret == -ETIMEDOUT)
 		_dpu_encoder_phys_wb_handle_wbdone_timeout(phys_enc);

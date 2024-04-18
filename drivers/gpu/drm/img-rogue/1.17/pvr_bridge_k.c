@@ -79,6 +79,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "srvcore.h"
 #include "common_srvcore_bridge.h"
+#include "kernel_compatibility.h"
 
 PVRSRV_ERROR InitDMABUFBridge(void);
 void DeinitDMABUFBridge(void);
@@ -526,6 +527,9 @@ PVRSRV_MMap(struct file *pFile, struct vm_area_struct *ps_vma)
 	IMG_HANDLE hSecurePMRHandle = (IMG_HANDLE)((uintptr_t)ps_vma->vm_pgoff);
 	PMR *psPMR;
 	PVRSRV_ERROR eError;
+	PVRSRV_MEMALLOCFLAGS_T uiProtFlags =
+	    (BITMASK_HAS(ps_vma->vm_flags, VM_READ) ? PVRSRV_MEMALLOCFLAG_CPU_READABLE : 0) |
+	    (BITMASK_HAS(ps_vma->vm_flags, VM_WRITE) ? PVRSRV_MEMALLOCFLAG_CPU_WRITEABLE : 0);
 
 	if (psConnection == NULL)
 	{
@@ -554,11 +558,18 @@ PVRSRV_MMap(struct file *pFile, struct vm_area_struct *ps_vma)
 	}
 
 	mutex_lock(&g_sMMapMutex);
+
+	/* Forcibly clear the VM_MAYWRITE flag as this is inherited from the
+	 * kernel mmap code and we do not want to produce a potentially writable
+	 * mapping from a read-only mapping.
+	 */
+	pvr_vm_flags_clear(ps_vma, VM_MAYWRITE);
+
 	/* Note: PMRMMapPMR will take a reference on the PMR.
 	 * Unref the handle immediately, because we have now done
 	 * the required operation on the PMR (whether it succeeded or not)
 	 */
-	eError = PMRMMapPMR(psPMR, ps_vma);
+	eError = PMRMMapPMR(psPMR, ps_vma, uiProtFlags);
 	mutex_unlock(&g_sMMapMutex);
 	PVRSRVReleaseHandle(psConnection->psHandleBase, hSecurePMRHandle, PVRSRV_HANDLE_TYPE_PHYSMEM_PMR);
 	if (eError != PVRSRV_OK)
@@ -575,8 +586,8 @@ PVRSRV_MMap(struct file *pFile, struct vm_area_struct *ps_vma)
 e0:
 	PVRSRVDriverThreadExit();
 
-	PVR_DPF((PVR_DBG_ERROR, "Unable to translate error %d", eError));
+	PVR_DPF((PVR_DBG_ERROR, "Failed with error: %s", PVRSRVGetErrorString(eError)));
 	PVR_ASSERT(eError != PVRSRV_OK);
 
-	return -ENOENT; // -EAGAIN // or what?
+	return OSPVRSRVToNativeError(eError);
 }

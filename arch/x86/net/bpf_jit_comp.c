@@ -411,7 +411,7 @@ static void emit_return(u8 **pprog, u8 *ip)
 	u8 *prog = *pprog;
 
 	if (cpu_feature_enabled(X86_FEATURE_RETHUNK)) {
-		emit_jump(&prog, &__x86_return_thunk, ip);
+		emit_jump(&prog, x86_return_thunk, ip);
 	} else {
 		EMIT1(0xC3);		/* ret */
 		if (IS_ENABLED(CONFIG_SLS))
@@ -2402,4 +2402,50 @@ out:
 bool bpf_jit_supports_kfunc_call(void)
 {
 	return true;
+}
+
+void bpf_arch_poke_desc_update(struct bpf_jit_poke_descriptor *poke,
+			       struct bpf_prog *new, struct bpf_prog *old)
+{
+	u8 *old_addr, *new_addr, *old_bypass_addr;
+	int ret;
+
+	old_bypass_addr = old ? NULL : poke->bypass_addr;
+	old_addr = old ? (u8 *)old->bpf_func + poke->adj_off : NULL;
+	new_addr = new ? (u8 *)new->bpf_func + poke->adj_off : NULL;
+
+	/*
+	 * On program loading or teardown, the program's kallsym entry
+	 * might not be in place, so we use __bpf_arch_text_poke to skip
+	 * the kallsyms check.
+	 */
+	if (new) {
+		ret = __bpf_arch_text_poke(poke->tailcall_target,
+					   BPF_MOD_JUMP,
+					   old_addr, new_addr, true);
+		BUG_ON(ret < 0);
+		if (!old) {
+			ret = __bpf_arch_text_poke(poke->tailcall_bypass,
+						   BPF_MOD_JUMP,
+						   poke->bypass_addr,
+						   NULL, true);
+			BUG_ON(ret < 0);
+		}
+	} else {
+		ret = __bpf_arch_text_poke(poke->tailcall_bypass,
+					   BPF_MOD_JUMP,
+					   old_bypass_addr,
+					   poke->bypass_addr, true);
+		BUG_ON(ret < 0);
+		/* let other CPUs finish the execution of program
+		 * so that it will not possible to expose them
+		 * to invalid nop, stack unwind, nop state
+		 */
+		if (!ret)
+			synchronize_rcu();
+		ret = __bpf_arch_text_poke(poke->tailcall_target,
+					   BPF_MOD_JUMP,
+					   old_addr, NULL, true);
+		BUG_ON(ret < 0);
+	}
 }

@@ -791,8 +791,8 @@ static void __intel_backlight_enable(const struct intel_crtc_state *crtc_state,
 
 	WARN_ON(panel->backlight.max == 0);
 
-	if (panel->backlight.level <= panel->backlight.min) {
-		panel->backlight.level = panel->backlight.max;
+	if (panel->backlight.level < panel->backlight.min) {
+		panel->backlight.level = panel->backlight.min;
 		if (panel->backlight.device)
 			panel->backlight.device->props.brightness =
 				scale_hw_to_user(connector,
@@ -1399,8 +1399,10 @@ static int vlv_setup_backlight(struct intel_connector *connector, enum pipe pipe
 	ctl2 = intel_de_read(dev_priv, VLV_BLC_PWM_CTL2(pipe));
 	panel->backlight.active_low_pwm = ctl2 & BLM_POLARITY_I965;
 
-	ctl = intel_de_read(dev_priv, VLV_BLC_PWM_CTL(pipe));
-	panel->backlight.pwm_level_max = ctl >> 16;
+	if (!intel_has_quirk(dev_priv, QUIRK_IGNORE_DEFAULT_PWM_FREQUENCY)) {
+		ctl = intel_de_read(dev_priv, VLV_BLC_PWM_CTL(pipe));
+		panel->backlight.pwm_level_max = ctl >> 16;
+	}
 
 	if (!panel->backlight.pwm_level_max)
 		panel->backlight.pwm_level_max = get_backlight_max_vbt(connector);

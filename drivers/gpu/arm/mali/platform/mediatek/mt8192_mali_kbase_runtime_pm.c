@@ -46,25 +46,8 @@ const struct mtk_hw_config mt8192_hw_config = {
 };
 
 struct mtk_platform_context mt8192_platform_context = {
+	.manual_mux_reparent = true,
 	.config = &mt8192_hw_config,
-};
-
-struct kbase_pm_callback_conf mt8192_pm_callbacks = {
-	.power_on_callback = kbase_pm_callback_power_on,
-	.power_off_callback = kbase_pm_callback_power_off,
-	.power_suspend_callback = kbase_pm_callback_suspend,
-	.power_resume_callback = kbase_pm_callback_resume,
-#ifdef KBASE_PM_RUNTIME
-	.power_runtime_init_callback = kbase_pm_runtime_callback_init,
-	.power_runtime_term_callback = kbase_pm_runtime_callback_term,
-	.power_runtime_on_callback = kbase_pm_runtime_callback_on,
-	.power_runtime_off_callback = kbase_pm_runtime_callback_off,
-#else				/* KBASE_PM_RUNTIME */
-	.power_runtime_init_callback = NULL,
-	.power_runtime_term_callback = NULL,
-	.power_runtime_on_callback = NULL,
-	.power_runtime_off_callback = NULL,
-#endif				/* KBASE_PM_RUNTIME */
 };
 
 /**

@@ -41,6 +41,7 @@
 #include "intel_drrs.h"
 #include "intel_panel.h"
 #include "intel_quirks.h"
+#include "intel_vrr.h"
 
 bool intel_panel_use_ssc(struct drm_i915_private *i915)
 {
@@ -57,6 +58,29 @@ intel_panel_preferred_fixed_mode(struct intel_connector *connector)
 					struct drm_display_mode, head);
 }
 
+static bool is_best_fixed_mode(struct intel_connector *connector,
+			       int vrefresh, int fixed_mode_vrefresh,
+			       const struct drm_display_mode *best_mode)
+{
+	/* we want to always return something */
+	if (!best_mode)
+		return true;
+
+	/*
+	 * With VRR always pick a mode with equal/higher than requested
+	 * vrefresh, which we can then reduce to match the requested
+	 * vrefresh by extending the vblank length.
+	 */
+	if (intel_vrr_is_in_range(connector, vrefresh) &&
+	    intel_vrr_is_in_range(connector, fixed_mode_vrefresh) &&
+	    fixed_mode_vrefresh < vrefresh)
+		return false;
+
+	/* pick the fixed_mode that is closest in terms of vrefresh */
+	return abs(fixed_mode_vrefresh - vrefresh) <
+		abs(drm_mode_vrefresh(best_mode) - vrefresh);
+}
+
 const struct drm_display_mode *
 intel_panel_fixed_mode(struct intel_connector *connector,
 		       const struct drm_display_mode *mode)
@@ -64,11 +88,11 @@ intel_panel_fixed_mode(struct intel_connector *connector,
 	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
 	int vrefresh = drm_mode_vrefresh(mode);
 
-	/* pick the fixed_mode that is closest in terms of vrefresh */
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
-		if (!best_mode ||
-		    abs(drm_mode_vrefresh(fixed_mode) - vrefresh) <
-		    abs(drm_mode_vrefresh(best_mode) - vrefresh))
+		int fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
+
+		if (is_best_fixed_mode(connector, vrefresh,
+				       fixed_mode_vrefresh, best_mode))
 			best_mode = fixed_mode;
 	}
 
@@ -177,26 +201,45 @@ int intel_panel_compute_config(struct intel_connector *connector,
 {
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, adjusted_mode);
+	int vrefresh, fixed_mode_vrefresh;
+	bool is_vrr;
 
 	if (!fixed_mode)
 		return 0;
 
-	/*
-	 * We don't want to lie too much to the user about the refresh
-	 * rate they're going to get. But we have to allow a bit of latitude
-	 * for Xorg since it likes to automagically cook up modes with slightly
-	 * off refresh rates.
-	 */
-	if (abs(drm_mode_vrefresh(adjusted_mode) - drm_mode_vrefresh(fixed_mode)) > 1) {
-		drm_dbg_kms(connector->base.dev,
-			    "[CONNECTOR:%d:%s] Requested mode vrefresh (%d Hz) does not match fixed mode vrefresh (%d Hz)\n",
-			    connector->base.base.id, connector->base.name,
-			    drm_mode_vrefresh(adjusted_mode), drm_mode_vrefresh(fixed_mode));
+	vrefresh = drm_mode_vrefresh(adjusted_mode);
+	fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
 
-		return -EINVAL;
+	/*
+	 * Assume that we shouldn't muck about with the
+	 * timings if they don't land in the VRR range.
+	 */
+	is_vrr = intel_vrr_is_in_range(connector, vrefresh) &&
+		intel_vrr_is_in_range(connector, fixed_mode_vrefresh);
+
+	if (!is_vrr) {
+		/*
+		 * We don't want to lie too much to the user about the refresh
+		 * rate they're going to get. But we have to allow a bit of latitude
+		 * for Xorg since it likes to automagically cook up modes with slightly
+		 * off refresh rates.
+		 */
+		if (abs(vrefresh - fixed_mode_vrefresh) > 1) {
+			drm_dbg_kms(connector->base.dev,
+				    "[CONNECTOR:%d:%s] Requested mode vrefresh (%d Hz) does not match fixed mode vrefresh (%d Hz)\n",
+				    connector->base.base.id, connector->base.name,
+				    vrefresh, fixed_mode_vrefresh);
+
+			return -EINVAL;
+		}
 	}
 
 	drm_mode_copy(adjusted_mode, fixed_mode);
+
+	if (is_vrr && fixed_mode_vrefresh != vrefresh)
+		adjusted_mode->vtotal =
+			DIV_ROUND_CLOSEST(adjusted_mode->clock * 1000,
+					  adjusted_mode->htotal * vrefresh);
 
 	drm_mode_set_crtcinfo(adjusted_mode, 0);
 

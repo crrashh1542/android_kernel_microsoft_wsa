@@ -321,6 +321,12 @@ int32_t cam_context_config_dev_to_hw(
 		(uint32_t)cmd->offset);
 	header_size = packet->header.size;
 
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
+
 	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
 	if (!packet_local) {
 		CAM_ERR(CAM_CTXT, "Alloc and copy fail");
@@ -424,6 +430,12 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	packet = (struct cam_packet *) ((uint8_t *)packet_addr +
 		(uint32_t)cmd->offset);
 	header_size = packet->header.size;
+
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
+		rc = -ENOMEM;
+		goto free_cpu_buf;
+	}
 
 	packet_local = (struct cam_packet*)(cam_common_mem_kdup(packet, header_size));
 	if (!packet_local) {
@@ -627,7 +639,7 @@ int32_t cam_context_acquire_dev_to_hw(struct cam_context *ctx,
 	req_hdl_param.priv = ctx;
 	req_hdl_param.ops = ctx->crm_ctx_intf;
 	req_hdl_param.dev_id = ctx->dev_id;
-	ctx->dev_hdl = cam_create_device_hdl(&req_hdl_param);
+	ctx->dev_hdl = cam_create_device_ctx_hdl(&req_hdl_param);
 	if (ctx->dev_hdl <= 0) {
 		rc = -EFAULT;
 		CAM_ERR(CAM_CTXT, "[%s][%d] Can not create device handle",

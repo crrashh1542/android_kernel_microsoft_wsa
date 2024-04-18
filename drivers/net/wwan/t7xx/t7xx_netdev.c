@@ -27,11 +27,12 @@
 #include <linux/list.h>
 #include <linux/netdev_features.h>
 #include <linux/netdevice.h>
+#include <linux/pm_runtime.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
 #include <linux/wwan.h>
-#include <net/pkt_sched.h>
 #include <net/ipv6.h>
+#include <net/pkt_sched.h>
 
 #include "t7xx_hif_dpmaif_rx.h"
 #include "t7xx_hif_dpmaif_tx.h"
@@ -45,16 +46,28 @@
 
 static void t7xx_ccmni_enable_napi(struct t7xx_ccmni_ctrl *ctlb)
 {
-	int i;
+	struct dpmaif_ctrl *ctrl;
+	int i, ret;
+
+	ctrl =  ctlb->hif_ctrl;
 
 	if (ctlb->is_napi_en)
 		return;
 
 	for (i = 0; i < RXQ_NUM; i++) {
+		/* The usage count has to be bumped every time before calling
+		 * napi_schedule. It will be decresed in the poll routine,
+		 * right after napi_complete_done is called.
+		 */
+		ret = pm_runtime_resume_and_get(ctrl->dev);
+		if (ret < 0) {
+			dev_err(ctrl->dev, "Failed to resume device: %d\n",
+				ret);
+			return;
+		}
 		napi_enable(ctlb->napi[i]);
 		napi_schedule(ctlb->napi[i]);
 	}
-
 	ctlb->is_napi_en = true;
 }
 
@@ -80,12 +93,8 @@ static int t7xx_ccmni_open(struct net_device *dev)
 
 	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
-	if (!atomic_read(&ccmni_ctl->napi_usr_refcnt)) {
+	if (!atomic_fetch_inc(&ccmni_ctl->napi_usr_refcnt))
 		t7xx_ccmni_enable_napi(ccmni_ctl);
-		atomic_set(&ccmni_ctl->napi_usr_refcnt, 1);
-	} else {
-		atomic_inc(&ccmni_ctl->napi_usr_refcnt);
-	}
 
 	atomic_inc(&ccmni->usage);
 	return 0;
@@ -171,10 +180,10 @@ static void t7xx_ccmni_start(struct t7xx_ccmni_ctrl *ctlb)
 			netif_tx_start_all_queues(ccmni->dev);
 			netif_carrier_on(ccmni->dev);
 		}
-
-		if (atomic_read(&ctlb->napi_usr_refcnt))
-			t7xx_ccmni_enable_napi(ctlb);
 	}
+
+	if (atomic_read(&ctlb->napi_usr_refcnt))
+		t7xx_ccmni_enable_napi(ctlb);
 }
 
 static void t7xx_ccmni_pre_stop(struct t7xx_ccmni_ctrl *ctlb)
@@ -196,6 +205,9 @@ static void t7xx_ccmni_post_stop(struct t7xx_ccmni_ctrl *ctlb)
 {
 	struct t7xx_ccmni *ccmni;
 	int i;
+
+	if (atomic_read(&ctlb->napi_usr_refcnt))
+		t7xx_ccmni_disable_napi(ctlb);
 
 	for (i = 0; i < ctlb->nic_dev_num; i++) {
 		ccmni = ctlb->ccmni_inst[i];

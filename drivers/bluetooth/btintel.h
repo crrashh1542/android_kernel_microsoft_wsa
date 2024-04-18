@@ -144,6 +144,11 @@ struct intel_offload_use_cases {
 #define INTEL_TLV_DEBUG_EXCEPTION	0x02
 #define INTEL_TLV_TEST_EXCEPTION	0xDE
 
+#define INTEL_OP_PPAG_CMD		0xFE0B
+struct hci_ppag_enable_cmd {
+	__le32	ppag_enable_flags;
+} __packed;
+
 #define INTEL_HW_PLATFORM(cnvx_bt)	((u8)(((cnvx_bt) & 0x0000ff00) >> 8))
 #define INTEL_HW_VARIANT(cnvx_bt)	((u8)(((cnvx_bt) & 0x003f0000) >> 16))
 #define INTEL_CNVX_TOP_TYPE(cnvx_top)	((cnvx_top) & 0x00000fff)

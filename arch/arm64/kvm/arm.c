@@ -361,7 +361,7 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_mmu_free_memory_cache(&vcpu->arch.mmu_page_cache);
 	kvm_timer_vcpu_terminate(vcpu);
 	kvm_pmu_vcpu_destroy(vcpu);
-
+	kvm_vgic_vcpu_destroy(vcpu);
 	kvm_arm_vcpu_destroy(vcpu);
 }
 
@@ -1074,7 +1074,8 @@ static int kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 	unsigned int i, ret;
 	u32 phys_target = kvm_target_cpu();
 
-	if (init->target != phys_target)
+	if (init->target != KVM_ARM_TARGET_GENERIC_V8 &&
+	    init->target != phys_target)
 		return -EINVAL;
 
 	/*
@@ -1406,12 +1407,9 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		return kvm_vm_ioctl_set_device_addr(kvm, &dev_addr);
 	}
 	case KVM_ARM_PREFERRED_TARGET: {
-		int err;
-		struct kvm_vcpu_init init;
-
-		err = kvm_vcpu_preferred_target(&init);
-		if (err)
-			return err;
+		struct kvm_vcpu_init init = {
+			.target = KVM_ARM_TARGET_GENERIC_V8,
+		};
 
 		if (copy_to_user(argp, &init, sizeof(init)))
 			return -EFAULT;

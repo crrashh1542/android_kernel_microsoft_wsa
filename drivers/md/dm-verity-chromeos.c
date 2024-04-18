@@ -516,23 +516,6 @@ failed_bio_alloc:
 	return ret;
 }
 
-/*
- * Invalidate the kernel which corresponds to the root block device.
- *
- * This function stamps DMVERROR on the beginning of the kernel partition.
- *
- * The kernel partition is attempted to be found by subtracting 1 from
- *  the root partition.
- * If that fails, then the kernel_guid commandline parameter is used to
- *  find the kernel partition number.
- * The DMVERROR string is stamped over only the CHROMEOS string at the
- *  beginning of the kernel blob, leaving the rest of it intact.
- */
-static int chromeos_invalidate_kernel(struct block_device *root_bdev)
-{
-	return chromeos_invalidate_kernel_bio(root_bdev);
-}
-
 static bool retries_disabled;
 static int error_handler(struct notifier_block *nb, unsigned long transient,
 			 void *opaque_err)
@@ -542,11 +525,11 @@ static int error_handler(struct notifier_block *nb, unsigned long transient,
 	err->behavior = DM_VERITY_ERROR_BEHAVIOR_PANIC;
 	if (transient)
 		return 0;
-
 	// Do not invalidate kernel if successfully updated try count.
 	if (!retries_disabled && !chromeos_update_tries(err->dev))
 		return 0;
-	chromeos_invalidate_kernel(err->dev);
+	/* Mark the kernel partition as invalid. */
+	chromeos_invalidate_kernel_bio(err->dev);
 	return 0;
 }
 

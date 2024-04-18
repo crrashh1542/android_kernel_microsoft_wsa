@@ -502,6 +502,20 @@ static bool rc6_supported(struct intel_rc6 *rc6)
 		return false;
 	}
 
+	/*
+	 * The temporary WA to prevent system hang is to stop doing
+	 * software RC6 control, which manually force GT entering
+	 * and exiting from RC6. Noted that HW RC6 is still enabled
+	 * by default.
+	 *
+	 * TODO: enable software RC6 contorl after a fix is found.
+	 */
+	if (IS_JSL_EHL(i915)) {
+		drm_notice(&i915->drm,
+		   "WA: Software RC6 disabled for Jasperlake/Elkhartlake platforms\n");
+		return false;
+	}
+
 	return true;
 }
 

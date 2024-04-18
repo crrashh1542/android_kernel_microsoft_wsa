@@ -107,6 +107,8 @@ enum iommu_cap {
 					   transactions */
 	IOMMU_CAP_INTR_REMAP,		/* IOMMU supports interrupt isolation */
 	IOMMU_CAP_NOEXEC,		/* IOMMU_NOEXEC flag */
+	IOMMU_CAP_PRE_BOOT_PROTECTION,	/* Firmware says it used the IOMMU for
+					   DMA protection and we should too */
 };
 
 /* These are the possible reserved region types */
@@ -416,6 +418,7 @@ static inline const struct iommu_ops *dev_iommu_ops(struct device *dev)
 extern int bus_set_iommu(struct bus_type *bus, const struct iommu_ops *ops);
 extern int bus_iommu_probe(struct bus_type *bus);
 extern bool iommu_present(struct bus_type *bus);
+extern bool device_iommu_capable(struct device *dev, enum iommu_cap cap);
 extern bool iommu_capable(struct bus_type *bus, enum iommu_cap cap);
 extern struct iommu_domain *iommu_domain_alloc(struct bus_type *bus);
 extern struct iommu_group *iommu_group_get_by_id(int id);
@@ -684,6 +687,11 @@ struct iommu_fault_param {};
 struct iommu_iotlb_gather {};
 
 static inline bool iommu_present(struct bus_type *bus)
+{
+	return false;
+}
+
+static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 {
 	return false;
 }

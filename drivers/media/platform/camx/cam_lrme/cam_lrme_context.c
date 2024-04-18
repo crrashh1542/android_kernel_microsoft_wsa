@@ -17,7 +17,12 @@
 #include "cam_debug_util.h"
 #include "cam_lrme_context.h"
 
-static const char lrme_dev_name[] = "cam-lrme";
+const char *cam_lrme_dev_name(void)
+{
+	static const char *dev_name = "cam-lrme";
+
+	return dev_name;
+}
 
 static int __cam_lrme_ctx_acquire_dev_in_available(struct cam_context *ctx,
 	struct cam_acquire_dev_cmd *cmd)
@@ -242,7 +247,7 @@ int cam_lrme_context_init(struct cam_lrme_context *lrme_ctx,
 
 	memset(lrme_ctx, 0, sizeof(*lrme_ctx));
 
-	rc = cam_context_init(base_ctx, lrme_dev_name, CAM_LRME, index,
+	rc = cam_context_init(base_ctx, cam_lrme_dev_name(), CAM_LRME, index,
 		NULL, hw_intf, lrme_ctx->req_base, CAM_CTX_REQ_MAX);
 	if (rc) {
 		CAM_ERR(CAM_LRME, "Failed to init context");

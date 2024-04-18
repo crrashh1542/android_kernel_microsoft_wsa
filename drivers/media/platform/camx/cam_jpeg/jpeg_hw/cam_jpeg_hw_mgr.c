@@ -624,7 +624,7 @@ err_after_dq_free_list:
 }
 
 static void cam_jpeg_mgr_print_io_bufs(struct cam_packet *packet,
-	int32_t iommu_hdl, int32_t sec_mmu_hdl, uint32_t pf_buf_info,
+	int32_t iommu_hdl, uint32_t pf_buf_info,
 	bool *mem_found)
 {
 	uint64_t   iova_addr;
@@ -632,7 +632,6 @@ static void cam_jpeg_mgr_print_io_bufs(struct cam_packet *packet,
 	int        i;
 	int        j;
 	int        rc = 0;
-	int32_t    mmu_hdl;
 	struct cam_buf_io_cfg  *io_cfg = NULL;
 
 	if (mem_found)
@@ -668,11 +667,8 @@ static void cam_jpeg_mgr_print_io_bufs(struct cam_packet *packet,
 				io_cfg[i].format,
 				io_cfg[i].direction);
 
-			mmu_hdl = cam_mem_is_secure_buf(
-				io_cfg[i].mem_handle[j]) ? sec_mmu_hdl :
-				iommu_hdl;
 			rc = cam_mem_get_io_buf(io_cfg[i].mem_handle[j],
-				mmu_hdl, &iova_addr, &src_buf_size);
+				iommu_hdl, &iova_addr, &src_buf_size);
 			if (rc < 0) {
 				CAM_ERR(CAM_UTIL, "get src buf address fail");
 				continue;
@@ -760,7 +756,7 @@ static int cam_jpeg_mgr_prepare_hw_update(void *hw_mgr_priv,
 		(void *)packet, (void *)cmd_desc,
 		sizeof(struct cam_cmd_buf_desc));
 
-	rc = cam_packet_util_process_patches(packet, hw_mgr->iommu_hdl, -1, 0);
+	rc = cam_packet_util_process_patches(packet, hw_mgr->iommu_hdl, 0);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "Patch processing failed %d", rc);
 		return rc;
@@ -777,13 +773,17 @@ static int cam_jpeg_mgr_prepare_hw_update(void *hw_mgr_priv,
 
 	for (i = 0, j = 0, k = 0; i < packet->num_io_configs; i++) {
 		if (io_cfg_ptr[i].direction == CAM_BUF_INPUT) {
+			if (j >= prepare_args->max_in_map_entries)
+				continue;
 			prepare_args->in_map_entries[j].resource_handle =
 				io_cfg_ptr[i].resource_type;
 			prepare_args->in_map_entries[j++].sync_id =
 				io_cfg_ptr[i].fence;
 			prepare_args->num_in_map_entries++;
 		} else {
-			prepare_args->in_map_entries[k].resource_handle =
+			if (k >= prepare_args->max_out_map_entries)
+				continue;
+			prepare_args->out_map_entries[k].resource_handle =
 				io_cfg_ptr[i].resource_type;
 			prepare_args->out_map_entries[k++].sync_id =
 				io_cfg_ptr[i].fence;
@@ -1636,7 +1636,6 @@ static int cam_jpeg_mgr_cmd(void *hw_mgr_priv, void *cmd_args)
 		cam_jpeg_mgr_print_io_bufs(
 			hw_cmd_args->u.pf_args.pf_data.packet,
 			hw_mgr->iommu_hdl,
-			hw_mgr->iommu_sec_hdl,
 			hw_cmd_args->u.pf_args.buf_info,
 			hw_cmd_args->u.pf_args.mem_found);
 		break;

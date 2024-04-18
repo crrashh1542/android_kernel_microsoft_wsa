@@ -906,6 +906,14 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 		IMG_DEVMEM_SIZE_T uiLPhysicalSize;
 
 		/* Need to validate parameters before proceeding */
+		/* Check for size + offset overflow */
+		PVR_LOG_RETURN_IF_FALSE(((uiOffset + uiSize) >= uiSize),
+		                        "Overflow detected on offset + size parameters",
+		                        PVRSRV_ERROR_INVALID_PARAMS);
+		/* Since size + offset is later aligned to page size check for overflow with alignment */
+		PVR_LOG_RETURN_IF_FALSE((((uiOffset + uiSize) + gsCwq.uiPageSize - 1) >= (uiOffset + uiSize)),
+		                        "Overflow detected on offset + size parameters with applied alignment",
+		                        PVRSRV_ERROR_INVALID_PARAMS);
 		eError = PMR_PhysicalSize(psPMR, &uiLPhysicalSize);
 		PVR_LOG_RETURN_IF_ERROR(eError, "uiLPhysicalSize");
 

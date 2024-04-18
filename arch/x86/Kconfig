@@ -268,6 +268,8 @@ config X86
 	select HAVE_ARCH_KCSAN			if X86_64
 	select X86_FEATURE_NAMES		if PROC_FS
 	select PROC_PID_ARCH_STATUS		if PROC_FS
+	select FUNCTION_ALIGNMENT_16B		if X86_64 || X86_ALIGNMENT_16
+	select FUNCTION_ALIGNMENT_4B
 	imply IMA_SECURE_AND_OR_TRUSTED_BOOT    if EFI
 	select ARCH_HAS_ALT_SYSCALL		if X86_64
 
@@ -818,6 +820,19 @@ config KVM_GUEST
 	  of relying on a PIT (or probably other) emulation by the
 	  underlying device model, the host provides the guest with
 	  timing infrastructure such as time of day, and system time
+
+config PARAVIRT_SCHED
+	bool "Enable paravirt scheduling capability for guests"
+	depends on KVM_GUEST
+	default n
+	help
+	  Paravirtualized scheduling facilitates the exchange of scheduling
+	  related information between the host and guest through shared memory,
+	  enhancing the efficiency of vCPU thread scheduling by the hypervisor.
+	  An illustrative use case involves dynamically boosting the priority of
+	  a vCPU thread when the guest is executing a latency-sensitive workload
+	  on that specific vCPU.
+	  This config enables paravirt scheduling in guest(VM).
 
 config ARCH_CPUIDLE_HALTPOLL
 	def_bool n
@@ -2502,6 +2517,27 @@ config GDS_FORCE_MITIGATION
 	  Setting this option on systems not vulnerable to GDS has no effect.
 
 	  If in doubt, say N.
+
+config MITIGATION_RFDS
+	bool "RFDS Mitigation"
+	depends on CPU_SUP_INTEL
+	default y
+	help
+	  Enable mitigation for Register File Data Sampling (RFDS) by default.
+	  RFDS is a hardware vulnerability which affects Intel Atom CPUs. It
+	  allows unprivileged speculative access to stale data previously
+	  stored in floating point, vector and integer registers.
+	  See also <file:Documentation/admin-guide/hw-vuln/reg-file-data-sampling.rst>
+
+config MITIGATION_SPECTRE_BHI
+	bool "Mitigate Spectre-BHB (Branch History Injection)"
+	depends on CPU_SUP_INTEL
+	default y
+	help
+	  Enable BHI mitigations. BHI attacks are a form of Spectre V2 attacks
+	  where the branch history buffer is poisoned to speculatively steer
+	  indirect branches.
+	  See <file:Documentation/admin-guide/hw-vuln/spectre.rst>
 
 endif
 

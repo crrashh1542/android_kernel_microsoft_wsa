@@ -348,7 +348,7 @@ void snd_soc_close_delayed_work(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
 	int playback = SNDRV_PCM_STREAM_PLAYBACK;
 
-	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
+	snd_soc_dpcm_mutex_lock(rtd);
 
 	dev_dbg(rtd->dev,
 		"ASoC: pop wq checking: %s status: %s waiting: %s\n",
@@ -364,7 +364,7 @@ void snd_soc_close_delayed_work(struct snd_soc_pcm_runtime *rtd)
 					  SND_SOC_DAPM_STREAM_STOP);
 	}
 
-	mutex_unlock(&rtd->card->pcm_mutex);
+	snd_soc_dpcm_mutex_unlock(rtd);
 }
 EXPORT_SYMBOL_GPL(snd_soc_close_delayed_work);
 
@@ -1018,6 +1018,9 @@ int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
 	for_each_link_platforms(dai_link, i, platform) {
 		for_each_component(component) {
 			if (!snd_soc_is_matching_component(platform, component))
+				continue;
+
+			if (snd_soc_component_is_dummy(component) && component->num_dai)
 				continue;
 
 			snd_soc_rtd_add_component(rtd, component);

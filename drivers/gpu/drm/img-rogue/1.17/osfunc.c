@@ -863,7 +863,9 @@ static const error_map_t asErrorMap[] =
 	{-ENOTTY, PVRSRV_ERROR_BRIDGE_CALL_FAILED},
 	{-ERANGE, PVRSRV_ERROR_BRIDGE_BUFFER_TOO_SMALL},
 	{-ENOMEM, PVRSRV_ERROR_OUT_OF_MEMORY},
+	{-EACCES, PVRSRV_ERROR_PMR_NOT_PERMITTED},
 	{-EINVAL, PVRSRV_ERROR_INVALID_PARAMS},
+	{-EINVAL, PVRSRV_ERROR_BAD_MAPPING},
 
 	{0,       PVRSRV_OK}
 };
@@ -1635,23 +1637,23 @@ PVRSRV_ERROR OSChangeSparseMemCPUAddrMap(void **psPageArray,
 
 	/*
 	 * Acquire the lock before manipulating the VMA
-	 * In this case only mmap_sem lock would suffice as the pages associated with this VMA
+	 * In this case only mmap_write_lock would suffice as the pages associated with this VMA
 	 * are never meant to be swapped out.
 	 *
 	 * In the future, in case the pages are marked as swapped, page_table_lock needs
 	 * to be acquired in conjunction with this to disable page swapping.
 	 */
+	/* Acquire the memory sem */
+	mmap_write_lock(psMM);
 
 	/* Find the Virtual Memory Area associated with the user base address */
 	psVMA = find_vma(psMM, (uintptr_t)sCpuVAddrBase);
 	if (NULL == psVMA)
 	{
 		eError = PVRSRV_ERROR_PMR_NO_CPU_MAP_FOUND;
-		return eError;
+		goto eFailed;
 	}
 
-	/* Acquire the memory sem */
-	mmap_write_lock(psMM);
 
 	psMapping = psVMA->vm_file->f_mapping;
 

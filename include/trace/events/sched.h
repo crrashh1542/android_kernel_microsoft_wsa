@@ -514,33 +514,30 @@ TRACE_EVENT(sched_blocked_reason,
  */
 DECLARE_EVENT_CLASS(sched_stat_runtime,
 
-	TP_PROTO(struct task_struct *tsk, u64 runtime, u64 vruntime),
+	TP_PROTO(struct task_struct *tsk, u64 runtime),
 
-	TP_ARGS(tsk, __perf_count(runtime), vruntime),
+	TP_ARGS(tsk, __perf_count(runtime)),
 
 	TP_STRUCT__entry(
 		__array( char,	comm,	TASK_COMM_LEN	)
 		__field( pid_t,	pid			)
 		__field( u64,	runtime			)
-		__field( u64,	vruntime			)
 	),
 
 	TP_fast_assign(
 		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
 		__entry->pid		= tsk->pid;
 		__entry->runtime	= runtime;
-		__entry->vruntime	= vruntime;
 	),
 
-	TP_printk("comm=%s pid=%d runtime=%Lu [ns] vruntime=%Lu [ns]",
+	TP_printk("comm=%s pid=%d runtime=%Lu [ns]",
 			__entry->comm, __entry->pid,
-			(unsigned long long)__entry->runtime,
-			(unsigned long long)__entry->vruntime)
+			(unsigned long long)__entry->runtime)
 );
 
 DEFINE_EVENT(sched_stat_runtime, sched_stat_runtime,
-	     TP_PROTO(struct task_struct *tsk, u64 runtime, u64 vruntime),
-	     TP_ARGS(tsk, runtime, vruntime));
+	     TP_PROTO(struct task_struct *tsk, u64 runtime),
+	     TP_ARGS(tsk, runtime));
 
 /*
  * Tracepoint for showing priority inheritance modifying a tasks
@@ -755,6 +752,32 @@ DECLARE_TRACE(sched_util_est_se_tp,
 DECLARE_TRACE(sched_update_nr_running_tp,
 	TP_PROTO(struct rq *rq, int change),
 	TP_ARGS(rq, change));
+
+#ifdef CONFIG_PARAVIRT_SCHED
+#include <linux/kvm_para.h>
+TRACE_EVENT(sched_pvsched_vcpu_update,
+	TP_PROTO(union vcpu_sched_attr *attr),
+	TP_ARGS(attr),
+
+	TP_STRUCT__entry(
+		__field(int,	sched_policy)
+		__field(int,	rt_priority)
+		__field(int,	sched_nice)
+		__field(int,	kern_cs)
+	),
+
+	TP_fast_assign(
+		__entry->sched_policy = attr->sched_policy;
+		__entry->rt_priority = attr->rt_priority;
+		__entry->sched_nice = attr->sched_nice;
+		__entry->kern_cs = attr->kern_cs;
+	),
+
+	TP_printk("policy: %d, rt_prio: %d, nice: %d, kerncs=%x",
+		__entry->sched_policy, __entry->rt_priority,
+		__entry->sched_nice, __entry->kern_cs)
+);
+#endif /* CONFIG_PARAVIRT_SCHED */
 
 #endif /* _TRACE_SCHED_H */
 

@@ -412,9 +412,14 @@ static int mt7921_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
 
+	mt7921_roc_abort_sync(dev);
+
 	err = mt7921_mcu_drv_pmctrl(dev);
 	if (err < 0)
 		goto restore_suspend;
+
+	wait_event_timeout(dev->wait,
+			   !dev->regd_in_progress, 5 * HZ);
 
 	err = mt76_connac_mcu_set_hif_suspend(mdev, true);
 	if (err)
@@ -525,6 +530,9 @@ static int mt7921_pci_resume(struct pci_dev *pdev)
 		mt76_connac_mcu_set_deep_sleep(&dev->mt76, false);
 
 	err = mt76_connac_mcu_set_hif_suspend(mdev, false);
+
+	mt7921_regd_update(dev);
+
 failed:
 	pm->suspended = false;
 

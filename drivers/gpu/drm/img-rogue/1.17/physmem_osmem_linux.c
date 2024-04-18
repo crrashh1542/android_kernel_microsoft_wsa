@@ -1120,6 +1120,34 @@ eExit:
 #endif /* defined(PVR_LINUX_PHYSMEM_ZERO_ALL_PAGES) */
 }
 
+static bool _PagesHaveOtherRefs(struct page **ppsPageArray, IMG_UINT32 uiNumPages)
+{
+	IMG_UINT32 ui32pageIndex;
+
+	PVR_DPF_ENTERED;
+
+	if (!ppsPageArray)
+	{
+		PVR_DPF_RETURN_RC(false);
+	}
+
+	/* Iterate pages in ppsPageArray and return false if any are found
+	 * to have page_count() > 1. */
+	for (ui32pageIndex = 0; ui32pageIndex < uiNumPages; ui32pageIndex++)
+	{
+		struct page *psPage = ppsPageArray[ui32pageIndex];
+
+		if (page_count(psPage) > 1)
+		{
+			PVR_DPF((PVR_DBG_MESSAGE,
+			         "%s: page %d in page array found with page_count() of %d\n",
+			         __func__, ui32pageIndex, page_count(psPage)));
+			PVR_DPF_RETURN_RC(true);
+		}
+	}
+
+	PVR_DPF_RETURN_RC(false);
+}
 
 /* Put page array to the page pool.
  * Handles locking and checks whether the pages are
@@ -1145,6 +1173,12 @@ _PutPagesToPoolLocked(IMG_UINT32 ui32CPUCacheFlags,
 		IMG_UINT32 *puiCounter;
 		struct list_head *psPoolHead;
 
+		if (_PagesHaveOtherRefs(ppsPageArray, uiNumPages))
+		{
+			/* Pages still have other references, so
+			 * must not be put into our pool. */
+			goto eExitFalse;
+		}
 
 		_PagePoolLock();
 
@@ -3518,29 +3552,14 @@ PMRChangeSparseMemOSMem(PMR_IMPL_PRIVDATA pPriv,
 			goto e0;
 		}
 
-		if (SPARSE_REMAP_MEM != (uiFlags & SPARSE_REMAP_MEM))
+		if ((NULL != psPageArray[uiAllocpgidx]) ||
+		    (TRANSLATION_INVALID != psPMRMapTable->aui32Translation[uiAllocpgidx]))
 		{
-			if ((NULL != psPageArray[uiAllocpgidx]) ||
-			    (TRANSLATION_INVALID != psPMRMapTable->aui32Translation[uiAllocpgidx]))
-			{
-				eError = PVRSRV_ERROR_INVALID_PARAMS;
-				PVR_DPF((PVR_DBG_ERROR,
-				         "%s: Trying to allocate already allocated page again",
-				         __func__));
-				goto e0;
-			}
-		}
-		else
-		{
-			if ((NULL == psPageArray[uiAllocpgidx]) ||
-			    (TRANSLATION_INVALID == psPMRMapTable->aui32Translation[uiAllocpgidx]) )
-			{
-				eError = PVRSRV_ERROR_INVALID_PARAMS;
-				PVR_DPF((PVR_DBG_ERROR,
-				         "%s: Unable to remap memory due to missing page",
-				         __func__));
-				goto e0;
-			}
+			eError = PVRSRV_ERROR_INVALID_PARAMS;
+			PVR_DPF((PVR_DBG_ERROR,
+			         "%s: Trying to allocate already allocated page again",
+			         __func__));
+			goto e0;
 		}
 	}
 
@@ -3586,30 +3605,13 @@ PMRChangeSparseMemOSMem(PMR_IMPL_PRIVDATA pPriv,
 			psDMAPhysArray[uiAllocpgidx] = psDMAPhysArray[uiFreepgidx];
 		}
 
-		/* Is remap mem used in real world scenario? Should it be turned to a
-		 *  debug feature? The condition check needs to be out of loop, will be
-		 *  done at later point though after some analysis */
-		if (SPARSE_REMAP_MEM != (uiFlags & SPARSE_REMAP_MEM))
+		psPMRMapTable->aui32Translation[uiFreepgidx] = TRANSLATION_INVALID;
+		psPMRMapTable->aui32Translation[uiAllocpgidx] = uiAllocpgidx;
+		psPageArray[uiFreepgidx] = NULL;
+		if (bCMA)
 		{
-			psPMRMapTable->aui32Translation[uiFreepgidx] = TRANSLATION_INVALID;
-			psPMRMapTable->aui32Translation[uiAllocpgidx] = uiAllocpgidx;
-			psPageArray[uiFreepgidx] = NULL;
-			if (bCMA)
-			{
-				psDMAVirtArray[uiFreepgidx] = NULL;
-				psDMAPhysArray[uiFreepgidx] = (dma_addr_t)0;
-			}
-		}
-		else
-		{
-			psPMRMapTable->aui32Translation[uiFreepgidx] = uiFreepgidx;
-			psPMRMapTable->aui32Translation[uiAllocpgidx] = uiAllocpgidx;
-			psPageArray[uiFreepgidx] = psPage;
-			if (bCMA)
-			{
-				psDMAVirtArray[uiFreepgidx] = pvDMAVAddr;
-				psDMAPhysArray[uiFreepgidx] = psDMAPAddr;
-			}
+			psDMAVirtArray[uiFreepgidx] = NULL;
+			psDMAPhysArray[uiFreepgidx] = (dma_addr_t)0;
 		}
 	}
 

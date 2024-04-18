@@ -86,6 +86,7 @@ static void t7xx_remove_rescan(struct work_struct *work)
 	}
 
 	do {
+		msleep(DELAY_RESCAN_MTIME);
 		t7xx_pci_dev_rescan();
 		spin_lock_irqsave(&g_mtk_rescan_context.dev_lock, flags);
 		if (g_mtk_rescan_context.rescan_done) {
@@ -94,7 +95,6 @@ static void t7xx_remove_rescan(struct work_struct *work)
 		}
 
 		spin_unlock_irqrestore(&g_mtk_rescan_context.dev_lock, flags);
-		msleep(DELAY_RESCAN_MTIME);
 	} while (num_retries--);
 }
 

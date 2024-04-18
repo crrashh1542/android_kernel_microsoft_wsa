@@ -1483,6 +1483,7 @@ static void rtw_pci_interface_cfg(struct rtw_dev *rtwdev)
 static void rtw_pci_phy_cfg(struct rtw_dev *rtwdev)
 {
 	struct rtw_chip_info *chip = rtwdev->chip;
+	struct rtw_efuse *efuse = &rtwdev->efuse;
 	const struct rtw_intf_phy_para *para;
 	u16 cut;
 	u16 value;
@@ -1520,6 +1521,9 @@ static void rtw_pci_phy_cfg(struct rtw_dev *rtwdev)
 	}
 
 	rtw_pci_link_cfg(rtwdev);
+
+	if (chip->id == RTW_CHIP_TYPE_8822C && efuse->rfe_option == 5)
+		rtw_write32_mask(rtwdev, REG_ANAPARSW_MAC_0, BIT_CF_L_V2, 0x1);
 }
 
 static int __maybe_unused rtw_pci_suspend(struct device *dev)

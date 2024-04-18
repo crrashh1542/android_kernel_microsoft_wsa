@@ -141,7 +141,8 @@ void cam_tasklet_put_cmd(
 	spin_unlock_irqrestore(&tasklet->tasklet_lock, flags);
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_tasklet_dequeue_cmd()
  *
  * @brief:              Initialize the tasklet info structure

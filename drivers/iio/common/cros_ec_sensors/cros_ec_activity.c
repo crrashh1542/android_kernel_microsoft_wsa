@@ -312,7 +312,6 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 	indio_dev->info = &ec_sensors_info;
 	st = iio_priv(indio_dev);
 	st->core.type = st->core.resp->info.type;
-	st->core.loc = st->core.resp->info.location;
 
 	/*
 	 * List all available activities

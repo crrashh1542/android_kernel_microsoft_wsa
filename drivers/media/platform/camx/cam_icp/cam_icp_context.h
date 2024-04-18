@@ -48,4 +48,6 @@ int cam_icp_context_init(struct cam_icp_context *ctx,
  */
 int cam_icp_context_deinit(struct cam_icp_context *ctx);
 
+const char *cam_icp_dev_name(void);
+
 #endif /* _CAM_ICP_CONTEXT_H_ */

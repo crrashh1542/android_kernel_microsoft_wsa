@@ -959,6 +959,14 @@ static void tick_nohz_stop_tick(struct tick_sched *ts, int cpu)
 		hrtimer_start(&ts->sched_timer, tick,
 			      HRTIMER_MODE_ABS_PINNED_HARD);
 	} else {
+		/*
+		 * hrtimer_set_expires() may have previously set the expiry
+		 * well into the future, however an unrelated wakeup + timer
+		 * queuing means now the hrtimer needs to be backtracked, or
+		 * we'll just miss events. Back track it to last_tick, and
+		 * then use hrtimer_forward to forward it past 'tick'.
+		 */
+		hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
 		hrtimer_forward(&ts->sched_timer, tick, TICK_NSEC);
 		ts->next_tick = hrtimer_get_expires(&ts->sched_timer);
 		tick_program_event(ts->next_tick, 1);
@@ -1564,13 +1572,23 @@ void tick_setup_sched_timer(void)
 void tick_cancel_sched_timer(int cpu)
 {
 	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+	ktime_t idle_sleeptime, iowait_sleeptime;
+	unsigned long idle_calls, idle_sleeps;
 
 # ifdef CONFIG_HIGH_RES_TIMERS
 	if (ts->sched_timer.base)
 		hrtimer_cancel(&ts->sched_timer);
 # endif
 
+	idle_sleeptime = ts->idle_sleeptime;
+	iowait_sleeptime = ts->iowait_sleeptime;
+	idle_calls = ts->idle_calls;
+	idle_sleeps = ts->idle_sleeps;
 	memset(ts, 0, sizeof(*ts));
+	ts->idle_sleeptime = idle_sleeptime;
+	ts->iowait_sleeptime = iowait_sleeptime;
+	ts->idle_calls = idle_calls;
+	ts->idle_sleeps = idle_sleeps;
 }
 #endif
 

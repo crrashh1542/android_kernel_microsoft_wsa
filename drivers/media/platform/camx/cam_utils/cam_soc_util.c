@@ -55,7 +55,8 @@ static int cam_soc_util_get_clk_level(struct cam_hw_soc_info *soc_info,
 	return -EINVAL;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_get_string_from_level()
  *
  * @brief:     Returns the string for a given clk level
@@ -89,7 +90,8 @@ static const char *cam_soc_util_get_string_from_level(
 	}
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_get_supported_clk_levels()
  *
  * @brief:      Returns the string of all the supported clk levels for
@@ -173,7 +175,8 @@ static int cam_soc_util_get_clk_lvl(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(cam_soc_util_clk_lvl_control,
 	cam_soc_util_get_clk_lvl, cam_soc_util_set_clk_lvl, "%08llu");
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_create_clk_lvl_debugfs()
  *
  * @brief:      Creates debugfs files to view/control device clk rates
@@ -229,7 +232,8 @@ err:
 	return -ENOMEM;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_remove_clk_lvl_debugfs()
  *
  * @brief:      Removes the debugfs files used to view/control
@@ -275,7 +279,8 @@ int cam_soc_util_get_level_from_string(const char *string,
 	return 0;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_get_clk_level_to_apply()
  *
  * @brief:              Get the clock level to apply. If the requested level
@@ -385,7 +390,8 @@ int cam_soc_util_set_clk_flags(struct cam_hw_soc_info *soc_info,
 #endif
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_set_clk_rate()
  *
  * @brief:          Sets the given rate for the clk requested for
@@ -593,7 +599,8 @@ int cam_soc_util_clk_disable(struct clk *clk, const char *clk_name)
 	return 0;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_clk_enable_default()
  *
  * @brief:              This function enables the default clocks present
@@ -654,7 +661,8 @@ clk_disable:
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_clk_disable_default()
  *
  * @brief:              This function disables the default clocks present
@@ -678,7 +686,8 @@ void cam_soc_util_clk_disable_default(struct cam_hw_soc_info *soc_info)
 			soc_info->clk_name[i]);
 }
 
-/**
+/*
+ *FIXME kerneldoc
  * cam_soc_util_get_dt_clk_info()
  *
  * @brief:              Parse the DT and populate the Clock properties
@@ -985,7 +994,7 @@ static int cam_soc_util_get_gpio_info(struct cam_hw_soc_info *soc_info)
 		return -EINVAL;
 	}
 
-	gpio_array_size = of_gpio_count(of_node);
+	gpio_array_size = of_count_phandle_with_args(of_node, "gpios", "#gpio-cells");
 
 	if (gpio_array_size <= 0)
 		return 0;
@@ -997,7 +1006,7 @@ static int cam_soc_util_get_gpio_info(struct cam_hw_soc_info *soc_info)
 		goto free_gpio_conf;
 
 	for (i = 0; i < gpio_array_size; i++) {
-		gpio_array[i] = of_get_gpio(of_node, i);
+		gpio_array[i] = of_get_named_gpio(of_node, "gpios", i);
 		CAM_DBG(CAM_UTIL, "gpio_array[%d] = %d", i, gpio_array[i]);
 	}
 
@@ -1266,7 +1275,8 @@ int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_soc_util_get_regulator()
  *
  * @brief:              Get regulator resource named vdd

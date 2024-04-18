@@ -131,6 +131,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI,
 	MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
 	MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE,
+	MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
 };
 
 static const u16 mgmt_events[] = {
@@ -2448,7 +2449,8 @@ static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_link_key_info *key = &cp->keys[i];
 
-		if (key->addr.type != BDADDR_BREDR || key->type > 0x08)
+		/* Considering SMP over BREDR/LE, there is no need to check addr_type */
+		if (key->type > 0x08)
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_LOAD_LINK_KEYS,
 					       MGMT_STATUS_INVALID_PARAMS);
@@ -3137,6 +3139,18 @@ unlock:
 	return err;
 }
 
+static int abort_conn_sync(struct hci_dev *hdev, void *data)
+{
+	struct hci_conn *conn;
+	u16 handle = PTR_ERR(data);
+
+	conn = hci_conn_hash_lookup_handle(hdev, handle);
+	if (!conn)
+		return 0;
+
+	return hci_abort_conn_sync(hdev, conn, HCI_ERROR_REMOTE_USER_TERM);
+}
+
 static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 			      u16 len)
 {
@@ -3187,7 +3201,8 @@ static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 					      le_addr_type(addr->type));
 
 	if (conn->conn_reason == CONN_REASON_PAIR_DEVICE)
-		hci_abort_conn(conn, HCI_ERROR_REMOTE_USER_TERM);
+		hci_cmd_sync_queue(hdev, abort_conn_sync, ERR_PTR(conn->handle),
+				   NULL);
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -4791,9 +4806,9 @@ static u8 parse_adv_monitor_pattern(struct adv_monitor *m, u8 pattern_count,
 	for (i = 0; i < pattern_count; i++) {
 		offset = patterns[i].offset;
 		length = patterns[i].length;
-		if (offset >= HCI_MAX_AD_LENGTH ||
-		    length > HCI_MAX_AD_LENGTH ||
-		    (offset + length) > HCI_MAX_AD_LENGTH)
+		if (offset >= HCI_MAX_EXT_AD_LENGTH ||
+		    length > HCI_MAX_EXT_AD_LENGTH ||
+		    (offset + length) > HCI_MAX_EXT_AD_LENGTH)
 			return MGMT_STATUS_INVALID_PARAMS;
 
 		p = kmalloc(sizeof(*p), GFP_KERNEL);
@@ -6537,6 +6552,7 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 
 	for (i = 0; i < irk_count; i++) {
 		struct mgmt_irk_info *irk = &cp->irks[i];
+		u8 addr_type = le_addr_type(irk->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_IRK,
@@ -6546,8 +6562,12 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (irk->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_irk(hdev, &irk->addr.bdaddr,
-			    le_addr_type(irk->addr.type), irk->val,
+			    addr_type, irk->val,
 			    BDADDR_ANY);
 	}
 
@@ -6628,6 +6648,7 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_ltk_info *key = &cp->keys[i];
 		u8 type, authenticated;
+		u8 addr_type = le_addr_type(key->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_LTK,
@@ -6662,8 +6683,12 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (key->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_ltk(hdev, &key->addr.bdaddr,
-			    le_addr_type(key->addr.type), type, authenticated,
+			    addr_type, type, authenticated,
 			    key->val, key->enc_size, key->ediv, key->rand);
 	}
 
@@ -7829,8 +7854,8 @@ static int read_adv_features(struct sock *sk, struct hci_dev *hdev,
 	supported_flags = get_supported_adv_flags(hdev);
 
 	rp->supported_flags = cpu_to_le32(supported_flags);
-	rp->max_adv_data_len = HCI_MAX_AD_LENGTH;
-	rp->max_scan_rsp_len = HCI_MAX_AD_LENGTH;
+	rp->max_adv_data_len = max_adv_len(hdev);
+	rp->max_scan_rsp_len = max_adv_len(hdev);
 	rp->max_instances = hdev->le_num_of_adv_sets;
 	rp->num_instances = hdev->adv_instance_cnt;
 
@@ -7860,7 +7885,7 @@ static u8 calculate_name_len(struct hci_dev *hdev)
 static u8 tlv_data_max_len(struct hci_dev *hdev, u32 adv_flags,
 			   bool is_adv_data)
 {
-	u8 max_len = HCI_MAX_AD_LENGTH;
+	u8 max_len = max_adv_len(hdev);
 
 	if (is_adv_data) {
 		if (adv_flags & (MGMT_ADV_FLAG_DISCOV |
@@ -8655,13 +8680,7 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 					    void *data, u16 data_len)
 {
 	struct mgmt_cp_get_codec_capabilities *cp = data;
-	struct mgmt_rp_get_codec_capabilities *rp;
-	struct codec_list *c;
-	int i, num_rp_codecs;
-	int err;
-	size_t total_size = sizeof(struct mgmt_rp_get_codec_capabilities);
-	bool wbs_supported = false;
-	u8 *ptr;
+	struct mgmt_rp_get_codec_capabilities rp;
 	struct hci_dev *found_hdev;
 
 	found_hdev = floss_get_hdev(cp->hci_id);
@@ -8672,110 +8691,17 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 	if (!hdev)
 		return -EINVAL;
 
-	wbs_supported = test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	rp.hci_id = hdev->id;
+	rp.transparent_wbs_supported =
+		test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	rp.hci_data_path_id = 0;
+	if (hdev->get_data_path_id)
+		hdev->get_data_path_id(hdev, &rp.hci_data_path_id);
+	rp.wbs_pkt_len = hdev->wbs_pkt_len;
 
-	if (MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE + cp->num_codecs != data_len)
-		return -EINVAL;
-
-	// Determine total alloc size for supported codecs.
-	for (i = 0; i < cp->num_codecs; ++i) {
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported)
-				total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		case MGMT_SCO_CODEC_MSBC:
-			if (wbs_supported) {
-				hci_dev_lock(hdev);
-				list_for_each_entry(c, &hdev->local_codecs, list) {
-					/* 0x01 - HCI Transport (Codec supported over
-					 *          BR/EDR SCO and eSCO)
-					 * 0x05 - mSBC Codec ID
-					 */
-					if (c->transport != 0x01 || c->id != 0x05)
-						continue;
-
-					total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
-					break;
-				}
-				hci_dev_unlock(hdev);
-			}
-			break;
-		default:
-			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
-			break;
-		}
-	}
-
-	rp = kzalloc(total_size, GFP_KERNEL);
-	if (!rp)
-		return -ENOMEM;
-
-	rp->hci_id = hdev->id;
-
-	// Copy codec information to return.
-	ptr = (u8 *)rp->codecs;
-	for (i = 0, num_rp_codecs = 0; i < cp->num_codecs; ++i) {
-		struct mgmt_bt_codec *rc = (struct mgmt_bt_codec *)ptr;
-
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			rc->codec = cp->codecs[i];
-			ptr += sizeof(struct mgmt_bt_codec);
-			num_rp_codecs++;
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported) {
-				rc->codec = cp->codecs[i];
-				rc->packet_size = hdev->wbs_pkt_len;
-				ptr += sizeof(struct mgmt_bt_codec);
-				num_rp_codecs++;
-			}
-			break;
-		case MGMT_SCO_CODEC_MSBC:
-			if (wbs_supported) {
-				hci_dev_lock(hdev);
-				list_for_each_entry(c, &hdev->local_codecs, list) {
-					if (c->transport != 0x01 || c->id != 0x05)
-						continue;
-
-					/* Need to read the support from the controller
-					 * and then assign to TRUE for now by default
-					 * enable it as TRUE
-					 */
-					rp->offload_capable = true;
-
-					if (hdev->get_data_path_id)
-						hdev->get_data_path_id(hdev, &rc->data_path);
-
-					rc->codec = cp->codecs[i];
-					rc->packet_size = c->len;
-					rc->data_length = c->caps->len;
-					memcpy(rc->data, c->caps, c->caps->len);
-					ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
-					num_rp_codecs++;
-					break;
-				}
-				hci_dev_unlock(hdev);
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
-	// Only return the number of codecs actually written
-	rp->num_codecs = num_rp_codecs;
-
-	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
-				MGMT_STATUS_SUCCESS, rp, total_size);
-	kfree(rp);
-
-	return err;
+	return mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
+				 MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
+				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 }
 
 static int floss_notify_sco_connection_change(struct sock *sk,
@@ -8896,6 +8822,53 @@ static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, voi
 	hci_dev_unlock(hdev);
 
 	return 0;
+}
+
+static int sco_force_retrans_effort(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_sco_force_retrans_effort *cp = data;
+	struct hci_conn *acl;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	hci_dev_lock(hdev);
+
+	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->addr.bdaddr);
+
+	if (!acl) {
+		bt_dev_err(hdev, "%s: no acl found for %pMR",
+			   __func__, &cp->addr.bdaddr);
+		goto failed;
+	}
+
+	switch (cp->retrans_effort) {
+	/* optimize for power consumption and optimize for link quality
+	 * require esco
+	 */
+	case 0x01:
+	case 0x02:
+		if (!lmp_esco_capable(acl))
+			goto failed;
+		/* fall through */
+	/* No retransmission and Don’t care don't require esco  */
+	case 0x00:
+	case 0xFF:
+		break;
+	default:
+		goto failed;
+	}
+
+	acl->force_retrans_effort = cp->retrans_effort;
+	bt_dev_info(hdev, "set retrans effort to %d for %pMR", acl->force_retrans_effort,
+		    &cp->addr.bdaddr);
+
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+					MGMT_STATUS_SUCCESS);
+failed:
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+			       MGMT_STATUS_INVALID_PARAMS);
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -9034,8 +9007,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	floss_get_sco_codec_capabilities,
 				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
 						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED |
-						HCI_MGMT_VAR_LEN },
+						HCI_MGMT_UNTRUSTED },
 	{ floss_notify_sco_connection_change,
 				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
 						HCI_MGMT_NO_HDEV |
@@ -9047,6 +9019,9 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	[MGMT_OP_SCO_FORCE_RETRANS_EFFORT] = {
+	sco_force_retrans_effort,
+				   MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE },
 };
 
 void mgmt_index_added(struct hci_dev *hdev)
@@ -9201,7 +9176,7 @@ void mgmt_new_link_key(struct hci_dev *hdev, struct link_key *key,
 
 	ev.store_hint = persistent;
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = BDADDR_BREDR;
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = key->type;
 	memcpy(ev.key.val, key->val, HCI_LINK_KEY_SIZE);
 	ev.key.pin_len = key->pin_len;
@@ -9252,7 +9227,7 @@ void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, key->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = mgmt_ltk_type(key);
 	ev.key.enc_size = key->enc_size;
 	ev.key.ediv = key->ediv;
@@ -9281,7 +9256,7 @@ void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent)
 
 	bacpy(&ev.rpa, &irk->rpa);
 	bacpy(&ev.irk.addr.bdaddr, &irk->bdaddr);
-	ev.irk.addr.type = link_to_bdaddr(LE_LINK, irk->addr_type);
+	ev.irk.addr.type = link_to_bdaddr(irk->link_type, irk->addr_type);
 	memcpy(ev.irk.val, irk->val, sizeof(irk->val));
 
 	mgmt_event(MGMT_EV_NEW_IRK, hdev, &ev, sizeof(ev), NULL);
@@ -9310,7 +9285,7 @@ void mgmt_new_csrk(struct hci_dev *hdev, struct smp_csrk *csrk,
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &csrk->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, csrk->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(csrk->link_type, csrk->bdaddr_type);
 	ev.key.type = csrk->type;
 	memcpy(ev.key.val, csrk->val, sizeof(csrk->val));
 
@@ -9437,14 +9412,6 @@ void mgmt_device_disconnected(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	struct mgmt_ev_device_disconnected ev;
 	struct sock *sk = NULL;
 
-	/* The connection is still in hci_conn_hash so test for 1
-	 * instead of 0 to know if this is the last one.
-	 */
-	if (mgmt_powering_down(hdev) && hci_conn_count(hdev) == 1) {
-		cancel_delayed_work(&hdev->power_off);
-		queue_work(hdev->req_workqueue, &hdev->power_off.work);
-	}
-
 	if (!mgmt_connected)
 		return;
 
@@ -9500,14 +9467,6 @@ void mgmt_connect_failed(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 			 u8 addr_type, u8 status)
 {
 	struct mgmt_ev_connect_failed ev;
-
-	/* The connection is still in hci_conn_hash so test for 1
-	 * instead of 0 to know if this is the last one.
-	 */
-	if (mgmt_powering_down(hdev) && hci_conn_count(hdev) == 1) {
-		cancel_delayed_work(&hdev->power_off);
-		queue_work(hdev->req_workqueue, &hdev->power_off.work);
-	}
 
 	bacpy(&ev.addr.bdaddr, bdaddr);
 	ev.addr.type = link_to_bdaddr(link_type, addr_type);

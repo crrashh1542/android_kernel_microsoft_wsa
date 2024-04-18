@@ -206,6 +206,18 @@ PVRSRVRGXFWDebugSetOSidPriorityKM(
 	PVRSRV_RGXDEV_INFO* psDevInfo = psDeviceNode->pvDevice;
 	PVR_UNREFERENCED_PARAMETER(psConnection);
 
+	PVRSRV_VZ_RET_IF_MODE(GUEST, PVRSRV_ERROR_NOT_SUPPORTED);
+
+	if (psDevInfo->psRGXFWIfRuntimeCfg == NULL)
+	{
+		return PVRSRV_ERROR_NOT_INITIALISED;
+	}
+
+	if (ui32OSid >= RGX_NUM_OS_SUPPORTED)
+	{
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
+
 	return RGXFWChangeOSidPriority(psDevInfo, ui32OSid, ui32OSidPriority);
 }
 
@@ -219,6 +231,11 @@ PVRSRVRGXFWDebugSetOSNewOnlineStateKM(
 	PVRSRV_RGXDEV_INFO* psDevInfo = psDeviceNode->pvDevice;
 	RGXFWIF_OS_STATE_CHANGE eState;
 	PVR_UNREFERENCED_PARAMETER(psConnection);
+
+	if (ui32OSid >= RGX_NUM_OS_SUPPORTED)
+	{
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
 
 	eState = (ui32OSNewState) ? (RGXFWIF_OS_ONLINE) : (RGXFWIF_OS_OFFLINE);
 	return RGXFWSetFwOsState(psDevInfo, ui32OSid, eState);

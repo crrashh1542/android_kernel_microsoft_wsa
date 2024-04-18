@@ -54,9 +54,6 @@ struct ipu_isys_pipeline {
 	struct ipu_isys_csi2_be *csi2_be;
 	struct ipu_isys_csi2_be_soc *csi2_be_soc;
 	struct ipu_isys_csi2 *csi2;
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	struct ipu_isys_tpg *tpg;
-#endif
 
 	/*
 	 * Number of capture queues, write access serialised using struct
@@ -122,6 +119,7 @@ struct ipu_isys_video {
 	unsigned int streaming;
 	bool packed;
 	bool compression;
+	bool initialized;
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct v4l2_ctrl *compression_ctrl;
 	unsigned int ts_offsets[VIDEO_MAX_PLANES];

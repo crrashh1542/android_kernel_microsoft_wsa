@@ -699,7 +699,7 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 		drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_RATE_SET,
 				  &rate_select, 1);
 
-	link_config[0] = crtc_state->vrr.enable ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
+	link_config[0] = crtc_state->vrr.flipline ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
 	link_config[1] = intel_dp_is_uhbr(crtc_state) ?
 		DP_SET_ANSI_128B132B : DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
@@ -1116,10 +1116,10 @@ static void intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
 			    "not enabling it from now on",
 			    encoder->base.base.id, encoder->base.name);
 		intel_dp->hobl_failed = true;
-	} else if (intel_dp_get_link_train_fallback_values(intel_dp,
-							   crtc_state->port_clock,
-							   crtc_state->lane_count)) {
-		return;
+	} else {
+		intel_dp_get_link_train_fallback_values(intel_dp,
+							crtc_state->port_clock,
+							crtc_state->lane_count);
 	}
 
 	/* Schedule a Hotplug Uevent to userspace to start modeset */

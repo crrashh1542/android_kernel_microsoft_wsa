@@ -363,7 +363,7 @@ static int32_t cam_eeprom_get_dev_handle(struct cam_eeprom_ctrl_t *e_ctrl,
 	bridge_params.priv = e_ctrl;
 	bridge_params.dev_id = CAM_EEPROM;
 	eeprom_acq_dev.device_handle =
-		cam_create_device_hdl(&bridge_params);
+		cam_create_device_bridge_hdl(&bridge_params);
 	e_ctrl->bridge_intf.device_hdl = eeprom_acq_dev.device_handle;
 	e_ctrl->bridge_intf.session_hdl = eeprom_acq_dev.session_handle;
 
@@ -405,7 +405,8 @@ static int32_t cam_eeprom_update_slaveInfo(struct cam_eeprom_ctrl_t *e_ctrl,
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * cam_eeprom_parse_memory_map - Parse memory map info
  * @data:             memory block data
  * @cmd_buf:          command buffer
@@ -605,7 +606,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 	for (i = 0; i < csl_packet->num_cmd_buf; i++) {
 		total_cmd_buf_in_bytes = cmd_desc[i].length;
 		processed_cmd_buf_in_bytes = 0;
-		if (!total_cmd_buf_in_bytes)
+		if (total_cmd_buf_in_bytes < sizeof(struct common_header))
 			continue;
 		rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
 			&generic_pkt_addr, &pkt_len);
@@ -629,6 +630,13 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 		}
 		remain_len = pkt_len - cmd_desc[i].offset;
 		cmd_buf += cmd_desc[i].offset / sizeof(uint32_t);
+
+		if (total_cmd_buf_in_bytes < sizeof(struct common_header)) {
+			CAM_ERR(CAM_EEPROM, "common_header size exceeds alloc len (%u)",
+				total_cmd_buf_in_bytes);
+			rc = -EINVAL;
+			goto rel_cmd_buf;
+		}
 
 		cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, total_cmd_buf_in_bytes);
 
@@ -855,6 +863,12 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		(generic_pkt_addr + (uint32_t)dev_config.offset);
 	header_size = csl_packet->header.size;
 
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_EEPROM, "cam_packet size exceeds header_size (%u)", header_size);
+		rc = -EINVAL;
+		goto release_buf;
+	}
+
 	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
 
 	if (!csl_packet_local) {
@@ -979,7 +993,7 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 	}
 
 	if (e_ctrl->cam_eeprom_state == CAM_EEPROM_ACQUIRE) {
-		rc = cam_destroy_device_hdl(e_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(e_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_EEPROM, "destroying the device hdl");
 
@@ -1163,7 +1177,7 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 			rc = -EINVAL;
 			goto release_mutex;
 		}
-		rc = cam_destroy_device_hdl(e_ctrl->bridge_intf.device_hdl);
+		rc = cam_destroy_device_bridge_hdl(e_ctrl->bridge_intf.device_hdl);
 		if (rc < 0)
 			CAM_ERR(CAM_EEPROM,
 				"failed in destroying the device hdl");

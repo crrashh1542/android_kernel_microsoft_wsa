@@ -16,10 +16,7 @@
 #include "cam_debug_util.h"
 
 /**
- * cam_subdev_subscribe_event()
- *
- * @brief: function to subscribe to v4l2 events
- *
+ * cam_subdev_subscribe_event() -function to subscribe to v4l2 events
  * @sd:                    Pointer to struct v4l2_subdev.
  * @fh:                    Pointer to struct v4l2_fh.
  * @sub:                   Pointer to struct v4l2_event_subscription.
@@ -32,10 +29,7 @@ static int cam_subdev_subscribe_event(struct v4l2_subdev *sd,
 }
 
 /**
- * cam_subdev_unsubscribe_event()
- *
- * @brief: function to unsubscribe from v4l2 events
- *
+ * cam_subdev_unsubscribe_event() - function to unsubscribe from v4l2 events
  * @sd:                    Pointer to struct v4l2_subdev.
  * @fh:                    Pointer to struct v4l2_fh.
  * @sub:                   Pointer to struct v4l2_event_subscription.
@@ -127,7 +121,7 @@ int cam_subdev_remove(struct cam_subdev *sd)
 }
 
 int cam_subdev_probe(struct cam_subdev *sd, struct platform_device *pdev,
-	char *name, uint32_t dev_type)
+	const char *name, uint32_t dev_type)
 {
 	int rc;
 	struct cam_node *node = NULL;

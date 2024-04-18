@@ -429,14 +429,41 @@ static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int fl
 	resched_curr(rq);
 }
 
+/*
+ * In the non-defer mode, the idle time is not accounted, as the
+ * server provides a guarantee.
+ *
+ * If the dl_server is in defer mode, the idle time is also considered
+ * as time available for the fair server. This avoids creating a
+ * regression with the rt throttling behavior where the idle time did
+ * not create a penalty to the rt schedulers.
+ */
+void dl_server_update_idle_time(struct rq *rq, struct task_struct *p)
+{
+	s64 delta_exec;
+
+	if (!rq->fair_server.dl_defer)
+		return;
+
+	delta_exec = rq_clock_task(rq) - p->se.exec_start;
+
+	if (delta_exec < 0)
+		return;
+
+	dl_scalled_delta_exec(rq, &rq->fair_server, delta_exec);
+	p->se.exec_start = rq_clock_task(rq);
+}
+
 static void put_prev_task_idle(struct rq *rq, struct task_struct *prev)
 {
+	dl_server_update_idle_time(rq, prev);
 }
 
 static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool first)
 {
 	update_idle_core(rq);
 	schedstat_inc(rq->sched_goidle);
+	next->se.exec_start = rq_clock_task(rq);
 	queue_core_balance(rq);
 }
 

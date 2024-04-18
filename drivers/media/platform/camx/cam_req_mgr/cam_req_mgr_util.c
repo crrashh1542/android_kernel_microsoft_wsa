@@ -179,7 +179,8 @@ int32_t cam_create_session_hdl(void *priv)
 	return handle;
 }
 
-int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data)
+static int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data,
+				     enum hdl_type type)
 {
 	int idx;
 	int rand = 0;
@@ -201,10 +202,10 @@ int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data)
 	}
 
 	get_random_bytes(&rand, CAM_REQ_MGR_RND1_BYTES);
-	handle = GET_DEV_HANDLE(rand, HDL_TYPE_DEV, idx);
+	handle = GET_DEV_HANDLE(rand, type, idx);
 	hdl_tbl->hdl[idx].session_hdl = hdl_data->session_hdl;
 	hdl_tbl->hdl[idx].hdl_value = handle;
-	hdl_tbl->hdl[idx].type = HDL_TYPE_DEV;
+	hdl_tbl->hdl[idx].type = type;
 	hdl_tbl->hdl[idx].state = HDL_ACTIVE;
 	hdl_tbl->hdl[idx].priv = hdl_data->priv;
 	hdl_tbl->hdl[idx].ops = hdl_data->ops;
@@ -213,6 +214,16 @@ int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data)
 
 	CAM_DBG(CAM_CRM, "%s: handle = %x", __func__, handle);
 	return handle;
+}
+
+int32_t cam_create_device_ctx_hdl(struct cam_create_dev_hdl *hdl_data)
+{
+	return cam_create_device_hdl(hdl_data, HDL_TYPE_DEV_CTX);
+}
+
+int32_t cam_create_device_bridge_hdl(struct cam_create_dev_hdl *hdl_data)
+{
+	return cam_create_device_hdl(hdl_data, HDL_TYPE_DEV_BRIDGE);
 }
 
 int32_t cam_create_link_hdl(struct cam_create_dev_hdl *hdl_data)
@@ -295,11 +306,19 @@ device_priv_fail:
 	return NULL;
 }
 
-void *cam_get_device_priv(int32_t dev_hdl)
+void *cam_get_device_ctx(int32_t dev_hdl)
 {
 	void *priv;
 
-	priv = cam_get_priv(dev_hdl, HDL_TYPE_DEV);
+	priv = cam_get_priv(dev_hdl, HDL_TYPE_DEV_CTX);
+	return priv;
+}
+
+void *cam_get_device_bridge(int32_t dev_hdl)
+{
+	void *priv;
+
+	priv = cam_get_priv(dev_hdl, HDL_TYPE_DEV_BRIDGE);
 	return priv;
 }
 
@@ -347,8 +366,7 @@ void *cam_get_device_ops(int32_t dev_hdl)
 	}
 
 	type = CAM_REQ_MGR_GET_HDL_TYPE(dev_hdl);
-	if (HDL_TYPE_DEV != type && HDL_TYPE_SESSION != type
-			&& HDL_TYPE_LINK != type) {
+	if (type <= HDL_TYPE_UNDERFLOW || type >= HDL_TYPE_OVERFLOW) {
 		CAM_ERR(CAM_CRM, "Invalid type");
 		goto device_ops_fail;
 	}
@@ -391,10 +409,8 @@ static int cam_destroy_hdl(int32_t dev_hdl, int dev_hdl_type)
 	}
 
 	type = CAM_REQ_MGR_GET_HDL_TYPE(dev_hdl);
-	if (type != dev_hdl_type) {
-		CAM_ERR(CAM_CRM, "Invalid type %d, %d", type, dev_hdl_type);
+	if (type != dev_hdl_type)
 		goto destroy_hdl_fail;
-	}
 
 	if (hdl_tbl->hdl[idx].hdl_value != dev_hdl) {
 		CAM_ERR(CAM_CRM, "Invalid hdl");
@@ -414,10 +430,16 @@ destroy_hdl_fail:
 	return -EINVAL;
 }
 
-int cam_destroy_device_hdl(int32_t dev_hdl)
+int cam_destroy_device_ctx_hdl(int32_t dev_hdl)
 {
 	CAM_DBG(CAM_CRM, "%s: handle = %x", __func__, dev_hdl);
-	return cam_destroy_hdl(dev_hdl, HDL_TYPE_DEV);
+	return cam_destroy_hdl(dev_hdl, HDL_TYPE_DEV_CTX);
+}
+
+int cam_destroy_device_bridge_hdl(int32_t dev_hdl)
+{
+	CAM_DBG(CAM_CRM, "%s: handle = %x", __func__, dev_hdl);
+	return cam_destroy_hdl(dev_hdl, HDL_TYPE_DEV_BRIDGE);
 }
 
 int cam_destroy_link_hdl(int32_t dev_hdl)

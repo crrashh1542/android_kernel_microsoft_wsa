@@ -14,12 +14,15 @@
 #include "tb.h"
 #include "sb_regs.h"
 
-#define PORT_CAP_PCIE_LEN	1
+#define PORT_CAP_V1_PCIE_LEN	1
+#define PORT_CAP_V2_PCIE_LEN	2
 #define PORT_CAP_POWER_LEN	2
 #define PORT_CAP_LANE_LEN	3
 #define PORT_CAP_USB3_LEN	5
-#define PORT_CAP_DP_LEN		8
-#define PORT_CAP_TMU_LEN	8
+#define PORT_CAP_DP_V1_LEN	9
+#define PORT_CAP_DP_V2_LEN	14
+#define PORT_CAP_TMU_V1_LEN	8
+#define PORT_CAP_TMU_V2_LEN	10
 #define PORT_CAP_BASIC_LEN	9
 #define PORT_CAP_USB4_LEN	20
 
@@ -943,7 +946,7 @@ static void margining_port_remove(struct tb_port *port)
 	snprintf(dir_name, sizeof(dir_name), "port%d", port->port);
 	parent = debugfs_lookup(dir_name, port->sw->debugfs_dir);
 	if (parent)
-		debugfs_remove_recursive(debugfs_lookup("margining", parent));
+		debugfs_lookup_and_remove("margining", parent);
 
 	kfree(port->usb4->margining);
 	port->usb4->margining = NULL;
@@ -1148,7 +1151,10 @@ static void port_cap_show(struct tb_port *port, struct seq_file *s,
 		break;
 
 	case TB_PORT_CAP_TIME1:
-		length = PORT_CAP_TMU_LEN;
+		if (usb4_switch_version(port->sw) < 2)
+			length = PORT_CAP_TMU_V1_LEN;
+		else
+			length = PORT_CAP_TMU_V2_LEN;
 		break;
 
 	case TB_PORT_CAP_POWER:
@@ -1157,9 +1163,17 @@ static void port_cap_show(struct tb_port *port, struct seq_file *s,
 
 	case TB_PORT_CAP_ADAP:
 		if (tb_port_is_pcie_down(port) || tb_port_is_pcie_up(port)) {
-			length = PORT_CAP_PCIE_LEN;
-		} else if (tb_port_is_dpin(port) || tb_port_is_dpout(port)) {
-			length = PORT_CAP_DP_LEN;
+			if (usb4_switch_version(port->sw) < 2)
+				length = PORT_CAP_V1_PCIE_LEN;
+			else
+				length = PORT_CAP_V2_PCIE_LEN;
+		} else if (tb_port_is_dpin(port)) {
+			if (usb4_switch_version(port->sw) < 2)
+				length = PORT_CAP_DP_V1_LEN;
+			else
+				length = PORT_CAP_DP_V2_LEN;
+		} else if (tb_port_is_dpout(port)) {
+			length = PORT_CAP_DP_V1_LEN;
 		} else if (tb_port_is_usb3_down(port) ||
 			   tb_port_is_usb3_up(port)) {
 			length = PORT_CAP_USB3_LEN;

@@ -439,10 +439,10 @@ MMU_MapPages(MMU_CONTEXT *psMMUContext,
 @Input          uiMemAllocFlags         Indicates if the unmapped regions need
                                         to be backed by dummy or zero page
 
-@Return         None
+@Return         PVRSRV_OK if the unmap operation was successful
 */
 /*****************************************************************************/
-void
+PVRSRV_ERROR
 MMU_UnmapPages(MMU_CONTEXT *psMMUContext,
                PVRSRV_MEMALLOCFLAGS_T uiMappingFlags,
                IMG_DEV_VIRTADDR sDevVAddr,
@@ -494,10 +494,10 @@ MMU_MapPMRFast(MMU_CONTEXT *psMMUContext,
 
 @Input          uiLog2PageSize          log2 size of the page
 
-@Return         None
+@Return         PVRSRV_OK if the PMR was successfully unmapped
 */
 /*****************************************************************************/
-void
+PVRSRV_ERROR
 MMU_UnmapPMRFast(MMU_CONTEXT *psMMUContext,
                  IMG_DEV_VIRTADDR sDevVAddrBase,
                  IMG_UINT32 ui32PageCount,

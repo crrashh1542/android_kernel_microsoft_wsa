@@ -17,6 +17,7 @@
 #include "i915_irq.h"
 #include "intel_crtc.h"
 #include "intel_display_types.h"
+#include "intel_vblank.h"
 
 TRACE_EVENT(intel_pipe_enable,
 	    TP_PROTO(struct intel_crtc *crtc),

@@ -85,21 +85,18 @@ static int try_to_freeze_tasks(bool user_only)
 	elapsed = ktime_sub(end, start);
 	elapsed_msecs = ktime_to_ms(elapsed);
 
-	if (wakeup) {
+	if (todo) {
 		pr_cont("\n");
-		pr_err("Freezing of tasks aborted after %d.%03d seconds",
-		       elapsed_msecs / 1000, elapsed_msecs % 1000);
-	} else if (todo) {
-		pr_cont("\n");
-		pr_err("Freezing of tasks failed after %d.%03d seconds"
-		       " (%d tasks refusing to freeze, wq_busy=%d):\n",
+		pr_err("Freezing of tasks %s after %d.%03d seconds "
+		       "(%d tasks refusing to freeze, wq_busy=%d):\n",
+		       wakeup ? "aborted" : "failed",
 		       elapsed_msecs / 1000, elapsed_msecs % 1000,
 		       todo - wq_busy, wq_busy);
 
 		if (wq_busy)
 			show_all_workqueues();
 
-		if (pm_debug_messages_on) {
+		if (!wakeup || pm_debug_messages_on) {
 			read_lock(&tasklist_lock);
 			for_each_process_thread(g, p) {
 				if (p != current && !freezer_should_skip(p)

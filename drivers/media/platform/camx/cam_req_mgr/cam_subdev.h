@@ -53,7 +53,7 @@ struct cam_subdev {
 	struct v4l2_subdev                     sd;
 	const struct v4l2_subdev_ops          *ops;
 	const struct v4l2_subdev_internal_ops *internal_ops;
-	char                                  *name;
+	const char                            *name;
 	u32                                    sd_flags;
 	void                                  *token;
 	u32                                    ent_function;
@@ -70,7 +70,7 @@ struct cam_subdev {
  *
  */
 int cam_subdev_probe(struct cam_subdev *sd, struct platform_device *pdev,
-	char *name, uint32_t dev_type);
+	const char *name, uint32_t dev_type);
 
 /**
  * cam_subdev_remove()

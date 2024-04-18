@@ -333,7 +333,8 @@ static inline u64 get_mmio_spte_generation(u64 spte)
 #define SET_SPTE_NEED_REMOTE_TLB_FLUSH BIT(1)
 #define SET_SPTE_SPURIOUS              BIT(2)
 
-int make_spte(struct kvm_vcpu *vcpu, unsigned int pte_access, int level,
+int make_spte(struct kvm_vcpu *vcpu, const struct kvm_memory_slot *slot,
+		     unsigned int pte_access, int level,
 		     gfn_t gfn, kvm_pfn_t pfn, u64 old_spte, bool speculative,
 		     bool can_unsync, bool host_writable, bool ad_disabled,
 		     u64 *new_spte);

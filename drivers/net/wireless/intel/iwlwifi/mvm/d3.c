@@ -462,11 +462,9 @@ static int iwl_mvm_wowlan_config_rsc_tsc(struct iwl_mvm *mvm,
 		struct wowlan_key_rsc_v5_data data = {};
 		int i;
 
-		data.rsc = kmalloc(sizeof(*data.rsc), GFP_KERNEL);
+		data.rsc = kzalloc(sizeof(*data.rsc), GFP_KERNEL);
 		if (!data.rsc)
 			return -ENOMEM;
-
-		memset(data.rsc, 0xff, sizeof(*data.rsc));
 
 		for (i = 0; i < ARRAY_SIZE(data.rsc->mcast_key_id_map); i++)
 			data.rsc->mcast_key_id_map[i] =
@@ -1090,7 +1088,7 @@ static int iwl_mvm_wowlan_config_key_params(struct iwl_mvm *mvm,
 					sizeof(struct iwl_wowlan_kek_kck_material_cmd_v2);
 			/* skip the sta_id at the beginning */
 			_kek_kck_cmd = (void *)
-				((u8 *)_kek_kck_cmd) + sizeof(kek_kck_cmd.sta_id);
+				((u8 *)_kek_kck_cmd + sizeof(kek_kck_cmd.sta_id));
 		}
 
 		IWL_DEBUG_WOWLAN(mvm, "setting akm %d\n",

@@ -707,12 +707,10 @@ static void t7xx_dpmaif_rx_skb(struct dpmaif_rx_queue *rxq,
 
 	skb->ip_summed = skb_info->check_sum == DPMAIF_CS_RESULT_PASS ? CHECKSUM_UNNECESSARY :
 									CHECKSUM_NONE;
-
 	netif_id = FIELD_GET(NETIF_MASK, skb_info->cur_chn_idx);
 	skb_cb = T7XX_SKB_CB(skb);
 	skb_cb->netif_idx = netif_id;
 	skb_cb->rx_pkt_type = skb_info->pkt_type;
-
 	dpmaif_ctrl->callbacks->recv_skb(dpmaif_ctrl->t7xx_dev->ccmni_ctlb, skb, &rxq->napi);
 }
 
@@ -820,38 +818,14 @@ static int t7xx_dpmaif_napi_rx_data_collect(struct dpmaif_ctrl *dpmaif_ctrl,
 	int ret = 0;
 
 	cnt = t7xx_dpmaifq_poll_pit(rxq);
+	if (!cnt)
+		return ret;
 
-	if (cnt) {
-		ret = t7xx_dpmaif_rx_start(rxq, cnt, budget, once_more);
-
-		if (ret < 0 && ret != -EAGAIN)
-			dev_err(dpmaif_ctrl->dev, "dlq%u rx ERR:%d\n", rxq->index, ret);
-	}
+	ret = t7xx_dpmaif_rx_start(rxq, cnt, budget, once_more);
+	if (ret < 0)
+		dev_err(dpmaif_ctrl->dev, "dlq%u rx ERR:%d\n", rxq->index, ret);
 
 	return ret;
-}
-
-static int t7xx_dpmaif_rx_set_proc_qcheck(struct dpmaif_rx_queue *rxq)
-{
-	atomic_set(&rxq->rx_processing, 1);
-	/* Ensure rx_processing is changed to 1 before actually begin RX flow */
-	smp_mb();
-
-	if (!rxq->que_started) {
-		atomic_set(&rxq->rx_processing, 0);
-		dev_err(rxq->dpmaif_ctrl->dev, "Work RXQ: %d has not been started\n", rxq->index);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static void t7xx_dpmaif_rx_enable_sleep(struct dpmaif_rx_queue *rxq)
-{
-	t7xx_pci_enable_sleep(rxq->dpmaif_ctrl->t7xx_dev);
-	pm_runtime_mark_last_busy(rxq->dpmaif_ctrl->dev);
-	pm_runtime_put_autosuspend(rxq->dpmaif_ctrl->dev);
-	atomic_set(&rxq->rx_processing, 0);
 }
 
 int t7xx_dpmaif_napi_rx_poll(struct napi_struct *napi, const int budget)
@@ -860,17 +834,19 @@ int t7xx_dpmaif_napi_rx_poll(struct napi_struct *napi, const int budget)
 	struct t7xx_pci_dev *t7xx_dev = rxq->dpmaif_ctrl->t7xx_dev;
 	int ret, once_more = 0, work_done = 0;
 
-	ret = t7xx_dpmaif_rx_set_proc_qcheck(rxq);
-	if (ret)
+	atomic_set(&rxq->rx_processing, 1);
+	/* Ensure rx_processing is changed to 1 before actually begin RX flow */
+	smp_mb();
+
+	if (!rxq->que_started) {
+		atomic_set(&rxq->rx_processing, 0);
+		pm_runtime_put_autosuspend(rxq->dpmaif_ctrl->dev);
+		dev_err(rxq->dpmaif_ctrl->dev, "Work RXQ: %d has not been started\n", rxq->index);
 		return work_done;
-
-	if (!rxq->sleep_lock_pending) {
-		ret = pm_runtime_resume_and_get(rxq->dpmaif_ctrl->dev);
-		if (ret < 0 && ret != -EACCES)
-			return work_done;
-
-		t7xx_pci_disable_sleep(t7xx_dev);
 	}
+
+	if (!rxq->sleep_lock_pending)
+		t7xx_pci_disable_sleep(t7xx_dev);
 
 	ret = try_wait_for_completion(&t7xx_dev->sleep_lock_acquire);
 	if (!ret) {
@@ -883,9 +859,8 @@ int t7xx_dpmaif_napi_rx_poll(struct napi_struct *napi, const int budget)
 	rxq->sleep_lock_pending = false;
 	while (work_done < budget) {
 		int each_budget = budget - work_done;
-		int rx_cnt = t7xx_dpmaif_napi_rx_data_collect(rxq->dpmaif_ctrl,
-								rxq->index, each_budget,
-								&once_more);
+		int rx_cnt = t7xx_dpmaif_napi_rx_data_collect(rxq->dpmaif_ctrl, rxq->index,
+							      each_budget, &once_more);
 		if (rx_cnt > 0)
 			work_done += rx_cnt;
 		else
@@ -900,18 +875,22 @@ int t7xx_dpmaif_napi_rx_poll(struct napi_struct *napi, const int budget)
 		napi_complete_done(napi, work_done);
 		t7xx_dpmaif_clr_ip_busy_sts(&rxq->dpmaif_ctrl->hw_info);
 		t7xx_dpmaif_dlq_unmask_rx_done(&rxq->dpmaif_ctrl->hw_info, rxq->index);
+		t7xx_pci_enable_sleep(rxq->dpmaif_ctrl->t7xx_dev);
+		pm_runtime_mark_last_busy(rxq->dpmaif_ctrl->dev);
+		pm_runtime_put_autosuspend(rxq->dpmaif_ctrl->dev);
+		atomic_set(&rxq->rx_processing, 0);
 	} else {
 		t7xx_dpmaif_clr_ip_busy_sts(&rxq->dpmaif_ctrl->hw_info);
 	}
 
-	t7xx_dpmaif_rx_enable_sleep(rxq);
 	return work_done;
 }
 
 void t7xx_dpmaif_irq_rx_done(struct dpmaif_ctrl *dpmaif_ctrl, const unsigned int que_mask)
 {
 	struct dpmaif_rx_queue *rxq;
-	int qno;
+	struct dpmaif_ctrl *ctrl;
+	int qno, ret;
 
 	qno = ffs(que_mask) - 1;
 	if (qno < 0 || qno > DPMAIF_RXQ_NUM - 1) {
@@ -920,6 +899,18 @@ void t7xx_dpmaif_irq_rx_done(struct dpmaif_ctrl *dpmaif_ctrl, const unsigned int
 	}
 
 	rxq = &dpmaif_ctrl->rxq[qno];
+	ctrl = rxq->dpmaif_ctrl;
+	/* We need to make sure that the modem has been resumed before
+	 * calling napi. This can't be done inside the polling function
+	 * as we could be blocked waiting for device to be resumed,
+	 * which can't be done from softirq context the poll function
+	 * is running in.
+	 */
+	ret = pm_runtime_resume_and_get(ctrl->dev);
+	if (ret < 0 && ret != -EACCES) {
+		dev_err(ctrl->dev, "Failed to resume device: %d\n", ret);
+		return;
+	}
 	napi_schedule(&rxq->napi);
 }
 

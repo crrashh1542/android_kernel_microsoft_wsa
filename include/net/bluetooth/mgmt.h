@@ -848,26 +848,17 @@ struct mgmt_cp_add_adv_patterns_monitor_rssi {
 #define MGMT_SCO_CODEC_MSBC_TRANSPARENT		0x2
 #define MGMT_SCO_CODEC_MSBC			0x3
 
-struct mgmt_bt_codec {
-	__u8	codec;
-	__u8	packet_size;
-	__u8	data_path;
-	__u32	data_length;
-	__u8	data[];
-} __packed;
-
 struct mgmt_cp_get_codec_capabilities {
 	__u16	hci_id;
-	__u32	num_codecs;
-	__u8	codecs[];
 } __packed;
-#define MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE	0x6
+#define MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE	0x2
 
 struct mgmt_rp_get_codec_capabilities {
-	__u16			hci_id;
-	__u8			offload_capable;
-	__u32			num_codecs;
-	struct mgmt_bt_codec	codecs[];
+	__u16	hci_id;
+	__u8	transparent_wbs_supported;
+	// This refers to the offload path when it's non-zero.
+	__u8	hci_data_path_id;
+	__u32	wbs_pkt_len;
 } __packed;
 
 #define MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE	0x0101
@@ -899,6 +890,13 @@ struct mgmt_cp_notify_suspend_state {
 	__u8 suspended;
 } __packed;
 #define MGMT_NOTIFY_SUSPEND_STATE_SIZE	0x3
+
+#define MGMT_OP_SCO_FORCE_RETRANS_EFFORT	0x0200
+struct mgmt_cp_sco_force_retrans_effort {
+	struct mgmt_addr_info addr;
+	__u8 retrans_effort;
+} __packed;
+#define MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE	(MGMT_ADDR_INFO_SIZE + 1)
 
 #define MGMT_EV_CMD_COMPLETE		0x0001
 struct mgmt_ev_cmd_complete {

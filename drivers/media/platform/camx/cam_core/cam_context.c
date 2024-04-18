@@ -62,7 +62,7 @@ int cam_context_shutdown(struct cam_context *ctx)
 		rc = -EINVAL;
 	}
 
-	rc = cam_destroy_device_hdl(ctx->dev_hdl);
+	rc = cam_destroy_device_ctx_hdl(ctx->dev_hdl);
 	if (rc)
 		CAM_ERR(CAM_CORE, "destroy device hdl failed for node %s",
 			ctx->dev_name);
@@ -578,7 +578,7 @@ int cam_context_init(struct cam_context *ctx,
 	mutex_init(&ctx->sync_mutex);
 	spin_lock_init(&ctx->lock);
 
-	strlcpy(ctx->dev_name, dev_name, CAM_CTX_DEV_NAME_MAX_LENGTH);
+	ctx->dev_name = dev_name;
 	ctx->dev_id = dev_id;
 	ctx->ctx_id = ctx_id;
 	ctx->last_flush_req = 0;

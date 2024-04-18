@@ -40,18 +40,14 @@
 #define CLK_RATE_TRACE_OPS (&clk_rate_trace_ops)
 
 extern struct kbase_clk_rate_trace_op_conf clk_rate_trace_ops;
+extern struct kbase_pm_callback_conf mtk_pm_callbacks;
 
-extern struct kbase_pm_callback_conf mt8183_pm_callbacks;
 extern struct kbase_platform_funcs_conf mt8183_platform_funcs;
-
-extern struct kbase_pm_callback_conf mt8192_pm_callbacks;
+extern struct kbase_platform_funcs_conf mt8183b_platform_funcs;
 extern struct kbase_platform_funcs_conf mt8192_platform_funcs;
-
-extern struct kbase_pm_callback_conf mt8195_pm_callbacks;
 extern struct kbase_platform_funcs_conf mt8195_platform_funcs;
-
-extern struct kbase_pm_callback_conf mt8186_pm_callbacks;
 extern struct kbase_platform_funcs_conf mt8186_platform_funcs;
+extern struct kbase_platform_funcs_conf mt8188_platform_funcs;
 
 #if IS_ENABLED(CONFIG_OF)
 extern const struct of_device_id kbase_dt_ids[];

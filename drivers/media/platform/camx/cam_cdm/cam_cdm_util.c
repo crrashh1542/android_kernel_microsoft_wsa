@@ -154,7 +154,7 @@ struct cdm_genirq_cmd {
 } __attribute__((__packed__));
 
 /**
- * struct cdm_perf_ctrl_cmd_t - Definition for CDM perf control command.
+ * struct cdm_perf_ctrl_cmd - Definition for CDM perf control command.
  * @perf: perf command
  * @reserved: reserved bits
  * @cmd:Command ID (CDMCmd)

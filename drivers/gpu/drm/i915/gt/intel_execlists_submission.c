@@ -3271,6 +3271,9 @@ static void execlists_park(struct intel_engine_cs *engine)
 {
 	cancel_timer(&engine->execlists.timer);
 	cancel_timer(&engine->execlists.preempt);
+
+	/* Reset upon idling, or we may delay the busy wakeup. */
+	WRITE_ONCE(engine->sched_engine->queue_priority_hint, INT_MIN);
 }
 
 static void add_to_engine(struct i915_request *rq)
@@ -3546,6 +3549,8 @@ int intel_execlists_submission_setup(struct intel_engine_cs *engine)
 
 	logical_ring_default_vfuncs(engine);
 	logical_ring_default_irqs(engine);
+
+	seqcount_init(&engine->stats.execlists.lock);
 
 	if (engine->flags & I915_ENGINE_HAS_RCS_REG_STATE)
 		rcs_submission_override(engine);

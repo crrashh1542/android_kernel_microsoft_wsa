@@ -279,7 +279,8 @@ static int cam_sensor_handle_slave_info(
 	return rc;
 }
 
-/**
+/*
+ * FIXME kerneldoc
  * Name : cam_sensor_i2c_command_parser
  * Description : Parse CSL CCI packet and apply register settings
  * Parameters :  s_ctrl  input/output    sub_device

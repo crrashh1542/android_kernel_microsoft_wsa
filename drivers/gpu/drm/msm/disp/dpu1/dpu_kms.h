@@ -39,6 +39,7 @@
 #define DPU_DEBUG_DRIVER(fmt, ...) DRM_DEBUG_DRIVER(fmt, ##__VA_ARGS__)
 
 #define DPU_ERROR(fmt, ...) DRM_ERROR(fmt, ##__VA_ARGS__)
+#define DPU_ERROR_RATELIMITED(fmt, ...) DRM_ERROR_RATELIMITED(fmt, ##__VA_ARGS__)
 
 /**
  * ktime_compare_safe - compare two ktime structures

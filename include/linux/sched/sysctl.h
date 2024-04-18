@@ -38,15 +38,6 @@ enum sched_tunable_scaling {
 extern unsigned int sysctl_iowait_reset_ticks;
 extern unsigned int sysctl_iowait_apply_ticks;
 
-/*
- *  control realtime throttling:
- *
- *  /proc/sys/kernel/sched_rt_period_us
- *  /proc/sys/kernel/sched_rt_runtime_us
- */
-extern unsigned int sysctl_sched_rt_period;
-extern int sysctl_sched_rt_runtime;
-
 extern unsigned int sysctl_sched_dl_period_max;
 extern unsigned int sysctl_sched_dl_period_min;
 
@@ -69,8 +60,6 @@ extern int sched_rr_timeslice;
 
 int sched_rr_handler(struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
-int sched_rt_handler(struct ctl_table *table, int write, void *buffer,
-		size_t *lenp, loff_t *ppos);
 int sysctl_sched_uclamp_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
 int sysctl_numa_balancing(struct ctl_table *table, int write, void *buffer,
@@ -82,6 +71,12 @@ int sysctl_schedstats(struct ctl_table *table, int write, void *buffer,
 extern unsigned int sysctl_sched_energy_aware;
 int sched_energy_aware_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
+#endif
+
+extern unsigned long sysctl_sched_min_load_balance_interval;
+
+#ifdef CONFIG_SMP
+DECLARE_STATIC_KEY_TRUE(sched_aggressive_next_balance);
 #endif
 
 #endif /* _LINUX_SCHED_SYSCTL_H */

@@ -9,6 +9,8 @@
 
 #include "common.h"
 
+#include <linux/kvm_para.h>
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
@@ -73,8 +75,14 @@ static long syscall_trace_enter(struct pt_regs *regs, long syscall,
 	/* Either of the above might have changed the syscall number */
 	syscall = syscall_get_nr(current, regs);
 
-	if (unlikely(work & SYSCALL_WORK_SYSCALL_TRACEPOINT))
+	if (unlikely(work & SYSCALL_WORK_SYSCALL_TRACEPOINT)) {
 		trace_sys_enter(regs, syscall);
+		/*
+		 * Probes or BPF hooks in the tracepoint may have changed the
+		 * system call number as well.
+		 */
+		syscall = syscall_get_nr(current, regs);
+	}
 
 	syscall_enter_audit(regs, syscall);
 
@@ -200,6 +208,17 @@ static void exit_to_user_mode_prepare(struct pt_regs *regs)
 
 	lockdep_assert_irqs_disabled();
 
+	/*
+	 * Guest requests a boost when preemption is disabled but does not request
+	 * an immediate unboost when preemption is enabled back. There is a chance
+	 * that we are boosted here. Unboost if needed.
+	 */
+	if (pv_sched_enabled()) {
+		pv_sched_vcpu_kerncs_unboost(PVSCHED_KERNCS_BOOST_ALL, true);
+		pv_sched_vcpu_update(current->policy, current->rt_priority,
+				task_nice(current), false);
+	}
+
 	/* Flush pending rcuog wakeup before the last need_resched() check */
 	tick_nohz_user_enter_prepare();
 
@@ -322,6 +341,11 @@ noinstr irqentry_state_t irqentry_enter(struct pt_regs *regs)
 		.exit_rcu = false,
 	};
 
+	instrumentation_begin();
+	if (pv_sched_enabled())
+		pv_sched_vcpu_kerncs_boost_lazy(PVSCHED_KERNCS_BOOST_IRQ);
+	instrumentation_end();
+
 	if (user_mode(regs)) {
 		irqentry_enter_from_user_mode(regs);
 		return ret;
@@ -400,6 +424,11 @@ noinstr void irqentry_exit(struct pt_regs *regs, irqentry_state_t state)
 {
 	lockdep_assert_irqs_disabled();
 
+	instrumentation_begin();
+	if (pv_sched_enabled())
+		pv_sched_vcpu_kerncs_unboost(PVSCHED_KERNCS_BOOST_IRQ, true);
+	instrumentation_end();
+
 	/* Check whether this returns to user mode */
 	if (user_mode(regs)) {
 		irqentry_exit_to_user_mode(regs);
@@ -455,6 +484,10 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs)
 	instrumentation_begin();
 	trace_hardirqs_off_finish();
 	ftrace_nmi_enter();
+
+	if (pv_sched_enabled())
+		pv_sched_vcpu_kerncs_boost_lazy(PVSCHED_KERNCS_BOOST_IRQ);
+
 	instrumentation_end();
 
 	return irq_state;
@@ -468,6 +501,10 @@ void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t irq_state)
 		trace_hardirqs_on_prepare();
 		lockdep_hardirqs_on_prepare();
 	}
+
+	if (pv_sched_enabled())
+		pv_sched_vcpu_kerncs_unboost(PVSCHED_KERNCS_BOOST_IRQ, true);
+
 	instrumentation_end();
 
 	rcu_nmi_exit();

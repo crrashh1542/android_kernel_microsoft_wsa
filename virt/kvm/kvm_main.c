@@ -57,6 +57,9 @@
 #include <asm/ioctl.h>
 #include <linux/uaccess.h>
 
+#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
+
 #include "coalesced_mmio.h"
 #include "async_pf.h"
 #include "mmu_lock.h"
@@ -93,6 +96,61 @@ unsigned int halt_poll_ns_shrink;
 module_param(halt_poll_ns_shrink, uint, 0644);
 EXPORT_SYMBOL_GPL(halt_poll_ns_shrink);
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+__read_mostly DEFINE_STATIC_KEY_FALSE(kvm_pv_sched);
+EXPORT_SYMBOL_GPL(kvm_pv_sched);
+
+static int set_kvm_pv_sched(const char *val, const struct kernel_param *cp)
+{
+	struct kvm *kvm;
+	char *s = strstrip((char *)val);
+	bool new_val, old_val = static_key_enabled(&kvm_pv_sched);
+
+	if (!strcmp(s, "0"))
+		new_val = 0;
+	else if (!strcmp(s, "1"))
+		new_val = 1;
+	else
+		return -EINVAL;
+
+	/*
+	 * We have three factors that determine the feature status for a vcpu:
+	 * - Global static key: kvm_pv_sched
+	 * - Per vm: kvm->pv_sched_enabled
+	 * - Per vcpu: vcpu->arch.pv_sched.msr_val
+	 * We check this in order to determine the feature status. On both enable
+	 * and disable path, we modify this in the same order. This is to avoid
+	 * races which otherwise would need boosting path locking.
+	 */
+	if (old_val != new_val) {
+		mutex_lock(&kvm_lock);
+		if (new_val)
+			static_branch_enable(&kvm_pv_sched);
+		else
+			static_branch_disable(&kvm_pv_sched);
+
+		list_for_each_entry(kvm, &vm_list, vm_list)
+			kvm_set_pv_sched_enabled(kvm, !old_val);
+		mutex_unlock(&kvm_lock);
+	}
+
+	return 0;
+}
+
+static int get_kvm_pv_sched(char *buf, const struct kernel_param *cp)
+{
+	return sprintf(buf, "%s\n",
+			static_key_enabled(&kvm_pv_sched) ? "1" : "0");
+}
+
+static const struct kernel_param_ops kvm_pv_sched_ops = {
+	.set = set_kvm_pv_sched,
+	.get = get_kvm_pv_sched
+};
+
+module_param_cb(kvm_pv_sched, &kvm_pv_sched_ops, NULL, 0644);
+#endif
+
 /*
  * Ordering of locks:
  *
@@ -116,8 +174,6 @@ struct dentry *kvm_debugfs_dir;
 EXPORT_SYMBOL_GPL(kvm_debugfs_dir);
 
 static const struct file_operations stat_fops_per_vm;
-
-static struct file_operations kvm_chardev_ops;
 
 static long kvm_vcpu_ioctl(struct file *file, unsigned int ioctl,
 			   unsigned long arg);
@@ -1232,9 +1288,6 @@ static struct kvm *kvm_create_vm(unsigned long type)
 	if (!kvm)
 		return ERR_PTR(-ENOMEM);
 
-	/* KVM is pinned via open("/dev/kvm"), the fd passed to this ioctl(). */
-	__module_get(kvm_chardev_ops.owner);
-
 	KVM_MMU_LOCK_INIT(kvm);
 	mmgrab(current->mm);
 	kvm->mm = current->mm;
@@ -1250,6 +1303,9 @@ static struct kvm *kvm_create_vm(unsigned long type)
 
 	BUILD_BUG_ON(KVM_MEM_SLOTS_NUM > SHRT_MAX);
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	kvm->pv_sched_enabled = true;
+#endif
 	/*
 	 * Force subsequent debugfs file creations to fail if the VM directory
 	 * is not created (by kvm_create_vm_debugfs()).
@@ -1336,7 +1392,6 @@ out_err_no_irq_srcu:
 out_err_no_srcu:
 	kvm_arch_free_vm(kvm);
 	mmdrop(current->mm);
-	module_put(kvm_chardev_ops.owner);
 	return ERR_PTR(r);
 }
 
@@ -1403,7 +1458,6 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	preempt_notifier_dec();
 	hardware_disable_all();
 	mmdrop(mm);
-	module_put(kvm_chardev_ops.owner);
 }
 
 void kvm_get_kvm(struct kvm *kvm)
@@ -1636,6 +1690,8 @@ static int check_memory_region_flags(const struct kvm_userspace_memory_region *m
 #ifdef __KVM_HAVE_READONLY_MEM
 	valid_flags |= KVM_MEM_READONLY;
 #endif
+
+	valid_flags |= KVM_MEM_NON_COHERENT_DMA;
 
 	if (mem->flags & ~valid_flags)
 		return -EINVAL;
@@ -1948,7 +2004,8 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	} else { /* Modify an existing slot. */
 		if ((new.userspace_addr != old.userspace_addr) ||
 		    (new.npages != old.npages) ||
-		    ((new.flags ^ old.flags) & KVM_MEM_READONLY))
+		    ((new.flags ^ old.flags) &
+		     (KVM_MEM_READONLY | KVM_MEM_NON_COHERENT_DMA)))
 			return -EINVAL;
 
 		if (new.base_gfn != old.base_gfn)
@@ -3580,6 +3637,14 @@ void kvm_vcpu_block(struct kvm_vcpu *vcpu)
 		if (kvm_vcpu_check_block(vcpu) < 0)
 			break;
 
+		/*
+		 * Boost before scheduling out. Wakeup happens only on
+		 * an event or a signal and hence it is beneficial to
+		 * be scheduled ASAP. Ultimately, guest gets to idle loop
+		 * and then will request deboost.
+		 */
+		kvm_vcpu_boost(vcpu, PVSCHED_KERNCS_BOOST_IDLE);
+
 		waited = true;
 		schedule();
 	}
@@ -3636,6 +3701,154 @@ bool kvm_vcpu_wake_up(struct kvm_vcpu *vcpu)
 	return false;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_wake_up);
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+union vcpu_sched_attr kvm_vcpu_get_sched(struct kvm_vcpu *vcpu)
+{
+	union vcpu_sched_attr attr = { 0 };
+	struct pid *pid;
+	struct task_struct *vcpu_task = NULL;
+
+	rcu_read_lock();
+	pid = rcu_dereference(vcpu->pid);
+	if (pid)
+		vcpu_task = get_pid_task(pid, PIDTYPE_PID);
+	rcu_read_unlock();
+	if (vcpu_task == NULL)
+		return attr;
+
+	attr.sched_policy = vcpu_task->policy;
+	if (vcpu_task->policy == SCHED_RR || vcpu_task->policy == SCHED_FIFO)
+		attr.rt_priority = vcpu_task->rt_priority;
+	else
+		attr.sched_nice = task_nice(vcpu_task);
+
+	put_task_struct(vcpu_task);
+
+	return attr;
+}
+
+ /*
+  * Check if we need to act on the boost/unboost request.
+  * Returns true if:
+  * - caller is requesting boost and vcpu is boosted, or
+  * - caller is requesting unboost and vcpu is not boosted.
+  */
+static inline bool __needs_set_sched(struct kvm_vcpu *vcpu, int policy, int prio, int nice)
+{
+	union vcpu_sched_attr attr = {
+		.sched_policy = policy,
+		.rt_priority = prio,
+		.sched_nice = nice
+	};
+
+	return kvm_arch_vcpu_normalprio_cmp(&vcpu->arch, attr);
+}
+
+int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, union vcpu_sched_attr attr)
+{
+	int rt_prio;
+	int nice;
+	int policy;
+	int ret = 0;
+	struct pid *pid;
+	struct task_struct *vcpu_task = NULL;
+	int max_rt_prio = kvm_arch_vcpu_kerncs_prio(&vcpu->arch);
+	union vcpu_sched_attr default_attr = kvm_arch_vcpu_default_sched_attr(&vcpu->arch);
+
+retry_disable:
+	/*
+	 * If the feature is disabled, or a boost request comes when throttled, revert to CFS.
+	 */
+	if (!kvm_vcpu_sched_enabled(vcpu) || (kvm_arch_vcpu_is_throttled(&vcpu->arch) &&
+		(attr.kern_cs || kvm_arch_vcpu_normalprio_cmp(&vcpu->arch, attr) < 0)))
+		attr = default_attr;
+
+	policy = attr.sched_policy;
+	rt_prio = attr.rt_priority;
+	nice = attr.sched_nice;
+	if (attr.kern_cs || policy == SCHED_DEADLINE) {
+		nice = 0;
+		policy = kvm_arch_vcpu_kerncs_policy(&vcpu->arch);
+		rt_prio = max_rt_prio;
+	} else if (policy == SCHED_FIFO || policy == SCHED_RR) {
+		nice = 0;
+		if (rt_prio > max_rt_prio)
+			rt_prio = max_rt_prio;
+	} else {
+		rt_prio = 0;
+	}
+
+	rcu_read_lock();
+	pid = rcu_dereference(vcpu->pid);
+	if (pid)
+		vcpu_task = get_pid_task(pid, PIDTYPE_PID);
+	rcu_read_unlock();
+	if (vcpu_task == NULL)
+		return -KVM_EINVAL;
+
+	/*
+	 * This might be called from interrupt context.
+	 * Since we do not use rt-mutexes, we can safely call
+	 * sched_setscheduler_pi_nocheck with pi = false.
+	 * NOTE: If in future, we use rt-mutexes, this should
+	 * be modified to use a tasklet to do boost/unboost.
+	 */
+	WARN_ON_ONCE(vcpu_task->pi_top_task);
+	if (__needs_set_sched(vcpu, policy, rt_prio, nice)) {
+		struct sched_attr sattr = {
+			.sched_policy = policy,
+			.sched_nice = nice,
+			.sched_priority = rt_prio,
+		};
+		ret = sched_setattr_pi_nocheck(vcpu_task, &sattr, false);
+	}
+
+	/*
+	 * values to return to guest.
+	 */
+	attr.sched_policy = vcpu_task->policy;
+	if (task_is_realtime(vcpu_task))
+		attr.rt_priority = vcpu_task->rt_priority;
+	else
+		attr.sched_nice = task_nice(vcpu_task);
+
+	put_task_struct(vcpu_task);
+
+	attr.enabled = kvm_vcpu_sched_enabled(vcpu);
+	trace_kvm_pvsched_schedattr(ret, &attr);
+	/*
+	 * If the feature is disabled, we set it in the priority field to let the guest know.
+	 */
+	if (!attr.enabled) {
+		/*
+		 * There could be a race where the disable path disabled the feature
+		 * but we did the boost without knowing that disable was in progress.
+		 * Unboost again.
+		 */
+		if (attr.sched_policy != SCHED_NORMAL || attr.sched_nice != 0)
+			goto retry_disable;
+	}
+
+	kvm_arch_vcpu_set_sched_attr(&vcpu->arch, attr);
+	kvm_make_request(KVM_REQ_VCPU_PV_SCHED, vcpu);
+	trace_kvm_pvsched_vcpu_state(kvm_arch_vcpu_is_boosted(&vcpu->arch),
+			kvm_arch_vcpu_is_throttled(&vcpu->arch));
+
+	return ret;
+}
+
+void kvm_vcpu_boost(struct kvm_vcpu *vcpu, enum kerncs_boost_type boost_type)
+{
+	union vcpu_sched_attr attr = {
+		.kern_cs = boost_type
+	};
+
+	if (kvm_vcpu_sched_enabled(vcpu))
+		kvm_vcpu_set_sched(vcpu, attr);
+}
+EXPORT_SYMBOL_GPL(kvm_vcpu_boost);
+#endif
 
 #ifndef CONFIG_S390
 /*
@@ -4496,6 +4709,7 @@ static long kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_USER_MEMORY:
 	case KVM_CAP_DESTROY_MEMORY_REGION_WORKS:
 	case KVM_CAP_JOIN_MEMORY_REGIONS_WORKS:
+	case KVM_CAP_USER_CONFIGURE_NONCOHERENT_DMA:
 	case KVM_CAP_INTERNAL_ERROR_DATA:
 #ifdef CONFIG_HAVE_KVM_MSI
 	case KVM_CAP_SIGNAL_MSI:
@@ -4508,6 +4722,9 @@ static long kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_CHECK_EXTENSION_VM:
 	case KVM_CAP_ENABLE_CAP_VM:
 	case KVM_CAP_HALT_POLL:
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case KVM_CAP_PV_SCHED:
+#endif
 		return 1;
 #ifdef CONFIG_KVM_MMIO
 	case KVM_CAP_COALESCED_MMIO:
@@ -4873,6 +5090,18 @@ static long kvm_vm_ioctl(struct file *filp,
 	case KVM_GET_STATS_FD:
 		r = kvm_vm_ioctl_get_stats_fd(kvm);
 		break;
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case KVM_SET_PV_SCHED_ENABLED:
+		r = -EINVAL;
+		if (arg == 0 || arg == 1) {
+			kvm_set_pv_sched_enabled(kvm, arg);
+			r = 0;
+		}
+		break;
+	case KVM_GET_PV_SCHED_ENABLED:
+		r = kvm->pv_sched_enabled;
+		break;
+#endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
 	}

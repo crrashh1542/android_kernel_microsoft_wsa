@@ -342,6 +342,9 @@ lookup_protocol:
 	if (INET_PROTOSW_REUSE & answer_flags)
 		sk->sk_reuse = SK_CAN_REUSE;
 
+	if (INET_PROTOSW_ICSK & answer_flags)
+		inet_init_csk_locks(sk);
+
 	inet = inet_sk(sk);
 	inet->is_icsk = (INET_PROTOSW_ICSK & answer_flags) != 0;
 
@@ -838,16 +841,15 @@ EXPORT_SYMBOL_GPL(inet_send_prepare);
 
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
-	int rv;
 	struct sock *sk = sock->sk;
+
+	trace_cros_inet_sendmsg_enter(sock, msg, size);
 
 	if (unlikely(inet_send_prepare(sk)))
 		return -EAGAIN;
 
-	rv = INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
+	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			     sk, msg, size);
-	trace_cros_inet_sendmsg_exit(sock, msg, size, rv);
-	return rv;
 }
 EXPORT_SYMBOL(inet_sendmsg);
 
@@ -1633,10 +1635,12 @@ EXPORT_SYMBOL(inet_current_timestamp);
 
 int inet_recv_error(struct sock *sk, struct msghdr *msg, int len, int *addr_len)
 {
-	if (sk->sk_family == AF_INET)
+	unsigned int family = READ_ONCE(sk->sk_family);
+
+	if (family == AF_INET)
 		return ip_recv_error(sk, msg, len, addr_len);
 #if IS_ENABLED(CONFIG_IPV6)
-	if (sk->sk_family == AF_INET6)
+	if (family == AF_INET6)
 		return pingv6_ops.ipv6_recv_error(sk, msg, len, addr_len);
 #endif
 	return -EINVAL;

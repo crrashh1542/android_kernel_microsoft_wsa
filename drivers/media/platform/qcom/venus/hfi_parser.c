@@ -19,7 +19,7 @@ static void init_codecs(struct venus_core *core)
 	struct hfi_plat_caps *caps = core->caps, *cap;
 	unsigned long bit;
 
-	if ((hweight_long(core->dec_codecs) + hweight_long(core->enc_codecs)) > MAX_CODEC_NUM)
+	if (hweight_long(core->dec_codecs) + hweight_long(core->enc_codecs) > MAX_CODEC_NUM)
 		return;
 
 	for_each_set_bit(bit, &core->dec_codecs, MAX_CODEC_NUM) {
@@ -89,7 +89,7 @@ static void fill_profile_level(struct hfi_plat_caps *cap, const void *data,
 {
 	const struct hfi_profile_level *pl = data;
 
-	if (cap->num_pl + num > HFI_MAX_PROFILE_COUNT)
+	if (cap->num_pl + num >= HFI_MAX_PROFILE_COUNT)
 		return;
 
 	memcpy(&cap->pl[cap->num_pl], pl, num * sizeof(*pl));
@@ -117,7 +117,7 @@ fill_caps(struct hfi_plat_caps *cap, const void *data, unsigned int num)
 {
 	const struct hfi_capability *caps = data;
 
-	if (cap->num_caps + num > MAX_CAP_ENTRIES)
+	if (cap->num_caps + num >= MAX_CAP_ENTRIES)
 		return;
 
 	memcpy(&cap->caps[cap->num_caps], caps, num * sizeof(*caps));
@@ -146,7 +146,7 @@ static void fill_raw_fmts(struct hfi_plat_caps *cap, const void *fmts,
 {
 	const struct raw_formats *formats = fmts;
 
-	if (cap->num_fmts + num_fmts > MAX_FMT_ENTRIES)
+	if (cap->num_fmts + num_fmts >= MAX_FMT_ENTRIES)
 		return;
 
 	memcpy(&cap->fmts[cap->num_fmts], formats, num_fmts * sizeof(*formats));

@@ -206,6 +206,12 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		(generic_pkt_ptr + (uint32_t)cfg_dev->offset);
 	header_size = csl_packet->header.size;
 
+	if (header_size < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
 	csl_packet_local = (struct cam_packet *)cam_common_mem_kdup(csl_packet, header_size);
 
 	if (!csl_packet_local) {
@@ -601,10 +607,10 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 
 	if (csiphy_dev->csiphy_state == CAM_CSIPHY_ACQUIRE) {
 		if (csiphy_dev->bridge_intf.device_hdl[0] != -1)
-			cam_destroy_device_hdl(
+			cam_destroy_device_bridge_hdl(
 				csiphy_dev->bridge_intf.device_hdl[0]);
 		if (csiphy_dev->bridge_intf.device_hdl[1] != -1)
-			cam_destroy_device_hdl(
+			cam_destroy_device_bridge_hdl(
 				csiphy_dev->bridge_intf.device_hdl[1]);
 		csiphy_dev->bridge_intf.device_hdl[0] = -1;
 		csiphy_dev->bridge_intf.device_hdl[1] = -1;
@@ -760,7 +766,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		}
 
 		csiphy_acq_dev.device_handle =
-			cam_create_device_hdl(&bridge_params);
+			cam_create_device_bridge_hdl(&bridge_params);
 		bridge_intf = &csiphy_dev->bridge_intf;
 		bridge_intf->device_hdl[csiphy_acq_params.combo_mode]
 			= csiphy_acq_dev.device_handle;
@@ -888,7 +894,9 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 
 		csiphy_dev->csiphy_cpas_cp_reg_mask[offset] = 0x0;
 
-		rc = cam_destroy_device_hdl(release.dev_handle);
+		rc = cam_destroy_device_ctx_hdl(release.dev_handle);
+		if (rc < 0)
+			rc = cam_destroy_device_bridge_hdl(release.dev_handle);
 		if (rc < 0)
 			CAM_ERR(CAM_CSIPHY, "destroying the device hdl");
 		if (release.dev_handle ==

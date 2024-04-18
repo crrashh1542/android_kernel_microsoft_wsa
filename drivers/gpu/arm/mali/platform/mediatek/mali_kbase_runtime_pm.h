@@ -94,6 +94,10 @@ struct mtk_hw_config {
  * @clks: GPU clocks
  * @mfg_base_addr: MFG base address
  * @gpu_is_powered: GPU on/off status
+ * @manual_mux_reparent: Whether the platform driver needs to reparent the mux
+ *                       clock for pll clock rate change.
+ *                       Set this to false if it's handled by the base clock
+ *                       driver.
  * @config: pointer to the hardware config struct
  *
  * This holds general platform information e.g. data probed from device tree,
@@ -103,6 +107,7 @@ struct mtk_platform_context {
 	struct clk_bulk_data *clks;
 	void __iomem *mfg_base_addr;
 	bool gpu_is_powered;
+	bool manual_mux_reparent;
 
 	const struct mtk_hw_config *config;
 };
@@ -121,14 +126,6 @@ int mtk_mfgsys_init(struct kbase_device *kbdev);
 
 int kbase_pm_domain_init(struct kbase_device *kbdev);
 void kbase_pm_domain_term(struct kbase_device *kbdev);
-int kbase_pm_runtime_callback_init(struct kbase_device *kbdev);
-void kbase_pm_runtime_callback_term(struct kbase_device *kbdev);
-int kbase_pm_runtime_callback_on(struct kbase_device *kbdev);
-void kbase_pm_runtime_callback_off(struct kbase_device *kbdev);
-int kbase_pm_callback_power_on(struct kbase_device *kbdev);
-void kbase_pm_callback_power_off(struct kbase_device *kbdev);
-void kbase_pm_callback_suspend(struct kbase_device *kbdev);
-void kbase_pm_callback_resume(struct kbase_device *kbdev);
 
 int mtk_platform_init(struct kbase_device *kbdev);
 void platform_term(struct kbase_device *kbdev);

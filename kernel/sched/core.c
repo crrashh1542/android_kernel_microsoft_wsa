@@ -80,13 +80,93 @@ const_debug unsigned int sysctl_sched_nr_migrate = 32;
 unsigned int sysctl_iowait_reset_ticks = 20;
 unsigned int sysctl_iowait_apply_ticks = 10;
 
-/*
- * period over which we measure -rt task CPU usage in us.
- * default: 1s
- */
-unsigned int sysctl_sched_rt_period = 1000000;
-
 __read_mostly int scheduler_running;
+
+#ifdef CONFIG_PARAVIRT_SCHED
+#include <linux/kvm_para.h>
+
+DEFINE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+DEFINE_PER_CPU_DECRYPTED(struct pv_sched_data, pv_sched) __aligned(64);
+
+unsigned long pv_sched_pa(void)
+{
+	return slow_virt_to_phys(this_cpu_ptr(&pv_sched));
+}
+
+static inline int __normal_prio(int policy, int rt_prio, int nice);
+static inline int __pv_sched_equal_prio(union vcpu_sched_attr a1,
+		union vcpu_sched_attr a2)
+{
+	return (__normal_prio(a1.sched_policy, a1.rt_priority, a1.sched_nice) ==
+		__normal_prio(a2.sched_policy, a2.rt_priority, a2.sched_nice));
+}
+
+static inline void __pv_sched_vcpu_attr_update(union vcpu_sched_attr attr,
+		bool lazy)
+{
+	union vcpu_sched_attr status_attr;
+
+	status_attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_HOST].pad);
+	if (!status_attr.enabled || (status_attr.kern_cs == attr.kern_cs &&
+			__pv_sched_equal_prio(attr, status_attr)))
+		return;
+
+	this_cpu_write(pv_sched.attr[PV_SCHEDATTR_GUEST].pad, attr.pad);
+	trace_sched_pvsched_vcpu_update(&attr);
+
+	if (!lazy)
+		kvm_pv_sched_notify_host();
+}
+
+void pv_sched_vcpu_update(int policy, int prio, int nice, bool lazy)
+{
+	union vcpu_sched_attr attr = {
+		.sched_policy = policy,
+		.rt_priority = prio,
+		.sched_nice = nice
+	};
+	attr.kern_cs = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].kern_cs);
+	__pv_sched_vcpu_attr_update(attr, lazy);
+}
+
+void pv_sched_vcpu_kerncs_boost_lazy(int boost_type)
+{
+	union vcpu_sched_attr attr;
+
+	attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].pad);
+	attr.kern_cs |= boost_type;
+	__pv_sched_vcpu_attr_update(attr, true);
+}
+
+void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy)
+{
+	union vcpu_sched_attr attr;
+
+	attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].pad);
+	attr.kern_cs &= ~boost_type;
+	__pv_sched_vcpu_attr_update(attr, lazy);
+}
+
+/*
+ * Share the preemption enabled/disabled status with host. This will not incur a
+ * VMEXIT and acts as a lazy boost/unboost mechanism - host will check this on
+ * the next VMEXIT for boost/unboost decisions.
+ * XXX: Lazy unboosting may allow cfs tasks to run on RT vcpu till next VMEXIT.
+ */
+static inline void pv_sched_update_preempt_status(bool preempt_disabled)
+{
+	if (!pv_sched_enabled())
+		return;
+
+	if (preempt_disabled)
+		pv_sched_vcpu_kerncs_boost_lazy(PVSCHED_KERNCS_BOOST_PREEMPT_DISABLED);
+	else
+		pv_sched_vcpu_kerncs_unboost(PVSCHED_KERNCS_BOOST_PREEMPT_DISABLED, true);
+}
+#else
+static inline void pv_sched_update_preempt_status(bool preempt_disabled) {}
+#endif
 
 #ifdef CONFIG_SCHED_CORE
 
@@ -97,6 +177,9 @@ static inline int __task_prio(struct task_struct *p)
 {
 	if (p->sched_class == &stop_sched_class) /* trumps deadline */
 		return -2;
+
+	if (p->dl_server)
+		return -1; /* deadline */
 
 	if (rt_prio(p->prio)) /* includes deadline */
 		return p->prio; /* [-1, 99] */
@@ -126,8 +209,24 @@ static inline bool prio_less(struct task_struct *a, struct task_struct *b, bool 
 	if (-pb < -pa)
 		return false;
 
-	if (pa == -1) /* dl_prio() doesn't work because of stop_class above */
-		return !dl_time_before(a->dl.deadline, b->dl.deadline);
+	if (pa == -1) { /* dl_prio() doesn't work because of stop_class above */
+		const struct sched_dl_entity *a_dl, *b_dl;
+
+		a_dl = &a->dl;
+		/*
+		 * Since,'a' and 'b' can be CFS tasks served by DL server,
+		 * __task_prio() can return -1 (for DL) even for those. In that
+		 * case, get to the dl_server's DL entity.
+		 */
+		if (a->dl_server)
+			a_dl = a->dl_server;
+
+		b_dl = &b->dl;
+		if (b->dl_server)
+			b_dl = b->dl_server;
+
+		return !dl_time_before(a_dl->deadline, b_dl->deadline);
+	}
 
 	if (pa == MAX_RT_PRIO + MAX_NICE)	/* fair */
 		return cfs_prio_less(a, b, in_fi);
@@ -372,13 +471,6 @@ static inline void sched_core_enqueue(struct rq *rq, struct task_struct *p) { }
 static inline void sched_core_dequeue(struct rq *rq, struct task_struct *p) { }
 
 #endif /* CONFIG_SCHED_CORE */
-
-/*
- * part of the period that we allow rt tasks to run in us.
- * default: 0.95s
- */
-int sysctl_sched_rt_runtime = 950000;
-
 
 /*
  * Serialization rules:
@@ -1987,8 +2079,19 @@ bool sched_task_on_rq(struct task_struct *p)
 	return task_on_rq_queued(p);
 }
 
-static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
+inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
+	/*
+	 * TODO: currently request for boosting remote vcpus is not implemented. So
+	 * we boost only if this enqueue happens for this cpu.
+	 * This is not a big problem though, target cpu gets an IPI and then gets
+	 * boosted by the host. Posted interrupts is an exception where target vcpu
+	 * will not get boosted immediately, but on the next schedule().
+	 */
+	if (pv_sched_enabled() && this_rq() == rq &&
+			p->sched_class > &fair_sched_class)
+		pv_sched_vcpu_update(p->policy, p->rt_priority, 0, true);
+
 	if (!(flags & ENQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
@@ -2004,7 +2107,7 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 		sched_core_enqueue(rq, p);
 }
 
-static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (sched_core_enabled(rq))
 		sched_core_dequeue(rq, p);
@@ -2401,9 +2504,11 @@ static int migration_cpu_stop(void *data)
 		 * it.
 		 */
 		WARN_ON_ONCE(!pending->stop_pending);
+		preempt_disable();
 		task_rq_unlock(rq, p, &rf);
 		stop_one_cpu_nowait(task_cpu(p), migration_cpu_stop,
 				    &pending->arg, &pending->stop_work);
+		preempt_enable();
 		return 0;
 	}
 out:
@@ -2684,12 +2789,13 @@ static int affine_move_task(struct rq *rq, struct task_struct *p, struct rq_flag
 			complete = true;
 		}
 
+		preempt_disable();
 		task_rq_unlock(rq, p, rf);
-
 		if (push_task) {
 			stop_one_cpu_nowait(rq->cpu, push_cpu_stop,
 					    p, &rq->push_work);
 		}
+		preempt_enable();
 
 		if (complete)
 			complete_all(&pending->done);
@@ -2755,12 +2861,13 @@ static int affine_move_task(struct rq *rq, struct task_struct *p, struct rq_flag
 		if (flags & SCA_MIGRATE_ENABLE)
 			p->migration_flags &= ~MDF_PUSH;
 
+		preempt_disable();
 		task_rq_unlock(rq, p, rf);
-
 		if (!stop_pending) {
 			stop_one_cpu_nowait(cpu_of(rq), migration_cpu_stop,
 					    &pending->arg, &pending->stop_work);
 		}
+		preempt_enable();
 
 		if (flags & SCA_MIGRATE_ENABLE)
 			return 0;
@@ -3546,11 +3653,11 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
 #ifdef CONFIG_SMP
 	if (cpu == rq->cpu) {
 		__schedstat_inc(rq->ttwu_local);
-		__schedstat_inc(p->se.statistics.nr_wakeups_local);
+		__schedstat_inc(p->stats.nr_wakeups_local);
 	} else {
 		struct sched_domain *sd;
 
-		__schedstat_inc(p->se.statistics.nr_wakeups_remote);
+		__schedstat_inc(p->stats.nr_wakeups_remote);
 		rcu_read_lock();
 		for_each_domain(rq->cpu, sd) {
 			if (cpumask_test_cpu(cpu, sched_domain_span(sd))) {
@@ -3562,25 +3669,50 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
 	}
 
 	if (wake_flags & WF_MIGRATED)
-		__schedstat_inc(p->se.statistics.nr_wakeups_migrate);
+		__schedstat_inc(p->stats.nr_wakeups_migrate);
 #endif /* CONFIG_SMP */
 
 	__schedstat_inc(rq->ttwu_count);
-	__schedstat_inc(p->se.statistics.nr_wakeups);
+	__schedstat_inc(p->stats.nr_wakeups);
 
 	if (wake_flags & WF_SYNC)
-		__schedstat_inc(p->se.statistics.nr_wakeups_sync);
+		__schedstat_inc(p->stats.nr_wakeups_sync);
 }
 
 /*
- * Mark the task runnable and perform wakeup-preemption.
+ * Mark the task runnable.
  */
-static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags,
-			   struct rq_flags *rf)
+static inline void ttwu_do_wakeup(struct task_struct *p)
 {
-	check_preempt_curr(rq, p, wake_flags);
 	WRITE_ONCE(p->__state, TASK_RUNNING);
 	trace_sched_wakeup(p);
+}
+
+static void
+ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
+		 struct rq_flags *rf)
+{
+	int en_flags = ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK;
+
+	lockdep_assert_rq_held(rq);
+
+	if (p->sched_contributes_to_load)
+		rq->nr_uninterruptible--;
+
+#ifdef CONFIG_SMP
+	if (wake_flags & WF_MIGRATED)
+		en_flags |= ENQUEUE_MIGRATED;
+	else
+#endif
+	if (p->in_iowait) {
+		delayacct_blkio_end(p);
+		atomic_dec(&task_rq(p)->nr_iowait);
+	}
+
+	activate_task(rq, p, en_flags);
+	check_preempt_curr(rq, p, wake_flags);
+
+	ttwu_do_wakeup(p);
 
 #ifdef CONFIG_SMP
 	if (p->sched_class->task_woken) {
@@ -3608,31 +3740,8 @@ static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags,
 		rq->idle_stamp = 0;
 	}
 #endif
-}
 
-static void
-ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
-		 struct rq_flags *rf)
-{
-	int en_flags = ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK;
-
-	lockdep_assert_rq_held(rq);
-
-	if (p->sched_contributes_to_load)
-		rq->nr_uninterruptible--;
-
-#ifdef CONFIG_SMP
-	if (wake_flags & WF_MIGRATED)
-		en_flags |= ENQUEUE_MIGRATED;
-	else
-#endif
-	if (p->in_iowait) {
-		delayacct_blkio_end(p);
-		atomic_dec(&task_rq(p)->nr_iowait);
-	}
-
-	activate_task(rq, p, en_flags);
-	ttwu_do_wakeup(rq, p, wake_flags, rf);
+	p->dl_server = NULL;
 }
 
 /*
@@ -3668,9 +3777,15 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 
 	rq = __task_rq_lock(p, &rf);
 	if (task_on_rq_queued(p)) {
-		/* check_preempt_curr() may use rq clock */
-		update_rq_clock(rq);
-		ttwu_do_wakeup(rq, p, wake_flags, &rf);
+		if (!task_running(rq, p)) {
+			/*
+			 * When on_rq && !on_cpu the task is preempted, see if
+			 * it should preempt the task that is current now.
+			 */
+			update_rq_clock(rq);
+			check_preempt_curr(rq, p, wake_flags);
+		}
+		ttwu_do_wakeup(p);
 		ret = 1;
 	}
 	__task_rq_unlock(rq, &rf);
@@ -4036,8 +4151,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 			goto out;
 
 		trace_sched_waking(p);
-		WRITE_ONCE(p->__state, TASK_RUNNING);
-		trace_sched_wakeup(p);
+		ttwu_do_wakeup(p);
 		goto out;
 	}
 
@@ -4260,6 +4374,12 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.nr_migrations		= 0;
 	p->se.vruntime			= 0;
+	p->se.vlag			= 0;
+#ifdef CONFIG_SCHED_EEVDF
+	p->se.slice			= sysctl_sched_base_slice;
+#else
+	p->se.slice			= 0;
+#endif
 	INIT_LIST_HEAD(&p->se.group_node);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -4268,13 +4388,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 #ifdef CONFIG_SCHEDSTATS
 	/* Even if schedstat is disabled, there should not be garbage */
-	memset(&p->se.statistics, 0, sizeof(p->se.statistics));
+	memset(&p->stats, 0, sizeof(p->stats));
 #endif
 
-	RB_CLEAR_NODE(&p->dl.rb_node);
-	init_dl_task_timer(&p->dl);
-	init_dl_inactive_task_timer(&p->dl);
-	__dl_clear_params(p);
+	init_dl_entity(&p->dl);
 
 	INIT_LIST_HEAD(&p->rt.run_list);
 	p->rt.timeout		= 0;
@@ -5487,8 +5604,14 @@ static inline void sched_tick_start(int cpu) { }
 static inline void sched_tick_stop(int cpu) { }
 #endif
 
-#if defined(CONFIG_PREEMPTION) && (defined(CONFIG_DEBUG_PREEMPT) || \
-				defined(CONFIG_TRACE_PREEMPT_TOGGLE))
+/*
+ * PARAVIRT_SCHED enabled guest passes the preemption state to host.
+ * So we piggy back on the following functions to keep track of the
+ * preemption state.
+ */
+#if (defined(CONFIG_PREEMPTION) && (defined(CONFIG_DEBUG_PREEMPT) || \
+			defined(CONFIG_TRACE_PREEMPT_TOGGLE)) || \
+			defined(CONFIG_PARAVIRT_SCHED))
 /*
  * If the value passed in is equal to the current preempt count
  * then we just disabled preemption. Start timing the latency.
@@ -5496,11 +5619,12 @@ static inline void sched_tick_stop(int cpu) { }
 static inline void preempt_latency_start(int val)
 {
 	if (preempt_count() == val) {
-		unsigned long ip = get_lock_parent_ip();
 #ifdef CONFIG_DEBUG_PREEMPT
-		current->preempt_disable_ip = ip;
+		current->preempt_disable_ip = get_lock_parent_ip();
 #endif
-		trace_preempt_off(CALLER_ADDR0, ip);
+		pv_sched_update_preempt_status(true);
+
+		trace_preempt_off(CALLER_ADDR0, get_lock_parent_ip());
 	}
 }
 
@@ -5532,8 +5656,10 @@ NOKPROBE_SYMBOL(preempt_count_add);
  */
 static inline void preempt_latency_stop(int val)
 {
-	if (preempt_count() == val)
+	if (preempt_count() == val) {
+		pv_sched_update_preempt_status(false);
 		trace_preempt_on(CALLER_ADDR0, get_lock_parent_ip());
+	}
 }
 
 void preempt_count_sub(int val)
@@ -5655,6 +5781,14 @@ static void put_prev_task_balance(struct rq *rq, struct task_struct *prev,
 #endif
 
 	put_prev_task(rq, prev);
+
+	/*
+	 * We've updated @prev and no longer need the server link, clear it.
+	 * Must be done before ->pick_next_task() because that can (re)set
+	 * ->dl_server.
+	 */
+	if (prev->dl_server)
+		prev->dl_server = NULL;
 }
 
 /*
@@ -5684,6 +5818,20 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 			put_prev_task(rq, prev);
 			p = pick_next_task_idle(rq);
 		}
+
+		/*
+		 * This is a normal CFS pick, but the previous could be a DL pick.
+		 * Clear it as previous is no longer picked.
+		 */
+		if (prev->dl_server)
+			prev->dl_server = NULL;
+
+		/*
+		 * This is the fast path; it cannot be a DL server pick;
+		 * therefore even if @p == @prev, ->dl_server must be NULL.
+		 */
+		if (p->dl_server)
+			p->dl_server = NULL;
 
 		return p;
 	}
@@ -6371,6 +6519,17 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 #ifdef CONFIG_SCHED_DEBUG
 	rq->last_seen_need_resched_ns = 0;
 #endif
+
+	if (pv_sched_enabled()) {
+		int lazy = true;
+
+		/*
+		 * Synchronous unboost.
+		 */
+		if (task_is_realtime(next) || NICE_TO_PRIO(task_nice(next)) < DEFAULT_PRIO)
+			lazy = false;
+		pv_sched_vcpu_update(next->policy, next->rt_priority, task_nice(next), lazy);
+	}
 
 	if (likely(prev != next)) {
 		rq->nr_switches++;
@@ -7341,6 +7500,7 @@ static int __sched_setscheduler(struct task_struct *p,
 	int reset_on_fork;
 	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
 	struct rq *rq;
+	bool cpuset_locked = false;
 
 	/* The pi code expects interrupts enabled */
 	BUG_ON(pi && in_interrupt());
@@ -7440,8 +7600,14 @@ recheck:
 			return retval;
 	}
 
-	if (pi)
-		cpuset_read_lock();
+	/*
+	 * SCHED_DEADLINE bandwidth accounting relies on stable cpusets
+	 * information.
+	 */
+	if (dl_policy(policy) || dl_policy(p->policy)) {
+		cpuset_locked = true;
+		cpuset_lock();
+	}
 
 	/*
 	 * Make sure no PI-waiters arrive (or leave) while we are
@@ -7519,8 +7685,8 @@ change:
 	if (unlikely(oldpolicy != -1 && oldpolicy != p->policy)) {
 		policy = oldpolicy = -1;
 		task_rq_unlock(rq, p, &rf);
-		if (pi)
-			cpuset_read_unlock();
+		if (cpuset_locked)
+			cpuset_unlock();
 		goto recheck;
 	}
 
@@ -7588,7 +7754,8 @@ change:
 	task_rq_unlock(rq, p, &rf);
 
 	if (pi) {
-		cpuset_read_unlock();
+		if (cpuset_locked)
+			cpuset_unlock();
 		rt_mutex_adjust_pi(p);
 	}
 
@@ -7600,8 +7767,8 @@ change:
 
 unlock:
 	task_rq_unlock(rq, p, &rf);
-	if (pi)
-		cpuset_read_unlock();
+	if (cpuset_locked)
+		cpuset_unlock();
 	return retval;
 }
 
@@ -7651,6 +7818,25 @@ int sched_setattr_nocheck(struct task_struct *p, const struct sched_attr *attr)
 	return __sched_setscheduler(p, attr, false, true);
 }
 EXPORT_SYMBOL_GPL(sched_setattr_nocheck);
+
+/**
+ * sched_setattr_pi_nocheck - change the scheduling attributes of a thread from kernelspace.
+ * @p: the task in question.
+ * @attr: new scheduling attributes(policy, rt priority, nice etc).
+ * @pi: boolean flag stating if pi validation needs to be performed.
+ *
+ * A flexible version of sched_setattr_nocheck which allows for specifying
+ * whether PI context validation needs to be done or not. set_scheduler_nocheck
+ * is not allowed in interrupt context as it assumes that PI is used.
+ * This function allows interrupt context call by specifying pi = false.
+ *
+ * Return: 0 on success. An error code otherwise.
+ */
+int sched_setattr_pi_nocheck(struct task_struct *p, const struct sched_attr *attr, bool pi)
+{
+	return __sched_setscheduler(p, attr, false, pi);
+}
+EXPORT_SYMBOL_GPL(sched_setattr_pi_nocheck);
 
 /**
  * sched_setscheduler_nocheck - change the scheduling policy and/or RT priority of a thread from kernelspace.
@@ -8819,8 +9005,7 @@ int cpuset_cpumask_can_shrink(const struct cpumask *cur,
 	return ret;
 }
 
-int task_can_attach(struct task_struct *p,
-		    const struct cpumask *cs_effective_cpus)
+int task_can_attach(struct task_struct *p)
 {
 	int ret = 0;
 
@@ -8833,21 +9018,9 @@ int task_can_attach(struct task_struct *p,
 	 * success of set_cpus_allowed_ptr() on all attached tasks
 	 * before cpus_mask may be changed.
 	 */
-	if (p->flags & PF_NO_SETAFFINITY) {
+	if (p->flags & PF_NO_SETAFFINITY)
 		ret = -EINVAL;
-		goto out;
-	}
 
-	if (dl_task(p) && !cpumask_intersects(task_rq(p)->rd->span,
-					      cs_effective_cpus)) {
-		int cpu = cpumask_any_and(cpu_active_mask, cs_effective_cpus);
-
-		if (unlikely(cpu >= nr_cpu_ids))
-			return -EINVAL;
-		ret = dl_cpu_busy(cpu, p);
-	}
-
-out:
 	return ret;
 }
 
@@ -9004,9 +9177,11 @@ static void balance_push(struct rq *rq)
 	 * Temporarily drop rq->lock such that we can wake-up the stop task.
 	 * Both preemption and IRQs are still disabled.
 	 */
+	preempt_disable();
 	raw_spin_rq_unlock(rq);
 	stop_one_cpu_nowait(rq->cpu, __balance_push_cpu_stop, push_task,
 			    this_cpu_ptr(&push_work));
+	preempt_enable();
 	/*
 	 * At this point need_resched() is true and we'll take the loop in
 	 * schedule(). The next pick is obviously going to be the stop task
@@ -9129,7 +9304,7 @@ static void cpuset_cpu_active(void)
 static int cpuset_cpu_inactive(unsigned int cpu)
 {
 	if (!cpuhp_tasks_frozen) {
-		int ret = dl_cpu_busy(cpu, NULL);
+		int ret = dl_bw_check_overflow(cpu);
 
 		if (ret)
 			return ret;
@@ -9457,7 +9632,6 @@ void __init sched_init(void)
 	}
 #endif /* CONFIG_CPUMASK_OFFSTACK */
 
-	init_rt_bandwidth(&def_rt_bandwidth, global_rt_period(), global_rt_runtime());
 	init_dl_bandwidth(&def_dl_bandwidth, global_rt_period(), global_rt_runtime());
 
 #ifdef CONFIG_SMP
@@ -9514,8 +9688,13 @@ void __init sched_init(void)
 		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
-		rq->rt.rt_runtime = def_rt_bandwidth.rt_runtime;
 #ifdef CONFIG_RT_GROUP_SCHED
+		/*
+		 * This is required for init cpu because rt.c:__enable_runtime()
+		 * starts working after scheduler_running, which is not the case
+		 * yet.
+		 */
+		rq->rt.rt_runtime = global_rt_runtime();
 		init_tg_rt_entry(&root_task_group, &rq->rt, NULL, i, NULL);
 #endif
 #ifdef CONFIG_SMP
@@ -9549,6 +9728,7 @@ void __init sched_init(void)
 #endif /* CONFIG_SMP */
 		hrtick_rq_init(rq);
 		atomic_set(&rq->nr_iowait, 0);
+		fair_server_init(rq);
 
 #ifdef CONFIG_SCHED_CORE
 		rq->core = rq;
@@ -9744,9 +9924,9 @@ void normalize_rt_tasks(void)
 			continue;
 
 		p->se.exec_start = 0;
-		schedstat_set(p->se.statistics.wait_start,  0);
-		schedstat_set(p->se.statistics.sleep_start, 0);
-		schedstat_set(p->se.statistics.block_start, 0);
+		schedstat_set(p->stats.wait_start,  0);
+		schedstat_set(p->stats.sleep_start, 0);
+		schedstat_set(p->stats.block_start, 0);
 
 		if (!dl_task(p) && !rt_task(p)) {
 			/*
@@ -10635,11 +10815,14 @@ static int cpu_cfs_stat_show(struct seq_file *sf, void *v)
 	seq_printf(sf, "throttled_time %llu\n", cfs_b->throttled_time);
 
 	if (schedstat_enabled() && tg != &root_task_group) {
+		struct sched_statistics *stats;
 		u64 ws = 0;
 		int i;
 
-		for_each_possible_cpu(i)
-			ws += schedstat_val(tg->se[i]->statistics.wait_sum);
+		for_each_possible_cpu(i) {
+			stats = __schedstats_from_se(tg->se[i]);
+			ws += schedstat_val(stats->wait_sum);
+		}
 
 		seq_printf(sf, "wait_sum %llu\n", ws);
 	}

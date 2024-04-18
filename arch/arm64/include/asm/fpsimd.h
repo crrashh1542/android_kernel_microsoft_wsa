@@ -32,6 +32,17 @@
 #define VFP_STATE_SIZE		((32 * 8) + 4)
 #endif
 
+/*
+ * When we defined the maximum SVE vector length we defined the ABI so
+ * that the maximum vector length included all the reserved for future
+ * expansion bits in ZCR rather than those just currently defined by
+ * the architecture.  Using this length to allocate worst size buffers
+ * results in excessively large allocations, and this effect is even
+ * more pronounced for SME due to ZA.  Define more suitable VLs for
+ * these situations.
+ */
+#define ARCH_SVE_VQ_MAX 16
+
 struct task_struct;
 
 extern void fpsimd_save_state(struct user_fpsimd_state *state);

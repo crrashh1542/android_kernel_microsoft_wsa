@@ -173,6 +173,13 @@ static void conf_message(const char *fmt, ...)
 static const char *conf_filename;
 static int conf_lineno, conf_warnings;
 
+bool conf_errors(void)
+{
+	if (conf_warnings)
+		return getenv("KCONFIG_WERROR");
+	return false;
+}
+
 static void conf_warning(const char *fmt, ...)
 {
 	va_list ap;
@@ -351,7 +358,9 @@ int conf_read_simple(const char *name, int def)
 	char *p, *p2;
 	struct symbol *sym;
 	int i, def_flags;
+	const char *warn_unknown;
 
+	warn_unknown = getenv("KCONFIG_WARN_UNKNOWN_SYMBOLS");
 	if (name) {
 		in = zconf_fopen(name);
 	} else {
@@ -439,6 +448,10 @@ load:
 			if (def == S_DEF_USER) {
 				sym = sym_find(line + 2 + strlen(CONFIG_));
 				if (!sym) {
+					if (warn_unknown)
+						conf_warning("unknown symbol: %s",
+							     line + 2 + strlen(CONFIG_));
+
 					conf_set_changed(true);
 					continue;
 				}
@@ -473,7 +486,7 @@ load:
 
 			sym = sym_find(line + strlen(CONFIG_));
 			if (!sym) {
-				if (def == S_DEF_AUTO)
+				if (def == S_DEF_AUTO) {
 					/*
 					 * Reading from include/config/auto.conf
 					 * If CONFIG_FOO previously existed in
@@ -481,8 +494,13 @@ load:
 					 * include/config/FOO must be touched.
 					 */
 					conf_touch_dep(line + strlen(CONFIG_));
-				else
+				} else {
+					if (warn_unknown)
+						conf_warning("unknown symbol: %s",
+							     line + strlen(CONFIG_));
+
 					conf_set_changed(true);
+				}
 				continue;
 			}
 
@@ -521,6 +539,7 @@ load:
 	}
 	free(line);
 	fclose(in);
+
 	return 0;
 }
 

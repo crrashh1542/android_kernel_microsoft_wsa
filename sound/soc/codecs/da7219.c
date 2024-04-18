@@ -1816,8 +1816,6 @@ static struct da7219_pdata *da7219_fw_to_pdata(struct device *dev)
 			 pdata->dai_clk_names[DA7219_DAI_WCLK_IDX],
 			 pdata->dai_clk_names[DA7219_DAI_BCLK_IDX]);
 
-	device_property_read_string(dev, "dlg,mclk-name", &pdata->mclk_name);
-
 	if (device_property_read_u32(dev, "dlg,micbias-lvl", &of_val32) >= 0)
 		pdata->micbias_lvl = da7219_fw_micbias_lvl(dev, of_val32);
 	else
@@ -2557,11 +2555,7 @@ static int da7219_probe(struct snd_soc_component *component)
 	da7219_handle_pdata(component);
 
 	/* Check if MCLK provided */
-	if (da7219->pdata->mclk_name)
-		da7219->mclk = clk_get(NULL, da7219->pdata->mclk_name);
-	if (!da7219->mclk)
-		da7219->mclk = clk_get(component->dev, "mclk");
-
+	da7219->mclk = clk_get(component->dev, "mclk");
 	if (IS_ERR(da7219->mclk)) {
 		if (PTR_ERR(da7219->mclk) != -ENOENT) {
 			ret = PTR_ERR(da7219->mclk);
@@ -2639,9 +2633,6 @@ static void da7219_remove(struct snd_soc_component *component)
 	da7219_free_dai_clks(component);
 	clk_put(da7219->mclk);
 
-	if (da7219->pdata->mclk_name)
-		clk_put(da7219->mclk);
-
 	/* Supplies */
 	regulator_bulk_disable(DA7219_NUM_SUPPLIES, da7219->supplies);
 	regulator_bulk_free(DA7219_NUM_SUPPLIES, da7219->supplies);
@@ -2678,11 +2669,20 @@ static int da7219_resume(struct snd_soc_component *component)
 #define da7219_resume NULL
 #endif
 
+static int da7219_set_jack(struct snd_soc_component *component, struct snd_soc_jack *jack,
+			   void *data)
+{
+	da7219_aad_jack_det(component, jack);
+
+	return 0;
+}
+
 static const struct snd_soc_component_driver soc_component_dev_da7219 = {
 	.probe			= da7219_probe,
 	.remove			= da7219_remove,
 	.suspend		= da7219_suspend,
 	.resume			= da7219_resume,
+	.set_jack		= da7219_set_jack,
 	.set_bias_level		= da7219_set_bias_level,
 	.controls		= da7219_snd_controls,
 	.num_controls		= ARRAY_SIZE(da7219_snd_controls),

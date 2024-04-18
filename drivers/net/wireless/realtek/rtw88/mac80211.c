@@ -13,6 +13,7 @@
 #include "bf.h"
 #include "debug.h"
 #include "wow.h"
+#include "sar.h"
 
 static void rtw_ops_tx(struct ieee80211_hw *hw,
 		       struct ieee80211_tx_control *control,
@@ -286,9 +287,9 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 
 	if (changed_flags & FIF_ALLMULTI) {
 		if (*new_flags & FIF_ALLMULTI)
-			rtwdev->hal.rcr |= BIT_AM | BIT_AB;
+			rtwdev->hal.rcr |= BIT_AM;
 		else
-			rtwdev->hal.rcr &= ~(BIT_AM | BIT_AB);
+			rtwdev->hal.rcr &= ~(BIT_AM);
 	}
 	if (changed_flags & FIF_FCSFAIL) {
 		if (*new_flags & FIF_FCSFAIL)
@@ -391,6 +392,8 @@ static void rtw_ops_bss_info_changed(struct ieee80211_hw *hw,
 			rtw_coex_media_status_notify(rtwdev, conf->assoc);
 			if (rtw_bf_support)
 				rtw_bf_assoc(rtwdev, vif, conf);
+
+			rtw_fw_beacon_filter_config(rtwdev, true, vif);
 		} else {
 			rtw_leave_lps(rtwdev);
 			rtw_bf_disassoc(rtwdev, vif, conf);
@@ -899,6 +902,18 @@ static void rtw_ops_cancel_hw_scan(struct ieee80211_hw *hw,
 	mutex_unlock(&rtwdev->mutex);
 }
 
+static int rtw_ops_set_sar_specs(struct ieee80211_hw *hw,
+				 const struct cfg80211_sar_specs *sar)
+{
+	struct rtw_dev *rtwdev = hw->priv;
+
+	mutex_lock(&rtwdev->mutex);
+	rtw_set_sar_specs(rtwdev, sar);
+	mutex_unlock(&rtwdev->mutex);
+
+	return 0;
+}
+
 const struct ieee80211_ops rtw_ops = {
 	.tx			= rtw_ops_tx,
 	.wake_tx_queue		= rtw_ops_wake_tx_queue,
@@ -931,6 +946,7 @@ const struct ieee80211_ops rtw_ops = {
 	.reconfig_complete	= rtw_reconfig_complete,
 	.hw_scan		= rtw_ops_hw_scan,
 	.cancel_hw_scan		= rtw_ops_cancel_hw_scan,
+	.set_sar_specs          = rtw_ops_set_sar_specs,
 #ifdef CONFIG_PM
 	.suspend		= rtw_ops_suspend,
 	.resume			= rtw_ops_resume,
