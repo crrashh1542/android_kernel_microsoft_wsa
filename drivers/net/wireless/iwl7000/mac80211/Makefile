@@ -33,7 +33,7 @@ mac80211-y := \
 	spectmgmt.o \
 	tx.o \
 	key.o \
-	util.o \
+	util.o parse.o \
 	wme.o \
 	chan.o \
 	trace.o mlme.o \
@@ -74,6 +74,8 @@ rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
 mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
 
 obj-y += tests/
+
+mac80211-y += wbrf.o
 
 ccflags-y += -DDEBUG
 

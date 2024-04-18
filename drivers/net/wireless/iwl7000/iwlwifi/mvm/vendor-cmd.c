@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -446,7 +446,7 @@ static int iwl_vendor_rfi_ddr_get_table(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_rfi_freq_table_resp_cmd *resp;
+	struct iwl_rfi_freq_table_resp_cmd_v1 *resp;
 	struct sk_buff *skb = NULL;
 	struct nlattr *rfim_info;
 	int i, ret;
@@ -474,15 +474,15 @@ static int iwl_vendor_rfi_ddr_get_table(struct wiphy *wiphy,
 		goto err;
 	}
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < ARRAY_SIZE(resp->ddr_table); i++) {
 		if (nla_put_u16(skb, IWL_MVM_VENDOR_ATTR_RFIM_FREQ,
-				le16_to_cpu(resp->table[i].freq)) ||
+				le16_to_cpu(resp->ddr_table[i].freq)) ||
 		    nla_put(skb, IWL_MVM_VENDOR_ATTR_RFIM_CHANNELS,
-			    sizeof(resp->table[i].channels),
-			    resp->table[i].channels) ||
+			    sizeof(resp->ddr_table[i].channels),
+			    resp->ddr_table[i].channels) ||
 		    nla_put(skb, IWL_MVM_VENDOR_ATTR_RFIM_BANDS,
-			    sizeof(resp->table[i].bands),
-			    resp->table[i].bands)) {
+			    sizeof(resp->ddr_table[i].bands),
+			    resp->ddr_table[i].bands)) {
 			ret = -ENOBUFS;
 			goto err;
 		}
@@ -505,7 +505,7 @@ static int iwl_vendor_rfi_ddr_set_table(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_rfi_lut_entry *rfi_ddr_table = NULL;
+	struct iwl_rfi_ddr_lut_entry *rfi_ddr_table = NULL;
 	struct nlattr **tb;
 	struct nlattr *attr;
 	int rem, err = 0;
@@ -626,8 +626,7 @@ static int iwl_vendor_rfi_set_cnvi_master(struct wiphy *wiphy,
 		/* By-pass sending of RFI_CONFIG command, if user space
 		 * takes control when "fw_rfi_state" is not PMC_SUPPORTED.
 		 */
-		if (mvm->fw_rfi_state == IWL_RFI_PMC_SUPPORTED ||
-		    mvm->rfi_wlan_master)
+		if (mvm->rfi_wlan_master || iwl_mvm_fw_rfi_state_supported(mvm))
 			err = iwl_rfi_send_config_cmd(mvm, NULL, true, false);
 	} else {
 		IWL_ERR(mvm,
@@ -696,7 +695,9 @@ static int iwl_vendor_set_nic_txpower_limit(struct wiphy *wiphy,
 		cmd.common.dev_52_high = cpu_to_le16(txp);
 	}
 
-	if (cmd_ver == 6)
+	if (cmd_ver == 8)
+		len = sizeof(mvm->txp_cmd.v8);
+	else if (cmd_ver == 6)
 		len = sizeof(mvm->txp_cmd.v6);
 	else if (fw_has_api(&mvm->fw->ucode_capa,
 			    IWL_UCODE_TLV_API_REDUCE_TX_POWER))
@@ -1010,7 +1011,6 @@ free:
 	return err;
 }
 
-#ifdef CONFIG_ACPI
 static int iwl_mvm_vendor_set_dynamic_txp_profile(struct wiphy *wiphy,
 						  struct wireless_dev *wdev,
 						  const void *data,
@@ -1362,8 +1362,6 @@ err:
 	kfree_skb(skb);
 	return ret;
 }
-
-#endif
 
 static const struct nla_policy
 iwl_mvm_vendor_fips_hw_policy[NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW] = {
@@ -1938,7 +1936,6 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 		.maxattr = MAX_IWL_MVM_VENDOR_ATTR,
 #endif
 	},
-#ifdef CONFIG_ACPI
 	{
 		.info = {
 			.vendor_id = INTEL_OUI,
@@ -2038,7 +2035,6 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 		.maxattr = MAX_IWL_MVM_VENDOR_ATTR,
 #endif
 	},
-#endif
 	{
 		.info = {
 			.vendor_id = INTEL_OUI,

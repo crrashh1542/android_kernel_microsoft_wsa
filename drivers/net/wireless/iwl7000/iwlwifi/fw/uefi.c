@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2021-2023 Intel Corporation
+ * Copyright(c) 2021-2024 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -330,7 +330,6 @@ void iwl_uefi_get_step_table(struct iwl_trans *trans)
 }
 IWL_EXPORT_SYMBOL(iwl_uefi_get_step_table);
 
-#ifdef CONFIG_ACPI
 static int iwl_uefi_sgom_parse(struct uefi_cnv_wlan_sgom_data *sgom_data,
 			       struct iwl_fw_runtime *fwrt)
 {
@@ -418,7 +417,6 @@ int iwl_uefi_get_uats_table(struct iwl_trans *trans,
 	return 0;
 }
 IWL_EXPORT_SYMBOL(iwl_uefi_get_uats_table);
-#endif /* CONFIG_ACPI */
 
 static void iwl_uefi_set_sar_profile(struct iwl_fw_runtime *fwrt,
 				     struct uefi_sar_profile *uefi_sar_prof,
@@ -547,7 +545,8 @@ int iwl_uefi_get_ppag_table(struct iwl_fw_runtime *fwrt)
 	}
 
 	fwrt->ppag_ver = data->revision;
-	fwrt->ppag_flags = data->ppag_modes & IWL_PPAG_ETSI_CHINA_MASK;
+	fwrt->ppag_flags = iwl_bios_get_ppag_flags(data->ppag_modes,
+						   fwrt->ppag_ver);
 
 	BUILD_BUG_ON(sizeof(fwrt->ppag_chains) != sizeof(data->ppag_chains));
 	memcpy(&fwrt->ppag_chains, &data->ppag_chains,
@@ -688,7 +687,7 @@ int iwl_uefi_get_dsm(struct iwl_fw_runtime *fwrt, enum iwl_dsm_funcs func,
 		     u32 *value)
 {
 	struct uefi_cnv_var_general_cfg *data;
-	int ret = EINVAL;
+	int ret = -EINVAL;
 
 	/* Not supported function index */
 	if (func >= DSM_FUNC_NUM_FUNCS || func == 5)

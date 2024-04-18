@@ -30,10 +30,13 @@
 #define wiphy_delayed_work_queue __iwl7000_wiphy_delayed_work_queue
 #define wiphy_delayed_work_cancel __iwl7000_wiphy_delayed_work_cancel
 #endif /* CFG80211_VERSION < KERNEL_VERSION(6,5,0) */
+#if CFG80211_VERSION < KERNEL_VERSION(6,8,0)
+#define nl80211_chan_width_to_mhz __iwl7000_nl80211_chan_width_to_mhz
+#endif /* cfg < 6.8 */
 #if CFG80211_VERSION < KERNEL_VERSION(5,6,0)
 #define ieee80211_get_vht_max_nss __iwl7000_ieee80211_get_vht_max_nss
 #endif
-#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,9,0)
 #define cfg80211_defragment_element __iwl7000_cfg80211_defragment_element
 #endif
 #if CFG80211_VERSION < KERNEL_VERSION(6,7,0)
@@ -63,6 +66,10 @@
 #define __ieee80211_create_tpt_led_trigger __iwl7000___ieee80211_create_tpt_led_trigger
 #define ieee80211_set_active_links __iwl7000_ieee80211_set_active_links
 #define ieee80211_set_active_links_async __iwl7000_ieee80211_set_active_links_async
+#define ieee80211_emulate_add_chanctx __iwl7000_ieee80211_emulate_add_chanctx
+#define ieee80211_emulate_remove_chanctx __iwl7000_ieee80211_emulate_remove_chanctx
+#define ieee80211_emulate_change_chanctx __iwl7000_ieee80211_emulate_change_chanctx
+#define ieee80211_emulate_switch_vif_chanctx __iwl7000_ieee80211_emulate_switch_vif_chanctx
 #define ieee80211_restart_hw __iwl7000_ieee80211_restart_hw
 #define ieee80211_alloc_hw_nm __iwl7000_ieee80211_alloc_hw_nm
 #define ieee80211_register_hw __iwl7000_ieee80211_register_hw

@@ -2,7 +2,7 @@
 /*
  * MLO link handling
  *
- * Copyright (C) 2022-2023 Intel Corporation
+ * Copyright (C) 2022-2024 Intel Corporation
  */
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -77,6 +77,8 @@ void ieee80211_link_stop(struct ieee80211_link_data *link)
 		ieee80211_mgd_stop_link(link);
 
 	cancel_delayed_work_sync(&link->color_collision_detect_work);
+	wiphy_work_cancel(link->sdata->local->hw.wiphy,
+			  &link->csa_finalize_work);
 	ieee80211_link_release_channel(link);
 }
 
@@ -358,9 +360,21 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 
 		link = sdata_dereference(sdata->link[link_id], sdata);
 
-		/* FIXME: kill TDLS connections on the link */
+		ieee80211_teardown_tdls_peers(link);
 
-		ieee80211_link_release_channel(link);
+		__ieee80211_link_release_channel(link, true);
+
+		/*
+		 * If CSA is (still) active while the link is deactivated,
+		 * just schedule the channel switch work for the time we
+		 * had previously calculated, and we'll take the process
+		 * from there.
+		 */
+		if (link->conf->csa_active)
+			wiphy_delayed_work_queue(local->hw.wiphy,
+						 &link->u.mgd.chswitch_work,
+						 link->u.mgd.csa_time -
+						 jiffies);
 	}
 
 	list_for_each_entry(sta, &local->sta_list, list) {
@@ -406,8 +420,24 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 
 		link = sdata_dereference(sdata->link[link_id], sdata);
 
-		ret = ieee80211_link_use_channel(link, &link->conf->chandef,
-						 IEEE80211_CHANCTX_SHARED);
+		/*
+		 * This call really should not fail. Unfortunately, it appears
+		 * that this may happen occasionally with some drivers. Should
+		 * it happen, we are stuck in a bad place as going backwards is
+		 * not really feasible.
+		 *
+		 * So lets just tell link_use_channel that it must not fail to
+		 * assign the channel context (from mac80211's perspective) and
+		 * assume the driver is going to trigger a recovery flow if it
+		 * had a failure.
+		 * That really is not great nor guaranteed to work. But at least
+		 * the internal mac80211 state remains consistent and there is
+		 * a chance that we can recover.
+		 */
+		ret = _ieee80211_link_use_channel(link,
+						  &link->conf->chanreq,
+						  IEEE80211_CHANCTX_SHARED,
+						  true);
 		WARN_ON_ONCE(ret);
 
 		ieee80211_mgd_set_link_qos_params(link);
@@ -424,8 +454,7 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 						  BSS_CHANGED_BANDWIDTH |
 						  BSS_CHANGED_TWT |
 						  BSS_CHANGED_HE_OBSS_PD |
-						  BSS_CHANGED_HE_BSS_COLOR |
-						  BSS_CHANGED_EHT_PUNCTURING);
+						  BSS_CHANGED_HE_BSS_COLOR);
 	}
 
 	old_active = sdata->vif.active_links;
@@ -448,6 +477,9 @@ int ieee80211_set_active_links(struct ieee80211_vif *vif, u16 active_links)
 	int ret;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (WARN_ON(!active_links))
+		return -EINVAL;
 
 	if (!drv_can_activate_links(local, sdata, active_links))
 		return -EINVAL;
@@ -476,6 +508,9 @@ void ieee80211_set_active_links_async(struct ieee80211_vif *vif,
 				      u16 active_links)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+
+	if (WARN_ON(!active_links))
+		return;
 
 	if (!ieee80211_sdata_running(sdata))
 		return;

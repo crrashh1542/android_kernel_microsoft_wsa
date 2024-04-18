@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -370,9 +370,9 @@ static u32 iwl_get_channel_flags(u8 ch_num, int ch_idx, enum nl80211_band band,
 
 	/* Set the AP type for the UHB case. */
 	if (!(nvm_flags & NVM_CHANNEL_VLP))
-		flags |= IEEE80211_CHAN_NO_UHB_VLP_CLIENT;
+		flags |= IEEE80211_CHAN_NO_6GHZ_VLP_CLIENT;
 	if (!(nvm_flags & NVM_CHANNEL_AFC))
-		flags |= IEEE80211_CHAN_NO_UHB_AFC_CLIENT;
+		flags |= IEEE80211_CHAN_NO_6GHZ_AFC_CLIENT;
 
 	return flags;
 }
@@ -391,11 +391,14 @@ static int iwl_nl80211_band_from_channel_idx(int ch_idx)
 	return NL80211_BAND_2GHZ;
 }
 
-static int iwl_init_channel_map(struct device *dev, const struct iwl_cfg *cfg,
+static int iwl_init_channel_map(struct iwl_trans *trans,
+				const struct iwl_fw *fw,
 				struct iwl_nvm_data *data,
 				const void * const nvm_ch_flags,
 				u32 sbands_flags, bool v4)
 {
+	const struct iwl_cfg *cfg = trans->cfg;
+	struct device *dev = trans->dev;
 	int ch_idx = 0;
 	int n_channels = 0;
 	struct ieee80211_channel *channel;
@@ -479,11 +482,10 @@ static int iwl_init_channel_map(struct device *dev, const struct iwl_cfg *cfg,
 		else
 			channel->flags = 0;
 
-		/* TODO: Don't put limitations on UHB devices as we still don't
-		 * have NVM for them
-		 */
-		if (cfg->uhb_supported)
-			channel->flags = 0;
+		if (fw_has_capa(&fw->ucode_capa,
+				IWL_UCODE_TLV_CAPA_MONITOR_PASSIVE_CHANS))
+			channel->flags |= IEEE80211_CHAN_CAN_MONITOR;
+
 		iwl_nvm_print_channel_flags(dev, IWL_DL_EEPROM,
 					    channel->hw_value, ch_flags);
 		IWL_DEBUG_EEPROM(dev, "Ch. %d: %ddBm\n",
@@ -882,7 +884,7 @@ static void iwl_init_he_6ghz_capa(struct iwl_trans *trans,
 	u32 exp;
 	int i;
 
-	if (!nl80211_is_6ghz(sband->band))
+	if (sband->band != NL80211_BAND_6GHZ)
 		return;
 
 	/* grab HT/VHT capabilities and calculate HE 6 GHz capabilities */
@@ -929,8 +931,9 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 	bool is_ap = iftype_data->types_mask & BIT(NL80211_IFTYPE_AP);
 	bool no_320;
 
-	no_320 = !trans->trans_cfg->integrated &&
-		 trans->pcie_link_speed < PCI_EXP_LNKSTA_CLS_8_0GB;
+	no_320 = (!trans->trans_cfg->integrated &&
+		 trans->pcie_link_speed < PCI_EXP_LNKSTA_CLS_8_0GB) ||
+		 trans->reduced_cap_sku;
 
 	if (!data->sku_cap_11be_enable || iwlwifi_mod_params.disable_11be)
 		cfg_eht_cap_set_has_eht(iftype_data, false);
@@ -938,7 +941,7 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 	/* Advertise an A-MPDU exponent extension based on
 	 * operating band
 	 */
-	if (nl80211_is_6ghz(sband->band) && cfg_eht_cap_has_eht(iftype_data))
+	if (sband->band == NL80211_BAND_6GHZ && cfg_eht_cap_has_eht(iftype_data))
 		iftype_data->he_cap.he_cap_elem.mac_cap_info[3] |=
 			IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_EXT_2;
 	else if (sband->band != NL80211_BAND_2GHZ)
@@ -958,10 +961,7 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 					       IEEE80211_EHT_MAC_CAP0_MAX_MPDU_LEN_MASK);
 #endif
 		break;
-#if CFG80211_VERSION >= KERNEL_VERSION(5,4,0)
 	case NL80211_BAND_6GHZ:
-		/* keep code in case of fall-through (spatch generated) */
-#endif
 #if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 		if (!no_320) {
 			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[0] |=
@@ -1117,6 +1117,16 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 		iftype_data->he_cap.he_cap_elem.phy_cap_info[0] &=
 			~IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
 
+	if (trans->reduced_cap_sku) {
+		memset(&cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320, 0,
+		       sizeof(cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320));
+		cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._80.rx_tx_mcs13_max_nss = 0;
+		cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._160.rx_tx_mcs13_max_nss = 0;
+		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[8] &=
+				~IEEE80211_EHT_PHY_CAP8_RX_4096QAM_WIDER_BW_DL_OFDMA;
+		cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[2] &=
+				~IEEE80211_EHT_PHY_CAP2_SOUNDING_DIM_320MHZ_MASK;
+	}
 }
 
 static void iwl_init_he_hw_capab(struct iwl_trans *trans,
@@ -1132,17 +1142,14 @@ static void iwl_init_he_hw_capab(struct iwl_trans *trans,
 	BUILD_BUG_ON(sizeof(data->iftd.high) != sizeof(iwl_he_eht_capa));
 	BUILD_BUG_ON(sizeof(data->iftd.uhb) != sizeof(iwl_he_eht_capa));
 
-	switch (sband->band) {
+	switch((int)sband->band) {
 	case NL80211_BAND_2GHZ:
 		iftype_data = data->iftd.low;
 		break;
 	case NL80211_BAND_5GHZ:
 		iftype_data = data->iftd.high;
 		break;
-#if CFG80211_VERSION >= KERNEL_VERSION(5,4,0)
 	case NL80211_BAND_6GHZ:
-		/* keep code in case of fall-through (spatch generated) */
-#endif
 		iftype_data = data->iftd.uhb;
 		break;
 	default:
@@ -1383,22 +1390,12 @@ static void iwl_init_eht_band_override(struct iwl_trans *trans,
 #endif
 		}
 
-		if (trans->dbg_cfg.eht_disable_320 ||
-		    trans->reduced_cap_sku ||
-		    !nl80211_is_6ghz(sband->band)) {
+		if (trans->dbg_cfg.eht_disable_320 || sband->band != NL80211_BAND_6GHZ) {
 			memset(&cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320,
 			       0,
 			       sizeof(cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._320));
 			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[0] &=
 					~IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ;
-		}
-		if (trans->reduced_cap_sku) {
-			cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._80.rx_tx_mcs13_max_nss = 0;
-			cfg_eht_cap(iftype_data)->eht_mcs_nss_supp.bw._160.rx_tx_mcs13_max_nss = 0;
-			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[8] &=
-					~IEEE80211_EHT_PHY_CAP8_RX_4096QAM_WIDER_BW_DL_OFDMA;
-			cfg_eht_cap(iftype_data)->eht_cap_elem.phy_cap_info[2] &=
-					~IEEE80211_EHT_PHY_CAP2_SOUNDING_DIM_320MHZ_MASK;
 		}
 	}
 }
@@ -1455,12 +1452,11 @@ static void iwl_init_sbands(struct iwl_trans *trans,
 			    const struct iwl_fw *fw)
 {
 	struct device *dev = trans->dev;
-	const struct iwl_cfg *cfg = trans->cfg;
 	int n_channels;
 	int n_used = 0;
 	struct ieee80211_supported_band *sband;
 
-	n_channels = iwl_init_channel_map(dev, cfg, data, nvm_ch_flags,
+	n_channels = iwl_init_channel_map(trans, fw, data, nvm_ch_flags,
 					  sbands_flags, v4);
 	sband = &data->bands[NL80211_BAND_2GHZ];
 	sband->band = NL80211_BAND_2GHZ;
@@ -1970,10 +1966,10 @@ static u32 iwl_nvm_get_regdom_bw_flags(const u16 *nvm_chan,
 	/* Set the AP type for the UHB case. */
 	if (uats_enabled) {
 		if (!(nvm_flags & NVM_CHANNEL_VLP))
-			flags |= NL80211_RRF_NO_UHB_VLP_CLIENT;
+			flags |= NL80211_RRF_NO_6GHZ_VLP_CLIENT;
 
 		if (!(nvm_flags & NVM_CHANNEL_AFC))
-			flags |= NL80211_RRF_NO_UHB_AFC_CLIENT;
+			flags |= NL80211_RRF_NO_6GHZ_AFC_CLIENT;
 	}
 
 	/*
@@ -2108,12 +2104,12 @@ iwl_parse_nvm_mcc_info(struct device *dev, const struct iwl_cfg *cfg,
 							     cfg, uats_enabled);
 
 #if CFG80211_VERSION <= KERNEL_VERSION(6,8,0)
-		if (nl80211_is_6ghz(band)) {
-			chan->flags |= IEEE80211_CHAN_NO_UHB_VLP_CLIENT | IEEE80211_CHAN_NO_UHB_AFC_CLIENT;
+		if (band == NL80211_BAND_6GHZ) {
+			chan->flags |= IEEE80211_CHAN_NO_6GHZ_VLP_CLIENT | IEEE80211_CHAN_NO_6GHZ_AFC_CLIENT;
 			if (ch_flags & NVM_CHANNEL_AFC)
-				chan->flags &= ~IEEE80211_CHAN_NO_UHB_AFC_CLIENT;
+				chan->flags &= ~IEEE80211_CHAN_NO_6GHZ_AFC_CLIENT;
 			if (ch_flags & NVM_CHANNEL_VLP)
-				chan->flags &= ~IEEE80211_CHAN_NO_UHB_VLP_CLIENT;
+				chan->flags &= ~IEEE80211_CHAN_NO_6GHZ_VLP_CLIENT;
 		}
 #endif
 
@@ -2496,7 +2492,7 @@ struct iwl_nvm_data *iwl_get_nvm(struct iwl_trans *trans,
 		!!(mac_flags & NVM_MAC_SKU_FLAGS_BAND_5_2_ENABLED);
 	nvm->sku_cap_mimo_disabled =
 		!!(mac_flags & NVM_MAC_SKU_FLAGS_MIMO_DISABLED);
-	if (CSR_HW_RFID_TYPE(trans->hw_rf_id) == IWL_CFG_RF_TYPE_FM)
+	if (CSR_HW_RFID_TYPE(trans->hw_rf_id) >= IWL_CFG_RF_TYPE_FM)
 		nvm->sku_cap_11be_enable = true;
 
 	/* Initialize PHY sku data */

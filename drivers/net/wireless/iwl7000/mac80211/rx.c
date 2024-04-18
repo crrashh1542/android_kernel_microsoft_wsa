@@ -6,7 +6,7 @@
  * Copyright 2007-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  */
 
 #include <linux/jiffies.h>
@@ -426,7 +426,7 @@ ieee80211_add_rx_radiotap_header(struct ieee80211_local *local,
 		channel_flags |= IEEE80211_CHAN_QUARTER;
 
 	if (status->band == NL80211_BAND_5GHZ ||
-	    nl80211_is_6ghz(status->band))
+	    status->band == NL80211_BAND_6GHZ)
 		channel_flags |= IEEE80211_CHAN_OFDM | IEEE80211_CHAN_5GHZ;
 	else if (status->encoding != RX_ENC_LEGACY)
 		channel_flags |= IEEE80211_CHAN_DYN | IEEE80211_CHAN_2GHZ;
@@ -930,7 +930,7 @@ static void ieee80211_parse_qos(struct ieee80211_rx_data *rx)
  * Drivers always need to pass packets that are aligned to two-byte boundaries
  * to the stack.
  *
- * Additionally, should, if possible, align the payload data in a way that
+ * Additionally, they should, if possible, align the payload data in a way that
  * guarantees that the contained IP header is aligned to a four-byte
  * boundary. In the case of regular frames, this simply means aligning the
  * payload to a four-byte boundary (because either the IP header is directly
@@ -946,7 +946,7 @@ static void ieee80211_parse_qos(struct ieee80211_rx_data *rx)
  * subframe to a length that is a multiple of four.
  *
  * Padding like Atheros hardware adds which is between the 802.11 header and
- * the payload is not supported, the driver is required to move the 802.11
+ * the payload is not supported; the driver is required to move the 802.11
  * header to be directly in front of the payload in that case.
  */
 static void ieee80211_verify_alignment(struct ieee80211_rx_data *rx)
@@ -1251,8 +1251,7 @@ static bool ieee80211_sta_manage_reorder_buf(struct ieee80211_sub_if_data *sdata
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
-	u16 sc = le16_to_cpu(hdr->seq_ctrl);
-	u16 mpdu_seq_num = (sc & IEEE80211_SCTL_SEQ) >> 4;
+	u16 mpdu_seq_num = ieee80211_get_sn(hdr);
 	u16 head_seq_num, buf_size;
 	int index;
 	bool ret = true;
@@ -1435,12 +1434,30 @@ ieee80211_rx_h_check_dup(struct ieee80211_rx_data *rx)
 		return RX_CONTINUE;
 
 	if (ieee80211_is_ctl(hdr->frame_control) ||
-	    ieee80211_is_any_nullfunc(hdr->frame_control) ||
-	    is_multicast_ether_addr(hdr->addr1))
+	    ieee80211_is_any_nullfunc(hdr->frame_control))
 		return RX_CONTINUE;
 
 	if (!rx->sta)
 		return RX_CONTINUE;
+
+	if (unlikely(is_multicast_ether_addr(hdr->addr1))) {
+		struct ieee80211_sub_if_data *sdata = rx->sdata;
+		u16 sn = ieee80211_get_sn(hdr);
+
+		if (!ieee80211_is_data_present(hdr->frame_control))
+			return RX_CONTINUE;
+
+		if (!ieee80211_vif_is_mld(&sdata->vif) ||
+		    sdata->vif.type != NL80211_IFTYPE_STATION)
+			return RX_CONTINUE;
+
+		if (sdata->u.mgd.mcast_seq_last != IEEE80211_SN_MODULO &&
+		    ieee80211_sn_less_eq(sn, sdata->u.mgd.mcast_seq_last))
+			return RX_DROP_U_DUP;
+
+		sdata->u.mgd.mcast_seq_last = sn;
+		return RX_CONTINUE;
+	}
 
 	if (unlikely(ieee80211_has_retry(hdr->frame_control) &&
 		     rx->sta->last_seq_ctrl[rx->seqno_idx] == hdr->seq_ctrl)) {
@@ -3776,6 +3793,10 @@ ieee80211_rx_h_action(struct ieee80211_rx_data *rx)
 		}
 		break;
 	case WLAN_CATEGORY_PROTECTED_EHT:
+		if (len < offsetofend(typeof(*mgmt),
+				      u.action.u.ttlm_req.action_code))
+			break;
+
 		switch (mgmt->u.action.u.ttlm_req.action_code) {
 		case WLAN_PROTECTED_EHT_ACTION_TTLM_REQ:
 			if (sdata->vif.type != NL80211_IFTYPE_STATION)
@@ -4099,7 +4120,11 @@ static void ieee80211_rx_cooked_monitor(struct ieee80211_rx_data *rx,
 	}
 
  out_free_skb:
+#if LINUX_VERSION_IS_LESS(6,4,0)
+	kfree_skb_reason_mac80211(skb, reason);
+#else
 	kfree_skb_reason(skb, (__force u32)reason);
+#endif
 }
 
 static void ieee80211_rx_handlers_result(struct ieee80211_rx_data *rx,
@@ -4122,7 +4147,11 @@ static void ieee80211_rx_handlers_result(struct ieee80211_rx_data *rx,
 
 	if (u32_get_bits((__force u32)res, SKB_DROP_REASON_SUBSYS_MASK) ==
 			SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE) {
+#if LINUX_VERSION_IS_LESS(6,4,0)
+		kfree_skb_reason_mac80211(rx->skb, res);
+#else
 		kfree_skb_reason(rx->skb, (__force u32)res);
+#endif
 		return;
 	}
 
@@ -4447,19 +4476,8 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 				rate_idx = 0; /* TODO: HT/VHT rates */
 			else
 				rate_idx = status->rate_idx;
-			/*
-			 * FIXME: We should not need to avoid probe req/resp
-			 * here, but we respond with another probe request and
-			 * that can (briefly) cause traffic amplification.
-			 *
-			 * Ignoring probe responses is here is reasonable anyway
-			 * as the STA will be inserted later.
-			 */
-			if (!ieee80211_is_probe_req(hdr->frame_control) &&
-			    !ieee80211_is_probe_resp(hdr->frame_control))
-				ieee80211_ibss_rx_no_sta(sdata, bssid,
-							 hdr->addr2,
-							 BIT(rate_idx));
+			ieee80211_ibss_rx_no_sta(sdata, bssid, hdr->addr2,
+						 BIT(rate_idx));
 		}
 		return true;
 	case NL80211_IFTYPE_OCB:

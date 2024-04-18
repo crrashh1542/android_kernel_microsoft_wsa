@@ -2,7 +2,7 @@
 /*
 * Portions of this file
 * Copyright(c) 2016 Intel Deutschland GmbH
-* Copyright (C) 2018 - 2019, 2021 - 2023 Intel Corporation
+* Copyright (C) 2018-2019, 2021-2024 Intel Corporation
 */
 
 #ifndef __MAC80211_DRIVER_OPS
@@ -23,7 +23,7 @@
 static inline struct ieee80211_sub_if_data *
 get_bss_sdata(struct ieee80211_sub_if_data *sdata)
 {
-	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
+	if (sdata && sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
 		sdata = container_of(sdata->bss, struct ieee80211_sub_if_data,
 				     u.ap);
 
@@ -698,10 +698,13 @@ static inline void drv_flush(struct ieee80211_local *local,
 			     struct ieee80211_sub_if_data *sdata,
 			     u32 queues, bool drop)
 {
-	struct ieee80211_vif *vif = sdata ? &sdata->vif : NULL;
+	struct ieee80211_vif *vif;
 
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	sdata = get_bss_sdata(sdata);
+	vif = sdata ? &sdata->vif : NULL;
 
 	if (sdata && !check_sdata_in_driver(sdata))
 		return;
@@ -718,6 +721,8 @@ static inline void drv_flush_sta(struct ieee80211_local *local,
 {
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	sdata = get_bss_sdata(sdata);
 
 	if (sdata && !check_sdata_in_driver(sdata))
 		return;
@@ -1147,6 +1152,9 @@ drv_pre_channel_switch(struct ieee80211_sub_if_data *sdata,
 	if (!check_sdata_in_driver(sdata))
 		return -EIO;
 
+	if (!ieee80211_vif_link_active(&sdata->vif, ch_switch->link_id))
+		return 0;
+
 	trace_drv_pre_channel_switch(local, sdata, ch_switch);
 	if (local->ops->pre_channel_switch)
 		ret = local->ops->pre_channel_switch(&local->hw, &sdata->vif,
@@ -1168,6 +1176,9 @@ drv_post_channel_switch(struct ieee80211_link_data *link)
 	if (!check_sdata_in_driver(sdata))
 		return -EIO;
 
+	if (!ieee80211_vif_link_active(&sdata->vif, link->link_id))
+		return 0;
+
 	trace_drv_post_channel_switch(local, sdata);
 	if (local->ops->post_channel_switch)
 		ret = local->ops->post_channel_switch(&local->hw, &sdata->vif,
@@ -1177,8 +1188,9 @@ drv_post_channel_switch(struct ieee80211_link_data *link)
 }
 
 static inline void
-drv_abort_channel_switch(struct ieee80211_sub_if_data *sdata)
+drv_abort_channel_switch(struct ieee80211_link_data *link)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 
 	might_sleep();
@@ -1187,10 +1199,14 @@ drv_abort_channel_switch(struct ieee80211_sub_if_data *sdata)
 	if (!check_sdata_in_driver(sdata))
 		return;
 
+	if (!ieee80211_vif_link_active(&sdata->vif, link->link_id))
+		return;
+
 	trace_drv_abort_channel_switch(local, sdata);
 
 	if (local->ops->abort_channel_switch)
-		local->ops->abort_channel_switch(&local->hw, &sdata->vif);
+		local->ops->abort_channel_switch(&local->hw, &sdata->vif,
+						 link->conf);
 }
 
 static inline void
@@ -1203,6 +1219,9 @@ drv_channel_switch_rx_beacon(struct ieee80211_sub_if_data *sdata,
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (!check_sdata_in_driver(sdata))
+		return;
+
+	if (!ieee80211_vif_link_active(&sdata->vif, ch_switch->link_id))
 		return;
 
 	trace_drv_channel_switch_rx_beacon(local, sdata, ch_switch);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -1012,13 +1012,13 @@ static ssize_t iwl_dbgfs_tas_get_status_read(struct file *file,
 	const char * const tas_current_status[TAS_DYNA_STATUS_MAX] = {
 		[TAS_DYNA_INACTIVE] = "INACTIVE",
 		[TAS_DYNA_INACTIVE_MVM_MODE] =
-			"Inactive Due To MVM Mode",
+			"inactive due to mvm mode",
 		[TAS_DYNA_INACTIVE_TRIGGER_MODE] =
-			"Inactive Due To Trigger Mode",
+			"inactive due to trigger mode",
 		[TAS_DYNA_INACTIVE_BLOCK_LISTED] =
-			"Inactive Due To Block Listed",
+			"inactive due to block listed",
 		[TAS_DYNA_INACTIVE_UHB_NON_US] =
-			"Inactive Due To UHB Non USA",
+			"inactive due to uhb non US",
 		[TAS_DYNA_ACTIVE] = "ACTIVE",
 	};
 	struct iwl_host_cmd hcmd = {
@@ -1064,10 +1064,12 @@ static ssize_t iwl_dbgfs_tas_get_status_read(struct file *file,
 				pos += scnprintf(pos, endpos - pos, "UHB\n");
 				break;
 			case TAS_LMAC_BAND_INVALID:
-				pos += scnprintf(pos, endpos - pos, "INVALID BAND\n");
+				pos += scnprintf(pos, endpos - pos,
+						 "INVALID BAND\n");
 				break;
 			default:
-				pos += scnprintf(pos, endpos - pos, "Unsupported band (%d)\n",
+				pos += scnprintf(pos, endpos - pos,
+						 "Unsupported band (%d)\n",
 						 rsp->tas_status_mac[i].band);
 				goto out;
 			}
@@ -1078,76 +1080,92 @@ static ssize_t iwl_dbgfs_tas_get_status_read(struct file *file,
 		pos += scnprintf(pos, endpos - pos, "\tOFF\n");
 
 	pos += scnprintf(pos, endpos - pos, "TAS Report\n");
-	pos += scnprintf(pos, endpos - pos, "\tTAS FW version: %d\n", rsp->tas_fw_version);
-	pos += scnprintf(pos, endpos - pos, "\tIs UHB Enabled For USA?: %s\n",
-			 rsp->is_uhb_for_usa_enable ? "TRUE" : "FALSE");
-	pos += scnprintf(pos, endpos - pos, "\tCurrent Country: 0x%x\n",
+	pos += scnprintf(pos, endpos - pos, "TAS FW version: %d\n",
+			 rsp->tas_fw_version);
+	pos += scnprintf(pos, endpos - pos, "Is UHB enabled for USA?: %s\n",
+			 rsp->is_uhb_for_usa_enable ? "True" : "False");
+	pos += scnprintf(pos, endpos - pos, "Current MCC: 0x%x\n",
 			 le16_to_cpu(rsp->curr_mcc));
 
-	pos += scnprintf(pos, endpos - pos, "\tBlock List Countries:");
+	pos += scnprintf(pos, endpos - pos, "Block list entries:");
 	for (i = 0; i < IWL_WTAS_BLACK_LIST_MAX; i++)
-		pos += scnprintf(pos, endpos - pos, " 0x%x", le16_to_cpu(rsp->block_list[i]));
+		pos += scnprintf(pos, endpos - pos, " 0x%x",
+				 le16_to_cpu(rsp->block_list[i]));
 
-	pos += scnprintf(pos, endpos - pos, "\n\tVendor: %s\n",
-			 dmi_get_system_info(DMI_SYS_VENDOR));
+	pos += scnprintf(pos, endpos - pos, "\nOEM name: %s\n",
+			 dmi_get_system_info(DMI_SYS_VENDOR) ?: "<unknown>");
 	pos += scnprintf(pos, endpos - pos, "\tVendor In Approved List: %s\n",
 			 iwl_is_tas_approved() ? "YES" : "NO");
-	pos += scnprintf(pos, endpos - pos, "\tDo TAS Support Dual Radio?: %s\n",
+	pos += scnprintf(pos, endpos - pos,
+			 "\tDo TAS Support Dual Radio?: %s\n",
 			 rsp->in_dual_radio ? "TRUE" : "FALSE");
 
 	for (i = 0; i < rsp->in_dual_radio + 1; i++) {
-		if (rsp->tas_status_mac[i].static_dis_reason == 0) {
-			pos += scnprintf(pos, endpos - pos, "\tStatic Status: Disabled\n");
-			pos += scnprintf(pos, endpos - pos, "\tStatic Disabled Reason: %s (0)\n",
+		if (rsp->tas_status_mac[i].static_status == 0) {
+			pos += scnprintf(pos, endpos - pos,
+					 "Static status: disabled\n");
+			pos += scnprintf(pos, endpos - pos,
+					 "Static disabled reason: %s (0)\n",
 					 tas_dis_reason[0]);
 			goto out;
 		}
 
-		pos += scnprintf(pos, endpos - pos, "\nTAS status for ");
+		pos += scnprintf(pos, endpos - pos, "TAS status for ");
 		switch (rsp->tas_status_mac[i].band) {
 		case TAS_LMAC_BAND_HB:
-			pos += scnprintf(pos, endpos - pos, "HB\n");
+			pos += scnprintf(pos, endpos - pos, "High band\n");
 			break;
 		case TAS_LMAC_BAND_LB:
-			pos += scnprintf(pos, endpos - pos, "LB\n");
+			pos += scnprintf(pos, endpos - pos, "Low band\n");
 			break;
 		case TAS_LMAC_BAND_UHB:
-			pos += scnprintf(pos, endpos - pos, "UHB\n");
+			pos += scnprintf(pos, endpos - pos,
+					 "Ultra high band\n");
 			break;
 		case TAS_LMAC_BAND_INVALID:
-			pos += scnprintf(pos, endpos - pos, "INVALID BAND\n");
+			pos += scnprintf(pos, endpos - pos,
+					 "INVALID band\n");
 			break;
 		default:
-			pos += scnprintf(pos, endpos - pos, "Unsupported band (%d)\n",
+			pos += scnprintf(pos, endpos - pos,
+					 "Unsupported band (%d)\n",
 					 rsp->tas_status_mac[i].band);
 			goto out;
 		}
-		pos += scnprintf(pos, endpos - pos, "\tStatic Status: %sabled\n",
-				 rsp->tas_status_mac[i].static_status ? "En" : "Dis");
-		pos += scnprintf(pos, endpos - pos, "\tStatic Disabled Reason: ");
+		pos += scnprintf(pos, endpos - pos, "Static status: %sabled\n",
+				 rsp->tas_status_mac[i].static_status ?
+				 "En" : "Dis");
+		pos += scnprintf(pos, endpos - pos,
+				 "\tStatic Disabled Reason: ");
 		if (rsp->tas_status_mac[i].static_dis_reason < TAS_DISABLED_REASON_MAX)
 			pos += scnprintf(pos, endpos - pos, "%s (%d)\n",
 					 tas_dis_reason[rsp->tas_status_mac[i].static_dis_reason],
 					 rsp->tas_status_mac[i].static_dis_reason);
 		else
-			pos += scnprintf(pos, endpos - pos, "unsupported value (%d)\n",
+			pos += scnprintf(pos, endpos - pos,
+					 "unsupported value (%d)\n",
 					 rsp->tas_status_mac[i].static_dis_reason);
 
-		pos += scnprintf(pos, endpos - pos, "\tDynamic Status:\n");
+		pos += scnprintf(pos, endpos - pos, "Dynamic status:\n");
 		dyn_status = (rsp->tas_status_mac[i].dynamic_status);
 		for_each_set_bit(tmp, &dyn_status, sizeof(dyn_status)) {
 			if (tmp >= 0 && tmp < TAS_DYNA_STATUS_MAX)
-				pos += scnprintf(pos, endpos - pos, "\t\t%s (%d)\n",
+				pos += scnprintf(pos, endpos - pos,
+						 "\t%s (%d)\n",
 						 tas_current_status[tmp], tmp);
 		}
 
-		pos += scnprintf(pos, endpos - pos, "\tIs Near Disconnection?: %s\n",
-				 rsp->tas_status_mac[i].near_disconnection ? "TRUE" : "FALSE");
+		pos += scnprintf(pos, endpos - pos,
+				 "Is near disconnection?: %s\n",
+				 rsp->tas_status_mac[i].near_disconnection ?
+				 "True" : "False");
 		tmp = le16_to_cpu(rsp->tas_status_mac[i].max_reg_pwr_limit);
-		pos += scnprintf(pos, endpos - pos, "\tMax. Regulatory Pwr Limit (dBm): %d.%03d\n",
+		pos += scnprintf(pos, endpos - pos,
+				 "Max. regulatory pwr limit (dBm): %d.%03d\n",
 				 tmp / 8, 125 * (tmp % 8));
 		tmp = le16_to_cpu(rsp->tas_status_mac[i].sar_limit);
-		pos += scnprintf(pos, endpos - pos, "\tSAR limit (dBm): %d.%03d\n",
+		pos += scnprintf(pos, endpos - pos,
+				 "SAR limit (dBm): %d.%03d\n",
 				 tmp / 8, 125 * (tmp % 8));
 	}
 
@@ -1808,7 +1826,6 @@ static int _iwl_dbgfs_inject_beacon_ie(struct iwl_mvm *mvm, char *bin, int len)
 		else
 			beacon_cmd.link_id = cpu_to_le32((u32)mvmvif->id);
 
-
 		iwl_mvm_mac_ctxt_set_tim(mvm, &beacon_cmd.tim_idx,
 					 &beacon_cmd.tim_size,
 					 beacon->data, beacon->len);
@@ -2067,8 +2084,8 @@ static const struct file_operations iwl_dbgfs_link_sta_##name##_ops = {	\
 	.llseek = generic_file_llseek,					\
 }
 
-#define MVM_DEBUGFS_ADD_LINK_STA_FILE_ALIAS(alias, name, parent, mode)		\
-		debugfs_create_file(alias, mode, parent, link_sta,		\
+#define MVM_DEBUGFS_ADD_LINK_STA_FILE_ALIAS(alias, name, parent, mode)	\
+		debugfs_create_file(alias, mode, parent, link_sta,	\
 				    &iwl_dbgfs_link_sta_##name##_ops)
 #define MVM_DEBUGFS_ADD_LINK_STA_FILE(name, parent, mode) \
 	MVM_DEBUGFS_ADD_LINK_STA_FILE_ALIAS(#name, name, parent, mode)
@@ -2598,8 +2615,14 @@ static ssize_t iwl_dbgfs_rfi_freq_table_write(struct iwl_mvm *mvm, char *buf,
  * the table; So, need 5 chars for the "freq: " part and each tuple afterwards
  * needs 6 characters for numbers and 5 for the punctuation around.
  */
-#define IWL_RFI_BUF_SIZE (IWL_RFI_LUT_INSTALLED_SIZE *\
-				(5 + IWL_RFI_LUT_ENTRY_CHANNELS_NUM * (6 + 5)))
+#define IWL_RFI_DDR_BUF_SIZE (IWL_RFI_DDR_LUT_INSTALLED_SIZE *\
+				(5 + IWL_RFI_DDR_LUT_ENTRY_CHANNELS_NUM *\
+					(6 + 5)))
+#define IWL_RFI_DLVR_BUF_SIZE (IWL_RFI_DLVR_LUT_INSTALLED_SIZE *\
+				(5 + IWL_RFI_DLVR_LUT_ENTRY_CHANNELS_NUM *\
+					(6 + 5)))
+/* Extra 32 for "DDR and DLVR table" message */
+#define IWL_RFI_BUF_SIZE (IWL_RFI_DDR_BUF_SIZE + IWL_RFI_DLVR_BUF_SIZE + 32)
 
 static ssize_t iwl_dbgfs_rfi_freq_table_read(struct file *file,
 					     char __user *user_buf,
@@ -2608,34 +2631,62 @@ static ssize_t iwl_dbgfs_rfi_freq_table_read(struct file *file,
 	struct iwl_mvm *mvm = file->private_data;
 	struct iwl_rfi_freq_table_resp_cmd *resp;
 	u32 status;
-	char buf[IWL_RFI_BUF_SIZE];
-	int i, j, pos = 0;
+	char *buf;
+	int i, j, pos = 0, bufsz = IWL_RFI_BUF_SIZE;
+	size_t ret;
+	u8 notif_ver = iwl_fw_lookup_notif_ver(mvm->fw, SYSTEM_GROUP,
+					       RFI_GET_FREQ_TABLE_CMD, 0);
 
 	resp = iwl_rfi_get_freq_table(mvm);
 	if (IS_ERR(resp))
 		return PTR_ERR(resp);
 
+	buf = kzalloc(bufsz, GFP_KERNEL);
+	if (!buf) {
+		kfree(resp);
+		return -ENOMEM;
+	}
+
 	status = le32_to_cpu(resp->status);
 	if (status != RFI_FREQ_TABLE_OK) {
-		scnprintf(buf, IWL_RFI_BUF_SIZE, "status = %d\n", status);
+		pos = scnprintf(buf, bufsz, "status = %d\n", status);
 		goto out;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(resp->table); i++) {
-		pos += scnprintf(buf + pos, IWL_RFI_BUF_SIZE - pos, "%d: ",
-				 resp->table[i].freq);
+	pos = scnprintf(buf + pos, bufsz - pos, "DDR table:\n");
+	for (i = 0; i < ARRAY_SIZE(resp->ddr_table); i++) {
+		pos += scnprintf(buf + pos, bufsz - pos, "%u: ",
+				 le16_to_cpu(resp->ddr_table[i].freq));
 
-		for (j = 0; j < ARRAY_SIZE(resp->table[i].channels); j++)
-			pos += scnprintf(buf + pos, IWL_RFI_BUF_SIZE - pos,
-					 "(%d, %d) ",
-					 resp->table[i].channels[j],
-					 resp->table[i].bands[j]);
-		pos += scnprintf(buf + pos, IWL_RFI_BUF_SIZE - pos, "\n");
+		for (j = 0; j < ARRAY_SIZE(resp->ddr_table[0].channels); j++)
+			pos += scnprintf(buf + pos, bufsz - pos,
+					 "(%u, %u) ",
+					 resp->ddr_table[i].channels[j],
+					 resp->ddr_table[i].bands[j]);
+		pos += scnprintf(buf + pos, bufsz - pos, "\n");
+	}
+
+	if (notif_ver < 2)
+		goto out;
+
+	pos += scnprintf(buf + pos, bufsz - pos, "DLVR table:\n");
+	for (i = 0; i < ARRAY_SIZE(resp->dlvr_table); i++) {
+		pos += scnprintf(buf + pos, bufsz - pos, "%u: ",
+				 le16_to_cpu(resp->dlvr_table[i].freq));
+
+		for (j = 0; j < ARRAY_SIZE(resp->dlvr_table[0].channels); j++)
+			pos += scnprintf(buf + pos, bufsz - pos,
+					 "(%u, %u) ",
+					 resp->dlvr_table[i].channels[j],
+					 resp->dlvr_table[i].bands[j]);
+		pos += scnprintf(buf + pos, bufsz - pos, "\n");
 	}
 
 out:
 	kfree(resp);
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
+	ret = simple_read_from_buffer(user_buf, count, ppos, buf, pos);
+	kfree(buf);
+	return ret;
 }
 
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(prph_reg, 64);

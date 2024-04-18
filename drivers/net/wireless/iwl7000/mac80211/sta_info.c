@@ -40,7 +40,7 @@
  * either sta_info_insert() or sta_info_insert_rcu(); only in the latter
  * case (which acquires an rcu read section but must not be called from
  * within one) will the pointer still be valid after the call. Note that
- * the caller may not do much with the STA info before inserting it, in
+ * the caller may not do much with the STA info before inserting it; in
  * particular, it may not start any mesh peer link management or add
  * encryption keys.
  *
@@ -58,7 +58,7 @@
  * In order to remove a STA info structure, various sta_info_destroy_*()
  * calls are available.
  *
- * There is no concept of ownership on a STA entry, each structure is
+ * There is no concept of ownership on a STA entry; each structure is
  * owned by the global hash table/list until it is removed. All users of
  * the structure need to be RCU protected so that the structure won't be
  * freed before they are done using it.
@@ -648,9 +648,8 @@ __sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 		if (!hw->wiphy->bands[i])
 			continue;
 
-		switch (i) {
+		switch((int)i) {
 		case NL80211_BAND_2GHZ:
-#if CFG80211_VERSION >= KERNEL_VERSION(5,16,0)
 		case NL80211_BAND_LC:
 			/*
 			 * We use both here, even if we cannot really know for
@@ -664,7 +663,6 @@ __sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 			mandatory = IEEE80211_RATE_MANDATORY_B |
 				    IEEE80211_RATE_MANDATORY_G;
 			break;
-#endif /* CFG80211_VERSION >= KERNEL_VERSION(5,16,0) */
 		case NL80211_BAND_5GHZ:
 			mandatory = IEEE80211_RATE_MANDATORY_A;
 			break;
@@ -914,6 +912,8 @@ static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
 
 	if (ieee80211_vif_is_mesh(&sdata->vif))
 		mesh_accept_plinks_update(sdata);
+
+	ieee80211_check_fast_xmit(sta);
 
 	return 0;
  out_remove:
@@ -1316,8 +1316,7 @@ static int _sta_info_move_state(struct sta_info *sta,
 	sta_dbg(sta->sdata, "moving STA %pM to state %d\n",
 		sta->sta.addr, new_state);
 
-	/*
-	 * notify the driver before the actual changes so it can
+	/* notify the driver before the actual changes so it can
 	 * fail the transition
 	 */
 	if (test_sta_flag(sta, WLAN_STA_INSERTED)) {
@@ -2274,7 +2273,6 @@ void ieee80211_sta_register_airtime(struct ieee80211_sta *pubsta, u8 tid,
 	struct ieee80211_local *local = sta->sdata->local;
 	u8 ac = ieee80211_ac_from_tid(tid);
 	u32 airtime = 0;
-	u32 diff;
 
 	if (sta->local->airtime_flags & AIRTIME_USE_TX)
 		airtime += tx_airtime;
@@ -2285,8 +2283,7 @@ void ieee80211_sta_register_airtime(struct ieee80211_sta *pubsta, u8 tid,
 	sta->airtime[ac].tx_airtime += tx_airtime;
 	sta->airtime[ac].rx_airtime += rx_airtime;
 
-	diff = (u32)jiffies - sta->airtime[ac].last_active;
-	if (diff <= AIRTIME_ACTIVE_DURATION)
+	if (ieee80211_sta_keep_active(sta, ac))
 		sta->airtime[ac].deficit -= airtime;
 
 	spin_unlock_bh(&local->active_txq_lock[ac]);
