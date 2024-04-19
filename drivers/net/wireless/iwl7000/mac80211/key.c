@@ -6,7 +6,7 @@
  * Copyright 2007-2008	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright 2015-2017	Intel Deutschland GmbH
- * Copyright 2018-2020, 2022 -2023  Intel Corporation
+ * Copyright 2018-2020, 2022-2024  Intel Corporation
  */
 
 #include <crypto/utils.h>
@@ -942,7 +942,7 @@ int ieee80211_key_link(struct ieee80211_key *key,
 
 	key = NULL;
 
-out:
+ out:
 	ieee80211_key_free_unused(key);
 	return ret;
 }
@@ -1372,18 +1372,22 @@ EXPORT_SYMBOL_GPL(ieee80211_remove_key);
 
 struct ieee80211_key_conf *
 ieee80211_gtk_rekey_add(struct ieee80211_vif *vif,
-			struct ieee80211_key_conf *keyconf)
+			struct ieee80211_key_conf *keyconf,
+			int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_key *key;
 	int err;
+	struct ieee80211_link_data *link_data =
+		link_id < 0 ? &sdata->deflink :
+		sdata_dereference(sdata->link[link_id], sdata);
 
-	/*
-	 * TODO: we should check for local->wowlan here, because
-	 * calling gtk_rekey_add() without being in wowlan can cause
-	 * problems, unless we refactor the code to unify
-	 * gtk_rekey_add() with gtk_rekey_notify().
-	 */
+	if (WARN_ON(!link_data))
+		return ERR_PTR(-EINVAL);
+
+	if (WARN_ON(!local->wowlan))
+		return ERR_PTR(-EINVAL);
 
 	if (WARN_ON(vif->type != NL80211_IFTYPE_STATION))
 		return ERR_PTR(-EINVAL);
@@ -1397,8 +1401,9 @@ ieee80211_gtk_rekey_add(struct ieee80211_vif *vif,
 	if (sdata->u.mgd.mfp != IEEE80211_MFP_DISABLED)
 		key->conf.flags |= IEEE80211_KEY_FLAG_RX_MGMT;
 
-	/* FIXME: this function needs to get a link ID */
-	err = ieee80211_key_link(key, &sdata->deflink, NULL);
+	key->conf.link_id = link_id;
+
+	err = ieee80211_key_link(key, link_data, NULL);
 	if (err)
 		return ERR_PTR(err);
 

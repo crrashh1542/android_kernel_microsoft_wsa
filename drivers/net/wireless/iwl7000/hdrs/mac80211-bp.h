@@ -1,7 +1,7 @@
 /*
  * ChromeOS backport definitions
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  */
 #include <linux/if_ether.h>
 #include <net/cfg80211.h>
@@ -57,11 +57,11 @@ bool
 ieee80211_uhb_power_type_valid(struct ieee80211_mgmt *mgmt, size_t len,
 			       struct ieee80211_channel *channel);
 
-#define IEEE80211_CHAN_NO_UHB_VLP_CLIENT BIT(21)
-#define IEEE80211_CHAN_NO_UHB_AFC_CLIENT BIT(22)
+#define IEEE80211_CHAN_NO_6GHZ_VLP_CLIENT BIT(21)
+#define IEEE80211_CHAN_NO_6GHZ_AFC_CLIENT BIT(22)
 
-#define NL80211_RRF_NO_UHB_VLP_CLIENT BIT(22)
-#define NL80211_RRF_NO_UHB_AFC_CLIENT BIT(23)
+#define NL80211_RRF_NO_6GHZ_VLP_CLIENT BIT(22)
+#define NL80211_RRF_NO_6GHZ_AFC_CLIENT BIT(23)
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,18,0)
@@ -311,6 +311,7 @@ static inline void iwl7000_convert_survey_info(struct survey_info *survey,
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
+#define ASSOC_REQ_DISABLE_EHT BIT(5)
 #define NL80211_EXT_FEATURE_POWERED_ADDR_CHANGE -1
 #endif /* CFG80211_VERSION < KERNEL_VERSION(6,1,0) */
 
@@ -989,16 +990,8 @@ static inline void cfg80211_bss_iter(struct wiphy *wiphy,
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,3,0) */
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,4,0)
-static inline bool nl80211_is_6ghz(enum nl80211_band band)
-{
-	return false;
-}
-#else
-static inline bool nl80211_is_6ghz(enum nl80211_band band)
-{
-	return band == NL80211_BAND_6GHZ;
-}
-#endif /* CFG80211_VERSION < KERNEL_VERSION(5,4,0) */
+#define NL80211_BAND_6GHZ 3
+#endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,7,0)
 #define ieee80211_preamble_he() 0
@@ -1011,6 +1004,7 @@ static inline bool nl80211_is_6ghz(enum nl80211_band band)
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,13,0)
+#define NL80211_EXT_FEATURE_SECURE_LTF -1
 #define ftm_lmr_feedback(peer)		0
 #else
 #define ftm_lmr_feedback(peer)		((peer)->ftm.lmr_feedback)
@@ -1029,10 +1023,23 @@ int ieee80211_get_vht_max_nss(struct ieee80211_vht_cap *cap,
 			      unsigned int max_vht_nss);
 #endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,5,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,9,0)
 ssize_t cfg80211_defragment_element(const struct element *elem, const u8 *ies,
 				    size_t ieslen, u8 *data, size_t data_len,
 				    u8 frag_id);
+
+enum cfg80211_rnr_iter_ret {
+	RNR_ITER_CONTINUE,
+	RNR_ITER_BREAK,
+	RNR_ITER_ERROR,
+};
+
+bool cfg80211_iter_rnr(const u8 *elems, size_t elems_len,
+		       enum cfg80211_rnr_iter_ret
+		       (*iter)(void *data, u8 type,
+			       const struct ieee80211_neighbor_ap_info *info,
+			       const u8 *tbtt_info, u8 tbtt_info_len),
+		       void *iter_data);
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,8,0)
@@ -1297,7 +1304,7 @@ static inline void
 LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
 						  struct cfg80211_chan_def *chandef,
 						  unsigned int link_id, u8 count,
-						  bool quiet, u16 punct_bitmap)
+						  bool quiet)
 {
 	cfg80211_ch_switch_started_notify(dev, chandef, count);
 }
@@ -1308,12 +1315,22 @@ static inline void
 LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
 						  struct cfg80211_chan_def *chandef,
 						  unsigned int link_id, u8 count,
-						  bool quiet, u16 punct_bitmap)
+						  bool quiet)
 {
 	cfg80211_ch_switch_started_notify(dev, chandef, count, quiet);
 }
 #define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
-#endif /* < 6.1.0 */
+#elif CFG80211_VERSION < KERNEL_VERSION(6,9,0)
+static inline void
+LINUX_BACKPORT(cfg80211_ch_switch_started_notify)(struct net_device *dev,
+						  struct cfg80211_chan_def *chandef,
+						  unsigned int link_id, u8 count,
+						  bool quiet)
+{
+	cfg80211_ch_switch_started_notify(dev, chandef, link_id, count, quiet, 0);
+}
+#define cfg80211_ch_switch_started_notify LINUX_BACKPORT(cfg80211_ch_switch_started_notify)
+#endif
 
 #ifndef ETH_TLEN
 #define ETH_TLEN	2		/* Octets in ethernet type field */
@@ -1325,14 +1342,6 @@ static inline bool cfg80211_channel_is_psc(struct ieee80211_channel *chan)
 	return false;
 }
 #elif CFG80211_VERSION < KERNEL_VERSION(5,8,0)
-/**
- * cfg80211_channel_is_psc - Check if the channel is a 6 GHz PSC
- * @chan: control channel to check
- *
- * The Preferred Scanning Channels (PSC) are defined in
- * Draft IEEE P802.11ax/D5.0, 26.17.2.3.3
- */
-#
 static inline bool cfg80211_channel_is_psc(struct ieee80211_channel *chan)
 {
 	if (chan->band != NL80211_BAND_6GHZ)
@@ -1340,7 +1349,6 @@ static inline bool cfg80211_channel_is_psc(struct ieee80211_channel *chan)
 
 	return ieee80211_frequency_to_channel(chan->center_freq) % 16 == 5;
 }
-
 #endif /* < 5.8.0 */
 
 #if LINUX_VERSION_IS_LESS(5,9,0)
@@ -1373,33 +1381,12 @@ tasklet_setup(struct tasklet_struct *t,
 #endif /* < 5.4.0 */
 
 #if CFG80211_VERSION < KERNEL_VERSION(5,9,0)
-static inline bool nl80211_is_s1ghz(enum nl80211_band band)
-{
-	return false;
-}
-
+#define NL80211_BAND_S1GHZ 4
 #define NL80211_CHAN_WIDTH_1 8
 #define NL80211_CHAN_WIDTH_2 9
 #define NL80211_CHAN_WIDTH_4 10
 #define NL80211_CHAN_WIDTH_8 11
 #define NL80211_CHAN_WIDTH_16 12
-
-static inline bool nl80211_is_s1ghz_width(enum nl80211_chan_width w1,
-					  enum nl80211_chan_width w2)
-{
-	return false;
-}
-#else /* CFG80211_VERSION < 5.9.0 */
-static inline bool nl80211_is_s1ghz(enum nl80211_band band)
-{
-	return band == NL80211_BAND_S1GHZ;
-}
-
-static inline bool nl80211_is_s1ghz_width(enum nl80211_chan_width w1,
-					  enum nl80211_chan_width w2)
-{
-	return w1 == w2;
-}
 #endif /* CFG80211_VERSION < 5.9.0 */
 
 #if LINUX_VERSION_IS_LESS(4,19,0)
@@ -1566,6 +1553,9 @@ static inline u64 skb_get_kcov_handle(struct sk_buff *skb)
 #ifndef CONFIG_LOCKDEP
 /* upstream since 5.11 in this exact same way - calls compile away */
 int lockdep_is_held(const void *);
+
+#define HZ_PER_KHZ		1000UL
+#define KHZ_PER_MHZ		1000UL
 #endif
 
 static inline void dev_sw_netstats_tx_add(struct net_device *dev,
@@ -1597,7 +1587,7 @@ static inline void __iwl7000_cfg80211_unregister_wdev(struct wireless_dev *wdev)
 		cfg80211_unregister_wdev(wdev);
 }
 #define cfg80211_unregister_wdev __iwl7000_cfg80211_unregister_wdev
-#define lockdep_is_wiphy_held(wiphy) 0
+#define lockdep_is_wiphy_held(wiphy) lockdep_rtnl_is_held()
 static inline bool wdev_registered(struct wireless_dev *wdev)
 {
 	return true;
@@ -1653,7 +1643,15 @@ static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
 {
 	ether_addr_copy(dev->dev_addr, addr);
 }
-#endif /* LINUX_VERSION_IS_LESS(5,15,0) */
+#endif
+
+#ifndef lockdep_assert
+#define lockdep_assert(x) do {} while (0)
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(5,16,0)
+#define NL80211_BAND_LC	5
+#endif
 
 #if LINUX_VERSION_IS_LESS(5,16,0)
 #define skb_ext_reset LINUX_BACKPORT(skb_get_dsfield)
@@ -1798,7 +1796,7 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(5,19,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(6,4,0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
 struct cfg80211_set_hw_timestamp {
 	const u8 *macaddr;
 	bool enable;
@@ -1809,7 +1807,9 @@ struct cfg80211_set_hw_timestamp {
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,0,0)
-#define cfg80211_ch_switch_notify(dev, chandef, link_id, punct_bitmap) cfg80211_ch_switch_notify(dev, chandef)
+#define cfg80211_ch_switch_notify(dev, chandef, link_id) cfg80211_ch_switch_notify(dev, chandef)
+#elif CFG80211_VERSION < KERNEL_VERSION(6,9,0)
+#define cfg80211_ch_switch_notify(dev, chandef, link_id) cfg80211_ch_switch_notify(dev, chandef, link_id, 0)
 #endif
 
 #ifdef CONFIG_THERMAL
@@ -2159,7 +2159,7 @@ static inline void backport_led_trigger_blink(struct led_trigger *trigger,
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,8,0)
-static inline void cfg80211_schedule_channels_check(struct net_device *netdev)
+static inline void cfg80211_schedule_channels_check(struct wireless_dev *wdev)
 {
 }
 #define NL80211_EXT_FEATURE_DFS_CONCURRENT -1
@@ -2169,13 +2169,18 @@ struct cfg80211_ttlm_params {
 	u16 dlink[8];
 	u16 ulink[8];
 };
+#endif
 
-#if CFG80211_VERSION < KERNEL_VERSION(6, 8, 0)
+#if CFG80211_VERSION < KERNEL_VERSION(6,9,0)
 #define NL80211_EXT_FEATURE_SPP_AMSDU_SUPPORT -1
 #define ASSOC_REQ_SPP_AMSDU BIT(7)
 #define NL80211_STA_FLAG_SPP_AMSDU 8
-#endif
-
+bool ieee80211_operating_class_to_chandef(u8 operating_class,
+					  struct ieee80211_channel *chan,
+					  struct cfg80211_chan_def *chandef);
+#define cfg80211_csa_settings_link_id(csa)	0
+#else
+#define cfg80211_csa_settings_link_id(csa)	(csa)->link_id
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,7,0)
@@ -2208,5 +2213,139 @@ static inline bool LINUX_BACKPORT(napi_schedule)(struct napi_struct *n)
 	return false;
 }
 #define napi_schedule LINUX_BACKPORT(napi_schedule)
+
+#ifdef CONFIG_CFG80211_DEBUGFS
+/**
+ * wiphy_locked_debugfs_read - do a locked read in debugfs
+ * @wiphy: the wiphy to use
+ * @file: the file being read
+ * @buf: the buffer to fill and then read from
+ * @bufsize: size of the buffer
+ * @userbuf: the user buffer to copy to
+ * @count: read count
+ * @ppos: read position
+ * @handler: the read handler to call (under wiphy lock)
+ * @data: additional data to pass to the read handler
+ */
+static inline
+ssize_t wiphy_locked_debugfs_read(struct wiphy *wiphy, struct file *file,
+				  char *buf, size_t bufsize,
+				  char __user *userbuf, size_t count,
+				  loff_t *ppos,
+				  ssize_t (*handler)(struct wiphy *wiphy,
+						     struct file *file,
+						     char *buf,
+						     size_t bufsize,
+						     void *data),
+				  void *data)
+{
+	ssize_t ret = -EINVAL;
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(wiphy);
+#else
+	rtnl_lock();
+#endif
+	ret = handler(wiphy, file, buf, bufsize, data);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(wiphy);
+#else
+	rtnl_unlock();
+#endif
+
+	if (ret >= 0)
+		ret = simple_read_from_buffer(userbuf, count, ppos, buf, ret);
+
+	return ret;
+}
+
+/**
+ * wiphy_locked_debugfs_write - do a locked write in debugfs
+ * @wiphy: the wiphy to use
+ * @file: the file being written to
+ * @buf: the buffer to copy the user data to
+ * @bufsize: size of the buffer
+ * @userbuf: the user buffer to copy from
+ * @count: read count
+ * @handler: the write handler to call (under wiphy lock)
+ * @data: additional data to pass to the write handler
+ */
+static inline
+ssize_t wiphy_locked_debugfs_write(struct wiphy *wiphy, struct file *file,
+				   char *buf, size_t bufsize,
+				   const char __user *userbuf, size_t count,
+				   ssize_t (*handler)(struct wiphy *wiphy,
+						      struct file *file,
+						      char *buf,
+						      size_t count,
+						      void *data),
+				   void *data)
+{
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -E2BIG;
+
+	if (copy_from_user(buf, userbuf, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_lock(wiphy);
+#else
+	rtnl_lock();
+#endif
+	ret = handler(wiphy, file, buf, bufsize, data);
+#if CFG80211_VERSION >= KERNEL_VERSION(5,12,0)
+	wiphy_unlock(wiphy);
+#else
+	rtnl_unlock();
+#endif
+
+	return ret;
+}
+#endif
 #endif /* < 6.7.0 */
 
+#if CFG80211_VERSION < KERNEL_VERSION(6,7,5)
+#define cfg80211_bss_proberesp_ecsa_stuck(bss) false
+#else
+#define cfg80211_bss_proberesp_ecsa_stuck(bss) (bss->proberesp_ecsa_stuck)
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,9,0)
+#define IEEE80211_CHAN_CAN_MONITOR 0
+
+int nl80211_chan_width_to_mhz(enum nl80211_chan_width chan_width);
+int cfg80211_chandef_primary(const struct cfg80211_chan_def *chandef,
+			     enum nl80211_chan_width primary_width,
+			     u16 *punctured);
+static inline void chandef_clear_punctured(struct cfg80211_chan_def *chandef)
+{
+}
+
+static inline u16 chandef_punctured(const struct cfg80211_chan_def *chandef)
+{
+	return 0;
+}
+
+static inline u16 *chandef_punctured_ptr(struct cfg80211_chan_def *chandef)
+{
+	return NULL;
+}
+#else
+static inline void chandef_clear_punctured(struct cfg80211_chan_def *chandef)
+{
+	chandef->punctured = 0;
+}
+
+static inline u16 chandef_punctured(const struct cfg80211_chan_def *chandef)
+{
+	return chandef->punctured;
+}
+
+static inline u16 *chandef_punctured_ptr(struct cfg80211_chan_def *chandef)
+{
+	return &chandef->punctured;
+}
+#endif /* cfg < 6.8 */

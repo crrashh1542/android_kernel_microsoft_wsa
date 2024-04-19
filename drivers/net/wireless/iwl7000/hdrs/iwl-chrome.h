@@ -4,7 +4,7 @@
  *
  * ChromeOS backport definitions
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  */
 
 #include <linux/version.h>
@@ -316,6 +316,9 @@ static inline void debugfs_create_xul(const char *name, umode_t mode,
 
 #if LINUX_VERSION_IS_LESS(5,11,0)
 
+#define KHZ_PER_MHZ		1000UL
+#define HZ_PER_MHZ		1000000UL
+
 enum rfkill_hard_block_reasons {
 	RFKILL_HARD_BLOCK_SIGNAL        = 1 << 0,
 	RFKILL_HARD_BLOCK_NOT_OWNER     = 1 << 1,
@@ -362,5 +365,18 @@ static inline u32 get_random_u32_inclusive(u32 floor, u32 ceil)
 			 (floor > ceil || ceil - floor == U32_MAX),
 			 "get_random_u32_inclusive() must take floor <= ceil");
 	return floor + get_random_u32_below(ceil - floor + 1);
+}
+#endif
+
+#if LINUX_VERSION_IS_LESS(6,3,0)
+#define kvmemdup LINUX_BACKPORT(kvmemdup)
+static inline void *kvmemdup(const void *src, size_t len, gfp_t gfp)
+{
+	void *p;
+
+	p = kvmalloc(len, gfp);
+	if (p)
+		memcpy(p, src, len);
+	return p;
 }
 #endif

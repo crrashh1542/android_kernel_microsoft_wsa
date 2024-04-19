@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2013-2015, 2018-2023 Intel Corporation
+ * Copyright (C) 2013-2015, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  */
 #if !defined(__IWL_DBG_CFG_H__) || defined(DBG_CFG_REINCLUDE)
@@ -191,6 +191,18 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_RANGE(u8, MVM_ADAPTIVE_DWELL_NUM_APS_OVERRIDE, 0, 10)
 	IWL_DBG_CFG_DEF(int, eml_capa_override, -1)
 	IWL_DBG_CFG(bool, MVM_AUTO_EML_ENABLE)
+	IWL_DBG_CFG(u8, MVM_MISSED_BEACONS_EXIT_ESR_THRESH)
+
+	IWL_DBG_CFG(int, MVM_HIGH_RSSI_THRESH_20MHZ)
+	IWL_DBG_CFG(int, MVM_LOW_RSSI_THRESH_20MHZ)
+	IWL_DBG_CFG(int, MVM_HIGH_RSSI_THRESH_40MHZ)
+	IWL_DBG_CFG(int, MVM_LOW_RSSI_THRESH_40MHZ)
+	IWL_DBG_CFG(int, MVM_HIGH_RSSI_THRESH_80MHZ)
+	IWL_DBG_CFG(int, MVM_LOW_RSSI_THRESH_80MHZ)
+	IWL_DBG_CFG(int, MVM_HIGH_RSSI_THRESH_160MHZ)
+	IWL_DBG_CFG(int, MVM_LOW_RSSI_THRESH_160MHZ)
+	IWL_DBG_CFG(int, MVM_ENTER_ESR_TPT_THRESH)
+
 #endif /* CPTCFG_IWLMVM */
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	IWL_DBG_CFG_NODEF(u32, dnt_out_mode)
@@ -295,6 +307,8 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(bool, amsdu_in_ampdu_disabled)
 	IWL_DBG_CFG_NODEF(bool, disable_eml)
 	IWL_DBG_CFG_NODEF(u32, step_analog_params)
+	IWL_DBG_CFG_NODEF(bool, MVM_DISABLE_SPP_AMSDU_ADV)
+	IWL_DBG_CFG_DEF(int, MVM_SPP_AMSDU_ACTIVATE, -1)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */
@@ -314,7 +328,7 @@ struct iwl_dbg_cfg {
 #ifndef DBG_CFG_REINCLUDE
 };
 
-extern struct iwl_dbg_cfg current_dbg_config;
+extern const struct iwl_dbg_cfg default_dbg_config;
 void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg);
 void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg);
 #endif /* DBG_CFG_REINCLUDE */

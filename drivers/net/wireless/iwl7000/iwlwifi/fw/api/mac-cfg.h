@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2012-2014, 2018-2019, 2021-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2019, 2021-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -316,6 +316,8 @@ enum iwl_mac_config_filter_flags {
  *	ACK-enabled AGG, (i.e. both BACK and non-BACK frames in single AGG).
  *	If the NIC is not ACK_ENABLED it may use the EOF-bit in first non-0
  *	len delim to determine if AGG or single.
+ * @client: client mac data
+ * @p2p_dev: mac data for p2p device
  */
 struct iwl_mac_config_cmd {
 	/* COMMON_INDEX_HDR_API_S_VER_1 */
@@ -371,7 +373,7 @@ struct iwl_mac_config_cmd {
  *	iwl_link_ctx_cfg_cmd::bss_color_disable
  * @LINK_CONTEXT_MODIFY_EHT_PARAMS: covers iwl_link_ctx_cfg_cmd::puncture_mask.
  *	This flag can be set only if the MAC that this link relates to has
- *	eht_support set to true.
+ *	eht_support set to true. No longer used since _VER_3 of this command.
  * @LINK_CONTEXT_MODIFY_ALL: set all above flags
  */
 enum iwl_link_ctx_modify_flags {
@@ -460,7 +462,7 @@ enum iwl_link_ctx_flags {
  * @bi: beacon interval in TU, applicable only when associated
  * @dtim_interval: DTIM interval in TU.
  *	Relevant only for GO, otherwise this is offloaded.
- * @puncture_mask: puncture mask for EHT
+ * @puncture_mask: puncture mask for EHT (removed in VER_3)
  * @frame_time_rts_th: HE duration RTS threshold, in units of 32us
  * @flags: a combination from &enum iwl_link_ctx_flags
  * @flags_mask: what of %flags have changed. Also &enum iwl_link_ctx_flags
@@ -503,7 +505,7 @@ struct iwl_link_config_cmd {
 	struct iwl_he_backoff_conf trig_based_txf[AC_NUM];
 	__le32 bi;
 	__le32 dtim_interval;
-	__le16 puncture_mask;
+	__le16 puncture_mask; /* removed in _VER_3 */
 	__le16 frame_time_rts_th;
 	__le32 flags;
 	__le32 flags_mask;
@@ -517,9 +519,7 @@ struct iwl_link_config_cmd {
 	u8 ibss_bssid_addr[6];
 	__le16 reserved_for_ibss_bssid_addr;
 	__le32 reserved3[8];
-} __packed; /* LINK_CONTEXT_CONFIG_CMD_API_S_VER_1 and
-	     * LINK_CONTEXT_CONFIG_CMD_API_S_VER_2
-	     */
+} __packed; /* LINK_CONTEXT_CONFIG_CMD_API_S_VER_1, _VER_2, _VER_3 */
 
 /* Currently FW supports link ids in the range 0-3 and can have
  * at most two active links for each vif.
@@ -641,5 +641,26 @@ struct iwl_mvm_sta_disable_tx_cmd {
 	__le32 sta_id;
 	__le32 disable;
 } __packed; /* STA_DISABLE_TX_API_S_VER_1 */
+
+/**
+ * enum iwl_mvm_fw_esr_recommendation - FW recommendation code
+ * @ESR_RECOMMEND_LEAVE: recommendation to leave esr
+ * @ESR_FORCE_LEAVE: force exiting esr
+ * @ESR_RECOMMEND_ENTER: recommendation to enter esr
+ */
+enum iwl_mvm_fw_esr_recommendation {
+	ESR_RECOMMEND_LEAVE,
+	ESR_FORCE_LEAVE,
+	ESR_RECOMMEND_ENTER,
+}; /* ESR_MODE_RECOMMENDATION_CODE_API_E_VER_1 */
+
+/**
+ * struct iwl_mvm_esr_mode_notif - FWs recommendation/force for esr mode
+ *
+ * @action: the action to apply on esr state. See &iwl_mvm_fw_esr_recommendation
+ */
+struct iwl_mvm_esr_mode_notif {
+	__le32 action;
+} __packed; /* ESR_MODE_RECOMMENDATION_NTFY_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_mac_cfg_h__ */

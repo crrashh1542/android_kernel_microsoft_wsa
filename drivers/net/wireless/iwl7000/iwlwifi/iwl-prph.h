@@ -197,7 +197,6 @@
 #define SCD_QUEUE_CTX_REG2_VAL(_n, _v)		FIELD_PREP(SCD_QUEUE_CTX_REG2_ ## _n, _v)
 
 #define SCD_GP_CTRL_ENABLE_31_QUEUES		BIT(0)
-#define SCD_GP_CTRL_DRAM_BC_TABLE_DUP_DIS	BIT(16)
 #define SCD_GP_CTRL_AUTO_ACTIVE_MODE		BIT(18)
 
 /* Context Data */
@@ -232,7 +231,6 @@
 #define SCD_CHAINEXT_EN		(SCD_BASE + 0x244)
 #define SCD_AGGR_SEL		(SCD_BASE + 0x248)
 #define SCD_INTERRUPT_MASK	(SCD_BASE + 0x108)
-#define SCD_CB_SIZE		(SCD_BASE + 0x1a4)
 #define SCD_GP_CTRL		(SCD_BASE + 0x1a8)
 #define SCD_EN_CTRL		(SCD_BASE + 0x254)
 
@@ -371,6 +369,10 @@ enum {
 };
 
 #define CNVI_AUX_MISC_CHIP				0xA200B0
+#define CNVI_AUX_MISC_CHIP_MAC_STEP(_val)	(((_val) & 0xf000000) >> 24)
+#define CNVI_AUX_MISC_CHIP_PROD_TYPE(_val)	((_val) & 0xfff)
+#define CNVI_AUX_MISC_CHIP_PROD_TYPE_BZ_U	0x930
+
 #define CNVR_AUX_MISC_CHIP				0xA2B800
 #define CNVR_SCU_SD_REGS_SD_REG_DIG_DCDC_VTRIM		0xA29890
 #define CNVR_SCU_SD_REGS_SD_REG_ACTIVE_VDIG_MIRROR	0xA29938
@@ -434,13 +436,12 @@ enum {
 #define REG_CRF_ID_STEP(val)		(((val) & 0x0F000000) >> 24)
 #define REG_CRF_ID_FLAVOR(val)		(((val) & 0xF0000000) >> 28)
 
-
 #define UREG_CHICK		(0xA05C00)
 #define UREG_CHICK_MSI_ENABLE	BIT(24)
 #define UREG_CHICK_MSIX_ENABLE	BIT(25)
 
-#define SD_REG_VER	0xa29600
-#define SD_REG_VER_GEN2	0x00a2b800
+#define SD_REG_VER		0xa29600
+#define SD_REG_VER_GEN2		0x00a2b800
 
 #define REG_CRF_ID_TYPE_JF_1			0x201
 #define REG_CRF_ID_TYPE_JF_2			0x202

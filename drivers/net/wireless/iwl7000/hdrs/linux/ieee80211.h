@@ -9,7 +9,7 @@
  * Copyright (c) 2006, Michael Wu <flamingice@sourmilk.net>
  * Copyright (c) 2013 - 2014 Intel Mobile Communications GmbH
  * Copyright (c) 2016 - 2017 Intel Deutschland GmbH
- * Copyright (c) 2018 - 2023 Intel Corporation
+ * Copyright (c) 2018 - 2024 Intel Corporation
  */
 
 #ifndef LINUX_IEEE80211_H
@@ -172,11 +172,11 @@
 #define IEEE80211_SN_MODULO		(IEEE80211_MAX_SN + 1)
 
 
-/* PV1 Layout 11ah 9.8.3.1 */
+/* PV1 Layout IEEE 802.11-2020 9.8.3.1 */
 #define IEEE80211_PV1_FCTL_VERS		0x0003
 #define IEEE80211_PV1_FCTL_FTYPE	0x001c
 #define IEEE80211_PV1_FCTL_STYPE	0x00e0
-#define IEEE80211_PV1_FCTL_TODS		0x0100
+#define IEEE80211_PV1_FCTL_FROMDS		0x0100
 #define IEEE80211_PV1_FCTL_MOREFRAGS	0x0200
 #define IEEE80211_PV1_FCTL_PM		0x0400
 #define IEEE80211_PV1_FCTL_MOREDATA	0x0800
@@ -189,6 +189,11 @@
 static inline bool ieee80211_sn_less(u16 sn1, u16 sn2)
 {
 	return ((sn1 - sn2) & IEEE80211_SN_MASK) > (IEEE80211_SN_MODULO >> 1);
+}
+
+static inline bool ieee80211_sn_less_eq(u16 sn1, u16 sn2)
+{
+	return ((sn2 - sn1) & IEEE80211_SN_MASK) <= (IEEE80211_SN_MODULO >> 1);
 }
 
 static inline u16 ieee80211_sn_add(u16 sn1, u16 sn2)
@@ -808,6 +813,11 @@ static inline bool ieee80211_is_frag(struct ieee80211_hdr *hdr)
 	       hdr->seq_ctrl & cpu_to_le16(IEEE80211_SCTL_FRAG);
 }
 
+static inline u16 ieee80211_get_sn(struct ieee80211_hdr *hdr)
+{
+	return le16_get_bits(hdr->seq_ctrl, IEEE80211_SCTL_SEQ);
+}
+
 struct ieee80211s_hdr {
 	u8 flags;
 	u8 ttl;
@@ -1275,6 +1285,24 @@ struct ieee80211_twt_setup {
 struct ieee80211_ttlm_elem {
 	u8 control;
 	u8 optional[];
+} __packed;
+
+/**
+ * struct ieee80211_bss_load_elem - BSS Load elemen
+ *
+ * Defined in section 9.4.2.26 in IEEE 802.11-REVme D4.1
+ *
+ * @sta_count: total number of STAs currently associated with the AP.
+ * @channel_util: Percentage of time that the access point sensed the channel
+ *	was busy. This value is in range [0, 255], the highest value means
+ *	100% busy.
+ * @avail_admission_capa: remaining amount of medium time used for admission
+ *	control.
+ */
+struct ieee80211_bss_load_elem {
+	__le16 sta_count;
+	u8 channel_util;
+	__le16 avail_admission_capa;
 } __packed;
 
 struct ieee80211_mgmt {
@@ -2732,9 +2760,11 @@ static inline bool ieee80211_he_capa_size_ok(const u8 *data, u8 len)
 #define IEEE80211_HE_OPERATION_PARTIAL_BSS_COLOR		0x40000000
 #define IEEE80211_HE_OPERATION_BSS_COLOR_DISABLED		0x80000000
 
-#define IEEE80211_6GHZ_CTRL_REG_LPI_AP	0
-#define IEEE80211_6GHZ_CTRL_REG_SP_AP	1
-#define IEEE80211_6GHZ_CTRL_REG_VLP_AP	2
+#define IEEE80211_6GHZ_CTRL_REG_LPI_AP		0
+#define IEEE80211_6GHZ_CTRL_REG_SP_AP		1
+#define IEEE80211_6GHZ_CTRL_REG_VLP_AP		2
+#define IEEE80211_6GHZ_CTRL_REG_INDOOR_LPI_AP	3
+#define IEEE80211_6GHZ_CTRL_REG_INDOOR_SP_AP	4
 
 /**
  * struct ieee80211_he_6ghz_oper - HE 6 GHz operation Information field
@@ -2774,6 +2804,10 @@ struct ieee80211_he_6ghz_oper {
 #define IEEE80211_MAX_NUM_PWR_LEVEL	8
 
 #define IEEE80211_TPE_MAX_POWER_COUNT	8
+#define IEEE80211_TPE_MAX_EIRP_COUNT		3
+#define IEEE80211_TPE_MAX_EIRP_PSD_COUNT	4
+#define IEEE80211_TPE_MAX_INTER_COUNT		4
+#define IEEE80211_TPE_MAX_CAT_COUNT		2
 
 /* transmit power interpretation type of transmit power envelope element */
 enum ieee80211_tx_power_intrpt_type {
@@ -2781,6 +2815,12 @@ enum ieee80211_tx_power_intrpt_type {
 	IEEE80211_TPE_LOCAL_EIRP_PSD,
 	IEEE80211_TPE_REG_CLIENT_EIRP,
 	IEEE80211_TPE_REG_CLIENT_EIRP_PSD,
+};
+
+/* category type of transmit power envelope element */
+enum ieee80211_tx_power_category {
+	IEEE80211_TPE_CAT_DEFAULT,
+	IEEE80211_TPE_CAT_SUB_DEV,
 };
 
 /**
@@ -2800,6 +2840,54 @@ struct ieee80211_tx_pwr_env {
 #define IEEE80211_TX_PWR_ENV_INFO_COUNT 0x7
 #define IEEE80211_TX_PWR_ENV_INFO_INTERPRET 0x38
 #define IEEE80211_TX_PWR_ENV_INFO_CATEGORY 0xC0
+
+/**
+ * ieee80211_tx_pwr_env_ok - validate the TPE element
+ * @pos: TPE element contents
+ * @elen: length of TPE element
+ * return: true if elen and parameter is in valid range
+ */
+static inline bool
+ieee80211_tx_pwr_env_ok(const u8 *pos, u8 elen)
+{
+	u8 count;
+	u8 interpret;
+	u8 category;
+	const struct ieee80211_tx_pwr_env *tx_pwr_env = (const void *)pos;
+	u8 info_len = offsetofend(typeof(*tx_pwr_env), tx_power_info);
+
+	if (elen < info_len)
+		return false;
+
+	count = u8_get_bits(tx_pwr_env->tx_power_info,
+			    IEEE80211_TX_PWR_ENV_INFO_COUNT);
+	interpret = u8_get_bits(tx_pwr_env->tx_power_info,
+				IEEE80211_TX_PWR_ENV_INFO_INTERPRET);
+	category = u8_get_bits(tx_pwr_env->tx_power_info,
+			       IEEE80211_TX_PWR_ENV_INFO_CATEGORY);
+
+	if (category > IEEE80211_TPE_CAT_SUB_DEV)
+		return false;
+
+	switch (interpret) {
+	case IEEE80211_TPE_LOCAL_EIRP:
+	case IEEE80211_TPE_REG_CLIENT_EIRP:
+		if (count > IEEE80211_TPE_MAX_EIRP_COUNT)
+			return false;
+		info_len += count + 1;
+		break;
+	case IEEE80211_TPE_LOCAL_EIRP_PSD:
+	case IEEE80211_TPE_REG_CLIENT_EIRP_PSD:
+		if (count > IEEE80211_TPE_MAX_EIRP_PSD_COUNT)
+			return false;
+		info_len += (count == 0 ? 1 : 1 << (count - 1));
+		break;
+	default:
+		return false;
+	}
+
+	return elen >= info_len;
+}
 
 /*
  * ieee80211_he_oper_size - calculate 802.11ax HE Operations IE size
@@ -2845,11 +2933,13 @@ ieee80211_he_oper_size(const u8 *he_oper_ie)
 static inline const struct ieee80211_he_6ghz_oper *
 ieee80211_he_6ghz_oper(const struct ieee80211_he_operation *he_oper)
 {
-	const u8 *ret = (const void *)&he_oper->optional;
+	const u8 *ret;
 	u32 he_oper_params;
 
 	if (!he_oper)
 		return NULL;
+
+	ret = (const void *)&he_oper->optional;
 
 	he_oper_params = le32_to_cpu(he_oper->he_oper_params);
 
@@ -3048,6 +3138,9 @@ ieee80211_he_spr_size(const u8 *he_spr_ie)
 #define IEEE80211_EHT_PHY_CAP5_SUPP_EXTRA_EHT_LTF		0x40
 #define IEEE80211_EHT_PHY_CAP6_MAX_NUM_SUPP_EHT_LTF_MASK	0x07
 
+#define IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_80MHZ			0x08
+#define IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_160MHZ		0x30
+#define IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_320MHZ		0x40
 #define IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_MASK			0x78
 #define IEEE80211_EHT_PHY_CAP6_EHT_DUP_6GHZ_SUPP		0x80
 
@@ -3185,6 +3278,22 @@ ieee80211_eht_oper_size_ok(const u8 *data, u8 len)
 	}
 
 	return len >= needed;
+}
+
+/* must validate ieee80211_eht_oper_size_ok() first */
+static inline u16
+ieee80211_eht_oper_dis_subchan_bitmap(const struct ieee80211_eht_operation *eht_oper)
+{
+	const struct ieee80211_eht_operation_info *info =
+		(const void *)eht_oper->optional;
+
+	if (!(eht_oper->params & IEEE80211_EHT_OPER_INFO_PRESENT))
+		return 0;
+
+	if (!(eht_oper->params & IEEE80211_EHT_OPER_DISABLED_SUBCHANNEL_BITMAP_PRESENT))
+		return 0;
+
+	return get_unaligned_le16(info->optional);
 }
 
 #define IEEE80211_BW_IND_DIS_SUBCH_PRESENT	BIT(1)
@@ -4470,7 +4579,8 @@ ieee80211_is_protected_dual_of_public_action(struct sk_buff *skb)
 		action != WLAN_PUB_ACTION_LOC_TRACK_NOTI &&
 		action != WLAN_PUB_ACTION_FTM_REQUEST &&
 		action != WLAN_PUB_ACTION_FTM_RESPONSE &&
-		action != WLAN_PUB_ACTION_FILS_DISCOVERY;
+		action != WLAN_PUB_ACTION_FILS_DISCOVERY &&
+		action != WLAN_PUB_ACTION_VENDOR_SPECIFIC;
 }
 
 /**
@@ -4934,7 +5044,7 @@ static inline u8 ieee80211_mle_common_size(const u8 *data)
 
 /**
  * ieee80211_mle_get_link_id - returns the link ID
- * @mle: the basic multi link element
+ * @data: the basic multi link element
  *
  * The element is assumed to be of the correct type (BASIC) and big enough,
  * this must be checked using ieee80211_mle_type_ok().
@@ -4958,17 +5068,18 @@ static inline int ieee80211_mle_get_link_id(const u8 *data)
 
 /**
  * ieee80211_mle_get_bss_param_ch_cnt - returns the BSS parameter change count
- * @mle: the basic multi link element
+ * @data: pointer to the basic multi link element
  *
  * The element is assumed to be of the correct type (BASIC) and big enough,
  * this must be checked using ieee80211_mle_type_ok().
  *
  * If the BSS parameter change count value can't be found (the presence bit
- * for it is clear), 0 will be returned.
+ * for it is clear), -1 will be returned.
  */
-static inline u8
-ieee80211_mle_get_bss_param_ch_cnt(const struct ieee80211_multi_link_elem *mle)
+static inline int
+ieee80211_mle_get_bss_param_ch_cnt(const u8 *data)
 {
+	const struct ieee80211_multi_link_elem *mle = (const void *)data;
 	u16 control = le16_to_cpu(mle->control);
 	const u8 *common = mle->variable;
 
@@ -4976,7 +5087,7 @@ ieee80211_mle_get_bss_param_ch_cnt(const struct ieee80211_multi_link_elem *mle)
 	common += sizeof(struct ieee80211_mle_basic_common_info);
 
 	if (!(control & IEEE80211_MLC_BASIC_PRES_BSS_PARAM_CH_CNT))
-		return 0;
+		return -1;
 
 	if (control & IEEE80211_MLC_BASIC_PRES_LINK_ID)
 		common += 1;
@@ -5083,6 +5194,44 @@ static inline u16 ieee80211_mle_get_mld_capa_op(const u8 *data)
 }
 
 /**
+ * ieee80211_mle_get_mld_id - returns the MLD ID
+ * @data: pointer to the multi link element
+ *
+ * The element is assumed to be of the correct type (BASIC) and big enough,
+ * this must be checked using ieee80211_mle_type_ok().
+ *
+ * If the MLD ID is not present, 0 will be returned.
+ */
+static inline u8 ieee80211_mle_get_mld_id(const u8 *data)
+{
+	const struct ieee80211_multi_link_elem *mle = (const void *)data;
+	u16 control = le16_to_cpu(mle->control);
+	const u8 *common = mle->variable;
+
+	/*
+	 * common points now at the beginning of
+	 * ieee80211_mle_basic_common_info
+	 */
+	common += sizeof(struct ieee80211_mle_basic_common_info);
+
+	if (!(control & IEEE80211_MLC_BASIC_PRES_MLD_ID))
+		return 0;
+
+	if (control & IEEE80211_MLC_BASIC_PRES_LINK_ID)
+		common += 1;
+	if (control & IEEE80211_MLC_BASIC_PRES_BSS_PARAM_CH_CNT)
+		common += 1;
+	if (control & IEEE80211_MLC_BASIC_PRES_MED_SYNC_DELAY)
+		common += 2;
+	if (control & IEEE80211_MLC_BASIC_PRES_EML_CAPA)
+		common += 2;
+	if (control & IEEE80211_MLC_BASIC_PRES_MLD_CAPA_OP)
+		common += 2;
+
+	return *common;
+}
+
+/**
  * ieee80211_mle_size_ok - validate multi-link element size
  * @data: pointer to the element data
  * @len: length of the containing element
@@ -5095,7 +5244,7 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 	bool check_common_len = false;
 	u16 control;
 
-	if (len < fixed)
+	if (!data || len < fixed)
 		return false;
 
 	control = le16_to_cpu(mle->control);
@@ -5231,7 +5380,7 @@ static inline bool ieee80211_mle_basic_sta_prof_size_ok(const u8 *data,
 		info_len += 1;
 
 	return prof->sta_info_len >= info_len &&
-	       fixed + prof->sta_info_len <= len;
+	       fixed + prof->sta_info_len - 1 <= len;
 }
 
 /**

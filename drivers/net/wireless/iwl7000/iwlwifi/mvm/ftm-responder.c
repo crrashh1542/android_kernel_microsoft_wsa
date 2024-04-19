@@ -360,6 +360,12 @@ int iwl_mvm_ftm_respoder_add_pasn_sta(struct iwl_mvm *mvm,
 	}
 
 	if (hltk && hltk_len) {
+		if (!fw_has_capa(&mvm->fw->ucode_capa,
+				 IWL_UCODE_TLV_CAPA_SECURE_LTF_SUPPORT)) {
+			IWL_ERR(mvm, "No support for secure LTF measurement\n");
+			return -EINVAL;
+		}
+
 		hltk_data.cipher = iwl_mvm_cipher_to_location_cipher(cipher);
 		if (hltk_data.cipher == IWL_LOCATION_CIPHER_INVALID) {
 			IWL_ERR(mvm, "invalid cipher: %u\n", cipher);
@@ -443,7 +449,7 @@ int iwl_mvm_ftm_start_responder(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	rcu_read_unlock();
 
 	phy_ctxt = &mvm->phy_ctxts[*phy_ctxt_id];
-	ret = iwl_mvm_phy_ctxt_changed(mvm, phy_ctxt, &ctx.def,
+	ret = iwl_mvm_phy_ctxt_changed(mvm, phy_ctxt, &ctx.def, &ctx.ap,
 				       ctx.rx_chains_static,
 				       ctx.rx_chains_dynamic);
 	if (ret)

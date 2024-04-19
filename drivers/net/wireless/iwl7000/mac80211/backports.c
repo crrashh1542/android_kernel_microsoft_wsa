@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018, 2020, 2022-2023 Intel Corporation
+ * Copyright (C) 2018, 2020, 2022-2024 Intel Corporation
  *
  * Backport functionality introduced in Linux 4.4.
  *
@@ -219,12 +219,6 @@ EXPORT_SYMBOL_GPL(thermal_zone_device_priv);
 #endif
 
 #if CFG80211_VERSION < KERNEL_VERSION(6,1,0)
-/*
- * How many Beacon frames need to have been used in average signal strength
- * before starting to indicate signal change events.
- */
-#define IEEE80211_SIGNAL_AVE_MIN_COUNT	4
-
 struct ieee80211_per_bw_puncturing_values {
 	u8 len;
 	const u16 *valid_values;
@@ -261,18 +255,16 @@ ieee80211_valid_disable_subchannel_bitmap(u16 *bitmap, enum nl80211_chan_width b
 {
 	u32 idx, i;
 
-	switch (bw) {
+	switch((int)bw) {
 	case NL80211_CHAN_WIDTH_80:
 		idx = 0;
 		break;
 	case NL80211_CHAN_WIDTH_160:
 		idx = 1;
 		break;
-#if CFG80211_VERSION >= KERNEL_VERSION(5,18,0)
 	case NL80211_CHAN_WIDTH_320:
 		idx = 2;
 		break;
-#endif
 	default:
 		*bitmap = 0;
 		break;
@@ -449,6 +441,7 @@ void wiphy_delayed_work_queue(struct wiphy *wiphy,
 			      unsigned long delay)
 {
 	if (!delay) {
+		del_timer(&dwork->timer);
 		wiphy_work_queue(wiphy, &dwork->work);
 		return;
 	}
@@ -468,3 +461,99 @@ void wiphy_delayed_work_cancel(struct wiphy *wiphy,
 }
 EXPORT_SYMBOL_GPL(wiphy_delayed_work_cancel);
 #endif /* CFG80211_VERSION < KERNEL_VERSION(6,5,0) */
+
+#if CFG80211_VERSION < KERNEL_VERSION(6,8,0)
+int nl80211_chan_width_to_mhz(enum nl80211_chan_width chan_width)
+{
+	int mhz;
+
+	switch((int)chan_width) {
+	case NL80211_CHAN_WIDTH_1:
+		mhz = 1;
+		break;
+	case NL80211_CHAN_WIDTH_2:
+		mhz = 2;
+		break;
+	case NL80211_CHAN_WIDTH_4:
+		mhz = 4;
+		break;
+	case NL80211_CHAN_WIDTH_8:
+		mhz = 8;
+		break;
+	case NL80211_CHAN_WIDTH_16:
+		mhz = 16;
+		break;
+	case NL80211_CHAN_WIDTH_5:
+		mhz = 5;
+		break;
+	case NL80211_CHAN_WIDTH_10:
+		mhz = 10;
+		break;
+	case NL80211_CHAN_WIDTH_20:
+	case NL80211_CHAN_WIDTH_20_NOHT:
+		mhz = 20;
+		break;
+	case NL80211_CHAN_WIDTH_40:
+		mhz = 40;
+		break;
+	case NL80211_CHAN_WIDTH_80P80:
+	case NL80211_CHAN_WIDTH_80:
+		mhz = 80;
+		break;
+	case NL80211_CHAN_WIDTH_160:
+		mhz = 160;
+		break;
+	case NL80211_CHAN_WIDTH_320:
+		mhz = 320;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return -1;
+	}
+	return mhz;
+}
+EXPORT_SYMBOL_GPL(nl80211_chan_width_to_mhz);
+
+static int cfg80211_chandef_get_width(const struct cfg80211_chan_def *c)
+{
+	return nl80211_chan_width_to_mhz(c->width);
+}
+
+int cfg80211_chandef_primary(const struct cfg80211_chan_def *c,
+			     enum nl80211_chan_width primary_chan_width,
+			     u16 *punctured)
+{
+	int pri_width = nl80211_chan_width_to_mhz(primary_chan_width);
+	int width = cfg80211_chandef_get_width(c);
+	u32 control = c->chan->center_freq;
+	u32 center = c->center_freq1;
+	u16 _punct = 0;
+
+	if (WARN_ON_ONCE(pri_width < 0 || width < 0))
+		return -1;
+
+	/* not intended to be called this way, can't determine */
+	if (WARN_ON_ONCE(pri_width > width))
+		return -1;
+
+	if (!punctured)
+		punctured = &_punct;
+
+	*punctured = chandef_punctured(c);
+
+	while (width > pri_width) {
+		unsigned int bits_to_drop = width / 20 / 2;
+
+		if (control > center) {
+			center += width / 4;
+			*punctured >>= bits_to_drop;
+		} else {
+			center -= width / 4;
+			*punctured &= (1 << bits_to_drop) - 1;
+		}
+		width /= 2;
+	}
+
+	return center;
+}
+#endif /* cfg < 6.8 */
