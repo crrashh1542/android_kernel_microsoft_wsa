@@ -20,8 +20,9 @@
 };
 
 &touchscreen {
-	compatible = "ilitek,ili2900";
-	/delete-property/ vccio;
+	/* ili2900 and ili2901 use the same timing */
+	compatible = "ilitek,ili2900", "ilitek,ili2901";
+	vccio-supply = <&pp3300_s3>;
 };
 
 &mt6366codec {
