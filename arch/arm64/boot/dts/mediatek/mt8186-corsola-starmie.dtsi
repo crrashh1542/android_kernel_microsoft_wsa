@@ -156,7 +156,7 @@
 		pinctrl-0 = <&touchscreen_pins>;
 		panel = <&panel>;
 		reset-gpios = <&pio 60 GPIO_ACTIVE_LOW>;
-		vccio = <&mt6366_vio18_reg>;
+		vccio-supply = <&mt6366_vio18_reg>;
 	};
 };
 
