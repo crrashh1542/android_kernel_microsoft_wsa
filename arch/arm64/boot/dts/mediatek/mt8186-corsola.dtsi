@@ -266,7 +266,7 @@
 		adsp_mem_reserved: memory@60000000 {
 			compatible = "mediatek,adsp-reserved-memory";
 			no-map;
-			reg = <0 0x60000000 0 0xA00000>;
+			reg = <0 0x60000000 0 0x1000000>;
 		};
 
 		scp_mem_reserved: memory@50000000 {
