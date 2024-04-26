@@ -1451,7 +1451,6 @@ PVRSRV_ERROR RGXInit(PVRSRV_DEVICE_NODE *psDeviceNode)
 
 	RGXInitMultiCoreInfo(psDeviceNode);
 
-#if defined(PDUMP)
 	eError = DevmemIntAllocDefBackingPage(psDeviceNode,
 	                                      &psDeviceNode->sDummyPage,
 	                                      PVR_DUMMY_PAGE_INIT_VALUE,
@@ -1473,7 +1472,6 @@ PVRSRV_ERROR RGXInit(PVRSRV_DEVICE_NODE *psDeviceNode)
 		PVR_DPF((PVR_DBG_ERROR, "%s: Failed to allocate Zero page.", __func__));
 		goto cleanup;
 	}
-#endif /* defined(PDUMP) */
 
 	sLayerParams.psDevInfo = psDevInfo;
 #if defined(SUPPORT_TRUSTED_DEVICE)

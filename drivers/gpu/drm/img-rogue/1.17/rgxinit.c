@@ -3660,14 +3660,12 @@ PVRSRV_ERROR DevDeInitRGX(PVRSRV_DEVICE_NODE *psDeviceNode)
 
 	DeviceDepBridgeDeInit(psDevInfo);
 
-#if defined(PDUMP)
 	DevmemIntFreeDefBackingPage(psDeviceNode,
 								&psDeviceNode->sDummyPage,
 								DUMMY_PAGE);
 	DevmemIntFreeDefBackingPage(psDeviceNode,
 								&psDeviceNode->sDevZeroPage,
 								DEV_ZERO_PAGE);
-#endif
 
 #if defined(PVRSRV_FORCE_UNLOAD_IF_BAD_STATE)
 	if (PVRSRVGetPVRSRVData()->eServicesState != PVRSRV_SERVICES_STATE_OK)
