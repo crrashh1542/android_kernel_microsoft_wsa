@@ -7,22 +7,17 @@
 #include "mt8186-corsola-veluza.dtsi"
 
 / {
-	model = "Google veluza sku131073/131075 board";
-	compatible = "google,veluza-sku131073", "google,veluza-sku131075",
+	model = "Google veluza sku65536/65537 board";
+	compatible = "google,veluza-sku65536", "google,veluza-sku65537",
 		     "google,veluza", "google,corsola", "mediatek,mt8186";
 };
 
 &i2c1 {
 	/delete-node/ touchscreen@10;
-	touchscreen@15 {
-		compatible = "hid-over-i2c";
-		reg = <0x15>;
+	touchscreen@10 {
+		compatible = "elan,ekth3500";
+		reg = <0x10>;
 		interrupts-extended = <&pio 12 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
-		post-power-on-delay-ms = <10>;
-		hid-descr-addr = <0x0001>;
-		vdd-supply = <&pp3300_s3>;
 		status = "okay";
 	};
 };
