@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ *
+ * Panel ID: 0x0 (Starry-ER88577)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x00
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-wugtrio.dtsi"
+
+/ {
+	model = "Google wugtrio sku1/unprovisioned board";
+	compatible = "google,wugtrio-sku1", "google,wugtrio-sku2147483632",
+		     "google,wugtrio", "mediatek,mt8186";
+};
+
+&panel {
+	compatible = "starry,er88577";
+};
