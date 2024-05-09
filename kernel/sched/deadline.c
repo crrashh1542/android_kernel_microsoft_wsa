@@ -1478,10 +1478,11 @@ throttle:
 
 void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
 {
-	update_curr_dl_se(dl_se->rq, dl_se, delta_exec);
+	if (!dl_se->dl_server_frozen)
+		update_curr_dl_se(dl_se->rq, dl_se, delta_exec);
 }
 
-void dl_server_start(struct sched_dl_entity *dl_se)
+static inline void __dl_server_start(struct sched_dl_entity *dl_se)
 {
 	/*
 	 * XXX: the apply do not work fine at the init phase for the
@@ -1500,23 +1501,95 @@ void dl_server_start(struct sched_dl_entity *dl_se)
 		setup_new_dl_entity(dl_se);
 	}
 
+	enqueue_dl_entity(dl_se, ENQUEUE_WAKEUP);
+}
+
+void dl_server_start(struct sched_dl_entity *dl_se)
+{
+	if (dl_se->dl_server_frozen)
+		goto set_active;
+
 	if (WARN_ON_ONCE(dl_se->dl_server_active))
 		return;
 
-	enqueue_dl_entity(dl_se, ENQUEUE_WAKEUP);
+	__dl_server_start(dl_se);
+
+set_active:
 	dl_se->dl_server_active = 1;
 }
 
-void dl_server_stop(struct sched_dl_entity *dl_se)
+static inline void __dl_server_stop(struct sched_dl_entity *dl_se)
 {
-	if (WARN_ON_ONCE(!dl_se->dl_server_active))
-		return;
-
 	dequeue_dl_entity(dl_se, DEQUEUE_SLEEP);
 	hrtimer_try_to_cancel(&dl_se->dl_timer);
 	dl_se->dl_defer_armed = 0;
 	dl_se->dl_throttled = 0;
+}
+
+void dl_server_stop(struct sched_dl_entity *dl_se)
+{
+	if (dl_se->dl_server_frozen)
+		goto reset_active;
+
+	if (WARN_ON_ONCE(!dl_se->dl_server_active))
+		return;
+
+	__dl_server_stop(dl_se);
+
+reset_active:
 	dl_se->dl_server_active = 0;
+}
+
+void dl_server_freeze(struct sched_dl_entity *dl_se)
+{
+	if (dl_se->dl_server_active) {
+		update_rq_clock(dl_se->rq);
+		__dl_server_stop(dl_se);
+	}
+	dl_se->dl_server_frozen = 1;
+}
+
+void dl_server_thaw(struct sched_dl_entity *dl_se)
+{
+	if (dl_se->dl_server_active) {
+		update_rq_clock(dl_se->rq);
+		__dl_server_start(dl_se);
+	}
+	dl_se->dl_server_frozen = 0;
+}
+
+void freeze_thaw_dl_server(enum dl_server_pm_action action)
+{
+	int cpu;
+
+	cpus_read_lock();
+	for_each_online_cpu(cpu) {
+		struct rq_flags rf;
+		struct rq *rq = cpu_rq(cpu);
+		struct sched_dl_entity *dl_se;
+
+		sched_clock_tick();
+		rq_lock_irqsave(rq, &rf);
+		dl_se = &rq->fair_server;
+		switch (action) {
+		case dl_server_pm_freeze:
+			if (WARN_ON_ONCE(dl_se->dl_server_frozen))
+				break;
+
+			dl_server_freeze(dl_se);
+			break;
+		case dl_server_pm_thaw:
+			if (WARN_ON_ONCE(!dl_se->dl_server_frozen))
+				break;
+
+			dl_server_thaw(dl_se);
+			break;
+		default:
+			WARN_ON_ONCE(1);
+		}
+		rq_unlock_irqrestore(rq, &rf);
+	}
+	cpus_read_unlock();
 }
 
 void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,

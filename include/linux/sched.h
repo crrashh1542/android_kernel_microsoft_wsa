@@ -650,6 +650,15 @@ struct sched_dl_entity {
 	unsigned int			dl_defer	  : 1;
 	unsigned int			dl_defer_armed	  : 1;
 	unsigned int			dl_server_active  : 1;
+	/*
+	 * dl_server is marked as frozen when the system suspends. Frozen
+	 * means that dl_server is stopped, but the dl_server_active state
+	 * is maintained so that the enqueue/dequeue path is not confused.
+	 * We need this separate state other than dl_server_active because
+	 * suspend doesn't dequeue the tasks and hence does not stop the
+	 * dl_server during suspend. And this may lead to spurious resumes.
+	 */
+	unsigned int			dl_server_frozen  : 1;
 
 	/*
 	 * Bandwidth enforcement timer. Each -deadline task has its
@@ -689,6 +698,24 @@ struct sched_dl_entity {
 	struct sched_dl_entity *pi_se;
 #endif
 };
+
+/*
+ * Power management related actions for dl_server
+ */
+enum dl_server_pm_action {
+	dl_server_pm_freeze = 0,
+	dl_server_pm_thaw = 1
+};
+extern void freeze_thaw_dl_server(enum dl_server_pm_action action);
+static inline void freeze_dl_server(void)
+{
+	freeze_thaw_dl_server(dl_server_pm_freeze);
+}
+static inline void thaw_dl_server(void)
+{
+	freeze_thaw_dl_server(dl_server_pm_thaw);
+}
+
 
 #ifdef CONFIG_UCLAMP_TASK
 /* Number of utilization clamp buckets (shorter alias) */
