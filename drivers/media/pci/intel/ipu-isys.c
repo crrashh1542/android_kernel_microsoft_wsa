@@ -11,7 +11,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/string.h>
 #include <linux/sched.h>
-#include <linux/version.h>
 
 #include <media/ipu-isys.h>
 #include <media/v4l2-mc.h>

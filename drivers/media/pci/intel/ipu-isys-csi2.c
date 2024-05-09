@@ -3,7 +3,6 @@
 
 #include <linux/device.h>
 #include <linux/module.h>
-#include <linux/version.h>
 
 #include <media/ipu-isys.h>
 #include <media/media-entity.h>

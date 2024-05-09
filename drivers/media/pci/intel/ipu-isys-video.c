@@ -7,7 +7,6 @@
 #include <linux/kthread.h>
 #include <linux/pm_runtime.h>
 #include <linux/module.h>
-#include <linux/version.h>
 #include <linux/compat.h>
 
 #include <uapi/linux/sched/types.h>

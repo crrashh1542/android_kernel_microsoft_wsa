@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
-#include <linux/version.h>
 #include <linux/poll.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/uaccess.h>

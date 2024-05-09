@@ -7,7 +7,6 @@
 #include <linux/ioport.h>
 #include <linux/list.h>
 #include <uapi/linux/media.h>
-#include <linux/version.h>
 
 #include "ipu-pdata.h"
 #include "ipu-bus.h"

@@ -9,7 +9,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/kthread.h>
 #include <linux/init_task.h>
-#include <linux/version.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/module.h>
 #include <linux/fs.h>
