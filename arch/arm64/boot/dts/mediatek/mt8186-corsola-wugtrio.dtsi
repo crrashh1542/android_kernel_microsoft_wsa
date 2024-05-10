@@ -10,6 +10,20 @@
 /delete-node/ &en_pp6000_mipi_disp_150ma;
 /delete-node/ &pp6000_mipi_disp_150ma_fixed_pins;
 
+&i2c4 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	ap_sar_sensor: hx9031as@28 {
+		compatible = "tyhx,hx9031as";
+		reg = <0x28>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sar_sensor_pins>;
+		interrupt-parent = <&pio>;
+		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+	};
+};
+
 &panel {
 	/* compatible will be set in board dts */
 	pp3300-supply = <&en_pp6000_mipi_disp>;
