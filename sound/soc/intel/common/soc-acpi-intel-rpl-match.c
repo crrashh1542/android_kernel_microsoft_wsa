@@ -304,14 +304,14 @@ static const struct snd_soc_acpi_codecs rpl_max98373_amp = {
 	.codecs = {"MX98373"}
 };
 
-static const struct snd_soc_acpi_codecs rpl_rt1019p_amp = {
-	.num_codecs = 1,
-	.codecs = {"RTL1019"}
-};
-
 static const struct snd_soc_acpi_codecs rpl_nau8318_amp = {
 	.num_codecs = 1,
 	.codecs = {"NVTN2012"}
+};
+
+static const struct snd_soc_acpi_codecs rpl_rt1019p_amp = {
+	.num_codecs = 1,
+	.codecs = {"RTL1019"}
 };
 
 struct snd_soc_acpi_mach snd_soc_acpi_intel_rpl_machines[] = {
