@@ -19,6 +19,11 @@
 	rotation = <90>;
 };
 
+&pen_insert {
+	/* Insert = high, eject = low */
+	gpios = <&pio 18 GPIO_ACTIVE_HIGH>;
+};
+
 &touchscreen {
 	/* ili2900 and ili2901 use the same timing */
 	compatible = "ilitek,ili2900", "ilitek,ili2901";
