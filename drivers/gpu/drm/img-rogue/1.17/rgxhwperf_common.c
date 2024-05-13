@@ -2169,8 +2169,10 @@ static inline IMG_UINT32 _FixNameAndCalculateHostAllocPacketSize(
 	if (*ppsName != NULL && *ui32NameSize > 0)
 	{
 		/* if string longer than maximum cut it (leave space for '\0') */
-		if (*ui32NameSize >= PVRSRV_SYNC_NAME_LENGTH)
+		if ((*ui32NameSize +1U) >= PVRSRV_SYNC_NAME_LENGTH)
 			*ui32NameSize = PVRSRV_SYNC_NAME_LENGTH;
+		else
+			*ui32NameSize += 1U;
 	}
 	else
 	{
@@ -2225,19 +2227,27 @@ static inline void _SetupHostAllocPacketData(IMG_UINT8 *pui8Dest,
 	switch (eAllocType)
 	{
 		case RGX_HWPERF_HOST_RESOURCE_TYPE_SYNC:
-			psData->uAllocDetail.sSyncAlloc = puAllocDetail->sSyncAlloc;
+			psData->uAllocDetail.sSyncAlloc.ui32FWAddr = puAllocDetail->sSyncAlloc.ui32FWAddr;
 			acName = psData->uAllocDetail.sSyncAlloc.acName;
 			break;
 		case RGX_HWPERF_HOST_RESOURCE_TYPE_FENCE_PVR:
-			psData->uAllocDetail.sFenceAlloc = puAllocDetail->sFenceAlloc;
+			psData->uAllocDetail.sFenceAlloc.uiPID = puAllocDetail->sFenceAlloc.uiPID;
+			psData->uAllocDetail.sFenceAlloc.hFence = puAllocDetail->sFenceAlloc.hFence;
+			psData->uAllocDetail.sFenceAlloc.ui32CheckPt_FWAddr = puAllocDetail->sFenceAlloc.ui32CheckPt_FWAddr;
 			acName = psData->uAllocDetail.sFenceAlloc.acName;
 			break;
 		case RGX_HWPERF_HOST_RESOURCE_TYPE_FENCE_SW:
-			psData->uAllocDetail.sSWFenceAlloc = puAllocDetail->sSWFenceAlloc;
+			psData->uAllocDetail.sSWFenceAlloc.uiPID = puAllocDetail->sSWFenceAlloc.uiPID;
+			psData->uAllocDetail.sSWFenceAlloc.hSWFence = puAllocDetail->sSWFenceAlloc.hSWFence;
+			psData->uAllocDetail.sSWFenceAlloc.hSWTimeline = puAllocDetail->sSWFenceAlloc.hSWTimeline;
+			psData->uAllocDetail.sSWFenceAlloc.ui64SyncPtIndex = puAllocDetail->sSWFenceAlloc.ui64SyncPtIndex;
 			acName = psData->uAllocDetail.sSWFenceAlloc.acName;
 			break;
 		case RGX_HWPERF_HOST_RESOURCE_TYPE_SYNC_CP:
-			psData->uAllocDetail.sSyncCheckPointAlloc = puAllocDetail->sSyncCheckPointAlloc;
+			psData->uAllocDetail.sSyncCheckPointAlloc.ui32CheckPt_FWAddr = puAllocDetail->sSyncCheckPointAlloc.ui32CheckPt_FWAddr;
+			psData->uAllocDetail.sSyncCheckPointAlloc.hTimeline = puAllocDetail->sSyncCheckPointAlloc.hTimeline;
+			psData->uAllocDetail.sSyncCheckPointAlloc.uiPID = puAllocDetail->sSyncCheckPointAlloc.uiPID;
+			psData->uAllocDetail.sSyncCheckPointAlloc.hFence = puAllocDetail->sSyncCheckPointAlloc.hFence;
 			acName = psData->uAllocDetail.sSyncCheckPointAlloc.acName;
 			break;
 		default:
