@@ -1,0 +1,11 @@
+What:		/sys/bus/iio/devices/iio:deviceX/in_proximity<id>_raw
+Date:		May 2024
+KernelVersion:	6.9.0
+Contact:	Yasin Lee <yasin.lee.x@gmail>
+Description:
+		Proximity measurement indicating that some object is
+		near the combined sensor. The combined sensor presents
+		proximity measurements constructed by hardware by
+		combining measurements taken from a given set of
+		physical sensors.
+
