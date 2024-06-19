@@ -15,7 +15,31 @@
 #include <crypto/internal/scompress.h>
 
 
-#define ZSTD_DEF_LEVEL	1
+static int __read_mostly compression_level = 1;
+
+int set_compression_level(const char *val, const struct kernel_param *kp)
+{
+	int temp, ret;
+
+	ret = sscanf(val, "%i", &temp);
+	if (ret == -EINVAL) {
+		return -EINVAL;
+	}
+
+	if (temp == 0) {
+		temp = 1;
+	} else if (temp > zstd_max_clevel()) {
+		temp = zstd_max_clevel();
+	} else if (temp < zstd_min_clevel()) {
+		temp = zstd_min_clevel();
+	}
+
+	*((int *)kp->arg) = temp;
+
+	return 0;
+}
+
+module_param_call(compression_level, set_compression_level, param_get_int, &compression_level, 0644);
 
 struct zstd_ctx {
 	zstd_cctx *cctx;
@@ -26,7 +50,7 @@ struct zstd_ctx {
 
 static zstd_parameters zstd_params(void)
 {
-	return zstd_get_params(ZSTD_DEF_LEVEL, PAGE_SIZE);
+	return zstd_get_params(compression_level, PAGE_SIZE);
 }
 
 static int zstd_comp_init(struct zstd_ctx *ctx)
@@ -177,7 +201,7 @@ static int zstd_scompress(struct crypto_scomp *tfm, const u8 *src,
 }
 
 static int __zstd_decompress(const u8 *src, unsigned int slen,
-			     u8 *dst, unsigned int *dlen, void *ctx)
+				 u8 *dst, unsigned int *dlen, void *ctx)
 {
 	size_t out_len;
 	struct zstd_ctx *zctx = ctx;
@@ -198,8 +222,8 @@ static int zstd_decompress(struct crypto_tfm *tfm, const u8 *src,
 }
 
 static int zstd_sdecompress(struct crypto_scomp *tfm, const u8 *src,
-			    unsigned int slen, u8 *dst, unsigned int *dlen,
-			    void *ctx)
+				unsigned int slen, u8 *dst, unsigned int *dlen,
+				void *ctx)
 {
 	return __zstd_decompress(src, slen, dst, dlen, ctx);
 }
