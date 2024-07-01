@@ -1175,7 +1175,7 @@ static void mb_regenerate_buddy(struct ext4_buddy *e4b)
 	void *buddy;
 
 	while ((buddy = mb_find_buddy(e4b, order++, &count)))
-		ext4_set_bits(buddy, 0, count);
+		mb_set_bits(buddy, 0, count);
 
 	e4b->bd_info->bb_fragments = 0;
 	memset(e4b->bd_info->bb_counters, 0,
