@@ -1794,6 +1794,8 @@ static inline struct page *alloc_slab_page(struct kmem_cache *s,
 	else
 		page = __alloc_pages_node(node, flags, order);
 
+	trace_android_vh_slab_page_alloced(page, s->size, flags);
+
 	return page;
 }
 
@@ -3237,6 +3239,8 @@ redo:
 out:
 	slab_post_alloc_hook(s, objcg, gfpflags, 1, &object, init);
 
+	trace_android_vh_slab_alloc_node(object, addr, s);
+
 	return object;
 }
 
@@ -3516,6 +3520,8 @@ static __always_inline void slab_free(struct kmem_cache *s, struct page *page,
 	 */
 	if (slab_free_freelist_hook(s, &head, &tail, &cnt))
 		do_slab_free(s, page, head, tail, cnt, addr);
+
+	trace_android_vh_slab_free(addr, s);
 }
 
 #ifdef CONFIG_KASAN_GENERIC

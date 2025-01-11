@@ -79,11 +79,21 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 		if (err < 0)
 			inode = ERR_PTR(err);
 		else {
-			ni_lock(ni);
+			ni_lock_dir(ni);
 			inode = dir_search_u(dir, uni, NULL);
 			ni_unlock(ni);
 		}
 		__putname(uni);
+	}
+
+	/*
+	 * Check for a null pointer
+	 * If the MFT record of ntfs inode is not a base record, inode->i_op can be NULL.
+	 * This causes null pointer dereference in d_splice_alias().
+	 */
+	if (!IS_ERR_OR_NULL(inode) && !inode->i_op) {
+		iput(inode);
+		inode = ERR_PTR(-EINVAL);
 	}
 
 	return d_splice_alias(inode, dentry);

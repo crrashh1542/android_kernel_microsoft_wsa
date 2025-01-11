@@ -487,8 +487,8 @@ static void do_bad_area(unsigned long far, unsigned int esr,
 	}
 }
 
-#define VM_FAULT_BADMAP		0x010000
-#define VM_FAULT_BADACCESS	0x020000
+#define VM_FAULT_BADMAP		((__force vm_fault_t)0x010000)
+#define VM_FAULT_BADACCESS	((__force vm_fault_t)0x020000)
 
 static vm_fault_t __do_page_fault(struct mm_struct *mm, unsigned long addr,
 				  unsigned int mm_flags, unsigned long vm_flags,
@@ -791,6 +791,11 @@ static int do_sea(unsigned long far, unsigned int esr, struct pt_regs *regs)
 {
 	const struct fault_info *inf;
 	unsigned long siaddr;
+	bool can_fixup = false;
+
+	trace_android_vh_try_fixup_sea(far, esr, regs, &can_fixup);
+	if (can_fixup && fixup_exception(regs))
+		return 0;
 
 	inf = esr_to_fault_info(esr);
 
@@ -1012,6 +1017,7 @@ struct page *alloc_zeroed_user_highpage_movable(struct vm_area_struct *vma,
 	gfp_t flags = GFP_HIGHUSER_MOVABLE | __GFP_ZERO | __GFP_CMA;
 
 	trace_android_vh_alloc_highpage_movable_gfp_adjust(&flags);
+	trace_android_vh_anon_gfp_adjust(&flags);
 	/*
 	 * If the page is mapped with PROT_MTE, initialise the tags at the
 	 * point of allocation and page zeroing as this is usually faster than

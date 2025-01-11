@@ -243,14 +243,9 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 		break;
 	case NFPROTO_BRIDGE:
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
-		hook_head = rcu_dereference(net->nf.hooks_bridge[hook]);
+		hook_head = rcu_dereference(get_nf_hooks_bridge(net)[hook]);
 #endif
 		break;
-#if IS_ENABLED(CONFIG_DECNET)
-	case NFPROTO_DECNET:
-		hook_head = rcu_dereference(net->nf.hooks_decnet[hook]);
-		break;
-#endif
 	default:
 		WARN_ON_ONCE(1);
 		break;
@@ -386,13 +381,13 @@ struct nf_nat_hook {
 	ANDROID_KABI_RESERVE(1);
 };
 
-extern struct nf_nat_hook __rcu *nf_nat_hook;
+extern const struct nf_nat_hook __rcu *nf_nat_hook;
 
 static inline void
 nf_nat_decode_session(struct sk_buff *skb, struct flowi *fl, u_int8_t family)
 {
 #if IS_ENABLED(CONFIG_NF_NAT)
-	struct nf_nat_hook *nat_hook;
+	const struct nf_nat_hook *nat_hook;
 
 	rcu_read_lock();
 	nat_hook = rcu_dereference(nf_nat_hook);
@@ -445,13 +440,14 @@ nf_nat_decode_session(struct sk_buff *skb, struct flowi *fl, u_int8_t family)
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 #include <linux/netfilter/nf_conntrack_zones_common.h>
 
-extern void (*ip_ct_attach)(struct sk_buff *, const struct sk_buff *) __rcu;
 void nf_ct_attach(struct sk_buff *, const struct sk_buff *);
+void nf_ct_set_closing(struct nf_conntrack *nfct);
 struct nf_conntrack_tuple;
 bool nf_ct_get_tuple_skb(struct nf_conntrack_tuple *dst_tuple,
 			 const struct sk_buff *skb);
 #else
 static inline void nf_ct_attach(struct sk_buff *new, struct sk_buff *skb) {}
+static inline void nf_ct_set_closing(struct nf_conntrack *nfct) {}
 struct nf_conntrack_tuple;
 static inline bool nf_ct_get_tuple_skb(struct nf_conntrack_tuple *dst_tuple,
 				       const struct sk_buff *skb)
@@ -468,10 +464,13 @@ struct nf_ct_hook {
 	void (*destroy)(struct nf_conntrack *);
 	bool (*get_tuple_skb)(struct nf_conntrack_tuple *,
 			      const struct sk_buff *);
+	void (*attach)(struct sk_buff *nskb, const struct sk_buff *skb);
+	void (*set_closing)(struct nf_conntrack *nfct);
+	int (*confirm)(struct sk_buff *skb);
 
 	ANDROID_KABI_RESERVE(1);
 };
-extern struct nf_ct_hook __rcu *nf_ct_hook;
+extern const struct nf_ct_hook __rcu *nf_ct_hook;
 
 struct nlattr;
 
@@ -488,7 +487,7 @@ struct nfnl_ct_hook {
 
 	ANDROID_KABI_RESERVE(1);
 };
-extern struct nfnl_ct_hook __rcu *nfnl_ct_hook;
+extern const struct nfnl_ct_hook __rcu *nfnl_ct_hook;
 
 /**
  * nf_skb_duplicated - TEE target has sent a packet

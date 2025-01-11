@@ -48,6 +48,7 @@ struct nfs_client {
 #define NFS_CS_NOPING		6		/* - don't ping on connect */
 #define NFS_CS_DS		7		/* - Server is a DS */
 #define NFS_CS_REUSEPORT	8		/* - reuse src port on reconnect */
+#define NFS_CS_PNFS		9		/* - Server used for pnfs */
 	struct sockaddr_storage	cl_addr;	/* server identifier */
 	size_t			cl_addrlen;
 	char *			cl_hostname;	/* hostname of server */
@@ -237,6 +238,7 @@ struct nfs_server {
 	struct list_head	layouts;
 	struct list_head	delegations;
 	struct list_head	ss_copies;
+	struct list_head	ss_src_copies;
 
 	unsigned long		mig_gen;
 	unsigned long		mig_status;

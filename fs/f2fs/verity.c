@@ -122,7 +122,7 @@ static int f2fs_begin_enable_verity(struct file *filp)
 	if (f2fs_verity_in_progress(inode))
 		return -EBUSY;
 
-	if (f2fs_is_atomic_file(inode) || f2fs_is_volatile_file(inode))
+	if (f2fs_is_atomic_file(inode))
 		return -EOPNOTSUPP;
 
 	/*
@@ -239,6 +239,8 @@ static int f2fs_get_verity_descriptor(struct inode *inode, void *buf,
 	if (pos + size < pos || pos + size > inode->i_sb->s_maxbytes ||
 	    pos < f2fs_verity_metadata_pos(inode) || size > INT_MAX) {
 		f2fs_warn(F2FS_I_SB(inode), "invalid verity xattr");
+		f2fs_handle_error(F2FS_I_SB(inode),
+				ERROR_CORRUPTED_VERITY_XATTR);
 		return -EFSCORRUPTED;
 	}
 	if (buf_size) {

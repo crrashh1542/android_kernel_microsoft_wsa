@@ -223,7 +223,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 			i = ractl->_index + ractl->_nr_pages - index - 1;
 			continue;
 		}
-
+		trace_android_vh_io_statistics(mapping, index + i, 1, true, false);
 		page = __page_cache_alloc(gfp_mask);
 		if (!page)
 			break;
@@ -642,7 +642,8 @@ ssize_t ksys_readahead(int fd, loff_t offset, size_t count)
 	 */
 	ret = -EINVAL;
 	if (!f.file->f_mapping || !f.file->f_mapping->a_ops ||
-	    !S_ISREG(file_inode(f.file)->i_mode))
+	    (!S_ISREG(file_inode(f.file)->i_mode) &&
+	    !S_ISBLK(file_inode(f.file)->i_mode)))
 		goto out;
 
 	ret = vfs_fadvise(f.file, offset, count, POSIX_FADV_WILLNEED);

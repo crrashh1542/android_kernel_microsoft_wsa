@@ -60,6 +60,11 @@ static short xsave_cpuid_features[] __initdata = {
  * XSAVE buffer, both supervisor and user xstates.
  */
 u64 xfeatures_mask_all __ro_after_init;
+/*
+ * This represents the "independent" xfeatures that are supported by XSAVES, but not managed as part
+ * of the FPU core, such as LBR.
+ */
+u64 xfeatures_mask_indep __ro_after_init;
 EXPORT_SYMBOL_GPL(xfeatures_mask_all);
 
 static unsigned int xstate_offsets[XFEATURE_MAX] __ro_after_init =
@@ -768,6 +773,8 @@ void __init fpu__init_system_xstate(void)
 		goto out_disable;
 	}
 
+	xfeatures_mask_indep = xfeatures_mask_all & XFEATURE_MASK_INDEPENDENT;
+
 	/*
 	 * Clear XSAVE features that are disabled in the normal CPUID.
 	 */
@@ -808,6 +815,13 @@ void __init fpu__init_system_xstate(void)
 		       xfeatures, xfeatures_mask_all);
 		goto out_disable;
 	}
+
+	/*
+	 * CPU capabilities initialization runs before FPU init. So
+	 * X86_FEATURE_OSXSAVE is not set. Now that XSAVE is completely
+	 * functional, set the feature bit so depending code works.
+	 */
+	setup_force_cpu_cap(X86_FEATURE_OSXSAVE);
 
 	print_xstate_offset_size();
 	pr_info("x86/fpu: Enabled xstate features 0x%llx, context size is %d bytes, using '%s' format.\n",

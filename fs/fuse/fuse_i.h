@@ -76,7 +76,13 @@ struct fuse_dentry {
 		u64 time;
 		struct rcu_head rcu;
 	};
+
+#ifdef CONFIG_FUSE_BPF
 	struct path backing_path;
+
+	/* bpf program *only* set for negative dentries */
+	struct bpf_prog *bpf;
+#endif
 };
 
 static inline struct fuse_dentry *get_fuse_dentry(const struct dentry *entry)
@@ -100,6 +106,19 @@ static inline void get_fuse_backing_path(const struct dentry *d,
 	path_get(path);
 }
 #endif
+
+/* Submount lookup tracking */
+struct fuse_submount_lookup {
+	/** Refcount */
+	refcount_t count;
+
+	/** Unique ID, which identifies the inode between userspace
+	 * and kernel */
+	u64 nodeid;
+
+	/** The request used for sending the FORGET message */
+	struct fuse_forget_link *forget;
+};
 
 /** FUSE inode */
 struct fuse_inode {
@@ -207,6 +226,8 @@ struct fuse_inode {
 	 */
 	struct fuse_inode_dax *dax;
 #endif
+	/** Submount specific lookup tracking */
+	struct fuse_submount_lookup *submount_lookup;
 };
 
 /** FUSE inode state bits */
@@ -978,7 +999,6 @@ static inline bool fuse_stale_inode(const struct inode *inode, int generation,
 
 static inline void fuse_make_bad(struct inode *inode)
 {
-	remove_inode_hash(inode);
 	set_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state);
 }
 
@@ -1631,6 +1651,9 @@ int fuse_file_write_iter_backing(struct fuse_bpf_args *fa,
 void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 		struct kiocb *iocb, struct iov_iter *from);
 
+long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags);
+
+int fuse_file_flock_backing(struct file *file, int cmd, struct file_lock *fl);
 ssize_t fuse_backing_mmap(struct file *file, struct vm_area_struct *vma);
 
 int fuse_file_fallocate_initialize(struct fuse_bpf_args *fa,

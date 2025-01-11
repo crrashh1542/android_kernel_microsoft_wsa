@@ -331,7 +331,11 @@ static inline void __d_clear_type_and_inode(struct dentry *dentry)
 	flags &= ~(DCACHE_ENTRY_TYPE | DCACHE_FALLTHRU);
 	WRITE_ONCE(dentry->d_flags, flags);
 	dentry->d_inode = NULL;
-	if (dentry->d_flags & DCACHE_LRU_LIST)
+	/*
+	 * The negative counter only tracks dentries on the LRU. Don't inc if
+	 * d_lru is on another list.
+	 */
+	if ((flags & (DCACHE_LRU_LIST|DCACHE_SHRINK_LIST)) == DCACHE_LRU_LIST)
 		this_cpu_inc(nr_dentry_negative);
 }
 
@@ -510,7 +514,7 @@ void d_drop(struct dentry *dentry)
 	__d_drop(dentry);
 	spin_unlock(&dentry->d_lock);
 }
-EXPORT_SYMBOL(d_drop);
+EXPORT_SYMBOL_NS(d_drop, ANDROID_GKI_VFS_EXPORT_ONLY);
 
 static inline void dentry_unlist(struct dentry *dentry, struct dentry *parent)
 {
@@ -762,12 +766,12 @@ static inline bool fast_dput(struct dentry *dentry)
 	 */
 	if (unlikely(ret < 0)) {
 		spin_lock(&dentry->d_lock);
-		if (dentry->d_lockref.count > 1) {
-			dentry->d_lockref.count--;
+		if (WARN_ON_ONCE(dentry->d_lockref.count <= 0)) {
 			spin_unlock(&dentry->d_lock);
 			return true;
 		}
-		return false;
+		dentry->d_lockref.count--;
+		goto locked;
 	}
 
 	/*
@@ -825,6 +829,7 @@ static inline bool fast_dput(struct dentry *dentry)
 	 * else could have killed it and marked it dead. Either way, we
 	 * don't need to do anything else.
 	 */
+locked:
 	if (dentry->d_lockref.count) {
 		spin_unlock(&dentry->d_lock);
 		return true;
@@ -968,7 +973,7 @@ repeat:
 	spin_unlock(&ret->d_lock);
 	return ret;
 }
-EXPORT_SYMBOL(dget_parent);
+EXPORT_SYMBOL_NS(dget_parent, ANDROID_GKI_VFS_EXPORT_ONLY);
 
 static struct dentry * __d_find_any_alias(struct inode *inode)
 {
@@ -1914,7 +1919,7 @@ void d_set_d_op(struct dentry *dentry, const struct dentry_operations *op)
 		dentry->d_flags |= DCACHE_OP_REAL;
 
 }
-EXPORT_SYMBOL(d_set_d_op);
+EXPORT_SYMBOL_NS(d_set_d_op, ANDROID_GKI_VFS_EXPORT_ONLY);
 
 
 /*
@@ -1974,9 +1979,11 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
 
 	spin_lock(&dentry->d_lock);
 	/*
-	 * Decrement negative dentry count if it was in the LRU list.
+	 * The negative counter only tracks dentries on the LRU. Don't dec if
+	 * d_lru is on another list.
 	 */
-	if (dentry->d_flags & DCACHE_LRU_LIST)
+	if ((dentry->d_flags &
+	     (DCACHE_LRU_LIST|DCACHE_SHRINK_LIST)) == DCACHE_LRU_LIST)
 		this_cpu_dec(nr_dentry_negative);
 	hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);
 	raw_write_seqcount_begin(&dentry->d_seq);
@@ -2533,7 +2540,7 @@ void d_rehash(struct dentry * entry)
 	__d_rehash(entry);
 	spin_unlock(&entry->d_lock);
 }
-EXPORT_SYMBOL(d_rehash);
+EXPORT_SYMBOL_NS(d_rehash, ANDROID_GKI_VFS_EXPORT_ONLY);
 
 static inline unsigned start_dir_add(struct inode *dir)
 {
@@ -3120,28 +3127,25 @@ EXPORT_SYMBOL_NS(d_splice_alias, ANDROID_GKI_VFS_EXPORT_ONLY);
   
 bool is_subdir(struct dentry *new_dentry, struct dentry *old_dentry)
 {
-	bool result;
+	bool subdir;
 	unsigned seq;
 
 	if (new_dentry == old_dentry)
 		return true;
 
-	do {
-		/* for restarting inner loop in case of seq retry */
-		seq = read_seqbegin(&rename_lock);
-		/*
-		 * Need rcu_readlock to protect against the d_parent trashing
-		 * due to d_move
-		 */
-		rcu_read_lock();
-		if (d_ancestor(old_dentry, new_dentry))
-			result = true;
-		else
-			result = false;
-		rcu_read_unlock();
-	} while (read_seqretry(&rename_lock, seq));
-
-	return result;
+	/* Access d_parent under rcu as d_move() may change it. */
+	rcu_read_lock();
+	seq = read_seqbegin(&rename_lock);
+	subdir = d_ancestor(old_dentry, new_dentry);
+	 /* Try lockless once... */
+	if (read_seqretry(&rename_lock, seq)) {
+		/* ...else acquire lock for progress even on deep chains. */
+		read_seqlock_excl(&rename_lock);
+		subdir = d_ancestor(old_dentry, new_dentry);
+		read_sequnlock_excl(&rename_lock);
+	}
+	rcu_read_unlock();
+	return subdir;
 }
 EXPORT_SYMBOL(is_subdir);
 
