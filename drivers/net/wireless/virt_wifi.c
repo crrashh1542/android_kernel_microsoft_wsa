@@ -174,7 +174,7 @@ static int virt_wifi_scan(struct wiphy *wiphy,
 		return -EBUSY;
 
 	priv->scan_request = request;
-	schedule_delayed_work(&priv->scan_result, HZ * 2);
+	schedule_delayed_work(&priv->scan_result, 0);
 
 	return 0;
 }
