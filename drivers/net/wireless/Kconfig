@@ -42,4 +42,14 @@ source "drivers/net/wireless/legacy/Kconfig"
 
 source "drivers/net/wireless/virtual/Kconfig"
 
+config PROXY_WIFI
+	tristate "Wifi control path virtualization"
+	depends on CFG80211
+	depends on VSOCKETS
+	help
+	  This driver allows to proxy wifi connections from a virtual machine.
+	  Control path operations are fowarded to the host through a VSocket and
+	  must be handled by an host component, while the data path is
+	  redirected to an ethernet interface using a rtnetlink device.
+
 endif # WLAN
